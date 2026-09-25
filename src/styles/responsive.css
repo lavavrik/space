@@ -1,0 +1,8 @@
+/* Narrow screens. */
+@media (max-width: 980px) {
+  #hud { flex-wrap: wrap; }
+  .side { width: auto; flex: 1 1 260px; }
+  .mid { order: -1; flex: 1 1 100%; }
+  #msg { bottom: 330px; }
+  #help { display: none; }
+}

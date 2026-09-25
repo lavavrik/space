@@ -1,0 +1,23 @@
+/* Colour tokens, page base and the two full-screen canvases. */
+:root {
+  color-scheme: dark;
+  --amber: #ffa53a;
+  --amber-dim: rgba(255, 165, 58, .58);
+  --amber-faint: rgba(255, 165, 58, .2);
+  --text: #ffe6c7;
+  --cyan: #7fdcff;
+  --cyan-faint: rgba(127, 220, 255, .22);
+  --red: #ff5b46;
+  --panel: rgba(16, 11, 6, .64);
+  --void: #000;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; background: var(--void); overflow: hidden; }
+body {
+  font-family: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
+  color: var(--amber);
+  user-select: none;
+  -webkit-user-select: none;
+}
+#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; }
+#ov { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }

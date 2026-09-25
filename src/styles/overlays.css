@@ -1,0 +1,24 @@
+/* Toast messages and the controls list. */
+#msg {
+  position: fixed; left: 50%; bottom: 190px; transform: translateX(-50%);
+  font-size: 13px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--text); background: var(--panel); border: 1px solid var(--amber-faint);
+  padding: 6px 14px; pointer-events: none; opacity: 0; transition: opacity .25s;
+  max-width: calc(100% - 32px); text-align: center;
+}
+#msg.on { opacity: 1; }
+#msg.ftl { border-color: var(--cyan-faint); color: var(--cyan); }
+#msg.warn { border-color: var(--red); color: var(--red); }
+
+#help {
+  position: fixed; top: calc(14px + env(safe-area-inset-top, 0px)); left: 16px;
+  background: var(--panel); border: 1px solid var(--amber-faint);
+  padding: 10px 14px; font-size: 12px; pointer-events: none;
+  display: grid; grid-template-columns: auto auto; gap: 2px 14px;
+}
+#help .h { grid-column: 1 / -1; }
+#help kbd {
+  font-family: "Share Tech Mono", ui-monospace, monospace; color: var(--text);
+  font-size: 12px; white-space: nowrap;
+}
+#help span { color: var(--amber-dim); }

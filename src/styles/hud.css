@@ -1,0 +1,44 @@
+/* Panels and the bottom HUD: navigation, flight and target readouts. */
+#hud {
+  position: fixed; left: 0; right: 0; bottom: 0;
+  padding: 0 16px calc(14px + env(safe-area-inset-bottom, 0px));
+  display: flex; justify-content: center; align-items: flex-end; gap: 12px;
+  pointer-events: none;
+}
+.pan {
+  background: var(--panel);
+  border: 1px solid var(--amber-faint);
+  padding: 10px 14px 12px;
+  clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+  backdrop-filter: blur(4px);
+  min-width: 0;
+}
+.side { width: 300px; }
+.mid { width: 250px; text-align: center; display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+.h {
+  font-size: 11px; font-weight: 600; letter-spacing: .2em; color: var(--amber-dim);
+  display: flex; justify-content: space-between; margin-bottom: 4px;
+}
+.row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 12px; line-height: 1.6; }
+.row span { color: var(--amber-dim); letter-spacing: .1em; flex: none; }
+.row b {
+  font-family: "Share Tech Mono", ui-monospace, Consolas, monospace; font-weight: 400;
+  color: var(--text); font-variant-numeric: tabular-nums;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.sep { height: 1px; background: var(--amber-faint); margin: 6px 0; }
+#hMode {
+  align-self: center; font-size: 11px; font-weight: 700; letter-spacing: .22em;
+  padding: 3px 10px; border: 1px solid currentColor; color: var(--amber);
+}
+#hMode.ftl { color: var(--cyan); }
+#hMode.warn { color: var(--red); }
+.spd { font-family: "Share Tech Mono", ui-monospace, Consolas, monospace; font-size: 42px; line-height: 1; color: var(--text); font-variant-numeric: tabular-nums; }
+.unit { font-size: 11px; letter-spacing: .24em; color: var(--amber-dim); margin-top: -2px; }
+.bar { height: 6px; background: var(--amber-faint); position: relative; }
+.bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--amber); }
+.bar.ftl { background: var(--cyan-faint); }
+.bar.ftl i { background: var(--cyan); }
+.sub { font-size: 10px; letter-spacing: .2em; color: var(--amber-dim); display: flex; justify-content: space-between; }
+.ftlc { color: var(--cyan); }
+.warnc { color: var(--red) !important; }

@@ -2,7 +2,39 @@
 
 A browser space flight sim built to real scale, in the spirit of Elite Dangerous. You're always in the cockpit: fly between planets on an FTL drive, jump between stars, fall into gravity wells, and manage propellant, exotic matter and solar power.
 
-Everything is a single file, `index.html`, using three.js from a CDN. Open it in a browser, or enable GitHub Pages on this repo to play it online.
+Built with TypeScript, React and three.js, bundled with Vite.
+
+## Running it
+```sh
+npm install
+npm run dev       # dev server with hot reload
+npm run build     # type-check and build a static site into dist/
+npm run preview   # serve the production build
+npm test          # unit tests (vitest)
+npm run lint
+```
+The build is a static site with relative paths, so `dist/` can be hosted anywhere. The included workflow (`.github/workflows/deploy.yml`) builds every push and deploys `main` to GitHub Pages; set **Settings → Pages → Source** to *GitHub Actions* to turn it on.
+
+## Code layout
+```
+src/
+  main.tsx, ui/            React: mounts the game and renders the HUD panels, start screen and toasts
+    hooks/useGame.ts       creates the Game and subscribes to its HUD snapshots
+    components/            Hud, ShipSystems, ManeuverGuide, OrbitPlanner, HelpPanel, StartScreen, Toast
+  styles/                  global CSS (theme, HUD, panels, start screen)
+  game/                    framework-free game engine
+    Game.ts                owns all state and runs the frame loop (simulate → render → overlay → HUD)
+    constants.ts, types.ts units, ship specs, drive costs; typed bodies, ship, autopilot…
+    format.ts              distance / speed / time / mass formatting
+    lib/                   seeded RNG, colours, three.js setup
+    universe/              procedural galaxy, stars, planets and moons
+    sim/                   physics and ship systems: gravity, flight, FTL, orbits, autopilot,
+                           maneuver guide, navigation and hyperjumps, resources, per-step update
+    input/                 keyboard / mouse state and key bindings
+    render/                three.js scene renderer, 2D overlay canvas, GLSL shaders
+    hud/                   builds the HUD view model that React renders
+```
+The simulation never touches the DOM. Each frame it steps the physics, draws the 3D scene and the overlay canvas, and about twelve times a second publishes a HUD snapshot (plain strings and flags) that React picks up through `useSyncExternalStore`.
 
 ## The universe
 - 110 procedurally generated star systems a few light-years apart, all from fixed seeds, so every system is the same on every visit.
@@ -36,4 +68,4 @@ Everything is a single file, `index.html`, using three.js from a CDN. Open it in
 - **Maneuver guide:** orbit insertion, hold position, hyperjumps and tanker rendezvous show a step-by-step progress panel with ETAs and Δv per step.
 
 ## Debugging
-`window.farlight.step(seconds)` fast-forwards the simulation from the browser console.
+`window.farlight` is the running `Game`. `farlight.step(seconds)` fast-forwards the simulation from the browser console, and `farlight.ship`, `farlight.cur` and `farlight.power` expose the live state.
