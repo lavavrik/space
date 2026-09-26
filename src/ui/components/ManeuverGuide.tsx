@@ -1,14 +1,10 @@
 import type { GuideView } from '../../game/hud/types';
-import { Bar, cx } from './primitives';
+import { Bar, Panel, cx } from './primitives';
 
 /** Step-by-step progress for orbit insertion, holds, hyperjumps and tanker rendezvous. */
 export function ManeuverGuide({ guide }: { guide: GuideView }) {
   return (
-    <section id="guide" className="pan">
-      <div className="h">
-        <span>{guide.title}</span>
-        <span id="gEta">{guide.eta}</span>
-      </div>
+    <Panel name="guide" id="guide" className="pan" title={guide.title} right={<span id="gEta">{guide.eta}</span>}>
       <div className="gsub">{guide.sub}</div>
       <ol id="gSteps">
         {guide.steps.map((s) => (
@@ -27,6 +23,6 @@ export function ManeuverGuide({ guide }: { guide: GuideView }) {
         <span>{guide.foot}</span>
         <span>{guide.time}</span>
       </div>
-    </section>
+    </Panel>
   );
 }

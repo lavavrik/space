@@ -22,10 +22,10 @@
 .isec { font-size: 11px; letter-spacing: .14em; color: var(--amber); margin: 8px 0 2px; border-top: 1px solid var(--amber-faint); padding-top: 6px; }
 #help {
   background: var(--panel); border: 1px solid var(--amber-faint);
-  padding: 10px 14px; font-size: 12px; pointer-events: none;
-  display: grid; grid-template-columns: auto auto; gap: 2px 14px;
+  padding: 10px 14px; font-size: 12px; pointer-events: none; align-self: flex-start;
 }
-#help .h { grid-column: 1 / -1; }
+#help.collapsed { padding-bottom: 6px; }
+#help .keys { display: grid; grid-template-columns: auto auto; gap: 2px 14px; }
 #help kbd {
   font-family: "Share Tech Mono", ui-monospace, monospace; color: var(--text);
   font-size: 12px; white-space: nowrap;

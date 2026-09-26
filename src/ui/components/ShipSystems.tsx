@@ -1,11 +1,10 @@
 import type { SystemsView } from '../../game/hud/types';
-import { Bar, Heading, Row, Sub } from './primitives';
+import { Bar, Panel, Row, Sub } from './primitives';
 
 /** Propellant, exotic matter and electrical power. */
 export function ShipSystems({ s }: { s: SystemsView }) {
   return (
-    <section id="sys" className="pan">
-      <Heading right={s.mass}>SHIP SYSTEMS</Heading>
+    <Panel name="sys" id="sys" className="pan" title="SHIP SYSTEMS" right={s.mass}>
       <div className="gauge">
         <Row label="PROPELLANT · H₂" value={s.prop} />
         <Bar frac={s.propFrac} lowWarn />
@@ -24,6 +23,6 @@ export function ShipSystems({ s }: { s: SystemsView }) {
       <Row label="SOLAR" value={s.solar} />
       <Row label="LOAD" value={s.load} />
       {s.note && <p className="onote">{s.note}</p>}
-    </section>
+    </Panel>
   );
 }

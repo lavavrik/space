@@ -1,10 +1,9 @@
 import type { FlightView, NavigationView, TargetView } from '../../game/hud/types';
-import { Bar, Heading, Row, Sub } from './primitives';
+import { Bar, Panel, Row, Sub } from './primitives';
 
 function NavigationPanel({ nav }: { nav: NavigationView }) {
   return (
-    <section className="pan side">
-      <Heading right={nav.clock}>NAVIGATION</Heading>
+    <Panel name="nav" className="pan side" title="NAVIGATION" right={nav.clock}>
       <Row label="SYSTEM" value={nav.system} />
       <Row label="STAR" value={nav.star} />
       <Row label="GALACTIC" value={nav.galactic} />
@@ -12,7 +11,7 @@ function NavigationPanel({ nav }: { nav: NavigationView }) {
       <Row label="X" value={nav.x} />
       <Row label="Y" value={nav.y} />
       <Row label="Z" value={nav.z} />
-    </section>
+    </Panel>
   );
 }
 
@@ -36,8 +35,7 @@ function FlightPanel({ flight }: { flight: FlightView }) {
 
 function TargetPanel({ target }: { target: TargetView }) {
   return (
-    <section className="pan side">
-      <Heading right={target.type}>TARGET</Heading>
+    <Panel name="target" className="pan side" title="TARGET" right={target.type}>
       <Row label="BODY" value={target.body} />
       <Row label="DISTANCE" value={target.distance} />
       <Row label="ETA" value={target.eta} />
@@ -46,11 +44,11 @@ function TargetPanel({ target }: { target: TargetView }) {
       <Row label="VERTICAL" value={target.vertical} />
       <Row label="ORBIT" value={target.orbit} />
       <Row label="JUMP TO" value={target.jump} />
-    </section>
+    </Panel>
   );
 }
 
-/** Bottom HUD: navigation, flight and target panels. */
+/** Bottom HUD: navigation, flight and target panels. All but the flight panel (the speedo) collapse. */
 export function Hud({ nav, flight, target }: { nav: NavigationView; flight: FlightView; target: TargetView }) {
   return (
     <div id="hud">

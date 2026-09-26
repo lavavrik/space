@@ -64,6 +64,7 @@ The simulation never touches the DOM. Each frame it steps the physics, draws the
 | P | Turn the solar panels to the star |
 | K | Call a fuel tanker |
 | Tab | Hide the controls list |
+| Click a panel heading | Collapse / expand that panel (all but the speed readout; remembered per browser). Release the mouse (Esc) first if it's captured |
 
 ## Physics
 - **Orbits:** planets orbit their star and moons orbit their planets on near-circular Kepler orbits (e ≤ 0.06), computed exactly from the sim clock, so a moon around a giant may lap it in hours while an Earth-like world takes a year.

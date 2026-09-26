@@ -1,6 +1,6 @@
 import type { PlannerView } from '../../game/hud/types';
 import type { OrbitType } from '../../game/types';
-import { Heading, Row, cx } from './primitives';
+import { Panel, Row, cx } from './primitives';
 
 const TYPES: [OrbitType, string][] = [
   ['equatorial', 'Equatorial'],
@@ -12,8 +12,7 @@ const TYPES: [OrbitType, string][] = [
 /** Orbit planner (O): choose an orbit type and altitude for the autopilot. */
 export function OrbitPlanner({ p }: { p: PlannerView }) {
   return (
-    <div id="orbit" className="pan">
-      <Heading right="O CLOSES">ORBIT PLANNER</Heading>
+    <Panel name="orbit" id="orbit" className="pan" title="ORBIT PLANNER" right="O CLOSES">
       <Row label="BODY" value={p.body} />
       <div className="otypes">
         {TYPES.map(([t, label], i) => (
@@ -31,6 +30,6 @@ export function OrbitPlanner({ p }: { p: PlannerView }) {
       <div className="okeys">
         <kbd>[ ]</kbd> or wheel altitude · <kbd>Shift</kbd> big steps · <kbd>R</kbd> direction · <kbd>Enter</kbd> engage
       </div>
-    </div>
+    </Panel>
   );
 }
