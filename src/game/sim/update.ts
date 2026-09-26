@@ -99,7 +99,8 @@ export function update(g: Game, dt: number) {
   power.net = power.solar - power.draw;
   ship.batt = Math.min(SHIP.battCap, Math.max(0, ship.batt + (power.net * dt) / 3600));
   if (ship.batt > 1) g.warned.batt = false;
-  ship.burnRate += (power.burn / dt - ship.burnRate) * Math.min(1, dt * 3);
+  // dt can be 0 (two frames on one timestamp); 0/0 would stick NaN in the smoothed rate forever
+  if (dt > 0) ship.burnRate += (power.burn / dt - ship.burnRate) * Math.min(1, dt * 3);
   power.thrustKW = power.ftlKW = power.chargeKW = power.burn = 0;
   if (!inTunnel) scoop(g, dt);
   updateTanker(g, dt);

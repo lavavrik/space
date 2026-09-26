@@ -9,7 +9,7 @@ export const HELP_KEYS: [string, string][] = [
   ['X', 'All stop'],
   ['J', 'FTL drive on / off'],
   ['T / G', 'Target ahead / next nearest'],
-  ['N / H', 'Pick star system / hyperjump'],
+  ['N / H', 'Pick star (aim or cycle) / hyperjump'],
   ['O', 'Orbit planner · autopilot off'],
   ['Z', 'Flight assist on / off'],
   ['P', 'Point solar panels at the star'],

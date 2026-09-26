@@ -19,3 +19,16 @@ export function makeName(g: Rng, used: Set<string>) {
   }
   return 'Unnamed ' + Math.floor(g() * 1e5);
 }
+
+/**
+ * A name for a procedurally generated star. Names aren't checked for uniqueness (the galaxy is
+ * generated lazily, so there's no global list), so the name space is kept large instead: mostly
+ * two-part syllable names (about 4 million), some short ones, and catalogue numbers.
+ */
+export function starName(g: Rng) {
+  const r = g();
+  const pick = (a: string[]) => a[Math.floor(g() * a.length)];
+  if (r < 0.1) return pick(CATALOGUES) + ' ' + (100 + Math.floor(g() * 99900));
+  if (r < 0.35) return pick(S1) + pick(S2) + pick(S3);
+  return pick(S1) + pick(S2) + pick(S1).toLowerCase() + pick(S2) + pick(S3);
+}

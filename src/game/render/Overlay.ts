@@ -2,7 +2,7 @@ import { JUMP_CHARGE_TIME, JUMP_TUNNEL_TIME, RESPAWN_TIME } from '../constants';
 import { fmtDist } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
-import { galPos } from '../sim/navigation';
+import { galPos, reachable } from '../sim/navigation';
 import type { SceneRenderer } from './SceneRenderer';
 
 const AMB = 'rgba(255,165,58,',
@@ -128,6 +128,7 @@ export class Overlay {
     }
 
     this.drawBodies(g);
+    this.drawReachable(g);
     this.drawJumpDest(g);
 
     if (g.flash > 0) {
@@ -264,6 +265,37 @@ export class Overlay {
         ctx.stroke();
         ctx.fillStyle = AMB + (b.kind === 'moon' ? '0.5)' : '0.75)');
         ctx.fillText(b.name, s.x, s.y - r - 5);
+      }
+    }
+  }
+
+  /**
+   * Small rings on reachable stars near the crosshair, so you can see what N would pick by aiming.
+   * Only a narrow cone is marked to keep ~100 in-range stars from cluttering the view.
+   */
+  private drawReachable(g: Game) {
+    const { ctx } = this;
+    const gp = galPos(g);
+    const dir = this.tmp;
+    ctx.font = `10px ${MONO}`;
+    ctx.textAlign = 'center';
+    for (const s of reachable(g)) {
+      if (s.id === g.jumpDest?.id) continue;
+      dir.subVectors(s.pos, gp);
+      const ly = dir.length();
+      const p = this.toScreen(g, dir.normalize().multiplyScalar(1e6));
+      if (p.behind) continue;
+      const off = Math.hypot(p.v.x, p.v.y) / -p.v.z; // tan of angle from the crosshair
+      if (off > 0.16) continue;
+      const a = off < 0.06 ? 0.75 : 0.3;
+      ctx.strokeStyle = CYA + a + ')';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+      ctx.stroke();
+      if (off < 0.06) {
+        ctx.fillStyle = CYA + '0.7)';
+        ctx.fillText(`${s.name} · ${ly.toFixed(1)} ly`, p.x, p.y - 11);
       }
     }
   }

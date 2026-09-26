@@ -7,7 +7,7 @@ export function StartScreen({ onStart }: { onStart: () => void }) {
       <div className="card">
         <h1>FARLIGHT</h1>
         <p className="tag">
-          A procedurally generated neighbourhood of 110 star systems, every one built to real scale: stars in solar radii, planets in Earth radii, orbits in
+          An endless, procedurally generated star cluster, every system built to real scale: stars in solar radii, planets in Earth radii, orbits in
           astronomical units, and light-years between the stars. You start above an Earth-like world. Use the FTL drive to cross a system and the hyperdrive
           to reach another star.
         </p>

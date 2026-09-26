@@ -2,6 +2,7 @@ import { AU, JUMP_CHARGE_TIME, JUMP_RANGE, LY, SHIP, jumpCost } from '../constan
 import type { Game } from '../Game';
 import { mulberry32, rr } from '../lib/rng';
 import { THREE } from '../lib/three';
+import { homeSystem } from '../universe/galaxy';
 import { findHome } from '../universe/system';
 import type { Ship, StarSystem } from '../types';
 import { massLock } from './ftl';
@@ -54,22 +55,43 @@ export function cycleTarget(g: Game) {
 
 /* ---------- hyperjumps ---------- */
 
+/** Systems within jump range of the ship, nearest first. */
 export function reachable(g: Game) {
   const gp = galPos(g);
-  return g.systems
-    .filter((s) => s !== g.cur.sys && s.pos.distanceTo(gp) <= JUMP_RANGE)
-    .sort((a, b) => a.pos.distanceTo(gp) - b.pos.distanceTo(gp));
+  return g.nearby.filter((s) => s.pos.distanceTo(gp) <= JUMP_RANGE).sort((a, b) => a.pos.distanceTo(gp) - b.pos.distanceTo(gp));
 }
 
-export function cycleDest(g: Game) {
+/** How far from the crosshair (rad) a star can be and still be picked by aiming at it. */
+const AIM_CONE = 0.06;
+
+/**
+ * Pick a jump destination: the reachable star nearest the crosshair if you're aiming at one,
+ * otherwise the next one out by distance.
+ */
+export function pickDest(g: Game) {
   const list = reachable(g);
   if (!list.length) {
     g.showMsg('No star systems within jump range', 'warn');
     return;
   }
-  const i = g.jumpDest ? list.indexOf(g.jumpDest) : -1;
-  g.jumpDest = list[(i + 1) % list.length];
-  g.showMsg(`Jump destination · ${g.jumpDest.name} · ${g.jumpDest.pos.distanceTo(galPos(g)).toFixed(2)} ly`, 'ftl');
+  const gp = galPos(g);
+  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(g.ship.q);
+  const dir = new THREE.Vector3();
+  let aimed: StarSystem | null = null,
+    bestA = AIM_CONE;
+  for (const s of list) {
+    const a = dir.subVectors(s.pos, gp).normalize().angleTo(fwd);
+    if (a < bestA) {
+      bestA = a;
+      aimed = s;
+    }
+  }
+  if (aimed && aimed.id !== g.jumpDest?.id) g.jumpDest = aimed;
+  else {
+    const i = g.jumpDest ? list.findIndex((s) => s.id === g.jumpDest!.id) : -1;
+    g.jumpDest = list[(i + 1) % list.length];
+  }
+  g.showMsg(`Jump destination · ${g.jumpDest.name} · ${g.jumpDest.pos.distanceTo(gp).toFixed(2)} ly`, 'ftl');
 }
 
 export function startJump(g: Game) {
@@ -126,7 +148,7 @@ export function arriveAt(g: Game, sys: StarSystem) {
 /** Start above the Earth-like home world, looking past it with the star to the side. */
 export function placeAtHome(g: Game) {
   const { ship } = g;
-  g.loadSystem(g.systems[0]);
+  g.loadSystem(homeSystem());
   const home = findHome(g.cur.bodies)!;
   const toStar = g.cur.star.pos.clone().sub(home.pos).normalize();
   const up = new THREE.Vector3(0, 1, 0);

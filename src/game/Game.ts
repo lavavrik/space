@@ -1,4 +1,4 @@
-import { FOV, HUD_INTERVAL, MSG_TIME, SHIP } from './constants';
+import { FOV, HUD_INTERVAL, JUMP_RANGE, MSG_TIME, SHIP, SKY_RADIUS } from './constants';
 import { buildSnapshot } from './hud/snapshot';
 import { HudStore } from './hud/HudStore';
 import { onPress, onRepeat, onWheel } from './input/controls';
@@ -11,7 +11,7 @@ import { placeAtHome } from './sim/navigation';
 import { closePlanner } from './sim/planner';
 import { update } from './sim/update';
 import type { Body, CurrentSystem, Jump, Message, MsgKind, Planner, Power, Ship, StarSystem } from './types';
-import { getGalaxy } from './universe/galaxy';
+import { systemsNear } from './universe/galaxy';
 import { buildSystem } from './universe/system';
 
 const qa = new THREE.Quaternion();
@@ -33,8 +33,9 @@ function newShip(): Ship {
  * their own modules as functions of this object.
  */
 export class Game {
-  readonly systems = getGalaxy();
   cur!: CurrentSystem;
+  /** Systems around the current one that a jump could reach (with a margin for moving within it). */
+  nearby: StarSystem[] = [];
   readonly ship = newShip();
   readonly power: Power = { solar: 0, cos: 0, shadow: null, draw: 0, net: 0, thrustKW: 0, ftlKW: 0, chargeKW: 0, burn: 0, flux: 0 };
   target: Body | null = null;
@@ -126,7 +127,8 @@ export class Game {
   loadSystem(sys: StarSystem) {
     const bodies = buildSystem(sys);
     this.cur = { sys, bodies, star: bodies[0] as CurrentSystem['star'] };
-    this.scene.setSystem(this.cur, this.systems);
+    this.nearby = systemsNear(sys.pos, JUMP_RANGE + 1).filter((s) => s.id !== sys.id);
+    this.scene.setSystem(this.cur, systemsNear(sys.pos, SKY_RADIUS));
     this.target = null;
     this.jumpDest = null;
     this.ship.ap = null;

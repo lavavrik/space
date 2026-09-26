@@ -66,7 +66,7 @@ export interface StarInfo {
 }
 
 export interface StarSystem {
-  id: number;
+  id: string; // stable across sessions: "ix,iy,iz:k" (sector coordinates and index within it)
   seed: number;
   pos: Vec3; // ly, galactic frame
   name: string;

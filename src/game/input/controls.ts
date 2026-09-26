@@ -2,7 +2,7 @@ import { TANKER_TIME } from '../constants';
 import type { Game } from '../Game';
 import { toggleFTL } from '../sim/ftl';
 import { startTankerGuide } from '../sim/guide';
-import { cycleDest, cycleTarget, startJump, targetAhead } from '../sim/navigation';
+import { pickDest, cycleTarget, startJump, targetAhead } from '../sim/navigation';
 import { ORBIT_TYPES } from '../sim/orbits';
 import { adjustAlt, closePlanner, disengageAP, engageOrbit, openPlanner, reversePlannerDir, selectOrbitType } from '../sim/planner';
 
@@ -77,7 +77,7 @@ export function onPress(g: Game, code: string) {
       cycleTarget(g);
       break;
     case 'KeyN':
-      cycleDest(g);
+      pickDest(g);
       break;
     case 'KeyH':
       startJump(g);

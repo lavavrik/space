@@ -1,7 +1,6 @@
 import { AU, FOV, WT } from '../constants';
 import type { Game } from '../Game';
-import { kelvin } from '../lib/color';
-import { mulberry32, rr } from '../lib/rng';
+import { mulberry32 } from '../lib/rng';
 import { THREE } from '../lib/three';
 import type { Body, CurrentSystem, Star, StarSystem, World } from '../types';
 import { ATMO_FS, BODY_VS, GLOW_FS, GLOW_VS, PLANET_FS, POINT_FS, POINT_VS, RING_FS, SKYPT_FS, SKYPT_VS, SKY_FS, SKY_VS, STAR_FS } from './shaders';
@@ -87,67 +86,39 @@ export class SceneRenderer {
     return new THREE.ShaderMaterial({ vertexShader: SKYPT_VS, fragmentShader: SKYPT_FS, uniforms: { uPR: { value: this.PR } }, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
   }
 
-  /** The Milky Way band and 11,000 background stars. */
+  /**
+   * The Milky Way band: unresolved light from distant stars. Every individual star in the sky is a
+   * real system you can fly to (see buildSysStars), so there are no decorative points.
+   */
   private buildSky() {
     const sky = new THREE.Mesh(new THREE.SphereGeometry(100, 64, 32), new THREE.ShaderMaterial({ vertexShader: SKY_VS, fragmentShader: SKY_FS, side: THREE.BackSide, depthWrite: false }));
     this.skyScene.add(sky);
-    const g = mulberry32(777);
-    const N = 11000,
-      pos = new Float32Array(N * 3),
-      col = new Float32Array(N * 3),
-      size = new Float32Array(N);
-    const gn = new THREE.Vector3(0.05, 1, 0.12).normalize();
-    const v = new THREE.Vector3(),
-      tmp = new THREE.Color();
-    for (let i = 0; i < N; i++) {
-      v.set(g() * 2 - 1, g() * 2 - 1, g() * 2 - 1);
-      if (v.lengthSq() > 1 || v.lengthSq() < 1e-4) {
-        i--;
-        continue;
-      }
-      v.normalize();
-      if (g() < 0.45) {
-        // crowd toward the galactic plane
-        const b = v.dot(gn);
-        v.addScaledVector(gn, -b + b * 0.12 * (g() < 0.5 ? 1 : 0.3)).normalize();
-      }
-      v.multiplyScalar(90);
-      pos.set([v.x, v.y, v.z], i * 3);
-      const br = Math.pow(g(), 7);
-      const T = g() < 0.1 ? rr(g, 9000, 25000) : g() < 0.4 ? rr(g, 3000, 4500) : rr(g, 4500, 7500);
-      tmp.copy(kelvin(T)).lerp(new THREE.Color(1, 1, 1), 0.35).multiplyScalar(0.18 + br * 1.1);
-      col.set([tmp.r, tmp.g, tmp.b], i * 3);
-      size[i] = 1.6 + br * 3.6;
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    geo.setAttribute('aColor', new THREE.BufferAttribute(col, 3));
-    geo.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
-    this.skyScene.add(new THREE.Points(geo, this.pointsMaterial()));
   }
 
-  /** The other star systems as sky points, bright by flux from here. */
+  /** Every other system within SKY_RADIUS as a sky point, brightness and size by flux from here. */
   private buildSysStars(cur: StarSystem, systems: StarSystem[]) {
     if (this.sysStars) {
       this.skyScene.remove(this.sysStars);
       this.sysStars.geometry.dispose();
       (this.sysStars.material as THREE.Material).dispose();
     }
-    const others = systems.filter((s) => s !== cur);
+    const others = systems.filter((s) => s.id !== cur.id);
     const N = others.length,
       pos = new Float32Array(N * 3),
       col = new Float32Array(N * 3),
       size = new Float32Array(N);
+    const white = new THREE.Color(1, 1, 1);
     others.forEach((s, i) => {
       const d = s.pos.clone().sub(cur.pos);
-      const ly = d.length();
+      const ly = Math.max(d.length(), 0.05);
       d.normalize().multiplyScalar(80);
       pos.set([d.x, d.y, d.z], i * 3);
-      const f = s.star.L / (ly * ly);
-      const k = Math.min(1, 0.35 + 0.3 * Math.log10(1 + f * 400));
-      const c = s.star.color.clone().lerp(new THREE.Color(1, 1, 1), 0.25).multiplyScalar(k * 1.3);
+      // log-flux brightness: a dim red dwarf at 100 ly (L/ly² ≈ 1e-6) is barely visible,
+      // a Sun at a few ly (≈ 0.1) is bright, a B star nearby saturates
+      const a = Math.max(0, Math.min(1, (Math.log10(s.star.L / (ly * ly)) + 6) / 5.5));
+      const c = s.star.color.clone().lerp(white, 0.25).multiplyScalar(0.14 + 1.2 * a ** 1.4);
       col.set([c.r, c.g, c.b], i * 3);
-      size[i] = Math.min(10, 2.4 + 2.2 * Math.log10(1 + f * 300));
+      size[i] = 1.5 + 6.5 * a * a;
     });
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));

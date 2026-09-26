@@ -57,9 +57,12 @@ export const RESPAWN_TIME = 4;
 export const MSG_TIME = 3.2;
 export const HUD_INTERVAL = 0.08;
 
-/* Galaxy */
+/* Galaxy: an unbounded local cluster, generated lazily in cubic sectors (see universe/galaxy.ts) */
 export const GALAXY_SEED = 20260925;
-export const SYSTEM_COUNT = 110;
+export const SECTOR_SIZE = 10; // ly, edge of one generation sector
+export const STARS_IN_RANGE = 100; // average number of systems within JUMP_RANGE of any point
+export const STAR_DENSITY = STARS_IN_RANGE / ((4 / 3) * Math.PI * JUMP_RANGE ** 3); // systems per ly³ (≈ 0.0015)
+export const SKY_RADIUS = 100; // ly: every system this close shows as a star in the sky
 
 /* World types */
 export const WT = {
