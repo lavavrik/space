@@ -53,8 +53,11 @@ The simulation never touches the DOM. Each frame it steps the physics, draws the
 | Mouse, arrows · Q / E | Pitch and yaw · roll |
 | Shift · X | Boost · all stop |
 | Z | Flight assist on / off |
+| V | Decoupled: turn without changing course (normal space and FTL) |
 | J | FTL drive |
+| F | FTL cruise control: the throttle holds. Off, it spools down when you release W and the drive drops out |
 | T / G | Target body or station ahead / cycle by distance |
+| Click | Target the body, station or reachable star under the cursor (or the crosshair, with the mouse captured). Clicking empty space captures the mouse |
 | N / H | Pick a star system (aim at it, or cycle by distance) / hyperjump |
 | O | Orbit planner (equatorial, polar, stationary, hold position) |
 | P | Turn the solar panels to the star |
@@ -68,6 +71,7 @@ The simulation never touches the DOM. Each frame it steps the physics, draws the
 - **Exotic matter:** runs the FTL drive, and hyperjumps cost `2 + 0.02 × ly²` kg.
 - **Power:** a 200 kWh battery charged by solar panels. Output follows starlight flux and panel angle, and drops to zero in a planet's shadow.
 - **Refuelling:** skim a star's corona or a gas giant's upper atmosphere, mine ice on the ground, or call a tanker.
+- **Decoupled flight (V):** rotation stops steering. In FTL the drive keeps pushing along its last direction, dropping out keeps that course, and in normal space flight assist stops damping drift. You can flip 180° and fly backwards; a crossed-circle retrograde marker shows where you came from. Thrust still works along the ship's axes, and X still stops you.
 - **Local frame:** within 30 km of a station, flight assist, the speed readout ("REL. <station>") and the speed limit are relative to the station. Hands off, you hold station beside it. Flying in from the planet's frame, flight assist burns real propellant to match the station's orbit. Dropping out of FTL within 30 km puts you straight into the station's frame.
 - **Hyperjumps:** limited to 25 ly. Reachable stars near the crosshair get a small ring and label; aim at one and press N.
 - **Maneuver guide:** orbit insertion, hold position, hyperjumps and tanker rendezvous show a step-by-step progress panel with ETAs and Δv per step.

@@ -56,6 +56,19 @@ export function ftlUpkeep(g: Game, dt: number, load: number) {
   return false;
 }
 
+/**
+ * Decoupled flight (V). Rotation no longer steers: in FTL the drive keeps pushing along its last
+ * direction, and in normal space flight assist stops damping your velocity, so you keep drifting
+ * the way you were going. Turn 180° and you fly backwards; thrust still works along the ship's
+ * axes, and X still brings you to a stop.
+ */
+export function toggleDecoupled(g: Game) {
+  const { ship } = g;
+  ship.decoupled = !ship.decoupled;
+  if (!ship.decoupled) ship.travelDir.set(0, 0, -1).applyQuaternion(ship.q);
+  g.showMsg(ship.decoupled ? 'Decoupled · turn freely, you keep your heading' : ship.mode === 'ftl' ? 'Coupled · the FTL drive follows the nose again' : 'Coupled · flight assist damps drift again');
+}
+
 export function toggleFTL(g: Game) {
   const { ship } = g;
   if (g.jump) return;
@@ -94,6 +107,7 @@ export function engageFTL(g: Game) {
   ship.mode = 'ftl';
   ship.tanker = null;
   const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(ship.q);
+  ship.travelDir.copy(fwd); // the drive always spins up along the nose
   ship.ftlSpeed = Math.max(ship.vel.dot(fwd), 0) + 3e4;
   ship.throttle = 0.3;
   ship.vel.set(0, 0, 0);
@@ -103,14 +117,14 @@ export function engageFTL(g: Game) {
     g.showMsg(`Autopilot · FTL transfer to ${ship.ap.body.name}`, 'ftl');
     return;
   }
-  g.showMsg('FTL engaged · W / S sets throttle', 'ftl');
+  g.showMsg(ship.cruise ? 'FTL engaged · cruise control on · W / S set the throttle' : 'FTL engaged · hold W to accelerate · F for cruise control', 'ftl');
 }
 
 export function dropFTL(g: Game, forced: boolean, body?: Body) {
   const { ship } = g;
-  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(ship.q);
   ship.mode = 'normal';
-  ship.vel.copy(fwd).multiplyScalar(forced ? 500 : Math.min(ship.ftlSpeed, NORMAL_MAX));
+  // keep moving the way the drive was pushing, which may not be where the nose points
+  ship.vel.copy(ship.travelDir).multiplyScalar(forced ? 500 : Math.min(ship.ftlSpeed, NORMAL_MAX));
   ship.ftlSpeed = 0;
   if (ship.ap) {
     ship.ap.phase = 'insert';
@@ -143,10 +157,27 @@ export function chargeFTL(g: Game, dt: number) {
   }
 }
 
-/** Manual FTL flight: W / S set the throttle, and the drive slows itself near massive bodies. */
+/** Throttle lost per second with cruise control off and W released: from full to idle in ~6 s. */
+const SPOOL_DOWN = 0.17;
+/** With cruise off, the drive drops out once the throttle is idle and it has slowed below this. */
+const SPOOL_DROP_SPEED = 5e4; // m/s
+
+/** Cruise control (F): hold the FTL throttle where it is instead of letting it spool down. */
+export function toggleCruise(g: Game) {
+  const { ship } = g;
+  ship.cruise = !ship.cruise;
+  g.showMsg(ship.cruise ? 'Cruise control on · the FTL throttle holds · W / S adjust it' : 'Cruise control off · hold W to keep the FTL drive running', 'ftl');
+}
+
+/**
+ * Manual FTL flight: W / S move the throttle, and the drive slows itself near massive bodies.
+ * With cruise control off the throttle spools down whenever W is released, and the drive drops
+ * out by itself once it idles; with cruise control on it holds wherever you leave it.
+ */
 export function ftlCruise(g: Game, dt: number) {
   const { ship, keys } = g;
   if (keys.KeyW) ship.throttle = Math.min(1, ship.throttle + 0.45 * dt);
+  else if (!ship.cruise) ship.throttle = Math.max(0, ship.throttle - SPOOL_DOWN * dt);
   if (keys.KeyS) ship.throttle = Math.max(0, ship.throttle - 0.45 * dt);
   if (keys.KeyX) ship.throttle = 0;
   const vmax = ftlSpeedLimit(g);
@@ -155,9 +186,14 @@ export function ftlCruise(g: Game, dt: number) {
   if (ship.ftlSpeed < tgt) ship.ftlSpeed = Math.min(tgt, ship.ftlSpeed * Math.exp(1.5 * dt) + 20000 * dt);
   else ship.ftlSpeed = Math.max(tgt, ship.ftlSpeed * Math.exp(-2.5 * dt));
   ship.ftlSpeed = Math.min(ship.ftlSpeed, vmax);
-  ship.pos.addScaledVector(g.fwd, ship.ftlSpeed * dt);
+  ship.pos.addScaledVector(ship.travelDir, ship.ftlSpeed * dt);
   g.curSpeed = ship.ftlSpeed;
   if (ftlUpkeep(g, dt, ship.throttle)) {
+    if (!ship.cruise && ship.throttle === 0 && ship.ftlSpeed < SPOOL_DROP_SPEED) {
+      dropFTL(g, false);
+      if (!g.refFrame) g.showMsg('FTL drive spooled down · press F for cruise control'); // keep "matched <station>" if we dropped beside one
+      return;
+    }
     for (const b of g.cur.bodies) {
       const alt = b.pos.distanceTo(ship.pos) - b.radius;
       if (alt < dropAlt(b)) {

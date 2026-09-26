@@ -21,7 +21,7 @@ export function App() {
             {hud.guide && <ManeuverGuide guide={hud.guide} />}
             {hud.planner && <OrbitPlanner p={hud.planner} />}
           </div>
-          {hud.showRelock && <div id="relock">CLICK TO CAPTURE MOUSE · DRAG ALSO STEERS</div>}
+          {hud.showRelock && <div id="relock">CLICK SPACE TO CAPTURE MOUSE · CLICK OBJECTS TO TARGET · DRAG ALSO STEERS</div>}
           <Toast toast={hud.toast} />
           <Hud nav={hud.nav} flight={hud.flight} target={hud.target} />
           {!hud.started && <StartScreen onStart={() => game!.begin()} />}

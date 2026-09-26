@@ -2,7 +2,7 @@
 const HANDLED = new Set([
   'KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ControlLeft', 'ControlRight', 'KeyC', 'KeyQ', 'KeyE', 'ShiftLeft', 'ShiftRight',
   'KeyJ', 'KeyH', 'KeyN', 'KeyT', 'KeyG', 'KeyX', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
-  'KeyZ', 'KeyO', 'KeyR', 'KeyP', 'KeyK', 'BracketLeft', 'BracketRight', 'Enter', 'NumpadEnter', 'Digit1', 'Digit2', 'Digit3', 'Digit4',
+  'KeyZ', 'KeyV', 'KeyF', 'KeyO', 'KeyR', 'KeyP', 'KeyK', 'BracketLeft', 'BracketRight', 'Enter', 'NumpadEnter', 'Digit1', 'Digit2', 'Digit3', 'Digit4',
 ]);
 
 export type Keys = Record<string, boolean | undefined>;
@@ -13,6 +13,8 @@ export interface InputHandlers {
   /** A held key auto-repeated. */
   onRepeat(code: string): void;
   onWheel(deltaY: number): void;
+  /** A click that didn't drag, at canvas pixel (x, y). While the pointer is locked it's always the centre. */
+  onClick(x: number, y: number, locked: boolean): void;
   /** Whether the mouse steers the ship yet. */
   isActive(): boolean;
   onPointerLockChange(locked: boolean): void;
@@ -24,6 +26,7 @@ export class Input {
   private mdx = 0;
   private mdy = 0;
   private dragging = false;
+  private dragDist = 0; // px moved since mousedown, to tell a click from a drag
   private readonly cleanup: (() => void)[] = [];
 
   constructor(
@@ -44,18 +47,23 @@ export class Input {
       for (const k in this.keys) this.keys[k] = false;
       this.dragging = false;
     });
-    this.listen(canvas, 'mousedown', () => {
-      if (!handlers.isActive()) return;
-      if (!this.isLocked()) {
-        this.dragging = true;
-        this.requestLock();
-      }
+    // Unlocked: dragging steers, and a click either targets what's under the cursor or (via the
+    // handler) captures the mouse. Locked: a click targets what's under the crosshair.
+    this.listen(canvas, 'mousedown', (e: MouseEvent) => {
+      if (!handlers.isActive() || e.button !== 0) return;
+      this.dragging = true;
+      this.dragDist = 0;
     });
-    this.listen(window, 'mouseup', () => {
+    this.listen(window, 'mouseup', (e: MouseEvent) => {
+      if (this.dragging && this.dragDist < 5 && e.button === 0) {
+        const r = canvas.getBoundingClientRect();
+        handlers.onClick(e.clientX - r.left, e.clientY - r.top, this.isLocked());
+      }
       this.dragging = false;
     });
     this.listen(window, 'mousemove', (e: MouseEvent) => {
-      if (this.isLocked() || this.dragging) {
+      if (this.dragging) this.dragDist += Math.abs(e.movementX) + Math.abs(e.movementY);
+      if (this.isLocked() || (this.dragging && this.dragDist >= 5)) {
         this.mdx += e.movementX;
         this.mdy += e.movementY;
       }

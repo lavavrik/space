@@ -1,6 +1,6 @@
 import { TANKER_TIME } from '../constants';
 import type { Game } from '../Game';
-import { toggleFTL } from '../sim/ftl';
+import { toggleCruise, toggleDecoupled, toggleFTL } from '../sim/ftl';
 import { startTankerGuide } from '../sim/guide';
 import { pickDest, cycleTarget, startJump, targetAhead } from '../sim/navigation';
 import { ORBIT_TYPES } from '../sim/orbits';
@@ -61,6 +61,12 @@ export function onPress(g: Game, code: string) {
         startTankerGuide(g, ship.tanker);
         g.showMsg(`Tanker on its way · hold still for ${TANKER_TIME} s`);
       }
+      break;
+    case 'KeyF':
+      toggleCruise(g);
+      break;
+    case 'KeyV':
+      toggleDecoupled(g);
       break;
     case 'KeyZ':
       ship.fa = !ship.fa;

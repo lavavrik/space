@@ -70,7 +70,7 @@ function flight(g: Game): FlightView {
   const barFtl = ship.mode === 'ftl';
   if (barFtl) {
     barFrac = ship.throttle;
-    barLabel = 'THROTTLE';
+    barLabel = ship.cruise ? 'THROTTLE · CRUISE' : 'THROTTLE';
     barValue = Math.round(ship.throttle * 100) + '%';
   } else {
     const boost = !!(keys.ShiftLeft || keys.ShiftRight);
@@ -88,7 +88,7 @@ function flight(g: Game): FlightView {
   }
   return {
     mode, modeClass, speed, unit, barFrac, barFtl, barLabel, barValue,
-    flightAssist: { text: ship.fa ? 'FLIGHT ASSIST ON' : 'FLIGHT ASSIST OFF', warn: !ship.fa },
+    flightAssist: { text: (ship.fa ? 'FLIGHT ASSIST ON' : 'FLIGHT ASSIST OFF') + (ship.decoupled ? ' · DECOUPLED' : ''), warn: !ship.fa || ship.decoupled },
     gravity,
   };
 }
@@ -106,7 +106,7 @@ function target(g: Game): TargetView {
     view.type = t.typeName.toUpperCase();
     view.distance = fmtDist(d);
     const dir = tmp.subVectors(t.pos, ship.pos).normalize();
-    const vel = ship.mode === 'ftl' ? g.fwd.clone().multiplyScalar(ship.ftlSpeed) : ship.vel.clone();
+    const vel = ship.mode === 'ftl' ? ship.travelDir.clone().multiplyScalar(ship.ftlSpeed) : ship.vel.clone();
     vel.add(g.frameBody.vel).sub(t.vel); // everything moves, so close on the target in its own frame
     const closing = vel.dot(dir);
     view.eta = closing > 1 ? fmtTime(d / closing) : 'not closing';

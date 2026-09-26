@@ -7,7 +7,7 @@ import { THREE } from './lib/three';
 import { Overlay } from './render/Overlay';
 import { SceneRenderer } from './render/SceneRenderer';
 import type { Guide } from './sim/guide';
-import { placeAtHome } from './sim/navigation';
+import { pickAt, placeAtHome } from './sim/navigation';
 import { closePlanner } from './sim/planner';
 import { update } from './sim/update';
 import type { Body, CurrentSystem, Jump, Message, MsgKind, Planner, Power, Ship, StarSystem, Station, Target } from './types';
@@ -24,8 +24,8 @@ const AY = new THREE.Vector3(0, 1, 0);
 function newShip(): Ship {
   return {
     pos: new THREE.Vector3(), vel: new THREE.Vector3(), q: new THREE.Quaternion(),
-    mode: 'normal', throttle: 0, ftlSpeed: 0, ftlCharge: 0, vmax: 0,
-    fa: true, ap: null, landed: null, dead: null, grav: null,
+    mode: 'normal', throttle: 0, cruise: false, ftlSpeed: 0, ftlCharge: 0, vmax: 0,
+    fa: true, decoupled: false, travelDir: new THREE.Vector3(0, 0, -1), ap: null, landed: null, dead: null, grav: null,
     prop: SHIP.propCap, exotic: SHIP.exoticCap, batt: SHIP.battCap,
     burnRate: 0, sunTrack: false, tanker: null, scoop: '',
   };
@@ -92,6 +92,13 @@ export class Game {
       onPress: (code) => onPress(this, code),
       onRepeat: (code) => onRepeat(this, code),
       onWheel: (dy) => onWheel(this, dy),
+      onClick: (x, y, locked) => {
+        const { W, H } = this.view;
+        const hit = pickAt(this, locked ? W / 2 : x, locked ? H / 2 : y);
+        // clicking empty space captures the mouse, as before
+        if (!hit && !locked) this.input.requestLock();
+        this.invalidateHud();
+      },
       isActive: () => this.started,
       onPointerLockChange: (locked) => {
         this.pointerLocked = locked;

@@ -46,6 +46,70 @@ export function targetAhead(g: Game) {
   } else g.showMsg('Nothing ahead · aim closer or press G');
 }
 
+/** Click tolerance in px: how far from a small object's marker a click still hits it. */
+const CLICK_PX = 14;
+
+/**
+ * Target what's at screen pixel (sx, sy). Small things drawn as markers (stations, distant bodies)
+ * win when the click lands on their marker, even in front of a big planet's disc; otherwise the
+ * nearest disc under the click. Failing both, a reachable star becomes the jump destination.
+ * Returns false if there's nothing there.
+ */
+export function pickAt(g: Game, sx: number, sy: number) {
+  const { ship } = g;
+  const { W, H, pxPerRad } = g.view;
+  const v = new THREE.Vector3();
+  const project = (rel: THREE.Vector3) => {
+    v.copy(rel).applyQuaternion(g.qInv);
+    return v.z < 0 ? { x: W / 2 + (v.x / -v.z) * pxPerRad, y: H / 2 - (v.y / -v.z) * pxPerRad } : null;
+  };
+  let marker: Target | null = null,
+    markerMiss = CLICK_PX,
+    disc: Target | null = null,
+    discDist = Infinity;
+  for (const t of [...g.cur.bodies, ...g.cur.stations]) {
+    const rel = t.pos.clone().sub(ship.pos);
+    const dist = rel.length();
+    const p = project(rel);
+    if (!p) continue;
+    const pxR = (t.radius / dist) * pxPerRad;
+    const off = Math.hypot(p.x - sx, p.y - sy);
+    if (pxR < CLICK_PX) {
+      if (off < markerMiss) {
+        marker = t;
+        markerMiss = off;
+      }
+    } else if (off <= pxR && dist < discDist) {
+      disc = t;
+      discDist = dist;
+    }
+  }
+  const best = marker ?? disc;
+  if (best) {
+    g.target = best;
+    g.showMsg(`Target · ${best.name}`);
+    return true;
+  }
+  const gp = galPos(g);
+  let star: StarSystem | null = null,
+    starMiss = CLICK_PX;
+  for (const s of reachable(g)) {
+    const p = project(s.pos.clone().sub(gp).normalize().multiplyScalar(1e6));
+    if (!p) continue;
+    const miss = Math.hypot(p.x - sx, p.y - sy);
+    if (miss < starMiss) {
+      starMiss = miss;
+      star = s;
+    }
+  }
+  if (star) {
+    g.jumpDest = star;
+    g.showMsg(`Jump destination · ${star.name} · ${star.pos.distanceTo(gp).toFixed(2)} ly`, 'ftl');
+    return true;
+  }
+  return false;
+}
+
 /** Cycle targets by distance. */
 export function cycleTarget(g: Game) {
   const { ship } = g;

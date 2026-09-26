@@ -112,21 +112,14 @@ export class Overlay {
 
     this.drawReticle(ship.mode === 'ftl' ? CYA : AMB);
 
-    // prograde marker
-    if (ship.mode === 'normal' && g.curSpeed > 2) {
-      const s = this.toScreen(g, relVel(g).normalize().multiplyScalar(1000));
-      if (!s.behind) {
-        ctx.strokeStyle = AMB + '0.8)';
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, 6, 0, Math.PI * 2);
-        ctx.moveTo(s.x - 12, s.y);
-        ctx.lineTo(s.x - 6, s.y);
-        ctx.moveTo(s.x + 6, s.y);
-        ctx.lineTo(s.x + 12, s.y);
-        ctx.moveTo(s.x, s.y - 6);
-        ctx.lineTo(s.x, s.y - 12);
-        ctx.stroke();
-      }
+    // prograde marker (where you're going), or retrograde (where you came from) when it's behind
+    // you, e.g. flying backwards while decoupled
+    const dir = ship.mode === 'normal' ? (g.curSpeed > 2 ? relVel(g) : null) : ship.decoupled ? ship.travelDir.clone() : null;
+    if (dir) {
+      dir.normalize().multiplyScalar(1000);
+      const pro = this.toScreen(g, dir);
+      const s = pro.behind ? this.toScreen(g, dir.negate()) : pro;
+      if (!s.behind) this.drawVelMarker(s.x, s.y, !pro.behind, ship.mode === 'ftl' ? CYA : AMB);
     }
 
     this.drawBodies(g);
@@ -189,6 +182,30 @@ export class Overlay {
     ctx.fillStyle = `rgba(255,165,58,${0.8 * k})`;
     ctx.font = `12px ${MONO}`;
     ctx.fillText(`RESTORING SHIP IN ${Math.max(0, t).toFixed(1)} S`, cx, cy + 34);
+  }
+
+  /** Prograde: a ring with three spikes. Retrograde: a ring with a cross through it. */
+  private drawVelMarker(x: number, y: number, prograde: boolean, color: string) {
+    const { ctx } = this;
+    ctx.strokeStyle = color + '0.8)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(x, y, 6, 0, Math.PI * 2);
+    if (prograde) {
+      ctx.moveTo(x - 12, y);
+      ctx.lineTo(x - 6, y);
+      ctx.moveTo(x + 6, y);
+      ctx.lineTo(x + 12, y);
+      ctx.moveTo(x, y - 6);
+      ctx.lineTo(x, y - 12);
+    } else {
+      const k = 4.2;
+      ctx.moveTo(x - k, y - k);
+      ctx.lineTo(x + k, y + k);
+      ctx.moveTo(x + k, y - k);
+      ctx.lineTo(x - k, y + k);
+    }
+    ctx.stroke();
   }
 
   private drawReticle(rc: string) {

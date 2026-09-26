@@ -56,6 +56,8 @@ export function update(g: Game, dt: number) {
   }
   g.qInv.copy(ship.q).invert();
   g.fwd.set(0, 0, -1).applyQuaternion(ship.q);
+  // coupled, the FTL drive pushes along the nose; decoupled, it keeps its last direction
+  if (!ship.decoupled || apSteering) ship.travelDir.copy(g.fwd);
 
   // --- charging and hyperjumps
   chargeFTL(g, dt);

@@ -149,10 +149,16 @@ export interface Ship {
   q: THREE.Quaternion;
   mode: 'normal' | 'ftl';
   throttle: number;
+  /** FTL cruise control (F): the throttle holds. Off, it spools down unless you hold W. */
+  cruise: boolean;
   ftlSpeed: number;
   ftlCharge: number;
   vmax: number;
   fa: boolean; // flight assist
+  /** Decoupled (V): turning doesn't change where you're going, in normal space or FTL. */
+  decoupled: boolean;
+  /** Unit vector the FTL drive pushes along: the nose, or wherever it pointed when decoupled. */
+  travelDir: Vec3;
   ap: Autopilot | null; // orbit autopilot
   landed: Body | null; // body we are resting on
   dead: { t: number; reason: string; body: Body } | null;
