@@ -3,6 +3,7 @@ import type { Game } from '../Game';
 import { mulberry32 } from '../lib/rng';
 import { THREE } from '../lib/three';
 import type { Body, CurrentSystem, Star, StarSystem, Station, World } from '../types';
+import { HyperspaceView } from './Hyperspace';
 import { ATMO_FS, BODY_VS, GLOW_FS, GLOW_VS, PLANET_FS, POINT_FS, POINT_VS, RING_FS, SKYPT_FS, SKYPT_VS, SKY_FS, SKY_VS, STAR_FS, STATION_FS } from './shaders';
 
 type Uniforms = Record<string, THREE.IUniform>;
@@ -47,6 +48,7 @@ export class SceneRenderer {
   private readonly plane = new THREE.PlaneGeometry(2, 2);
   private readonly box = new THREE.BoxGeometry(1, 1, 1);
   private sysStars: THREE.Points | null = null;
+  private readonly hyper = new HyperspaceView(() => this.pointsMaterial());
   private readonly dotGeo = new THREE.BufferGeometry();
   private readonly dustGeo = new THREE.BufferGeometry();
   private readonly dust: THREE.Points;
@@ -238,6 +240,18 @@ export class SceneRenderer {
 
   render(g: Game) {
     const { ship, cur, simTime } = g;
+    // in hyperspace: only the Milky Way and the real stars streaming past, no system scene
+    const inTunnel = !!g.jump && g.jump.phase === 'tunnel';
+    if (this.sysStars) this.sysStars.visible = !inTunnel;
+    if (inTunnel) {
+      this.skyCam.quaternion.copy(ship.q);
+      this.skyCam.updateMatrixWorld();
+      this.gl.clear();
+      this.gl.render(this.skyScene, this.skyCam);
+      this.hyper.render(this.gl, g.jump!, ship.q, this.camera.aspect);
+      return;
+    }
+    this.hyper.dispose();
     const { pxPerRad } = g.view;
     const { camera, skyCam, dotGeo, PR, tmp, tmp2 } = this;
     camera.position.set(0, 0, 0);
@@ -375,6 +389,7 @@ export class SceneRenderer {
 
   dispose() {
     this.disposeSystem();
+    this.hyper.dispose();
     const dispose = (o: THREE.Object3D) => {
       const m = o as THREE.Mesh;
       if (m.geometry) m.geometry.dispose();

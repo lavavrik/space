@@ -51,7 +51,11 @@ export const ftlBurn = (load: number) => 0.015 + 0.035 * load;
 /* Timings (s) */
 export const FTL_CHARGE_TIME = 3;
 export const JUMP_CHARGE_TIME = 5;
-export const JUMP_TUNNEL_TIME = 4.5;
+// hyperspace transit lasts JUMP_TUNNEL_BASE + JUMP_TUNNEL_PER_LY × distance (see sim/hyperspace.ts)
+export const JUMP_TUNNEL_BASE = 4;
+/** A hyperjump drops you this many star radii from the destination star's centre. */
+export const ARRIVE_STAR_RADII = 10;
+export const JUMP_TUNNEL_PER_LY = 0.16;
 export const TANKER_TIME = 30;
 export const RESPAWN_TIME = 4;
 export const MSG_TIME = 3.2;

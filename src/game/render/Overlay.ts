@@ -1,9 +1,11 @@
-import { JUMP_CHARGE_TIME, JUMP_TUNNEL_TIME, RESPAWN_TIME } from '../constants';
+import { JUMP_CHARGE_TIME, RESPAWN_TIME } from '../constants';
 import { fmtDist } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import { relVel } from '../sim/frame';
+import { transitState, type TransitState } from '../sim/hyperspace';
 import { galPos, reachable } from '../sim/navigation';
+import type { Jump } from '../types';
 import type { SceneRenderer } from './SceneRenderer';
 
 const AMB = 'rgba(255,165,58,',
@@ -12,12 +14,6 @@ const AMB = 'rgba(255,165,58,',
 const MONO = '"Share Tech Mono", monospace';
 const SANS = '"Chakra Petch", system-ui, sans-serif';
 
-interface Streak {
-  a: number;
-  z: number;
-  w: number;
-}
-
 /** 2D canvas drawn over the 3D view: reticle, markers, labels, and full-screen effects. */
 export class Overlay {
   private readonly ctx: CanvasRenderingContext2D;
@@ -25,7 +21,7 @@ export class Overlay {
   private H = 1;
   private readonly tmp = new THREE.Vector3();
   private readonly tmp2 = new THREE.Vector3();
-  private readonly streaks: Streak[] = Array.from({ length: 280 }, () => ({ a: Math.random() * Math.PI * 2, z: Math.random(), w: Math.random() }));
+  private transit?: TransitState;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -78,7 +74,7 @@ export class Overlay {
     ctx.fillText(label, x, y + 22);
   }
 
-  draw(g: Game, dt: number) {
+  draw(g: Game) {
     const { ctx, W, H } = this;
     const { ship, jump } = g;
     ctx.clearRect(0, 0, W, H);
@@ -86,7 +82,7 @@ export class Overlay {
       cy = H / 2;
 
     if (jump && jump.phase === 'tunnel') {
-      this.drawTunnel(jump.t, dt);
+      this.drawTunnel(jump);
       return;
     }
     if (ship.dead) {
@@ -133,36 +129,25 @@ export class Overlay {
     }
   }
 
-  private drawTunnel(t: number, dt: number) {
+  /**
+   * Hyperspace overlay. The star field itself is drawn in 3D by SceneRenderer (real stars
+   * streaking past); this only adds a blue edge glow that swells at the peak speed and a readout.
+   */
+  private drawTunnel(j: Jump) {
     const { ctx, W, H } = this;
     const cx = W / 2,
       cy = H / 2;
-    const elapsed = JUMP_TUNNEL_TIME - t;
-    const k = Math.min(1, elapsed / 0.35) * Math.min(1, t / 0.3 + 0.0001);
-    const gr = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.hypot(W, H) / 2);
-    gr.addColorStop(0, `rgba(215,235,255,${k})`);
-    gr.addColorStop(0.12, `rgba(70,120,220,${k})`);
-    gr.addColorStop(0.5, `rgba(14,26,70,${k})`);
-    gr.addColorStop(1, `rgba(2,4,14,${k})`);
+    const st = (this.transit = transitState(j, this.transit));
+    const k = Math.sin(Math.PI * st.u); // 0 at both ends, 1 at peak speed
+    const gr = ctx.createRadialGradient(cx, cy, Math.min(W, H) * (0.45 - 0.15 * k), cx, cy, Math.hypot(W, H) / 2);
+    gr.addColorStop(0, 'rgba(60,120,255,0)');
+    gr.addColorStop(1, `rgba(60,120,255,${0.1 + 0.3 * k})`);
     ctx.fillStyle = gr;
     ctx.fillRect(0, 0, W, H);
-    ctx.lineCap = 'round';
-    for (const s of this.streaks) {
-      s.z -= dt * (0.35 + s.w * 0.5);
-      if (s.z <= 0.03) {
-        s.z = 1;
-        s.a = Math.random() * Math.PI * 2;
-      }
-      const r1 = 30 / s.z,
-        r2 = r1 * (1.15 + (0.25 / s.z) * 0.1);
-      const al = Math.min(1, (1 - s.z) * 1.4) * k;
-      ctx.strokeStyle = `rgba(${170 + s.w * 80},${210 + s.w * 40},255,${al})`;
-      ctx.lineWidth = 1 + (1 - s.z) * 2;
-      ctx.beginPath();
-      ctx.moveTo(cx + Math.cos(s.a) * r1, cy + Math.sin(s.a) * r1);
-      ctx.lineTo(cx + Math.cos(s.a) * r2, cy + Math.sin(s.a) * r2);
-      ctx.stroke();
-    }
+    ctx.textAlign = 'center';
+    ctx.fillStyle = CYA + '0.9)';
+    ctx.font = `12px ${MONO}`;
+    ctx.fillText(`${j.dest.name.toUpperCase()} · ${st.left.toFixed(2)} LY TO GO`, cx, cy - Math.min(W, H) * 0.3);
   }
 
   private drawDestroyed(t: number, reason: string) {

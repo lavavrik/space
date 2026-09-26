@@ -178,6 +178,7 @@ export function ftlCruise(g: Game, dt: number) {
   const { ship, keys } = g;
   if (keys.KeyW) ship.throttle = Math.min(1, ship.throttle + 0.45 * dt);
   else if (!ship.cruise) ship.throttle = Math.max(0, ship.throttle - SPOOL_DOWN * dt);
+  if (ship.throttle > 0.05) ship.ftlSpooled = true;
   if (keys.KeyS) ship.throttle = Math.max(0, ship.throttle - 0.45 * dt);
   if (keys.KeyX) ship.throttle = 0;
   const vmax = ftlSpeedLimit(g);
@@ -189,7 +190,8 @@ export function ftlCruise(g: Game, dt: number) {
   ship.pos.addScaledVector(ship.travelDir, ship.ftlSpeed * dt);
   g.curSpeed = ship.ftlSpeed;
   if (ftlUpkeep(g, dt, ship.throttle)) {
-    if (!ship.cruise && ship.throttle === 0 && ship.ftlSpeed < SPOOL_DROP_SPEED) {
+    // arriving from a hyperjump leaves the drive idle but not spooled, so you stay in FTL until you use it
+    if (!ship.cruise && ship.ftlSpooled && ship.throttle === 0 && ship.ftlSpeed < SPOOL_DROP_SPEED) {
       dropFTL(g, false);
       if (!g.refFrame) g.showMsg('FTL drive spooled down · press F for cruise control'); // keep "matched <station>" if we dropped beside one
       return;

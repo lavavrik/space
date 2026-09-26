@@ -24,7 +24,7 @@ const AY = new THREE.Vector3(0, 1, 0);
 function newShip(): Ship {
   return {
     pos: new THREE.Vector3(), vel: new THREE.Vector3(), q: new THREE.Quaternion(),
-    mode: 'normal', throttle: 0, cruise: false, ftlSpeed: 0, ftlCharge: 0, vmax: 0,
+    mode: 'normal', throttle: 0, cruise: false, ftlSpooled: false, ftlSpeed: 0, ftlCharge: 0, vmax: 0,
     fa: true, decoupled: false, travelDir: new THREE.Vector3(0, 0, -1), ap: null, landed: null, dead: null, grav: null,
     prop: SHIP.propCap, exotic: SHIP.exoticCap, batt: SHIP.battCap,
     burnRate: 0, sunTrack: false, tanker: null, scoop: '',
@@ -184,7 +184,7 @@ export class Game {
       this.ship.q.multiply(qa.setFromAxisAngle(AY, -0.012 * dt));
     }
     this.scene.render(this);
-    this.overlay.draw(this, dt);
+    this.overlay.draw(this);
     this.hudT -= dt;
     if (this.hudT <= 0) this.publishHud();
     this.raf = requestAnimationFrame(this.frame);

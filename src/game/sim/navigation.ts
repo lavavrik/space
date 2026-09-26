@@ -1,4 +1,4 @@
-import { AU, JUMP_CHARGE_TIME, JUMP_RANGE, LY, SHIP, jumpCost } from '../constants';
+import { ARRIVE_STAR_RADII, JUMP_CHARGE_TIME, JUMP_RANGE, LY, SHIP, jumpCost } from '../constants';
 import type { Game } from '../Game';
 import { mulberry32, rr } from '../lib/rng';
 import { THREE } from '../lib/three';
@@ -9,6 +9,7 @@ import { resetFrame } from './frame';
 import { massLock } from './ftl';
 import { dominantBody } from './gravity';
 import { startJumpGuide } from './guide';
+import { transitTime } from './hyperspace';
 import { closePlanner } from './planner';
 
 export function lookAt(ship: Ship, to: THREE.Vector3) {
@@ -192,7 +193,7 @@ export function startJump(g: Game) {
   ship.ap = null;
   closePlanner(g);
   ship.tanker = null;
-  g.jump = { phase: 'charge', t: JUMP_CHARGE_TIME, dest, loaded: false, cost };
+  g.jump = { phase: 'charge', t: JUMP_CHARGE_TIME, dest, cost, from: galPos(g), dur: transitTime(d) };
   startJumpGuide(g, g.jump, d);
   g.showMsg(`Hyperdrive charging · ${dest.name}`, 'ftl');
 }
@@ -203,12 +204,15 @@ export function arriveAt(g: Game, sys: StarSystem) {
   g.loadSystem(sys);
   const r = mulberry32(sys.seed + 5);
   const dir = new THREE.Vector3(rr(r, -1, 1), rr(r, 0.15, 0.5), rr(r, -1, 1)).normalize();
-  ship.pos.copy(g.cur.star.pos).addScaledVector(dir, Math.max(g.cur.star.radius * 70, 0.05 * AU));
+  // drop in close: ARRIVE_STAR_RADII from the centre the star spans ~11° of sky, outside the corona
+  // (scooping starts at 2.5 radii) and well clear of the FTL drop-out altitude (1.6 radii)
+  ship.pos.copy(g.cur.star.pos).addScaledVector(dir, g.cur.star.radius * ARRIVE_STAR_RADII);
   lookAt(ship, g.cur.star.pos);
   ship.vel.set(0, 0, 0);
   resetFrame(g, dominantBody(g.cur, ship.pos));
   ship.mode = 'ftl';
   ship.throttle = 0;
+  ship.ftlSpooled = false;
   ship.ftlSpeed = 0;
 }
 

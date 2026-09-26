@@ -1,4 +1,4 @@
-import { JUMP_TUNNEL_TIME, SHIP } from '../constants';
+import { SHIP } from '../constants';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import { autopilot, ftlTransfer } from './autopilot';
@@ -6,7 +6,7 @@ import { collide, manualFlight, respawn } from './flight';
 import { chargeFTL, ftlCruise } from './ftl';
 import { gravityAt } from './gravity';
 import { updateGuide } from './guide';
-import { arriveAt } from './navigation';
+import { arriveAt, galPos } from './navigation';
 import { advanceBodies, relVel, syncFrame, updateFrame } from './frame';
 import { disengageAP } from './planner';
 import { refillShip, scoop, solarPower } from './resources';
@@ -138,17 +138,21 @@ function updateJump(g: Game, dt: number) {
   const { jump, ship } = g;
   if (!jump) return;
   jump.t -= dt;
+  if (jump.phase === 'charge') {
+    // swing the nose onto the destination while the drive charges; the transit flies straight at it
+    const to = jump.dest.pos.clone().sub(jump.from).normalize();
+    const m = new THREE.Matrix4().lookAt(new THREE.Vector3(), to, new THREE.Vector3(0, 1, 0).applyQuaternion(ship.q));
+    ship.q.slerp(new THREE.Quaternion().setFromRotationMatrix(m), Math.min(1, (jump.t <= 0 ? 1 : 1.6 * dt)));
+  }
   if (jump.phase === 'charge' && jump.t <= 0) {
     jump.phase = 'tunnel';
-    jump.t = JUMP_TUNNEL_TIME;
+    jump.t = jump.dur;
+    jump.from = galPos(g); // wherever the charge left us
     ship.exotic = Math.max(0, ship.exotic - jump.cost);
     g.showMsg(`Hyperspace · ${jump.dest.name} · ${jump.cost.toFixed(1)} kg exotic matter used`, 'ftl');
   } else if (jump.phase === 'tunnel') {
-    if (!jump.loaded && jump.t < 3.8) {
-      jump.loaded = true;
-      arriveAt(g, jump.dest);
-    }
     if (jump.t <= 0) {
+      arriveAt(g, jump.dest);
       g.flash = 1;
       const s = g.cur.sys.star;
       g.showMsg(`Arrived at ${g.cur.sys.name} · ${s.spec} · throttle up with W`, 'ftl');

@@ -151,6 +151,8 @@ export interface Ship {
   throttle: number;
   /** FTL cruise control (F): the throttle holds. Off, it spools down unless you hold W. */
   cruise: boolean;
+  /** The FTL throttle has been opened since the drive engaged; only then can it spool down and drop out. */
+  ftlSpooled: boolean;
   ftlSpeed: number;
   ftlCharge: number;
   vmax: number;
@@ -190,8 +192,9 @@ export interface Jump {
   phase: 'charge' | 'tunnel';
   t: number;
   dest: StarSystem;
-  loaded: boolean;
   cost: number;
+  from: Vec3; // ly, galactic: where the transit starts
+  dur: number; // s, length of the tunnel phase
 }
 
 export interface Planner {

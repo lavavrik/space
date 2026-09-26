@@ -5,6 +5,7 @@ import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import { orbitElements } from '../sim/gravity';
 import { guideEta, type Guide } from '../sim/guide';
+import { transitState } from '../sim/hyperspace';
 import { galPos } from '../sim/navigation';
 import { evalPlan } from '../sim/orbits';
 import { deltaVLeft, shipMass } from '../sim/resources';
@@ -66,7 +67,7 @@ function flightMode(g: Game): [string, FlightView['modeClass']] {
 function flight(g: Game): FlightView {
   const { ship, keys, jump } = g;
   const [mode, modeClass] = flightMode(g);
-  const [speed, speedUnit] = jump && jump.phase === 'tunnel' ? ['—', 'IN HYPERSPACE'] : fmtSpeed(g.curSpeed);
+  const [speed, speedUnit] = jump && jump.phase === 'tunnel' ? [transitState(jump).speed.toFixed(2), 'LIGHT-YEARS / S · HYPERSPACE'] : fmtSpeed(g.curSpeed);
   const unit = g.refFrame && ship.mode === 'normal' ? `${speedUnit} · REL. ${g.refFrame.name.toUpperCase()}` : speedUnit;
   let barFrac: number, barLabel: string, barValue: string;
   const barFtl = ship.mode === 'ftl';

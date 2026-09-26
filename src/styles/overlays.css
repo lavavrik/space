@@ -22,7 +22,7 @@
 .isec { font-size: 11px; letter-spacing: .14em; color: var(--amber); margin: 8px 0 2px; border-top: 1px solid var(--amber-faint); padding-top: 6px; }
 #help {
   background: var(--panel); border: 1px solid var(--amber-faint);
-  padding: 10px 14px; font-size: 12px; pointer-events: none; align-self: flex-start;
+  padding: 10px 14px; font-size: 12px; pointer-events: none;
 }
 #help.collapsed { padding-bottom: 6px; }
 #help .keys { display: grid; grid-template-columns: auto 1fr; gap: 0 8px; font-size: 11px; line-height: 1.4; }

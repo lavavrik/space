@@ -1,6 +1,6 @@
 /* Maneuver guide: a read-only checklist of what the ship is doing. Each step reports progress
    as 1 − error/initial error, and an ETA from how fast that error is shrinking (or a timer). */
-import { JUMP_TUNNEL_TIME, SHIP } from '../constants';
+import { SHIP } from '../constants';
 import { fmtDist, fmtFlow, fmtMass, fmtPower, fmtSpeedText, fmtTime } from '../format';
 import type { Game } from '../Game';
 import type { Autopilot, Jump, Tanker } from '../types';
@@ -193,7 +193,7 @@ export function startJumpGuide(g: Game, j: Jump, ly: number) {
       }),
       mkStep({
         title: 'Hyperspace transit', kind: 'ftl', active: () => g.jump === j && j.phase === 'tunnel', done: () => g.jump !== j,
-        err: () => j.t, etaFn: () => j.t, guess: () => JUMP_TUNNEL_TIME, detail: () => `${ly.toFixed(2)} light-years in ${JUMP_TUNNEL_TIME} s`,
+        err: () => j.t, etaFn: () => j.t, guess: () => j.dur, detail: () => `${ly.toFixed(2)} light-years in ${j.dur.toFixed(1)} s`,
       }),
     ],
   });
