@@ -62,12 +62,13 @@ The simulation never touches the DOM. Each frame it steps the physics, draws the
 | Tab | Hide the controls list |
 
 ## Physics
-- **Gravity:** patched conics. The innermost body whose sphere of influence you're in pulls on you. Landing above 150 m/s destroys the ship.
+- **Orbits:** planets orbit their star and moons orbit their planets on near-circular Kepler orbits (e ≤ 0.06), computed exactly from the sim clock, so a moon around a giant may lap it in hours while an Earth-like world takes a year.
+- **Gravity:** patched conics. The innermost body whose sphere of influence you're in pulls on you, and your velocity is kept relative to it as it orbits, so hovering, landing and orbiting work as if it stood still. Crossing into another body's sphere of influence re-expresses your velocity without any jump. Landing above 150 m/s destroys the ship.
 - **Propellant:** fusion torch with 200 km/s exhaust velocity, costed with the rocket equation. A full ship has about 183 km/s of Δv.
 - **Exotic matter:** runs the FTL drive, and hyperjumps cost `2 + 0.02 × ly²` kg.
 - **Power:** a 200 kWh battery charged by solar panels. Output follows starlight flux and panel angle, and drops to zero in a planet's shadow.
 - **Refuelling:** skim a star's corona or a gas giant's upper atmosphere, mine ice on the ground, or call a tanker.
-- **Local frame:** within 30 km of a station, flight assist, the speed readout ("REL. <station>") and the speed limit are relative to the station. Hands off, you hold station beside it. Flying in from the planet's frame, flight assist burns real propellant to match the station's orbit. Dropping out of FTL within 30 km puts you straight into the station's frame. Planets and moons don't move, so near them the system frame already is their frame.
+- **Local frame:** within 30 km of a station, flight assist, the speed readout ("REL. <station>") and the speed limit are relative to the station. Hands off, you hold station beside it. Flying in from the planet's frame, flight assist burns real propellant to match the station's orbit. Dropping out of FTL within 30 km puts you straight into the station's frame.
 - **Hyperjumps:** limited to 25 ly. Reachable stars near the crosshair get a small ring and label; aim at one and press N.
 - **Maneuver guide:** orbit insertion, hold position, hyperjumps and tanker rendezvous show a step-by-step progress panel with ETAs and Δv per step.
 

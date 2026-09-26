@@ -3,13 +3,15 @@ import { fmtDist, nf0 } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import type { Body, Gravity } from '../types';
-import { frameVel } from './frame';
+import { frameVel, resetFrame } from './frame';
+import { dominantBody } from './gravity';
 import { dropAlt } from './ftl';
 import { lookAt } from './navigation';
 import { closePlanner, disengageAP } from './planner';
 import { applyThrust, refillShip } from './resources';
 
-const tmp = new THREE.Vector3();
+const tmp = new THREE.Vector3(),
+  tmp2 = new THREE.Vector3();
 
 /** Manual flight. Gravity always acts. Flight assist damps drift on axes you are not
  *  thrusting on, but near a body it leaves the velocity along the pull alone, so you
@@ -79,16 +81,22 @@ export function collide(g: Game, dt: number) {
       continue;
     }
     rel.divideScalar(d);
+    // work in the body's own frame (it may not be the frame body)
+    const bv = tmp2.subVectors(b.vel, g.frameBody.vel);
+    ship.vel.sub(bv);
     const vin = -ship.vel.dot(rel);
     if (b.kind === 'star') {
+      ship.vel.add(bv);
       destroyShip(g, `Burned up in the photosphere of ${b.name}`, b);
       return;
     }
     if (b.type >= WT.GasGiant) {
+      ship.vel.add(bv);
       destroyShip(g, `Crushed in the atmosphere of ${b.name} · gas giants have no surface`, b);
       return;
     }
     if (vin > CRASH_SPEED) {
+      ship.vel.add(bv);
       destroyShip(g, `Hit ${b.name} at ${nf0.format(vin)} m/s`, b);
       return;
     }
@@ -96,7 +104,7 @@ export function collide(g: Game, dt: number) {
     if (vin > 0) ship.vel.addScaledVector(rel, vin);
     // ground friction
     const vtan = ship.vel.clone().addScaledVector(rel, -ship.vel.dot(rel));
-    ship.vel.addScaledVector(vtan, -Math.min(1, 4 * dt));
+    ship.vel.addScaledVector(vtan, -Math.min(1, 4 * dt)).add(bv);
     if (ship.ap) disengageAP(g);
     if (ship.landed !== b) {
       ship.landed = b;
@@ -122,6 +130,8 @@ export function respawn(g: Game) {
   const alt = b.kind === 'star' ? b.radius * 20 : Math.max(dropAlt(b) * 2, b.radius * 1.5);
   ship.pos.copy(b.pos).addScaledVector(u, b.radius + alt);
   ship.vel.set(0, 0, 0);
+  resetFrame(g, dominantBody(g.cur, ship.pos));
+  ship.vel.copy(b.vel).sub(g.frameBody.vel); // at rest relative to the body you died at
   ship.mode = 'normal';
   ship.fa = true;
   ship.sunTrack = false;

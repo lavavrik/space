@@ -3,7 +3,7 @@ import { fmtDist } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import type { Body, Ship } from '../types';
-import { FRAME_ENTER, stationWithin } from './frame';
+import { FRAME_ENTER, stationVel, stationWithin } from './frame';
 import { apLabel } from './orbits';
 
 /** How strongly a body's gravity well slows the FTL drive. */
@@ -123,7 +123,7 @@ export function dropFTL(g: Game, forced: boolean, body?: Body) {
     // dropping out beside a station puts you straight into its frame, moving with it
     const st = stationWithin(g, FRAME_ENTER);
     if (st) {
-      ship.vel.add(st.vel);
+      ship.vel.add(stationVel(g, st));
       g.refFrame = st;
       g.showMsg(`Dropped to normal space · matched ${st.name}'s orbit`);
     } else g.showMsg('Dropped to normal space');

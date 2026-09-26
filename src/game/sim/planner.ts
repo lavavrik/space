@@ -63,7 +63,7 @@ export function engageOrbit(g: Game) {
     r0: ev.r0,
     period: ev.period,
     n: planner.type === 'hold' ? null : orbitNormal(b, planner.type, planner.dir, u),
-    point: planner.type === 'hold' ? b.pos.clone().addScaledVector(u, ev.r0) : null,
+    point: planner.type === 'hold' ? u.clone().multiplyScalar(ev.r0) : null, // offset from the body, which moves
     phase: 'insert',
     settled: false,
   };

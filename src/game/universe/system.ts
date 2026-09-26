@@ -2,6 +2,7 @@ import { AU, GRAV, MSUN, REARTH, RSUN, WT } from '../constants';
 import { lr, mulberry32, rr } from '../lib/rng';
 import { THREE } from '../lib/three';
 import type { Body, Star, StarSystem, WorldType } from '../types';
+import { updateBodies } from '../sim/kepler';
 import { makeWorld, rockyType, teq } from './worlds';
 
 /** Generate every body in a star system from its seed. Always returns the star first. */
@@ -15,6 +16,7 @@ export function buildSystem(sys: StarSystem): Body[] {
     name: sys.name,
     radius: st.R * RSUN,
     pos: new THREE.Vector3(),
+    vel: new THREE.Vector3(), // the star anchors the system frame
     color: st.color,
     L: st.L,
     typeName: st.spec + ' star',
@@ -55,6 +57,7 @@ export function buildSystem(sys: StarSystem): Body[] {
     const nm = type === WT.GasGiant ? 1 + Math.floor(g() * 7) : type === WT.IceGiant ? 1 + Math.floor(g() * 4) : g() < 0.45 ? 1 + (g() < 0.3 ? 1 : 0) : 0;
     let r = radius * (giant ? rr(g, 3.5, 6) : rr(g, 15, 40));
     if (p.ring) r = Math.max(r, radius * p.ring.outer * 1.4);
+    let letter = 0;
     for (let j = 0; j < nm; j++) {
       if (r > a * 0.06) break;
       const mr = giant ? lr(g, 1.5e5, 2.6e6) : radius * rr(g, 0.06, 0.27);
@@ -62,11 +65,18 @@ export function buildSystem(sys: StarSystem): Body[] {
       const ma = g() * Math.PI * 2,
         mi = rr(g, -0.08, 0.08);
       const mpos = pos.clone().add(new THREE.Vector3(Math.cos(ma) * r, Math.sin(mi) * r, Math.sin(ma) * r));
-      bodies.push(makeWorld({ kind: 'moon', name: `${p.name} ${'abcdefgh'[j]}`, type: mt, radius: mr, pos: mpos, parent: p, orbit: r, T }, g));
+      const moon = makeWorld({ kind: 'moon', name: '', type: mt, radius: mr, pos: mpos, parent: p, orbit: r, T }, g);
+      // a moon must sit well inside its planet's sphere of influence to stay bound as the planet
+      // orbits; it's still generated first so skipping it doesn't change anything after it
+      if (r < p.soi * 0.5) {
+        moon.name = `${p.name} ${'abcdefgh'[letter++]}`;
+        bodies.push(moon);
+      }
       r *= rr(g, 1.5, 2.3);
     }
     a *= rr(g, 1.45, 2.05);
   }
+  updateBodies(bodies, 0); // fill in orbital velocities
   return bodies;
 }
 

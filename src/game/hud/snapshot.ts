@@ -107,7 +107,7 @@ function target(g: Game): TargetView {
     view.distance = fmtDist(d);
     const dir = tmp.subVectors(t.pos, ship.pos).normalize();
     const vel = ship.mode === 'ftl' ? g.fwd.clone().multiplyScalar(ship.ftlSpeed) : ship.vel.clone();
-    if (t.kind === 'station') vel.sub(t.vel); // stations move, so close on them relative to their orbit
+    vel.add(g.frameBody.vel).sub(t.vel); // everything moves, so close on the target in its own frame
     const closing = vel.dot(dir);
     view.eta = closing > 1 ? fmtTime(d / closing) : 'not closing';
   }

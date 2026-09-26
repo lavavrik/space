@@ -80,6 +80,7 @@ describe('galaxy', () => {
     expect(home.star.cls).toBe('G');
     const bodies = buildSystem(home);
     const planet = findHome(bodies);
+    expect(planet?.name).toBe('Venydes 5'); // pinned: the start hasn't changed since the first version
     expect(planet?.kind).toBe('planet');
     expect(planet && planet.kind !== 'star' && planet.type).toBe(WT.EarthLike);
     expect(bodies.some((b) => b.kind === 'moon' && b.parent === planet)).toBe(true);

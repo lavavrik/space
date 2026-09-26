@@ -2,8 +2,8 @@ import { THREE } from '../lib/three';
 import type { Body, CurrentSystem, Gravity, Ship } from '../types';
 
 /* Gravity uses patched conics. The pulling body is the innermost one whose sphere of influence
-   contains the ship: star → planet → moon. Bodies are fixed in space, so only that body's
-   gravity applies. */
+   contains the ship: star → planet → moon. Only that body's gravity applies, and the ship's
+   velocity is kept relative to it while it orbits its own parent (see sim/frame.ts). */
 
 export function dominantBody(cur: CurrentSystem, pos: THREE.Vector3): Body {
   let best: Body = cur.star;

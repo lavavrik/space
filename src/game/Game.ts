@@ -12,9 +12,11 @@ import { closePlanner } from './sim/planner';
 import { update } from './sim/update';
 import type { Body, CurrentSystem, Jump, Message, MsgKind, Planner, Power, Ship, StarSystem, Station, Target } from './types';
 import { systemsNear } from './universe/galaxy';
+import { advanceBodies } from './sim/frame';
+import { updateBodies } from './sim/kepler';
+import { updateStations } from './sim/stations';
 import { buildStations } from './universe/stations';
 import { buildSystem } from './universe/system';
-import { updateStations } from './sim/stations';
 
 const qa = new THREE.Quaternion();
 const AY = new THREE.Vector3(0, 1, 0);
@@ -43,6 +45,8 @@ export class Game {
   target: Target | null = null;
   /** Station whose frame flight assist works in, or null for the system frame (see sim/frame.ts). */
   refFrame: Station | null = null;
+  /** Body whose frame ship.vel is in: the one whose sphere of influence the ship is in (see sim/frame.ts). */
+  frameBody!: Body;
   jumpDest: StarSystem | null = null;
   jump: Jump | null = null;
   planner: Planner | null = null;
@@ -131,8 +135,10 @@ export class Game {
   loadSystem(sys: StarSystem) {
     const bodies = buildSystem(sys);
     const stations = buildStations(sys, bodies);
+    updateBodies(bodies, this.simTime);
     updateStations(stations, this.simTime);
     this.cur = { sys, bodies, star: bodies[0] as CurrentSystem['star'], stations };
+    this.frameBody = this.cur.star; // callers place the ship and then pick its frame
     this.nearby = systemsNear(sys.pos, JUMP_RANGE + 1).filter((s) => s.id !== sys.id);
     this.scene.setSystem(this.cur, systemsNear(sys.pos, SKY_RADIUS));
     this.target = null;
@@ -164,7 +170,7 @@ export class Game {
     else {
       // idle drift behind the start screen
       this.simTime += dt;
-      updateStations(this.cur.stations, this.simTime);
+      advanceBodies(this);
       this.qInv.copy(this.ship.q).invert();
       this.ship.q.multiply(qa.setFromAxisAngle(AY, -0.012 * dt));
     }

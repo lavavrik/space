@@ -7,10 +7,9 @@ import { chargeFTL, ftlCruise } from './ftl';
 import { gravityAt } from './gravity';
 import { updateGuide } from './guide';
 import { arriveAt } from './navigation';
-import { relVel, updateFrame } from './frame';
+import { advanceBodies, relVel, syncFrame, updateFrame } from './frame';
 import { disengageAP } from './planner';
 import { refillShip, scoop, solarPower } from './resources';
-import { updateStations } from './stations';
 
 const qa = new THREE.Quaternion();
 const AX = new THREE.Vector3(1, 0, 0),
@@ -25,6 +24,7 @@ export function update(g: Game, dt: number) {
   const inTunnel = !!g.jump && g.jump.phase === 'tunnel';
 
   if (ship.dead) {
+    advanceBodies(g);
     ship.dead.t -= dt;
     updateGuide(g, dt);
     if (ship.dead.t <= 0) respawn(g);
@@ -61,9 +61,9 @@ export function update(g: Game, dt: number) {
   chargeFTL(g, dt);
   updateJump(g, dt);
 
-  // --- planet spin and station orbits
+  // --- orbits (the ship rides along with its frame body) and planet spin
+  advanceBodies(g);
   for (const b of g.cur.bodies) b.rot += b.spin * dt;
-  updateStations(g.cur.stations, g.simTime);
   updateFrame(g);
 
   // --- movement
@@ -75,6 +75,7 @@ export function update(g: Game, dt: number) {
   if (!inTunnel) {
     if (ship.mode === 'normal') {
       const grav = (ship.grav = gravityAt(g.cur, ship.pos));
+      syncFrame(g, grav.body);
       if (ship.ap && ship.ap.phase === 'insert') autopilot(g, dt, grav);
       else manualFlight(g, dt, grav, inp);
       ship.pos.addScaledVector(ship.vel, dt);
@@ -87,7 +88,10 @@ export function update(g: Game, dt: number) {
     }
   }
 
-  if (ship.mode === 'ftl') ship.grav = gravityAt(g.cur, ship.pos);
+  if (ship.mode === 'ftl') {
+    ship.grav = gravityAt(g.cur, ship.pos);
+    syncFrame(g, ship.grav.body);
+  }
 
   // --- power, fuel, refuelling
   if (ship.sunTrack && !apSteering && !inTunnel) {

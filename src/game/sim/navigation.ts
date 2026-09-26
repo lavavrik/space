@@ -5,7 +5,9 @@ import { THREE } from '../lib/three';
 import { homeSystem } from '../universe/galaxy';
 import { findHome } from '../universe/system';
 import type { Ship, StarSystem, Target } from '../types';
+import { resetFrame } from './frame';
 import { massLock } from './ftl';
+import { dominantBody } from './gravity';
 import { startJumpGuide } from './guide';
 import { closePlanner } from './planner';
 
@@ -140,6 +142,7 @@ export function arriveAt(g: Game, sys: StarSystem) {
   ship.pos.copy(g.cur.star.pos).addScaledVector(dir, Math.max(g.cur.star.radius * 70, 0.05 * AU));
   lookAt(ship, g.cur.star.pos);
   ship.vel.set(0, 0, 0);
+  resetFrame(g, dominantBody(g.cur, ship.pos));
   ship.mode = 'ftl';
   ship.throttle = 0;
   ship.ftlSpeed = 0;
@@ -157,5 +160,7 @@ export function placeAtHome(g: Game) {
   ship.pos.copy(home.pos).addScaledVector(dir, home.radius * 3.1);
   const aim = home.pos.clone().addScaledVector(side, home.radius * 0.9).addScaledVector(toStar, home.radius * 0.5);
   lookAt(ship, aim);
+  ship.vel.set(0, 0, 0);
+  resetFrame(g, dominantBody(g.cur, ship.pos)); // start at rest relative to the home world
   g.target = home;
 }

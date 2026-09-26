@@ -16,6 +16,7 @@ export interface BodyView {
   uni?: Uniforms;
   ringUni?: Uniforms;
   dotColor?: THREE.Color;
+  light?: THREE.Vector3; // direction to the star, shared by the surface, atmosphere and ring uniforms
   dist: number; // m from the ship
   pxR: number; // apparent radius in pixels
 }
@@ -211,7 +212,7 @@ export class SceneRenderer {
     mesh.scale.setScalar(b.radius);
     mesh.rotation.y = b.rot;
     tilt.add(mesh);
-    const view: BodyView = { group, mesh, uni, dist: Infinity, pxR: 0 };
+    const view: BodyView = { group, mesh, uni, light, dist: Infinity, pxR: 0 };
     if (atmo) {
       const k = b.type >= WT.GasGiant ? 1.02 : 1.025;
       view.atmo = new THREE.Mesh(
@@ -281,6 +282,7 @@ export class SceneRenderer {
       }
       const uni = v.uni!;
       uni.uTime.value = simTime;
+      v.light!.subVectors(starPos, b.pos).normalize(); // worlds orbit, so the lit side turns
       uni.uOct.value = Math.max(4, Math.min(13, Math.round(4 + Math.log2(Math.max(pxR, 1) / 30))));
       if (v.ringUni) (v.ringUni.uPC.value as THREE.Vector3).copy(rel);
       // distant bodies as dots of reflected starlight

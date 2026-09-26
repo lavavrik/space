@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { JUMP_RANGE } from '../constants';
 import { THREE } from '../lib/three';
 import { minOrbitAlt } from '../sim/orbits';
+import { updateBodies } from '../sim/kepler';
 import { stationState } from '../sim/stations';
 import { homeSystem, systemsNear } from '../universe/galaxy';
 import { buildStations } from '../universe/stations';
@@ -51,20 +52,25 @@ describe('stations', () => {
     }
   });
 
-  it('follow Kepler orbits', () => {
-    for (const { st } of all.slice(0, 30)) {
-      const mu = st.parent.mu;
+  it('follow Kepler orbits around their moving worlds', () => {
+    for (const { st, bodies } of all.slice(0, 30)) {
+      const p = st.parent,
+        mu = p.mu;
       const T = (2 * Math.PI) / st.n;
-      for (const t of [0, 1234.5, T * 0.37]) {
+      const relAt = (t: number) => {
+        updateBodies(bodies, t);
         stationState(st, t);
-        const r = st.pos.distanceTo(st.parent.pos);
+        return { r: st.pos.clone().sub(p.pos), v: st.vel.clone().sub(p.vel) };
+      };
+      for (const t of [0, 1234.5, T * 0.37]) {
+        const { r: rv, v } = relAt(t);
+        const r = rv.length();
         expect(r).toBeGreaterThanOrEqual(st.a * (1 - st.e) * (1 - 1e-9));
         expect(r).toBeLessThanOrEqual(st.a * (1 + st.e) * (1 + 1e-9));
         // vis-viva: v² = μ(2/r − 1/a)
-        expect(st.vel.lengthSq() / (mu * (2 / r - 1 / st.a))).toBeCloseTo(1, 9);
-        const p0 = st.pos.clone();
-        stationState(st, t + T);
-        expect(st.pos.distanceTo(p0) / st.a).toBeLessThan(1e-6);
+        expect(v.lengthSq() / (mu * (2 / r - 1 / st.a))).toBeCloseTo(1, 6); // subtracting ~30 km/s parent speeds costs digits
+        const r1 = relAt(t + T).r;
+        expect(r1.distanceTo(rv) / st.a).toBeLessThan(1e-6);
       }
     }
   });

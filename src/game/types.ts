@@ -22,11 +22,25 @@ export interface Ring {
   seed: number;
 }
 
+/**
+ * A Kepler orbit around a parent, fixed by its elements. Position at any time comes from
+ * `keplerState` (sim/kepler.ts), so orbits are exact and need no integration.
+ */
+export interface KeplerOrbit {
+  a: number; // semi-major axis, m
+  e: number; // eccentricity
+  P: Vec3; // unit vector toward periapsis
+  Q: Vec3; // unit vector 90° ahead in the direction of motion
+  n: number; // mean motion, rad/s
+  M0: number; // mean anomaly at simTime 0, rad
+}
+
 interface BodyBase {
   name: string;
   typeName: string;
   radius: number; // m
-  pos: Vec3; // m, system frame (bodies are fixed in space)
+  pos: Vec3; // m, system frame (the star sits at the origin; worlds move on their orbits)
+  vel: Vec3; // m/s, system frame
   seed: number;
   mass: number; // kg
   mu: number; // G·M
@@ -48,7 +62,8 @@ export interface World extends BodyBase {
   pal: Palette;
   albedo: number;
   parent: Body;
-  orbit: number; // m
+  orbit: number; // m, distance from the parent when generated (≈ semi-major axis)
+  orb: KeplerOrbit;
   T: number; // equilibrium temperature, K
   tilt: number;
   ring?: Ring;
@@ -61,7 +76,7 @@ export type Body = Star | World;
  * `CurrentSystem.bodies`. It follows a fixed Kepler orbit around its parent, so `pos` and `vel`
  * are recomputed from the sim clock every step (see sim/stations.ts).
  */
-export interface Station {
+export interface Station extends KeplerOrbit {
   kind: 'station';
   name: string;
   typeName: string;
@@ -69,17 +84,10 @@ export interface Station {
   size: number; // m, edge of the cube
   radius: number; // m, half the cube's diagonal (for targeting and markers)
   seed: number;
-  // orbit around the parent: semi-major axis, eccentricity, perifocal basis, mean motion, epoch
-  a: number; // m
-  e: number;
-  P: Vec3; // unit vector toward periapsis
-  Q: Vec3; // unit vector 90° ahead in the direction of motion
-  n: number; // rad/s
-  M0: number; // mean anomaly at simTime 0, rad
   spinAxis: Vec3;
   spinRate: number; // rad/s, slow tumble about spinAxis
   pos: Vec3; // m, system frame
-  vel: Vec3; // m/s
+  vel: Vec3; // m/s, system frame
 }
 
 /** Anything the ship can target. */
@@ -125,7 +133,7 @@ export interface Autopilot {
   r0: number; // target orbit radius, m
   period: number;
   n: Vec3 | null; // orbit normal (null when holding position)
-  point: Vec3 | null; // hold point (only when holding position)
+  point: Vec3 | null; // hold point, as an offset from the body (only when holding position)
   phase: 'charge' | 'transfer' | 'insert';
   settled: boolean;
 }
@@ -137,7 +145,7 @@ export interface Tanker {
 
 export interface Ship {
   pos: Vec3;
-  vel: Vec3;
+  vel: Vec3; // m/s, relative to Game.frameBody (patched conics; see sim/frame.ts)
   q: THREE.Quaternion;
   mode: 'normal' | 'ftl';
   throttle: number;

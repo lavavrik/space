@@ -3,6 +3,7 @@ import { fmtDist, fmtTime } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import type { Autopilot, Gravity, Ship } from '../types';
+import { velRel } from './frame';
 import { dropAlt, dropFTL, ftlSpeedLimit, ftlUpkeep } from './ftl';
 import { applyThrust } from './resources';
 
@@ -28,11 +29,16 @@ export function apInsertion(ship: Ship, ap: Autopilot) {
   return { P: b.pos.clone().addScaledVector(up, rT), rT };
 }
 
-/** How far the ship's velocity is from circular orbital velocity. */
-export function orbitVelErr(ship: Ship, ap: Autopilot) {
-  const { b, up } = apGeom(ship, ap);
+/** How far the ship's velocity (relative to the body) is from circular orbital velocity. */
+export function orbitVelErr(g: Game, ap: Autopilot) {
+  const { b, up } = apGeom(g.ship, ap);
   const tang = new THREE.Vector3().crossVectors(ap.n!, up).multiplyScalar(Math.sqrt(b.mu / ap.r0));
-  return ship.vel.distanceTo(tang);
+  return velRel(g, b).distanceTo(tang);
+}
+
+/** The hold point in the system frame (it's stored as an offset from the moving body). */
+export function holdPoint(ap: Autopilot) {
+  return ap.body.pos.clone().add(ap.point!);
 }
 
 /** Orbit / station-keeping autopilot: steer velocity toward a desired velocity field
@@ -44,13 +50,15 @@ export function autopilot(g: Game, dt: number, grav: Gravity) {
   const rv = ship.pos.clone().sub(b.pos),
     r = rv.length(),
     u = rv.clone().divideScalar(r);
+  // desired velocities below are relative to the autopilot body, which may not be the frame body
+  const vRel = velRel(g, b);
   let vDes: THREE.Vector3, aFF: THREE.Vector3;
   if (ap.type === 'hold') {
-    const e = ap.point!.clone().sub(ship.pos),
+    const e = holdPoint(ap).sub(ship.pos),
       dist = e.length();
     vDes = e.multiplyScalar(Math.min(AP_KP, AP_VMAX / Math.max(dist, 1)));
     aFF = grav.vec.clone().negate();
-    if (!ap.settled && dist < 100 && ship.vel.length() < 5) {
+    if (!ap.settled && dist < 100 && vRel.length() < 5) {
       ap.settled = true;
       g.showMsg(`Holding position ${fmtDist(ap.r0 - b.radius)} above ${b.name}`, 'ftl');
     }
@@ -72,12 +80,12 @@ export function autopilot(g: Game, dt: number, grav: Gravity) {
       .clone()
       .multiplyScalar((-vt * vt) / r)
       .sub(grav.vec);
-    if (!ap.settled && Math.abs(ap.r0 - r) < Math.max(200, ap.r0 * 0.002) && ship.vel.distanceTo(vDes) < 5 + vt * 0.003) {
+    if (!ap.settled && Math.abs(ap.r0 - r) < Math.max(200, ap.r0 * 0.002) && vRel.distanceTo(vDes) < 5 + vt * 0.003) {
       ap.settled = true;
       g.showMsg(`Orbit established · ${fmtDist(ap.r0 - b.radius)} · period ${fmtTime(ap.period)}`, 'ftl');
     }
   }
-  const err = vDes.sub(ship.vel);
+  const err = vDes.sub(vRel);
   const a = err.clone().divideScalar(AP_TAU).add(aFF);
   // once in a stable orbit, ignore tiny errors: a real orbit needs no thrust to keep
   if (ap.settled && ap.type !== 'hold' && err.length() < 1 && Math.abs(ap.r0 - r) < 500) a.set(0, 0, 0);

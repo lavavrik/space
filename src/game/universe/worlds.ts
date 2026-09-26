@@ -1,7 +1,8 @@
 import { ALBEDO, DENSITY, GRAV, TYPES } from '../constants';
 import { hsl } from '../lib/color';
-import { rr, type Rng } from '../lib/rng';
+import { mulberry32, rr, type Rng } from '../lib/rng';
 import { THREE } from '../lib/three';
+import { orbitThrough } from '../sim/kepler';
 import type { Body, Palette, World, WorldType } from '../types';
 
 /** Equilibrium temperature (K) at `aAU` from a star of luminosity L. */
@@ -97,5 +98,18 @@ export function makeWorld(props: WorldProps, g: Rng): World {
     mu: GRAV * mass,
     // sphere of influence (patched conics): inside it, this body's gravity is the one that counts
     soi: props.orbit * Math.pow(mass / props.parent.mass, 0.4),
+    orb: worldOrbit(props, seed),
+    vel: props.parent.vel.clone(),
   };
+}
+
+/**
+ * A near-circular orbit through the generated position, like real planets and regular moons:
+ * eccentricity up to 0.06 for planets and 0.03 for moons, from its own RNG stream (seeded by the
+ * body) so the rest of the system generates exactly as before.
+ */
+function worldOrbit(props: WorldProps, seed: number) {
+  const g = mulberry32(Math.floor(seed * 1e6) ^ 0x0b175eed);
+  const e = rr(g, 0, props.kind === 'planet' ? 0.06 : 0.03);
+  return orbitThrough(props.pos.clone().sub(props.parent.pos), props.parent.mu, e, g() * 2 * Math.PI);
 }

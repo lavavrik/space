@@ -4,7 +4,8 @@ import { JUMP_TUNNEL_TIME, SHIP } from '../constants';
 import { fmtDist, fmtFlow, fmtMass, fmtPower, fmtSpeedText, fmtTime } from '../format';
 import type { Game } from '../Game';
 import type { Autopilot, Jump, Tanker } from '../types';
-import { apGeom, apInsertion, orbitVelErr } from './autopilot';
+import { apGeom, apInsertion, holdPoint, orbitVelErr } from './autopilot';
+import { velRel } from './frame';
 import { orbitElements } from './gravity';
 import { deltaVLeft, shipMass } from './resources';
 
@@ -117,14 +118,15 @@ export function startOrbitGuide(g: Game, ap: Autopilot) {
   ftlStepsFor(g, ap, steps);
   const ins = () => ap.phase === 'insert';
   if (ap.type === 'hold') {
-    const dist = () => ap.point!.distanceTo(ship.pos);
+    const dist = () => holdPoint(ap).distanceTo(ship.pos);
+    const vRel = () => velRel(g, b).length();
     steps.push(mkStep({
       title: 'Fly to hold point', group: 'move', active: ins, done: () => ins() && dist() < 200, err: dist,
       detail: () => `${fmtDist(dist())} to go · ${fmtDist(ap.r0 - b.radius)} above ${b.name}`,
     }));
     steps.push(mkStep({
-      title: 'Cancel velocity', group: 'move', active: ins, done: () => ins() && dist() < 1000 && ship.vel.length() < 5, err: () => ship.vel.length(),
-      detail: () => `${fmtSpeedText(ship.vel.length())} relative to ${b.name}`,
+      title: 'Cancel velocity', group: 'move', active: ins, done: () => ins() && dist() < 1000 && vRel() < 5, err: vRel,
+      detail: () => `${fmtSpeedText(vRel())} relative to ${b.name}`,
     }));
     steps.push(mkStep({
       title: 'Station-keeping', ongoing: true, active: () => ins() && ap.settled, done: () => false, err: () => null,
@@ -144,10 +146,10 @@ export function startOrbitGuide(g: Game, ap: Autopilot) {
     }));
     steps.push(mkStep({
       title: 'Match orbital velocity', group: 'ins', active: ins,
-      done: () => ins() && orbitVelErr(ship, ap) < Math.max(5, vc * 0.005), err: () => orbitVelErr(ship, ap),
-      detail: () => `${fmtSpeedText(ship.vel.length())} of ${fmtSpeedText(vc)} · off by ${fmtSpeedText(orbitVelErr(ship, ap))}`,
+      done: () => ins() && orbitVelErr(g, ap) < Math.max(5, vc * 0.005), err: () => orbitVelErr(g, ap),
+      detail: () => `${fmtSpeedText(velRel(g, b).length())} of ${fmtSpeedText(vc)} · off by ${fmtSpeedText(orbitVelErr(g, ap))}`,
     }));
-    const planeErr = () => Math.abs(apGeom(ship, ap).rv.dot(ap.n!)) + Math.abs(ship.vel.dot(ap.n!)) * 30;
+    const planeErr = () => Math.abs(apGeom(ship, ap).rv.dot(ap.n!)) + Math.abs(velRel(g, b).dot(ap.n!)) * 30;
     if (planeErr() > 2000) {
       steps.push(mkStep({
         title: ap.type === 'polar' ? 'Align to polar plane' : 'Align to equator', group: 'ins', active: ins,
