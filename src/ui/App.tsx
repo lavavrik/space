@@ -1,3 +1,4 @@
+import { BodyInfo } from './components/BodyInfo';
 import { HelpPanel } from './components/HelpPanel';
 import { Hud } from './components/Hud';
 import { ManeuverGuide } from './components/ManeuverGuide';
@@ -15,13 +16,15 @@ export function App() {
       <div ref={hostRef} />
       {hud && (
         <>
-          {hud.helpVisible && <HelpPanel />}
+          <div id="leftcol">
+            {hud.info ? <BodyInfo info={hud.info} /> : hud.helpVisible && <HelpPanel />}
+          </div>
           <div id="rightcol">
             <ShipSystems s={hud.systems} />
             {hud.guide && <ManeuverGuide guide={hud.guide} />}
             {hud.planner && <OrbitPlanner p={hud.planner} />}
           </div>
-          {hud.showRelock && <div id="relock">CLICK SPACE TO CAPTURE MOUSE · CLICK OBJECTS TO TARGET · DRAG ALSO STEERS</div>}
+          {hud.showRelock && <div id="relock">CLICK: TARGET OR CAPTURE MOUSE · DRAG STEERS</div>}
           <Toast toast={hud.toast} />
           <Hud nav={hud.nav} flight={hud.flight} target={hud.target} />
           {!hud.started && <StartScreen onStart={() => game!.begin()} />}

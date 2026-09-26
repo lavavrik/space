@@ -12,6 +12,10 @@ export function onPress(g: Game, code: string) {
   if (!g.started) return;
   g.invalidateHud();
   if (code === 'Tab') g.helpVisible = !g.helpVisible;
+  if (code === 'KeyI') {
+    g.infoVisible = !g.infoVisible;
+    if (g.infoVisible && !g.target) g.showMsg('Target something (T, G or click) to see its details');
+  }
   if ((g.jump && g.jump.phase === 'tunnel') || ship.dead) return;
 
   if (g.planner) {

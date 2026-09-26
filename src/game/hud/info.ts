@@ -1,0 +1,130 @@
+/* Body info panel (I): everything about the current target, and where the ship stands relative to it. */
+import { AU, MSUN, REARTH } from '../constants';
+import { fmtDist, fmtSpeedText, fmtTime } from '../format';
+import type { Game } from '../Game';
+import { THREE } from '../lib/three';
+import { velRel } from '../sim/frame';
+import { orbitElementsRel } from '../sim/gravity';
+import type { Body, KeplerOrbit, Station, Target } from '../types';
+import type { InfoView, Readout } from './types';
+
+const MEARTH = 5.972e24;
+const DEG = 180 / Math.PI;
+const tmp = new THREE.Vector3();
+
+const sci = (x: number) => x.toExponential(2).replace('e+', 'e');
+const fmtMassBody = (kg: number) => (kg > 0.05 * MSUN ? `${(kg / MSUN).toFixed(2)} M☉` : kg > 0.01 * MEARTH ? `${(kg / MEARTH).toFixed(2)} M⊕` : `${sci(kg)} kg`);
+const fmtRadius = (m: number) => (m > 3e8 ? `${(m / 6.957e8).toFixed(2)} R☉ · ${fmtDist(m)}` : m > 0.1 * REARTH ? `${(m / REARTH).toFixed(2)} R⊕ · ${fmtDist(m)}` : fmtDist(m));
+/** Orbit distances: AU around a star, km around a world. */
+const fmtOrbitDist = (m: number, aroundStar: boolean) => (aroundStar ? `${(m / AU).toFixed(3)} AU` : fmtDist(m));
+
+export function buildInfo(g: Game, t: Target): InfoView {
+  const physical = t.kind === 'station' ? stationPhysical(t) : bodyPhysical(g, t);
+  let orbitHead = 'ANCHORS THE SYSTEM';
+  let orbit: [string, string][] = [['ORBIT', 'none · everything here orbits it']];
+  if (t.kind !== 'star') {
+    const p = t.parent;
+    orbitHead = `ORBITS ${p.name.toUpperCase()}`;
+    orbit = orbitRows(t.kind === 'station' ? t : t.orb, t, p);
+  }
+  return { title: t.name, type: t.kind === 'station' ? 'ORBITAL STATION' : t.typeName.toUpperCase(), physical, orbitHead, orbit, you: youRows(g, t) };
+}
+
+function bodyPhysical(g: Game, b: Body): [string, string][] {
+  const rows: [string, string][] = [
+    ['RADIUS', fmtRadius(b.radius)],
+    ['MASS · GRAVITY', `${fmtMassBody(b.mass)} · ${(b.mu / b.radius ** 2 / 9.80665).toFixed(2)} g`],
+    ['ESCAPE VELOCITY', fmtSpeedText(Math.sqrt((2 * b.mu) / b.radius))],
+  ];
+  if (b.kind === 'star') {
+    rows.push(['LUMINOSITY', `${b.L.toFixed(b.L < 10 ? 3 : 0)} L☉ · ${Math.round(g.cur.sys.star.T)} K`]);
+    rows.push(['DAY', fmtTime((2 * Math.PI) / b.spin)]);
+    rows.push(['PLANETS', String(g.cur.bodies.filter((m) => m.kind === 'planet').length)]);
+    return rows;
+  }
+  const atmo = b.pal.atmo ? (b.type >= 6 ? 'deep atmosphere' : 'atmosphere') : 'airless';
+  const stations = g.cur.stations.filter((s) => s.parent === b).map((s) => s.name);
+  const moons = g.cur.bodies.filter((m) => m.kind === 'moon' && m.parent === b).length;
+  rows.push(
+    ['CLIMATE', `${Math.round(b.T - 273)} °C · ${atmo}`],
+    ['DAY · TILT', `${fmtTime((2 * Math.PI) / b.spin)} · ${(b.tilt * DEG).toFixed(1)}°`],
+    ['SPHERE OF INFLUENCE', fmtDist(b.soi)],
+    [b.kind === 'planet' ? 'MOONS · STATIONS' : 'STATIONS', (b.kind === 'planet' ? `${moons} · ` : '') + (stations.length ? stations.join(', ') : 'none')],
+  );
+  if (b.ring) rows.push(['RINGS', `${b.ring.inner.toFixed(2)}–${b.ring.outer.toFixed(2)} radii`]);
+  return rows;
+}
+
+function stationPhysical(st: Station): [string, string][] {
+  return [['SIZE · TUMBLE', `${fmtDist(st.size)} cube · ${fmtTime((2 * Math.PI) / Math.abs(st.spinRate))} per turn`]];
+}
+
+/** Orbital elements of `o` around `p`, plus where the body is on that orbit right now. */
+function orbitRows(o: KeplerOrbit, t: Target, p: Body): [string, string][] {
+  const aroundStar = p.kind === 'star';
+  const d = (m: number) => fmtOrbitDist(m, aroundStar);
+  // around a star, distances from its centre; around a world, altitudes above its surface
+  const alt = (r: number) => (aroundStar ? d(r) : fmtDist(r - p.radius));
+  const rel = tmp.subVectors(t.pos, p.pos);
+  const vrel = t.vel.clone().sub(p.vel);
+  const normal = new THREE.Vector3().crossVectors(o.P, o.Q);
+  // inclination: to the system plane around a star, to the parent's equator around a world
+  const ref = aroundStar ? new THREE.Vector3(0, 1, 0) : p.axis;
+  const inc = Math.acos(Math.max(-1, Math.min(1, normal.dot(ref)))) * DEG;
+  return [
+    ['SEMI-MAJOR AXIS · e', `${d(o.a)} · ${o.e.toFixed(3)}`],
+    [aroundStar ? 'PERIHELION – APHELION' : 'PERIAPSIS – APOAPSIS', `${alt(o.a * (1 - o.e))} – ${alt(o.a * (1 + o.e))}`],
+    ['INCLINATION · PERIOD', `${inc.toFixed(1)}°${inc > 90 ? ' retro' : ''} · ${fmtTime((2 * Math.PI) / o.n)}`],
+    ['NOW', `${alt(rel.length())} · ${fmtSpeedText(vrel.length())}`],
+  ];
+}
+
+/** The ship relative to the target: distance, speeds, and its own orbit around it if any. */
+function youRows(g: Game, t: Target): [string, string | Readout][] {
+  const { ship } = g;
+  const rv = ship.pos.clone().sub(t.pos);
+  const r = rv.length();
+  const v = t.kind === 'station' ? ship.vel.clone().add(g.frameBody.vel).sub(t.vel) : velRel(g, t);
+  const vr = v.dot(rv) / r;
+  const rows: [string, string | Readout][] = [
+    [t.kind === 'station' ? 'DISTANCE' : 'ALTITUDE', fmtDist(r - (t.kind === 'station' ? t.size / 2 : t.radius))],
+    ['SPEED · VERTICAL', ship.mode === 'ftl' ? 'in FTL' : `${fmtSpeedText(v.length())} · ${vr >= 0 ? '+' : '−'}${fmtSpeedText(Math.abs(vr))}`],
+  ];
+  if (t.kind === 'station') {
+    rows.push(['FRAME', g.refFrame === t ? 'matched · flight assist holds you here' : 'not matched (within 30 km to match)']);
+    return rows;
+  }
+  if (ship.landed === t) {
+    rows.push(['STATUS', { text: 'landed' }]);
+    return rows;
+  }
+  if (ship.mode === 'ftl') {
+    rows.push(['STATUS', 'in FTL']);
+    return rows;
+  }
+  // an orbit only means something where this body's gravity is the one that counts: not inside a
+  // planet or moon circling it, and not outside its own sphere of influence
+  const fb = g.frameBody;
+  if (fb !== t && fb.kind !== 'star' && (fb.parent === t || (fb.parent.kind !== 'star' && fb.parent.parent === t))) {
+    rows.push(['STATUS', `inside ${fb.name}'s gravity`]);
+    return rows;
+  }
+  if (t.kind !== 'star' && r > t.soi) {
+    rows.push(['STATUS', `outside its gravity (${fmtDist(r - t.soi)} beyond the SOI)`]);
+    return rows;
+  }
+  const oe = orbitElementsRel(rv, v, t.mu);
+  const R = t.radius;
+  if (oe.escape) rows.push(['STATUS', 'escape trajectory'], ['PERIAPSIS', fmtDist(oe.pe - R)]);
+  else if (oe.pe < R) rows.push(['STATUS', { text: 'suborbital · will hit the surface', warn: true }], ['APOAPSIS', fmtDist(oe.ap - R)]);
+  else {
+    const e = (oe.ap - oe.pe) / (oe.ap + oe.pe);
+    const out = t.kind !== 'star' && oe.ap > t.soi;
+    rows.push(
+      ['STATUS', { text: out ? 'in orbit · leaves the SOI at apoapsis' : 'in orbit', warn: out }],
+      ['PERIAPSIS – APOAPSIS', `${fmtDist(oe.pe - R)} – ${fmtDist(oe.ap - R)}`],
+      ['e · PERIOD', `${e.toFixed(3)} · ${fmtTime(oe.period)}`],
+    );
+  }
+  return rows;
+}

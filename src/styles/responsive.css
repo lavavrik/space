@@ -5,4 +5,5 @@
   .mid { order: -1; flex: 1 1 100%; }
   #msg { bottom: 330px; }
   #help { display: none; }
+  #leftcol { max-height: calc(100% - 400px); } /* the bottom HUD wraps taller here */
 }

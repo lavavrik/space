@@ -37,17 +37,20 @@ export type OrbitElements =
   | { escape: true; pe: number; ap?: undefined; period?: undefined; vr: number; r: number }
   | { escape: false; pe: number; ap: number; period: number; vr: number; r: number };
 
-/** Osculating orbit around a body from the ship's current state. */
+/** Osculating orbit around a body from the ship's current state (ship.vel must be relative to b). */
 export function orbitElements(ship: Ship, b: Body): OrbitElements {
-  const rv = ship.pos.clone().sub(b.pos),
-    r = rv.length();
-  const v = ship.vel,
+  return orbitElementsRel(ship.pos.clone().sub(b.pos), ship.vel, b.mu);
+}
+
+/** Osculating orbit from a position and velocity relative to a body with gravitational parameter mu. */
+export function orbitElementsRel(rv: THREE.Vector3, v: THREE.Vector3, mu: number): OrbitElements {
+  const r = rv.length(),
     v2 = v.lengthSq();
-  const eps = v2 / 2 - b.mu / r;
+  const eps = v2 / 2 - mu / r;
   const h = rv.clone().cross(v).length();
-  const e = Math.sqrt(Math.max(0, 1 + (2 * eps * h * h) / (b.mu * b.mu)));
+  const e = Math.sqrt(Math.max(0, 1 + (2 * eps * h * h) / (mu * mu)));
   const vr = rv.dot(v) / r;
-  if (eps >= 0) return { escape: true, pe: (h * h) / (b.mu * (1 + e)), vr, r };
-  const a = -b.mu / (2 * eps);
-  return { escape: false, pe: a * (1 - e), ap: a * (1 + e), period: 2 * Math.PI * Math.sqrt(a ** 3 / b.mu), vr, r };
+  if (eps >= 0) return { escape: true, pe: (h * h) / (mu * (1 + e)), vr, r };
+  const a = -mu / (2 * eps);
+  return { escape: false, pe: a * (1 - e), ap: a * (1 + e), period: 2 * Math.PI * Math.sqrt(a ** 3 / mu), vr, r };
 }

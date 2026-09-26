@@ -62,6 +62,8 @@ export class Game {
 
   started = false;
   helpVisible = true;
+  /** Body info panel (I), shown in place of the controls list while open. */
+  infoVisible = false;
   pointerLocked = false;
 
   /** Inverse ship orientation and forward vector, refreshed each simulation step. */

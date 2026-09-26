@@ -44,6 +44,16 @@ export interface TargetView {
   jump: string;
 }
 
+/** Body info panel (I): the target's physical data, its own orbit, and the ship relative to it. */
+export interface InfoView {
+  title: string;
+  type: string;
+  physical: [string, string][];
+  orbitHead: string; // e.g. "ORBITS VENYDES" or "ANCHORS THE SYSTEM"
+  orbit: [string, string][];
+  you: [string, string | Readout][];
+}
+
 export interface SystemsView {
   mass: string;
   prop: string;
@@ -97,6 +107,7 @@ export interface GuideView {
 export interface HudSnapshot {
   started: boolean;
   helpVisible: boolean;
+  info: InfoView | null;
   showRelock: boolean;
   toast: { text: string; kind: MsgKind; visible: boolean };
   nav: NavigationView;

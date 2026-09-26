@@ -8,6 +8,7 @@ import { guideEta, type Guide } from '../sim/guide';
 import { galPos } from '../sim/navigation';
 import { evalPlan } from '../sim/orbits';
 import { deltaVLeft, shipMass } from '../sim/resources';
+import { buildInfo } from './info';
 import type { FlightView, GuideView, HudSnapshot, NavigationView, PlannerView, SystemsView, TargetView } from './types';
 
 const tmp = new THREE.Vector3();
@@ -17,6 +18,7 @@ export function buildSnapshot(g: Game): HudSnapshot {
   return {
     started: g.started,
     helpVisible: g.helpVisible,
+    info: g.infoVisible && g.target ? buildInfo(g, g.target) : null,
     showRelock: g.started && !g.pointerLocked,
     toast: { text: g.msg.text, kind: g.msg.kind, visible: g.msg.on },
     nav: navigation(g),

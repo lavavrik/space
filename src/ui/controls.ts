@@ -12,6 +12,7 @@ export const HELP_KEYS: [string, string][] = [
   ['T / G · click', 'Target ahead / next nearest / clicked'],
   ['N / H', 'Pick star (aim or cycle) / hyperjump'],
   ['O', 'Orbit planner · autopilot off'],
+  ['I', 'Target info (replaces this list)'],
   ['Z', 'Flight assist on / off'],
   ['V', 'Decoupled: turn without changing course'],
   ['P', 'Point solar panels at the star'],

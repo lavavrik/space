@@ -52,6 +52,7 @@ The simulation never touches the DOM. Each frame it steps the physics, draws the
 | Space / Ctrl or C | Thrust up / down (Ctrl+W closes the tab, so use C when also pressing W) |
 | Mouse, arrows · Q / E | Pitch and yaw · roll |
 | Shift · X | Boost · all stop |
+| I | Target info: size, mass, gravity, climate, its orbit, and your speed and orbit relative to it (shown in place of the controls list) |
 | Z | Flight assist on / off |
 | V | Decoupled: turn without changing course (normal space and FTL) |
 | J | FTL drive |

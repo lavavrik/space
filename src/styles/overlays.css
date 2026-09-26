@@ -10,8 +10,17 @@
 #msg.ftl { border-color: var(--cyan-faint); color: var(--cyan); }
 #msg.warn { border-color: var(--red); color: var(--red); }
 
-#help {
+/* Left column: controls list, then the body info panel. */
+#leftcol {
   position: fixed; top: calc(14px + env(safe-area-inset-top, 0px)); left: 16px;
+  width: 330px; max-width: calc(100% - 32px); max-height: calc(100% - 270px); overflow: hidden;
+  display: flex; flex-direction: column; gap: 10px; pointer-events: none;
+}
+#info { display: flex; flex-direction: column; gap: 2px; }
+#info .row b { text-align: right; max-width: 62%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.itype { font-size: 11px; letter-spacing: .14em; color: var(--amber-dim); margin: -2px 0 4px; }
+.isec { font-size: 11px; letter-spacing: .14em; color: var(--amber); margin: 8px 0 2px; border-top: 1px solid var(--amber-faint); padding-top: 6px; }
+#help {
   background: var(--panel); border: 1px solid var(--amber-faint);
   padding: 10px 14px; font-size: 12px; pointer-events: none;
   display: grid; grid-template-columns: auto auto; gap: 2px 14px;
