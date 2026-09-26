@@ -10,9 +10,11 @@ import type { Guide } from './sim/guide';
 import { placeAtHome } from './sim/navigation';
 import { closePlanner } from './sim/planner';
 import { update } from './sim/update';
-import type { Body, CurrentSystem, Jump, Message, MsgKind, Planner, Power, Ship, StarSystem } from './types';
+import type { Body, CurrentSystem, Jump, Message, MsgKind, Planner, Power, Ship, StarSystem, Station, Target } from './types';
 import { systemsNear } from './universe/galaxy';
+import { buildStations } from './universe/stations';
 import { buildSystem } from './universe/system';
+import { updateStations } from './sim/stations';
 
 const qa = new THREE.Quaternion();
 const AY = new THREE.Vector3(0, 1, 0);
@@ -38,7 +40,9 @@ export class Game {
   nearby: StarSystem[] = [];
   readonly ship = newShip();
   readonly power: Power = { solar: 0, cos: 0, shadow: null, draw: 0, net: 0, thrustKW: 0, ftlKW: 0, chargeKW: 0, burn: 0, flux: 0 };
-  target: Body | null = null;
+  target: Target | null = null;
+  /** Station whose frame flight assist works in, or null for the system frame (see sim/frame.ts). */
+  refFrame: Station | null = null;
   jumpDest: StarSystem | null = null;
   jump: Jump | null = null;
   planner: Planner | null = null;
@@ -126,10 +130,13 @@ export class Game {
 
   loadSystem(sys: StarSystem) {
     const bodies = buildSystem(sys);
-    this.cur = { sys, bodies, star: bodies[0] as CurrentSystem['star'] };
+    const stations = buildStations(sys, bodies);
+    updateStations(stations, this.simTime);
+    this.cur = { sys, bodies, star: bodies[0] as CurrentSystem['star'], stations };
     this.nearby = systemsNear(sys.pos, JUMP_RANGE + 1).filter((s) => s.id !== sys.id);
     this.scene.setSystem(this.cur, systemsNear(sys.pos, SKY_RADIUS));
     this.target = null;
+    this.refFrame = null;
     this.jumpDest = null;
     this.ship.ap = null;
     this.ship.landed = null;
@@ -157,6 +164,7 @@ export class Game {
     else {
       // idle drift behind the start screen
       this.simTime += dt;
+      updateStations(this.cur.stations, this.simTime);
       this.qInv.copy(this.ship.q).invert();
       this.ship.q.multiply(qa.setFromAxisAngle(AY, -0.012 * dt));
     }

@@ -3,6 +3,7 @@ import { fmtDist } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import type { Body, Ship } from '../types';
+import { FRAME_ENTER, stationWithin } from './frame';
 import { apLabel } from './orbits';
 
 /** How strongly a body's gravity well slows the FTL drive. */
@@ -118,7 +119,15 @@ export function dropFTL(g: Game, forced: boolean, body?: Body) {
     return;
   }
   if (forced && body) g.showMsg(`Emergency drop · too close to ${body.name}`, 'warn');
-  else g.showMsg('Dropped to normal space');
+  else {
+    // dropping out beside a station puts you straight into its frame, moving with it
+    const st = stationWithin(g, FRAME_ENTER);
+    if (st) {
+      ship.vel.add(st.vel);
+      g.refFrame = st;
+      g.showMsg(`Dropped to normal space · matched ${st.name}'s orbit`);
+    } else g.showMsg('Dropped to normal space');
+  }
 }
 
 /** Tick the FTL charge timer; engage when it runs out. */

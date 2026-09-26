@@ -12,6 +12,7 @@ import skyVert from './sky.vert.glsl?raw';
 import skyFrag from './sky.frag.glsl?raw';
 import skyPointVert from './skyPoint.vert.glsl?raw';
 import skyPointFrag from './skyPoint.frag.glsl?raw';
+import stationFrag from './station.frag.glsl?raw';
 
 // Shaders that need simplex noise and fBm mark the spot with this pragma.
 const withNoise = (src: string) => src.replace('#pragma farlight_noise', noise);
@@ -24,6 +25,8 @@ export const STAR_FS = withNoise(starFrag);
 export const GLOW_VS = glowVert;
 export const GLOW_FS = glowFrag;
 export const RING_FS = withNoise(ringFrag);
+/** Orbital stations (drawn with BODY_VS on a unit cube). */
+export const STATION_FS = withNoise(stationFrag);
 /** Point sprites: distant bodies and dust. */
 export const POINT_VS = pointVert;
 export const POINT_FS = pointFrag;

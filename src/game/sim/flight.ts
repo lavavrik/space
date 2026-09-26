@@ -3,6 +3,7 @@ import { fmtDist, nf0 } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import type { Body, Gravity } from '../types';
+import { frameVel } from './frame';
 import { dropAlt } from './ftl';
 import { lookAt } from './navigation';
 import { closePlanner, disengageAP } from './planner';
@@ -12,7 +13,9 @@ const tmp = new THREE.Vector3();
 
 /** Manual flight. Gravity always acts. Flight assist damps drift on axes you are not
  *  thrusting on, but near a body it leaves the velocity along the pull alone, so you
- *  fall unless you thrust away. With flight assist off the ship is purely Newtonian.
+ *  fall unless you thrust away. Near a station it works relative to the station instead
+ *  (see sim/frame.ts): you fall together, so it holds you still beside it. With flight
+ *  assist off the ship is purely Newtonian.
  *  `inp` is the thrust input in ship axes: [right, up, back]. */
 export function manualFlight(g: Game, dt: number, grav: Gravity, inp: number[]) {
   const { ship, keys } = g;
@@ -20,12 +23,15 @@ export function manualFlight(g: Game, dt: number, grav: Gravity, inp: number[]) 
   const acc = boost ? NORMAL_ACC * 3 : NORMAL_ACC,
     maxV = boost ? NORMAL_BOOST : NORMAL_MAX;
   ship.vel.addScaledVector(grav.vec, dt);
-  const v0 = ship.vel.clone();
+  // everything below works in the local frame: the station's, or the system's
+  const fv = frameVel(g);
+  const v0 = ship.vel.clone().sub(fv);
 
   const gh = tmp.copy(grav.vec).normalize();
   const stopping = keys.KeyX;
-  // how much of the pull flight assist ignores: none in deep space, all of it near a body
-  const w = stopping ? 0 : Math.min(1, Math.max(0, (grav.g - 0.02) / 0.3));
+  // how much of the pull flight assist ignores: none in deep space, all of it near a body,
+  // none in a station's frame (the station falls with you)
+  const w = stopping || g.refFrame ? 0 : Math.min(1, Math.max(0, (grav.g - 0.02) / 0.3));
   const radial = gh.clone().multiplyScalar(v0.dot(gh) * w);
   const rest = v0.clone().sub(radial);
   const lv = rest.clone().applyQuaternion(g.qInv);
@@ -57,7 +63,7 @@ export function manualFlight(g: Game, dt: number, grav: Gravity, inp: number[]) 
     }
   }
   applyThrust(g, T, dt);
-  ship.vel.copy(v0).add(T);
+  ship.vel.copy(v0).add(T).add(fv);
   if (inp[0] || inp[1] || inp[2]) ship.landed = null;
 }
 

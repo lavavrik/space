@@ -64,7 +64,8 @@ function flightMode(g: Game): [string, FlightView['modeClass']] {
 function flight(g: Game): FlightView {
   const { ship, keys, jump } = g;
   const [mode, modeClass] = flightMode(g);
-  const [speed, unit] = jump && jump.phase === 'tunnel' ? ['—', 'IN HYPERSPACE'] : fmtSpeed(g.curSpeed);
+  const [speed, speedUnit] = jump && jump.phase === 'tunnel' ? ['—', 'IN HYPERSPACE'] : fmtSpeed(g.curSpeed);
+  const unit = g.refFrame && ship.mode === 'normal' ? `${speedUnit} · REL. ${g.refFrame.name.toUpperCase()}` : speedUnit;
   let barFrac: number, barLabel: string, barValue: string;
   const barFtl = ship.mode === 'ftl';
   if (barFtl) {
@@ -105,7 +106,8 @@ function target(g: Game): TargetView {
     view.type = t.typeName.toUpperCase();
     view.distance = fmtDist(d);
     const dir = tmp.subVectors(t.pos, ship.pos).normalize();
-    const vel = ship.mode === 'ftl' ? g.fwd.clone().multiplyScalar(ship.ftlSpeed) : ship.vel;
+    const vel = ship.mode === 'ftl' ? g.fwd.clone().multiplyScalar(ship.ftlSpeed) : ship.vel.clone();
+    if (t.kind === 'station') vel.sub(t.vel); // stations move, so close on them relative to their orbit
     const closing = vel.dot(dir);
     view.eta = closing > 1 ? fmtTime(d / closing) : 'not closing';
   }

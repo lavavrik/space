@@ -7,8 +7,10 @@ import { chargeFTL, ftlCruise } from './ftl';
 import { gravityAt } from './gravity';
 import { updateGuide } from './guide';
 import { arriveAt } from './navigation';
+import { relVel, updateFrame } from './frame';
 import { disengageAP } from './planner';
 import { refillShip, scoop, solarPower } from './resources';
+import { updateStations } from './stations';
 
 const qa = new THREE.Quaternion();
 const AX = new THREE.Vector3(1, 0, 0),
@@ -59,8 +61,10 @@ export function update(g: Game, dt: number) {
   chargeFTL(g, dt);
   updateJump(g, dt);
 
-  // --- planet spin
+  // --- planet spin and station orbits
   for (const b of g.cur.bodies) b.rot += b.spin * dt;
+  updateStations(g.cur.stations, g.simTime);
+  updateFrame(g);
 
   // --- movement
   const down = keys.ControlLeft || keys.ControlRight || keys.KeyC;
@@ -75,7 +79,7 @@ export function update(g: Game, dt: number) {
       else manualFlight(g, dt, grav, inp);
       ship.pos.addScaledVector(ship.vel, dt);
       collide(g, dt);
-      g.curSpeed = ship.vel.length();
+      g.curSpeed = relVel(g).length();
     } else if (apSteering) {
       ftlTransfer(g, dt);
     } else {

@@ -56,6 +56,35 @@ export interface World extends BodyBase {
 
 export type Body = Star | World;
 
+/**
+ * An orbital station. Not a Body: it has no gravity, doesn't mass-lock, and isn't in
+ * `CurrentSystem.bodies`. It follows a fixed Kepler orbit around its parent, so `pos` and `vel`
+ * are recomputed from the sim clock every step (see sim/stations.ts).
+ */
+export interface Station {
+  kind: 'station';
+  name: string;
+  typeName: string;
+  parent: World;
+  size: number; // m, edge of the cube
+  radius: number; // m, half the cube's diagonal (for targeting and markers)
+  seed: number;
+  // orbit around the parent: semi-major axis, eccentricity, perifocal basis, mean motion, epoch
+  a: number; // m
+  e: number;
+  P: Vec3; // unit vector toward periapsis
+  Q: Vec3; // unit vector 90° ahead in the direction of motion
+  n: number; // rad/s
+  M0: number; // mean anomaly at simTime 0, rad
+  spinAxis: Vec3;
+  spinRate: number; // rad/s, slow tumble about spinAxis
+  pos: Vec3; // m, system frame
+  vel: Vec3; // m/s
+}
+
+/** Anything the ship can target. */
+export type Target = Body | Station;
+
 export interface StarInfo {
   cls: string;
   spec: string;
@@ -78,6 +107,7 @@ export interface CurrentSystem {
   sys: StarSystem;
   bodies: Body[];
   star: Star;
+  stations: Station[];
 }
 
 export interface Gravity {

@@ -2,11 +2,13 @@ import { JUMP_CHARGE_TIME, JUMP_TUNNEL_TIME, RESPAWN_TIME } from '../constants';
 import { fmtDist } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
+import { relVel } from '../sim/frame';
 import { galPos, reachable } from '../sim/navigation';
 import type { SceneRenderer } from './SceneRenderer';
 
 const AMB = 'rgba(255,165,58,',
-  CYA = 'rgba(127,220,255,';
+  CYA = 'rgba(127,220,255,',
+  MINT = 'rgba(115,255,178,'; // stations (matches STATION_RGB in SceneRenderer)
 const MONO = '"Share Tech Mono", monospace';
 const SANS = '"Chakra Petch", system-ui, sans-serif';
 
@@ -112,7 +114,7 @@ export class Overlay {
 
     // prograde marker
     if (ship.mode === 'normal' && g.curSpeed > 2) {
-      const s = this.toScreen(g, ship.vel.clone().normalize().multiplyScalar(1000));
+      const s = this.toScreen(g, relVel(g).normalize().multiplyScalar(1000));
       if (!s.behind) {
         ctx.strokeStyle = AMB + '0.8)';
         ctx.beginPath();
@@ -128,6 +130,7 @@ export class Overlay {
     }
 
     this.drawBodies(g);
+    this.drawStations(g);
     this.drawReachable(g);
     this.drawJumpDest(g);
 
@@ -265,6 +268,51 @@ export class Overlay {
         ctx.stroke();
         ctx.fillStyle = AMB + (b.kind === 'moon' ? '0.5)' : '0.75)');
         ctx.fillText(b.name, s.x, s.y - r - 5);
+      }
+    }
+  }
+
+  /**
+   * Stations get a mint square marker whenever you're anywhere near their world, so they stand out
+   * against the planets' amber circles; the name shows when closer, and a targeted one gets brackets.
+   */
+  private drawStations(g: Game) {
+    const { ctx, W, H } = this;
+    ctx.font = `11px ${MONO}`;
+    ctx.textAlign = 'center';
+    for (const st of g.cur.stations) {
+      const view = this.scene.stationViews.get(st);
+      if (!view) continue;
+      const isT = st === g.target;
+      const d = view.dist;
+      const label = `${st.name} · ${fmtDist(Math.max(0, d - st.size / 2))}`;
+      const s = this.toScreen(g, this.tmp.subVectors(st.pos, g.ship.pos));
+      const onScreen = !s.behind && s.x > -50 && s.x < W + 50 && s.y > -50 && s.y < H + 50;
+      if (!onScreen) {
+        if (isT) this.edgeArrow(s.v, MINT, label);
+        continue;
+      }
+      const near = d < st.parent.radius * 60;
+      if (!isT && !near) continue;
+      const r = Math.max(7, Math.min(view.pxR, Math.max(W, H)) + 5);
+      ctx.strokeStyle = MINT + (isT ? '0.95)' : '0.8)');
+      ctx.lineWidth = isT ? 1.5 : 1.2;
+      if (isT) {
+        const k = 7;
+        ctx.beginPath();
+        for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+          ctx.moveTo(s.x + sx * (r + 4), s.y + sy * (r + 4 - k));
+          ctx.lineTo(s.x + sx * (r + 4), s.y + sy * (r + 4));
+          ctx.lineTo(s.x + sx * (r + 4 - k), s.y + sy * (r + 4));
+        }
+        ctx.stroke();
+      }
+      if (r < H * 0.4) {
+        ctx.strokeRect(s.x - r, s.y - r, 2 * r, 2 * r);
+        if (isT || d < st.parent.radius * 25) {
+          ctx.fillStyle = MINT + '0.95)';
+          ctx.fillText(isT ? label.toUpperCase() : st.name, s.x, s.y - r - 7);
+        }
       }
     }
   }

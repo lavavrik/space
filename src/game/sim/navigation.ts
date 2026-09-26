@@ -4,7 +4,7 @@ import { mulberry32, rr } from '../lib/rng';
 import { THREE } from '../lib/three';
 import { homeSystem } from '../universe/galaxy';
 import { findHome } from '../universe/system';
-import type { Ship, StarSystem } from '../types';
+import type { Ship, StarSystem, Target } from '../types';
 import { massLock } from './ftl';
 import { startJumpGuide } from './guide';
 import { closePlanner } from './planner';
@@ -25,9 +25,9 @@ export function galPos(g: Game) {
 export function targetAhead(g: Game) {
   const { ship } = g;
   const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(ship.q);
-  let best = null,
+  let best: Target | null = null,
     bestA = 0.35;
-  for (const b of g.cur.bodies) {
+  for (const b of [...g.cur.bodies, ...g.cur.stations]) {
     const d = b.pos.clone().sub(ship.pos);
     const dist = d.length();
     const ang = Math.acos(Math.min(1, d.dot(fwd) / dist));
@@ -47,7 +47,7 @@ export function targetAhead(g: Game) {
 /** Cycle targets by distance. */
 export function cycleTarget(g: Game) {
   const { ship } = g;
-  const sorted = g.cur.bodies.slice().sort((a, b) => a.pos.distanceTo(ship.pos) - b.pos.distanceTo(ship.pos));
+  const sorted = [...g.cur.bodies, ...g.cur.stations].sort((a, b) => a.pos.distanceTo(ship.pos) - b.pos.distanceTo(ship.pos));
   const i = g.target ? sorted.indexOf(g.target) : -1;
   g.target = sorted[(i + 1) % sorted.length];
   g.showMsg(`Target · ${g.target.name}`);

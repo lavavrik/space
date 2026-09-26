@@ -9,7 +9,9 @@ import { apLabel, defaultOrbitAlt, evalPlan, maxOrbitR, minOrbitAlt, orbitNormal
 
 export function openPlanner(g: Game) {
   const { ship } = g;
-  const b = g.target || (ship.grav && ship.grav.body) || dominantBody(g.cur, ship.pos);
+  // a targeted station plans an orbit around the world it circles
+  const t = g.target && g.target.kind === 'station' ? g.target.parent : g.target;
+  const b = t || (ship.grav && ship.grav.body) || dominantBody(g.cur, ship.pos);
   const curAlt = ship.pos.distanceTo(b.pos) - b.radius;
   g.planner = { body: b, type: 'equatorial', alt: defaultOrbitAlt(b), dir: 1, curAlt };
   g.invalidateHud();

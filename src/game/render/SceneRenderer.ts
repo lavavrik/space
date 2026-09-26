@@ -2,8 +2,8 @@ import { AU, FOV, WT } from '../constants';
 import type { Game } from '../Game';
 import { mulberry32 } from '../lib/rng';
 import { THREE } from '../lib/three';
-import type { Body, CurrentSystem, Star, StarSystem, World } from '../types';
-import { ATMO_FS, BODY_VS, GLOW_FS, GLOW_VS, PLANET_FS, POINT_FS, POINT_VS, RING_FS, SKYPT_FS, SKYPT_VS, SKY_FS, SKY_VS, STAR_FS } from './shaders';
+import type { Body, CurrentSystem, Star, StarSystem, Station, World } from '../types';
+import { ATMO_FS, BODY_VS, GLOW_FS, GLOW_VS, PLANET_FS, POINT_FS, POINT_VS, RING_FS, SKYPT_FS, SKYPT_VS, SKY_FS, SKY_VS, STAR_FS, STATION_FS } from './shaders';
 
 type Uniforms = Record<string, THREE.IUniform>;
 
@@ -21,6 +21,8 @@ export interface BodyView {
 }
 
 const MAXDOTS = 256;
+/** Colour of a distant station's beacon dot (and its overlay marker): mint, unlike any body. */
+export const STATION_RGB = new THREE.Color(0.45, 1, 0.7);
 const DUST = 700,
   DUSTBOX = 3000;
 
@@ -32,6 +34,7 @@ const DUST = 700,
 export class SceneRenderer {
   readonly gl: THREE.WebGLRenderer;
   readonly views = new Map<Body, BodyView>();
+  readonly stationViews = new Map<Station, { mesh: THREE.Mesh; uni: Uniforms; dist: number; pxR: number }>();
   private readonly scene = new THREE.Scene();
   private readonly skyScene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(FOV, 1, 0.5, 1e21);
@@ -41,6 +44,7 @@ export class SceneRenderer {
   private readonly geoMid = new THREE.SphereGeometry(1, 96, 48);
   private readonly geoLo = new THREE.SphereGeometry(1, 32, 16);
   private readonly plane = new THREE.PlaneGeometry(2, 2);
+  private readonly box = new THREE.BoxGeometry(1, 1, 1);
   private sysStars: THREE.Points | null = null;
   private readonly dotGeo = new THREE.BufferGeometry();
   private readonly dustGeo = new THREE.BufferGeometry();
@@ -48,6 +52,7 @@ export class SceneRenderer {
   private readonly dustSeed: [number, number, number][] = [];
   private readonly tmp = new THREE.Vector3();
   private readonly tmp2 = new THREE.Vector3();
+  private readonly tmp3 = new THREE.Vector3();
 
   constructor(canvas: HTMLCanvasElement) {
     this.gl = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true });
@@ -132,11 +137,12 @@ export class SceneRenderer {
   setSystem(cur: CurrentSystem, systems: StarSystem[]) {
     this.disposeSystem();
     for (const b of cur.bodies) this.views.set(b, b.kind === 'star' ? this.attachStar(b) : this.attachWorld(b, cur.star));
+    for (const st of cur.stations) this.stationViews.set(st, this.attachStation(st, cur.star));
     this.buildSysStars(cur.sys, systems);
   }
 
   private isShared(geo: THREE.BufferGeometry) {
-    return geo === this.geoHi || geo === this.geoMid || geo === this.geoLo || geo === this.plane;
+    return geo === this.geoHi || geo === this.geoMid || geo === this.geoLo || geo === this.plane || geo === this.box;
   }
 
   private disposeSystem() {
@@ -153,6 +159,23 @@ export class SceneRenderer {
       }
     }
     this.views.clear();
+    for (const v of this.stationViews.values()) {
+      this.scene.remove(v.mesh);
+      (v.mesh.material as THREE.Material).dispose();
+    }
+    this.stationViews.clear();
+  }
+
+  private attachStation(st: Station, star: Star) {
+    const p = st.parent.pal;
+    const uni: Uniforms = {
+      uLight: { value: new THREE.Vector3() }, uStarColor: { value: star.color.clone().lerp(new THREE.Color(1, 1, 1), 0.5) }, uLit: { value: 1 },
+      uPlanetDir: { value: new THREE.Vector3() }, uPlanetColor: { value: p.a.clone().lerp(p.b, 0.5) }, uPlanetSize: { value: 1 }, uSeed: { value: st.seed },
+    };
+    const mesh = new THREE.Mesh(this.box, new THREE.ShaderMaterial({ vertexShader: BODY_VS, fragmentShader: STATION_FS, uniforms: uni }));
+    mesh.scale.setScalar(st.size);
+    this.scene.add(mesh);
+    return { mesh, uni, dist: Infinity, pxR: 0 };
   }
 
   private attachStar(b: Star): BodyView {
@@ -281,6 +304,33 @@ export class SceneRenderer {
         }
       }
     }
+    // stations: tumbling cubes up close, mint beacon dots far away
+    for (const [st, v] of this.stationViews) {
+      const rel = tmp.subVectors(st.pos, ship.pos);
+      const d = rel.length();
+      v.dist = d;
+      v.pxR = (st.radius / d) * pxPerRad;
+      v.mesh.position.copy(rel);
+      v.mesh.quaternion.setFromAxisAngle(st.spinAxis, st.spinRate * simTime);
+      v.mesh.visible = v.pxR > 0.5;
+      const toStar = tmp2.subVectors(starPos, st.pos).normalize();
+      (v.uni.uLight.value as THREE.Vector3).copy(toStar);
+      // in the parent's shadow if the line to the star passes through it
+      const par = st.parent;
+      const w = this.tmp3.subVectors(par.pos, st.pos);
+      const t = w.dot(toStar);
+      v.uni.uLit.value = t > 0 && w.lengthSq() - t * t < par.radius * par.radius ? 0 : 1;
+      const pd = w.length();
+      (v.uni.uPlanetDir.value as THREE.Vector3).copy(w).divideScalar(pd);
+      v.uni.uPlanetSize.value = Math.cos(Math.asin(Math.min(1, par.radius / pd)));
+      if (v.pxR < 2.5 && nd < MAXDOTS) {
+        const a = v.pxR < 1.2 ? 1 : (2.5 - v.pxR) / 1.3;
+        dPos.set([rel.x, rel.y, rel.z], nd * 3);
+        dCol.set([STATION_RGB.r * a, STATION_RGB.g * a, STATION_RGB.b * a], nd * 3);
+        dSize[nd] = 3.2 * PR;
+        nd++;
+      }
+    }
     dotGeo.setDrawRange(0, nd);
     dotGeo.attributes.position.needsUpdate = dotGeo.attributes.aColor.needsUpdate = dotGeo.attributes.aSize.needsUpdate = true;
 
@@ -330,7 +380,7 @@ export class SceneRenderer {
     };
     this.scene.traverse(dispose);
     this.skyScene.traverse(dispose);
-    for (const geo of [this.geoHi, this.geoMid, this.geoLo, this.plane]) geo.dispose();
+    for (const geo of [this.geoHi, this.geoMid, this.geoLo, this.plane, this.box]) geo.dispose();
     this.gl.dispose();
   }
 }
