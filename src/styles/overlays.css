@@ -25,9 +25,34 @@
   padding: 10px 14px; font-size: 12px; pointer-events: none; align-self: flex-start;
 }
 #help.collapsed { padding-bottom: 6px; }
-#help .keys { display: grid; grid-template-columns: auto auto; gap: 2px 14px; }
+#help .keys { display: grid; grid-template-columns: auto 1fr; gap: 0 8px; font-size: 11px; line-height: 1.4; }
+#help .keys span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* keyboard schema: keycaps coloured by control group; the legend below uses the same colours */
+#help { --g-flight: var(--amber); --g-ftl: var(--cyan); --g-target: #73ffb2; --g-ship: #e6d3ff; --g-planner: #ffd27a; }
+.kb { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 8px; }
+.kbrow { display: flex; gap: 2px; }
+.kc {
+  flex: none; height: 19px; display: grid; place-items: center; box-sizing: border-box;
+  font: 10px "Share Tech Mono", ui-monospace, monospace; color: rgba(255, 230, 199, .28);
+  border: 1px solid rgba(255, 165, 58, .12); border-radius: 2px; overflow: hidden; white-space: nowrap;
+}
+.kc.gap { border-color: transparent; }
+.kc.flight { --c: var(--g-flight); }
+.kc.ftl { --c: var(--g-ftl); }
+.kc.target { --c: var(--g-target); }
+.kc.ship { --c: var(--g-ship); }
+.kc.planner { --c: var(--g-planner); }
+.kc.on { color: var(--c, inherit); border-color: var(--c, transparent); background: color-mix(in srgb, var(--c, transparent) 14%, transparent); }
+.klegend { columns: 2; column-gap: 14px; }
+.kgroup { break-inside: avoid; margin-bottom: 6px; }
+.kgt { font-size: 10.5px; letter-spacing: .16em; margin-bottom: 1px; }
+.kgroup.flight .kgt, .kgroup.flight kbd { color: var(--g-flight); }
+.kgroup.ftl .kgt, .kgroup.ftl kbd { color: var(--g-ftl); }
+.kgroup.target .kgt, .kgroup.target kbd { color: var(--g-target); }
+.kgroup.ship .kgt, .kgroup.ship kbd { color: var(--g-ship); }
+.kgroup.planner .kgt, .kgroup.planner kbd { color: var(--g-planner); }
 #help kbd {
   font-family: "Share Tech Mono", ui-monospace, monospace; color: var(--text);
-  font-size: 12px; white-space: nowrap;
+  font-size: 11px; white-space: nowrap;
 }
 #help span { color: var(--amber-dim); }

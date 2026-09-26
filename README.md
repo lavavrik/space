@@ -63,7 +63,7 @@ The simulation never touches the DOM. Each frame it steps the physics, draws the
 | O | Orbit planner (equatorial, polar, stationary, hold position) |
 | P | Turn the solar panels to the star |
 | K | Call a fuel tanker |
-| Tab | Hide the controls list |
+| Tab | Hide the controls panel (a colour-coded keyboard schema with a legend by group) |
 | Click a panel heading | Collapse / expand that panel (all but the speed readout; remembered per browser). Release the mouse (Esc) first if it's captured |
 
 ## Physics

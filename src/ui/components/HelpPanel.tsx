@@ -1,17 +1,45 @@
-import { Fragment } from 'react';
-import { HELP_KEYS } from '../controls';
-import { Panel } from './primitives';
+import { Fragment } from "react";
+import { GROUPS, KEYBOARD } from "../controls";
+import { Panel, cx } from "./primitives";
 
-/** Controls list in the top-left corner (Tab hides it). */
+/** Width of one key unit on the schema, in px. */
+const U = 21;
+
+/**
+ * Controls (Tab hides, heading collapses): a keyboard schema with the keys the game uses coloured
+ * by group, and a legend of what each does, in the same colours.
+ */
 export function HelpPanel() {
   return (
     <Panel name="help" id="help" title="CONTROLS" right="TAB HIDES">
-      <div className="keys">
-        {HELP_KEYS.map(([k, what]) => (
-          <Fragment key={k}>
-            <kbd>{k}</kbd>
-            <span>{what}</span>
-          </Fragment>
+      <div className="kb" aria-hidden="true">
+        {KEYBOARD.map((row, r) => (
+          <div key={r} className="kbrow">
+            {row.map(([label, w, group], i) => (
+              <span
+                key={i}
+                className={cx("kc", group, group && "on", !label && "gap")}
+                style={{ width: w * U - 2 }}
+              >
+                {label}
+              </span>
+            ))}
+          </div>
+        ))}
+      </div>
+      <div className="klegend">
+        {GROUPS.map((g) => (
+          <div key={g.id} className={cx("kgroup", g.id)}>
+            <div className="kgt">{g.title}</div>
+            <div className="keys">
+              {g.keys.map(([k, what]) => (
+                <Fragment key={k + what}>
+                  <kbd>{k}</kbd>
+                  <span>{what}</span>
+                </Fragment>
+              ))}
+            </div>
+          </div>
         ))}
       </div>
     </Panel>

@@ -1,22 +1,78 @@
-/** Key bindings shown in the in-flight controls list. */
-export const HELP_KEYS: [string, string][] = [
-  ['W / S', 'Thrust fwd / back · FTL throttle'],
-  ['A / D', 'Strafe left / right'],
-  ['Space / Ctrl, C', 'Thrust up / down'],
-  ['Mouse, arrows', 'Pitch and yaw'],
-  ['Q / E', 'Roll'],
-  ['Shift', 'Boost'],
-  ['X', 'All stop'],
-  ['J', 'FTL drive on / off'],
-  ['F', 'FTL cruise control (else hold W)'],
-  ['T / G · click', 'Target ahead / next nearest / clicked'],
-  ['N / H', 'Pick star (aim or cycle) / hyperjump'],
-  ['O', 'Orbit planner · autopilot off'],
-  ['I', 'Target info (replaces this list)'],
-  ['Z', 'Flight assist on / off'],
-  ['V', 'Decoupled: turn without changing course'],
-  ['P', 'Point solar panels at the star'],
-  ['K', 'Call a fuel tanker'],
+/** Control groups: each colours its keys on the keyboard schema and has its own legend block. */
+export type ControlGroup = 'flight' | 'ftl' | 'target' | 'ship' | 'planner';
+
+export const GROUPS: { id: ControlGroup; title: string; keys: [string, string][] }[] = [
+  {
+    id: 'flight',
+    title: 'FLIGHT',
+    keys: [
+      ['W S', 'fwd / back'],
+      ['A D', 'strafe'],
+      ['Spc C', 'up / down'],
+      ['Mouse', 'steer (or arrows)'],
+      ['Q E', 'roll'],
+      ['Shift', 'boost'],
+      ['X', 'all stop'],
+      ['Z', 'flight assist'],
+      ['V', 'decouple'],
+    ],
+  },
+  {
+    id: 'ftl',
+    title: 'FTL & JUMPS',
+    keys: [
+      ['J', 'FTL on / off'],
+      ['W S', 'FTL throttle'],
+      ['F', 'cruise control'],
+      ['N', 'pick star'],
+      ['H', 'hyperjump'],
+    ],
+  },
+  {
+    id: 'target',
+    title: 'TARGETING',
+    keys: [
+      ['T', 'target ahead'],
+      ['G', 'next nearest'],
+      ['Click', 'target it'],
+      ['I', 'target info'],
+    ],
+  },
+  {
+    id: 'ship',
+    title: 'SHIP',
+    keys: [
+      ['O', 'orbit planner'],
+      ['P', 'sun-track panels'],
+      ['K', 'fuel tanker'],
+      ['Tab', 'hide controls'],
+    ],
+  },
+  {
+    id: 'planner',
+    title: 'ORBIT PLANNER',
+    keys: [
+      ['1–4', 'orbit type'],
+      ['[ ]', 'altitude'],
+      ['R', 'direction'],
+      ['⏎', 'engage'],
+    ],
+  },
+];
+
+/** One keycap on the schema: label, width in key units, and the group it belongs to (if any). */
+export type Keycap = [label: string, width: number, group?: ControlGroup];
+
+/**
+ * A compact keyboard, row by row, with only the keys the game uses coloured. W/S are 'flight'
+ * though they also set the FTL throttle; the legend lists both.
+ */
+export const KEYBOARD: Keycap[][] = [
+  [['Esc', 1.25], ['1', 1, 'planner'], ['2', 1, 'planner'], ['3', 1, 'planner'], ['4', 1, 'planner'], ['5', 1], ['6', 1], ['7', 1], ['8', 1], ['9', 1], ['0', 1]],
+  [['Tab', 1.5, 'ship'], ['Q', 1, 'flight'], ['W', 1, 'flight'], ['E', 1, 'flight'], ['R', 1, 'planner'], ['T', 1, 'target'], ['Y', 1], ['U', 1], ['I', 1, 'target'], ['O', 1, 'ship'], ['P', 1, 'ship'], ['[', 1, 'planner'], [']', 1, 'planner']],
+  [['Caps', 1.75], ['A', 1, 'flight'], ['S', 1, 'flight'], ['D', 1, 'flight'], ['F', 1, 'ftl'], ['G', 1, 'target'], ['H', 1, 'ftl'], ['J', 1, 'ftl'], ['K', 1, 'ship'], ['L', 1], ['⏎', 1.5, 'planner']],
+  [['Shift', 2.25, 'flight'], ['Z', 1, 'flight'], ['X', 1, 'flight'], ['C', 1, 'flight'], ['V', 1, 'flight'], ['B', 1], ['N', 1, 'ftl'], ['M', 1], ['↑', 1, 'flight']],
+  [['Ctrl', 1.5, 'flight'], ['Space', 5.5, 'flight'], ['', 1.25], ['←', 1, 'flight'], ['↓', 1, 'flight'], ['→', 1, 'flight']],
 ];
 
 /** Condensed bindings for the start screen. */

@@ -114,3 +114,24 @@ Phase 1 is designed so phases 2–3 only swap `density()` and add views. The gen
 - **Sky radius vs jump range:** how far do you see individual stars beyond what you can reach (for example 25 ly range, 100 ly sky)?
 - **Decorative background:** drop the fake 11k stars entirely, or keep them faint as unresolved glow until phase 2 replaces the far field?
 - **Scope:** stop at phase 1 (bounded local cluster), or commit to the phase 2 galaxy model now, which decides where home sits and the coordinate frame?
+
+## 5. How big is the galaxy's data?
+
+Measured on 2026-09-26 (Node heap, current code).
+
+**Stored or shipped: effectively nothing.** The whole galaxy is one 32-bit number (`GALAXY_SEED`) plus about 530 lines of generator code (`universe/*.ts`, `lib/rng.ts`). Every star, planet, moon, station and orbit is recomputed from the seed and its coordinates on demand, and comes out identical every time. There's no save file yet, so the game persists no player state either.
+
+**In memory while playing** (JS objects, so each record costs far more than its raw numbers):
+
+| What | Count | Memory |
+|---|---|---|
+| One star record (position, seed, name, star type) | — | ≈ 1.5 KB |
+| Sky: every system within 100 ly (`SKY_RADIUS`) | ≈ 6,400 | ≈ 9.5 MB, generated in ~10 ms |
+| Jump candidates within 25 ly | ≈ 100 | ≈ 150 KB |
+| Current system, fully built (star, ~14 bodies, ~2.6 stations, orbits, palettes) | 1 | ≈ 23 KB, built in ~0.05 ms |
+| Sector cache ceiling (`MAX_CACHED` = 40,000 sectors ≈ 61,000 stars) | — | up to ≈ 90 MB before it's cleared |
+| GPU: sky point buffer (7 floats per star) | ≈ 6,400 | ≈ 180 KB |
+
+**For scale:** at the current density (about 0.0015 systems per ly³), a sphere 1,000 ly across holds about 800,000 systems. Stored as records that would be about 1.2 GB, but since it's generated there's nothing to store. A real Milky Way (§3) would be about 10¹¹ stars, which only works because of this approach.
+
+**Worth tightening:** the sector cache ceiling is generous. One sky query touches about 9,300 sectors, and regenerating one costs only ~10 ms, so capping the cache at ~12,000 sectors would bound memory near 25 MB with no visible cost.
