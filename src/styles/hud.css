@@ -91,3 +91,4 @@
 .tdist b { font: 400 1.5rem "Share Tech Mono", ui-monospace, monospace; color: var(--text); }
 .tdist span { font: .95rem "Share Tech Mono", ui-monospace, monospace; color: var(--amber); }
 #target.none .tname { color: var(--amber-dim); font-size: 1.1rem; }
+.tscan { font-size: .8rem; letter-spacing: .14em; color: var(--cyan); margin-top: .15rem; }

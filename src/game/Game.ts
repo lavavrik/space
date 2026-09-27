@@ -68,6 +68,9 @@ export class Game {
   infoVisible = false;
   /** Avionics panel (U): the fitted computers; shares the left column with info and controls. */
   avionicsVisible = false;
+  /** Scan progress (0…1) per object key (see sim/scanner.ts), and whether the target is being scanned. */
+  readonly scans = new Map<string, number>();
+  scanning: Target | null = null;
   /** Draw the planned / autopilot orbit as a ring (L). */
   orbitPreview = true;
   /** Autopilot status panel (O while the autopilot flies). */
@@ -163,6 +166,7 @@ export class Game {
     this.nearby = systemsNear(sys.pos, JUMP_RANGE + 1).filter((s) => s.id !== sys.id);
     this.scene.setSystem(this.cur, systemsNear(sys.pos, SKY_RADIUS));
     this.target = null;
+    this.scanning = null;
     this.refFrame = null;
     this.jumpDest = null;
     this.ship.ap = null;

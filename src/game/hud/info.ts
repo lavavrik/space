@@ -5,6 +5,7 @@ import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import { velRel } from '../sim/frame';
 import { orbitElementsRel } from '../sim/gravity';
+import { resolvable, SCAN_STAGE, scanProgress } from '../sim/scanner';
 import type { Body, KeplerOrbit, Station, Target } from '../types';
 import type { InfoView, Readout } from './types';
 
@@ -19,15 +20,32 @@ const fmtRadius = (m: number) => (m > 3e8 ? `${(m / 6.957e8).toFixed(2)} R☉ ·
 const fmtOrbitDist = (m: number, aroundStar: boolean) => (aroundStar ? `${(m / AU).toFixed(3)} AU` : fmtDist(m));
 
 export function buildInfo(g: Game, t: Target): InfoView {
-  const physical = t.kind === 'station' ? stationPhysical(t) : bodyPhysical(g, t);
+  // what the scanner has revealed so far (see sim/scanner.ts); your own position and speed
+  // relative to it come from the ship's instruments and are always shown
+  const p = scanProgress(g, t);
+  const unknown: [string, string] = ['SCAN', scanHint(g, t, p)];
+  let physical: [string, string][] = t.kind === 'station' ? stationPhysical(t) : bodyPhysical(g, t);
+  if (p < SCAN_STAGE.type) physical = [unknown];
+  else if (p < SCAN_STAGE.physical) physical = [physical[0], unknown];
+  else if (p < SCAN_STAGE.full) physical = [...physical.slice(0, t.kind === 'station' ? 1 : 3), unknown];
   let orbitHead = 'ANCHORS THE SYSTEM';
   let orbit: [string, string][] = [['ORBIT', 'none · everything here orbits it']];
   if (t.kind !== 'star') {
-    const p = t.parent;
-    orbitHead = `ORBITS ${p.name.toUpperCase()}`;
-    orbit = orbitRows(t.kind === 'station' ? t : t.orb, t, p);
+    const par = t.parent;
+    orbitHead = `ORBITS ${par.name.toUpperCase()}`;
+    orbit = p >= SCAN_STAGE.orbit ? orbitRows(t.kind === 'station' ? t : t.orb, t, par) : [['ORBIT', 'unknown · scan to 75 %']];
   }
-  return { title: t.name, type: t.kind === 'station' ? 'ORBITAL STATION' : t.typeName.toUpperCase(), physical, orbitHead, orbit, you: youRows(g, t) };
+  const type = p < SCAN_STAGE.type ? 'UNKNOWN · UNSCANNED' : t.kind === 'station' ? 'ORBITAL STATION' : t.typeName.toUpperCase();
+  return { title: t.name, type, physical, orbitHead, orbit, you: youRows(g, t) };
+}
+
+/** What to say where scan data is missing. */
+function scanHint(g: Game, t: Target, p: number) {
+  if (g.scanning === t) return `scanning · ${Math.floor(p * 100)} %`;
+  if (!g.ship.avionics.scanner) return 'no scanner fitted';
+  const r = resolvable(g, t);
+  if (!r.ok) return `out of resolution · close to ${fmtDist(r.needDist)}`;
+  return p > 0 ? `${Math.floor(p * 100)} % scanned · Y to continue` : 'unscanned · Y to scan';
 }
 
 function bodyPhysical(g: Game, b: Body): [string, string][] {

@@ -1,6 +1,7 @@
 import { TANKER_TIME } from '../constants';
 import type { Game } from '../Game';
 import { toggleCruise, toggleDecoupled, toggleFTL } from '../sim/ftl';
+import { toggleScan } from '../sim/scanner';
 import { startTankerGuide } from '../sim/guide';
 import { pickDest, cycleTarget, startJump, targetAhead } from '../sim/navigation';
 import { ORBIT_TYPES } from '../sim/orbits';
@@ -91,6 +92,9 @@ export function onPress(g: Game, code: string) {
       break;
     case 'KeyF':
       toggleCruise(g);
+      break;
+    case 'KeyY':
+      toggleScan(g);
       break;
     case 'KeyL':
       toggleOrbitPreview(g);

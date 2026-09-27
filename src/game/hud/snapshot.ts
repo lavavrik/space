@@ -8,6 +8,7 @@ import { velRel } from '../sim/frame';
 import { orbitElements, orbitElementsRel } from '../sim/gravity';
 import { guideEta, type Guide } from '../sim/guide';
 import { transitState } from '../sim/hyperspace';
+import { resolvable, SCAN_STAGE, scanProgress } from '../sim/scanner';
 import { galPos } from '../sim/navigation';
 import { evalPlan } from '../sim/orbits';
 import { deltaVLeft } from '../sim/resources';
@@ -123,13 +124,21 @@ function flight(g: Game): FlightView {
 function target(g: Game): TargetView {
   const { ship } = g;
   const t = g.target;
-  if (!t) return { name: 'NO TARGET', type: 'T · G · CLICK', distance: '—', eta: '', none: true };
+  if (!t) return { name: 'NO TARGET', type: 'T · G · CLICK', distance: '—', eta: '', none: true, scan: null, scanFrac: 0 };
+  const sp = scanProgress(g, t);
+  let scan: Readout | null = null;
+  if (g.scanning === t) scan = { text: `SCANNING · ${Math.floor(sp * 100)} %` };
+  else if (sp < 1) {
+    const r = resolvable(g, t);
+    scan = !g.ship.avionics.scanner ? { text: 'UNSCANNED · NO SCANNER' } : r.ok ? { text: sp > 0 ? `${Math.floor(sp * 100)} % SCANNED · Y` : 'UNSCANNED · Y TO SCAN' } : { text: `OUT OF RESOLUTION · ${fmtDist(r.needDist)}`, warn: true };
+  }
   const d = t.pos.distanceTo(ship.pos) - (t.kind === 'station' ? t.size / 2 : t.radius);
   const dir = tmp.subVectors(t.pos, ship.pos).normalize();
   const vel = ship.mode === 'ftl' ? ship.travelDir.clone().multiplyScalar(ship.ftlSpeed) : ship.vel.clone();
   vel.add(g.frameBody.vel).sub(t.vel); // everything moves, so close on the target in its own frame
   const closing = vel.dot(dir);
-  return { name: t.name, type: t.kind === 'station' ? 'ORBITAL STATION' : t.typeName.toUpperCase(), distance: fmtDist(d), eta: closing > 1 ? `ETA ${fmtTime(d / closing)}` : 'NOT CLOSING', none: false };
+  const type = sp < SCAN_STAGE.type ? 'UNKNOWN' : t.kind === 'station' ? 'ORBITAL STATION' : t.typeName.toUpperCase();
+  return { name: t.name, type, distance: fmtDist(d), eta: closing > 1 ? `ETA ${fmtTime(d / closing)}` : 'NOT CLOSING', none: false, scan, scanFrac: sp };
 }
 
 function systems(g: Game): SystemsView {

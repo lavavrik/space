@@ -2,7 +2,7 @@
 const HANDLED = new Set([
   'KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ControlLeft', 'ControlRight', 'KeyC', 'KeyQ', 'KeyE', 'ShiftLeft', 'ShiftRight',
   'KeyJ', 'KeyH', 'KeyN', 'KeyT', 'KeyG', 'KeyX', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
-  'KeyZ', 'KeyV', 'KeyF', 'KeyI', 'KeyU', 'KeyL', 'Backquote', 'Backspace', 'KeyO', 'KeyR', 'KeyP', 'KeyK', 'BracketLeft', 'BracketRight', 'Enter', 'NumpadEnter', 'Digit1', 'Digit2', 'Digit3', 'Digit4',
+  'KeyZ', 'KeyV', 'KeyF', 'KeyI', 'KeyU', 'KeyY', 'KeyL', 'Backquote', 'Backspace', 'KeyO', 'KeyR', 'KeyP', 'KeyK', 'BracketLeft', 'BracketRight', 'Enter', 'NumpadEnter', 'Digit1', 'Digit2', 'Digit3', 'Digit4',
 ]);
 
 export type Keys = Record<string, boolean | undefined>;

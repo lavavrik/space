@@ -77,6 +77,12 @@ export function TargetCard({ t }: { t: TargetView }) {
           <span>{t.eta}</span>
         </div>
       )}
+      {t.scan && (
+        <>
+          <div className={cx('tscan', t.scan.warn && 'warnc')}>{t.scan.text}</div>
+          {t.scanFrac > 0 && <Bar frac={t.scanFrac} variant="ftl" />}
+        </>
+      )}
     </Panel>
   );
 }

@@ -55,6 +55,7 @@ The simulation never touches the DOM. Each frame it steps the physics, draws the
 | Space / Ctrl or C | Thrust up / down (Ctrl+W closes the tab, so use C when also pressing W) |
 | Mouse, arrows · Q / E | Pitch and yaw · roll |
 | Shift · X | Boost · all stop |
+| Y | Scan the target with the fitted scanner (it must resolve it: angular size ≥ the scanner's resolution). Scans reveal type and size → mass and gravity → orbit → climate, atmosphere, moons and stations; the home system starts scanned |
 | U | Avionics: the fitted computers (orbit computer, scanner, navigation) with their specs |
 | I | Target info: size, mass, gravity, climate, its orbit, and your speed and orbit relative to it (shown in place of the controls list) |
 | Z | Flight assist on / off |

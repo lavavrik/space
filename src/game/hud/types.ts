@@ -42,6 +42,8 @@ export interface TargetView {
   distance: string;
   eta: string;
   none: boolean;
+  scan: Readout | null; // scan status (unscanned / scanning / out of resolution); null once scanned
+  scanFrac: number; // 0…1, for the card's scan bar
 }
 
 /** One ship gauge: label, value, fill, and a one-line detail. */

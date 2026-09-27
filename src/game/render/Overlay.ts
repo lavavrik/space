@@ -4,6 +4,7 @@ import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import { relVel } from '../sim/frame';
 import { transitState, type TransitState } from '../sim/hyperspace';
+import { scanProgress } from '../sim/scanner';
 import { galPos, reachable } from '../sim/navigation';
 import type { Jump } from '../types';
 import type { SceneRenderer } from './SceneRenderer';
@@ -254,6 +255,7 @@ export class Overlay {
       const rClamp = Math.min(pxR, Math.max(W, H));
       if (isT) {
         const r = Math.max(14, rClamp + 8);
+        this.drawScanArc(g, s.x, s.y, r + 6);
         const t = 8;
         ctx.strokeStyle = AMB + '0.95)';
         ctx.lineWidth = 1.5;
@@ -318,6 +320,7 @@ export class Overlay {
         }
         ctx.stroke();
       }
+      if (isT) this.drawScanArc(g, s.x, s.y, r + 10);
       if (r < H * 0.4) {
         ctx.strokeRect(s.x - r, s.y - r, 2 * r, 2 * r);
         if (isT || d < st.parent.radius * 25) {
@@ -326,6 +329,25 @@ export class Overlay {
         }
       }
     }
+  }
+
+  /** While the target is being scanned, a cyan arc around it fills clockwise with the scan progress. */
+  private drawScanArc(g: Game, x: number, y: number, r: number) {
+    const t = g.scanning;
+    if (!t || t !== g.target) return;
+    const { ctx } = this;
+    const p = scanProgress(g, t);
+    ctx.save();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = CYA + '0.25)';
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = CYA + '0.95)';
+    ctx.beginPath();
+    ctx.arc(x, y, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p);
+    ctx.stroke();
+    ctx.restore();
   }
 
   /**
