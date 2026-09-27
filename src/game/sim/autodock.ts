@@ -28,7 +28,7 @@ import { THREE } from '../lib/three';
 import type { Station } from '../types';
 import { DOCK_REQUEST_RANGE, requestPad } from './docking';
 import { applyThrust } from './resources';
-import { padLocal, stationPointVelAt, stationQuat } from './stationGeom';
+import { HANGAR_R, padLocal, stationPointVelAt, stationQuat } from './stationGeom';
 
 export type AutoPhase = 'hold' | 'align' | 'enter' | 'descend' | 'rise' | 'exit';
 
@@ -163,14 +163,21 @@ export function autodock(g: Game, dt: number, gravVec: THREE.Vector3) {
   const dist = err.length();
   const brakeV = Math.sqrt(2 * BRAKE * dist);
   let speed = Math.min(cap, brakeV, dist / TAU);
-  if (ad.phase === 'descend') speed = Math.max(Math.min(speed, 12), dist > 1 ? SETTLE_V : 0); // settle gently onto the pad
+  if (ad.phase === 'descend') {
+    // settle gently: the closer to the pad (height above the hangar wall), the slower, down to
+    // SETTLE_V at touchdown; a profile on the distance to the target point alone reached the pad at
+    // ~14 m/s when the ship lagged its commanded speed
+    const h = (HANGAR_R - Math.hypot(p.x, p.y) / S) * S;
+    speed = Math.max(Math.min(speed, 12, SETTLE_V + 0.25 * Math.max(0, h - SETTLE_H)), dist > 1 ? SETTLE_V : 0);
+  }
   const vDesL = dist > 1e-6 ? err.multiplyScalar(speed / dist) : err.set(0, 0, 0);
   // inside the hull match the turning structure; outside, just the station's orbit (the spin term
   // ω × r would be ~100 m/s a kilometre off the axis)
   const inHull = Math.max(Math.abs(p.x), Math.abs(p.y), Math.abs(p.z)) < S / 2;
   const vFrame = (inHull ? stationPointVelAt(st, rel, tmp2) : tmp2.copy(st.vel)).sub(g.frameBody.vel);
   const vDes = toWorld(vDesL).add(vFrame);
-  const T = vDes.sub(ship.vel).divideScalar(TAU);
+  // close to the pad, correct twice as quickly so the ship doesn't lag its (slowing) commanded speed
+  const T = vDes.sub(ship.vel).divideScalar(ad.phase === 'descend' ? TAU / 2 : TAU);
   if (T.length() > AUTO_ACC) T.setLength(AUTO_ACC);
   T.multiplyScalar(dt);
   applyThrust(g, T, dt);
