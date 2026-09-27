@@ -19,6 +19,18 @@ export function Location({ loc }: { loc: LocationView }) {
   );
 }
 
+/** Small status icon beside a gauge label. `panels-off`: a solar panel with a slash through it. */
+function GaugeBadge({ title }: { icon: 'panels-off'; title: string }) {
+  return (
+    <svg className="gbadge" viewBox="0 0 16 16" role="img" aria-label={title}>
+      <title>{title}</title>
+      <rect x="2" y="4" width="12" height="8" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M6 4v8M10 4v8M2 8h12" stroke="currentColor" strokeWidth="0.9" />
+      <path d="M1.5 14.5L14.5 1.5" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
 /** Bottom left: three gauges with one line of detail each, and a note when something needs attention. */
 export function ShipGauges({ s }: { s: SystemsView }) {
   return (
@@ -26,7 +38,10 @@ export function ShipGauges({ s }: { s: SystemsView }) {
       {s.gauges.map((gv) => (
         <div key={gv.label} className="gauge">
           <div className="gtop">
-            <span>{gv.label}</span>
+            <span>
+              {gv.label}
+              {gv.badge && <GaugeBadge {...gv.badge} />}
+            </span>
             <b>{gv.value}</b>
           </div>
           <Bar frac={gv.frac} variant={gv.variant} lowWarn />

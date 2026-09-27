@@ -178,6 +178,7 @@ export interface Ship {
   sunTrack: boolean; // keep the solar panels (ship's top) facing the star
   tanker: Tanker | null;
   scoop: string; // what we are refuelling from this frame
+  scoopRate: { prop: number; exotic: number }; // kg/s being scooped this frame
   avionics: Avionics; // fitted computers (see avionics/catalog.ts)
   temp: number; // K, hull temperature (see sim/thermal.ts)
 }

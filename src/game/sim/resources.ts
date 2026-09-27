@@ -96,6 +96,9 @@ export function scoop(g: Game, dt: number) {
     dp += 400 * dt;
     ship.scoop = `Mining water ice on ${landed.name}`;
   }
+  // rates for the HUD: only what actually goes in (nothing once a tank is full)
+  ship.scoopRate.prop = dt > 0 && ship.prop < SHIP.propCap ? dp / dt : 0;
+  ship.scoopRate.exotic = dt > 0 && ship.exotic < SHIP.exoticCap ? dx / dt : 0;
   if (ship.scoop) {
     ship.prop = Math.min(SHIP.propCap, ship.prop + dp);
     ship.exotic = Math.min(SHIP.exoticCap, ship.exotic + dx);

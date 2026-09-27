@@ -27,7 +27,7 @@ function newShip(): Ship {
     mode: 'normal', throttle: 0, cruise: false, ftlSpooled: false, ftlSpeed: 0, ftlCharge: 0, vmax: 0,
     fa: true, decoupled: false, travelDir: new THREE.Vector3(0, 0, -1), ap: null, landed: null, dead: null, grav: null,
     prop: SHIP.propCap, exotic: SHIP.exoticCap, batt: SHIP.battCap,
-    burnRate: 0, sunTrack: false, tanker: null, scoop: '', avionics: defaultAvionics(), temp: TEMP.start,
+    burnRate: 0, sunTrack: false, tanker: null, scoop: '', scoopRate: { prop: 0, exotic: 0 }, avionics: defaultAvionics(), temp: TEMP.start,
   };
 }
 

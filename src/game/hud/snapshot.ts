@@ -173,15 +173,40 @@ function systems(g: Game): SystemsView {
   let note: Readout | null = null;
   if (ship.tanker) note = { text: `Tanker arriving in ${Math.ceil(ship.tanker.t)} s · hold still` };
   else if (ship.scoop) note = { text: ship.scoop };
+  if (ship.temp >= TEMP.panels && !ship.tanker) note = { text: `Solar panels feathered · hull over ${TEMP.panels} K${ship.scoop ? ` · ${ship.scoop[0].toLowerCase()}${ship.scoop.slice(1)}` : ''}`, warn: true };
   else if (ship.prop <= 0) note = { text: 'No propellant · K for a tanker, or skim a gas giant or star', warn: true };
   else if (ship.batt <= 0) note = { text: 'Battery flat · P turns the panels to the star', warn: true };
   else if (power.shadow) note = { text: `In ${power.shadow.name}'s shadow · no solar power` };
+  const sr = ship.scoopRate;
   const burnLow = ship.burnRate > 1 && ship.prop / Math.max(ship.burnRate, 1e-9) < 300;
   return {
     gauges: [
-      { label: 'H₂', value: fmtMass(ship.prop), frac: ship.prop / SHIP.propCap, sub: { text: ship.burnRate > 0.01 ? `Δv ${fmtSpeedText(deltaVLeft(ship))} · burning ${fmtFlow(ship.burnRate)}` : `Δv ${fmtSpeedText(deltaVLeft(ship))} left`, warn: burnLow } },
-      { label: 'EXOTIC', value: fmtMass(ship.exotic), frac: ship.exotic / SHIP.exoticCap, variant: 'ftl', sub: { text: ship.mode === 'ftl' ? `burning ${fmtFlow(ftlRate)} · ${fmtTime(ship.exotic / ftlRate)} left` : `${Math.floor(ship.exotic / jumpCost(refLy))} jumps of ${refLy.toFixed(0)} ly` } },
-      { label: 'BATTERY', value: `${ship.batt.toFixed(0)} kWh`, frac: ship.batt / SHIP.battCap, variant: 'batt', sub: { text: `${netText}${battTime}`, warn: net < -0.5 } },
+      {
+        label: 'H₂',
+        value: fmtMass(ship.prop),
+        frac: ship.prop / SHIP.propCap,
+        sub: {
+          text: sr.prop > 0 ? `scooping +${fmtFlow(sr.prop)} · full in ${fmtTime((SHIP.propCap - ship.prop) / sr.prop)}` : ship.burnRate > 0.01 ? `Δv ${fmtSpeedText(deltaVLeft(ship))} · burning ${fmtFlow(ship.burnRate)}` : `Δv ${fmtSpeedText(deltaVLeft(ship))} left`,
+          warn: burnLow,
+        },
+      },
+      {
+        label: 'EXOTIC',
+        value: fmtMass(ship.exotic),
+        frac: ship.exotic / SHIP.exoticCap,
+        variant: 'ftl',
+        sub: {
+          text: sr.exotic > 0 ? `scooping +${sr.exotic.toFixed(2)} kg/s · full in ${fmtTime((SHIP.exoticCap - ship.exotic) / sr.exotic)}` : ship.mode === 'ftl' ? `burning ${fmtFlow(ftlRate)} · ${fmtTime(ship.exotic / ftlRate)} left` : `${Math.floor(ship.exotic / jumpCost(refLy))} jumps of ${refLy.toFixed(0)} ly`,
+        },
+      },
+      {
+        label: 'BATTERY',
+        value: `${ship.batt.toFixed(0)} kWh`,
+        frac: ship.batt / SHIP.battCap,
+        variant: 'batt',
+        sub: { text: `${netText}${battTime}`, warn: net < -0.5 },
+        badge: ship.temp >= TEMP.panels ? { icon: 'panels-off', title: `Solar panels feathered: hull over ${TEMP.panels} K` } : undefined,
+      },
       hullGauge(g),
     ],
     note,

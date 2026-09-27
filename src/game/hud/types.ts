@@ -58,6 +58,8 @@ export interface GaugeView {
   frac: number;
   variant?: 'ftl' | 'batt' | 'heat';
   sub: Readout;
+  /** A status icon beside the label, e.g. the solar panels feathered by heat. */
+  badge?: { icon: 'panels-off'; title: string };
 }
 
 /** Body info panel (I): the target's physical data, its own orbit, and the ship relative to it. */
