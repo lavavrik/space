@@ -6,8 +6,9 @@ varying vec3 vDir;
 uniform float uPxPerRad;
 #pragma farlight_noise
 
-// how visible a layer of features `freq` per radian is at this resolution: 0 below ~1.5 px, 1 from 4 px
-float vis(float freq){ return smoothstep(1.5,4.0,uPxPerRad/freq); }
+// how visible a layer of features `freq` per radian is at this resolution: nothing until its features
+// span ~6 px, fully from ~12 px, so no layer ever shows as pixel-sized grain
+float vis(float freq){ return smoothstep(6.0,12.0,uPxPerRad/freq); }
 
 
 // A nebula centred on direction c with angular radius r: domain-warped noise gives it filaments,
@@ -56,18 +57,19 @@ void main(){
   i*=1.0-dust*0.85;
   // fine structure at fixed scales, octave by octave (each 4× finer), faded in by resolution:
   // light and dark patches, a grainy texture, and dark dust lanes only in some regions
-  // (starting at 640/rad, finer than the whole-sky cube map resolves, so the normal view is unchanged)
+  // (from 160/rad: with the 6–12 px fade-in even that layer stays out of the whole-sky cube map)
   // the same detail sharpens the nebulae (det, below), and the band also gets its dust lanes
   float det=1.0;
-  for(int k=0;k<4;k++){
-    float F=640.0*pow(4.0,float(k));
+  for(int k=0;k<5;k++){
+    float F=160.0*pow(4.0,float(k));
     float v=vis(F);
     if(v<=0.0) break;
     float n=snoise(d*F+float(k)*17.0);
     float rid=1.0-abs(snoise(d*F*1.7+float(k)*31.0));
-    float region=smoothstep(0.35,0.7,snoise(d*F*0.3+float(k)*7.0));
-    det*=1.0+v*0.12*n;
-    i*=1.0+v*(0.12*n-0.3*pow(clamp(rid,0.0,1.0),12.0)*region*exp(-b*b/0.008));
+    float region=smoothstep(0.45,0.85,snoise(d*F*0.3+float(k)*7.0));
+    float amp=0.14*pow(0.55,float(k)); // finer layers are gentler: smooth, not grainy
+    det*=1.0+v*amp*n;
+    i*=1.0+v*(amp*n-0.2*pow(0.6,float(k))*pow(clamp(rid,0.0,1.0),5.0)*region*exp(-b*b/0.008));
   }
   vec3 col=mix(vec3(0.55,0.62,0.85),vec3(1.0,0.84,0.62),clamp(c*1.2+n2*0.3-0.2,0.0,1.0))*i;
   float neb=pow(max(fbm(d*2.4+11.0,4),0.0),2.0);
