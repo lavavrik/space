@@ -10,6 +10,7 @@ import { resetFrame } from './frame';
 import { addNavPoint, pickNavStar } from './navroute';
 import { massLock } from './ftl';
 import { heatBlocked } from './thermal';
+import { scanKey } from './scanner';
 import { dominantBody } from './gravity';
 import { startJumpGuide } from './guide';
 import { transitTime } from './hyperspace';
@@ -220,9 +221,22 @@ export function jumpBlocker(g: Game, dest: StarSystem) {
   return hiddenBy(occluders(g), dest.pos.clone().sub(galPos(g)).normalize());
 }
 
+/** H while the hyperdrive charges: stand it down (the exotic matter is only spent when it fires). */
+export function cancelJump(g: Game) {
+  if (g.jump?.phase !== 'charge') return false;
+  g.jump = null;
+  g.guide = null;
+  if (g.route?.running) g.route.running = false; // a route would just start it again
+  g.showMsg('Hyperdrive charge cancelled');
+  return true;
+}
+
 export function startJump(g: Game) {
   const { ship } = g;
-  if (g.jump) return;
+  if (g.jump) {
+    cancelJump(g); // H again during the charge cancels it (past that, the jump is committed)
+    return;
+  }
   const dest = g.jumpDest;
   if (!dest) {
     g.showMsg('Press N to pick a star system first', 'warn');
@@ -306,4 +320,6 @@ export function placeAtHome(g: Game) {
   ship.vel.set(0, 0, 0);
   resetFrame(g, dominantBody(g.cur, ship.pos)); // start at rest relative to the home world
   g.target = home;
+  // you know your home system: the radar has everything in it on file from the start
+  for (const t of [...g.cur.bodies, ...g.cur.stations]) g.radar.seen.add(scanKey(g.cur.sys, t));
 }

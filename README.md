@@ -74,7 +74,7 @@ The simulation never touches the DOM. Each frame it steps the physics, draws the
 | F | FTL cruise control: the throttle holds. Off, it spools down when you release W and the drive drops out |
 | T / G | Target body or station ahead / cycle by distance |
 | Click | Target the body, station or reachable star under the cursor (or the crosshair, with the mouse captured). Clicking empty space captures the mouse |
-| N / H | Pick a star system (aim at it, or cycle by distance) / hyperjump |
+| N / H | Pick a star system (aim at it, or cycle by distance) / hyperjump (H again during the charge cancels it) |
 | O | Orbit planner (equatorial, polar, stationary, hold position). While the autopilot flies, O opens its status instead: target versus current orbit, how far off you are, time and Δv used |
 | Backspace ×2 | Disengage the autopilot (from its status panel, confirmed within 3 s; also clickable). Thrust keys and J no longer switch it off |
 | L | Orbit preview ring on / off: the planned orbit (amber) or the one the autopilot is flying (cyan), drawn around the body |
