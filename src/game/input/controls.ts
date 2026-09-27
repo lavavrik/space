@@ -140,6 +140,10 @@ export function onPress(g: Game, code: string) {
       else openPlanner(g);
       break;
     case 'KeyP':
+      if (g.jump) {
+        g.showMsg('Hyperdrive is charging · it holds the nose on the destination', 'warn');
+        break;
+      }
       ship.sunTrack = !ship.sunTrack;
       g.showMsg(ship.sunTrack ? 'Sun tracking on · turning panels to the star (steer to cancel)' : 'Sun tracking off');
       break;

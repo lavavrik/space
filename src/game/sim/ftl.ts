@@ -88,6 +88,10 @@ export function toggleFTL(g: Game) {
     g.showMsg('FTL charge cancelled');
     return;
   }
+  if (g.inStation || g.dock?.docked) {
+    g.showMsg('Not inside a station · leave through the slot first', 'warn');
+    return;
+  }
   const lock = massLock(g);
   if (lock) {
     g.showMsg(`Mass-locked by ${lock.name} · climb above ${fmtDist(dropAlt(lock) * 1.15)}`, 'warn');

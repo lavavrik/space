@@ -241,6 +241,10 @@ export function startJump(g: Game) {
     cancelJump(g); // H again during the charge cancels it (past that, the jump is committed)
     return;
   }
+  if (g.inStation || g.dock?.docked) {
+    g.showMsg('Not inside a station · leave through the slot first', 'warn');
+    return;
+  }
   const dest = g.jumpDest;
   if (!dest) {
     g.showMsg('Press N to pick a star system first', 'warn');
@@ -278,6 +282,8 @@ export function startJump(g: Game) {
   }
   ship.ftlCharge = 0;
   ship.ap = null;
+  ship.sunTrack = false; // the charge swings the nose onto the destination; nothing else may steer
+  g.pivot = false;
   closePlanner(g);
   ship.tanker = null;
   g.jump = { phase: 'charge', t: JUMP_CHARGE_TIME, dest, cost, from: galPos(g), dur: transitTime(d) };

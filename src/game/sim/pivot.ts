@@ -21,6 +21,10 @@ const m = new THREE.Matrix4(),
 
 /** Middle click: start turning toward the target. */
 export function startPivot(g: Game) {
+  if (g.jump) {
+    g.showMsg('Hyperdrive is charging · it holds the nose on the destination', 'warn');
+    return;
+  }
   if (!g.target && !g.jumpDest) {
     g.showMsg('Nothing to pivot to · target something (T, G or click)');
     return;

@@ -64,7 +64,10 @@ export function update(g: Game, dt: number, realDt = dt) {
 
   // --- rotation
   const [mdx, mdy] = input.consumeMouse();
-  if (!inTunnel && !departing && !apSteering) {
+  // while the hyperdrive charges it swings the nose onto the destination (updateJump): no manual
+  // steering, pivot or sun tracking fighting it
+  const jumpCharging = g.jump?.phase === 'charge';
+  if (!inTunnel && !departing && !apSteering && !jumpCharging) {
     // through the periscope, steering slows by the magnification so a target can be held
     const zs = 1 / g.zoom.cur;
     let pitch = -mdy * MOUSE_SENS * zs,
@@ -157,7 +160,7 @@ export function update(g: Game, dt: number, realDt = dt) {
   }
 
   // --- power, fuel, refuelling
-  if (ship.sunTrack && !apSteering && !inTunnel && !departing) {
+  if (ship.sunTrack && !apSteering && !inTunnel && !departing && !g.jump) {
     const up = new THREE.Vector3(0, 1, 0).applyQuaternion(ship.q);
     const toS = g.cur.star.pos.clone().sub(ship.pos).normalize();
     const dq = new THREE.Quaternion().setFromUnitVectors(up, toS);
