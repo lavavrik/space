@@ -1,5 +1,5 @@
 /* Turns game state into the display strings and flags the HUD shows. */
-import { JUMP_DEPART_TIME, NORMAL_ACC, NORMAL_BOOST, NORMAL_MAX, SHIP, ftlBurn, jumpCost } from '../constants';
+import { FTL_CHARGE_TIME, JUMP_CHARGE_TIME, JUMP_DEPART_TIME, NORMAL_ACC, NORMAL_BOOST, NORMAL_MAX, SHIP, ftlBurn, jumpCost } from '../constants';
 import { fmtClock, fmtDist, fmtFlow, fmtMass, fmtPower, fmtSpeed, fmtSpeedText, fmtTime } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
@@ -88,8 +88,14 @@ function flight(g: Game): FlightView {
   }
   let barFrac: number, barLabel: string, barValue: string;
   let barMark: number | undefined, barHi: FlightView['barHi'];
-  const barFtl = ship.mode === 'ftl';
-  if (barFtl) {
+  const charge = jump?.phase === 'charge' ? { t: jump.t, of: JUMP_CHARGE_TIME, what: 'HYPERDRIVE' } : ship.ftlCharge > 0 ? { t: ship.ftlCharge, of: FTL_CHARGE_TIME, what: 'FTL DRIVE' } : null;
+  const barFtl = ship.mode === 'ftl' || !!charge;
+  if (charge) {
+    // charging a drive: the bar fills as the charge completes
+    barFrac = 1 - Math.max(0, charge.t) / charge.of;
+    barLabel = `${charge.what} CHARGING`;
+    barValue = `${Math.max(0, charge.t).toFixed(1)} S`;
+  } else if (ship.mode === 'ftl') {
     barFrac = ship.throttle;
     barLabel = 'THROTTLE';
     barValue = Math.round(ship.throttle * 100) + '%';
