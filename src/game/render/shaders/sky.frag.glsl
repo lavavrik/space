@@ -51,12 +51,13 @@ void main(){
   float neb2=pow(max(fbm(d*1.8+31.0,4),0.0),2.0);
   col+=neb2*vec3(0.008,0.02,0.04);
   // Nebulae, all well off the galactic belt (latitudes ~35–55°) so the Milky Way stays clean:
-  // three blue reflection nebulae (dust lit by hot stars, each a slightly different hue) and two
-  // small planetary rings. Kept faint (NEB_ALPHA, RING_ALPHA) so they tint the sky rather than
-  // dominate it.
+  // four clouds of mixed kinds (a red H-alpha emission cloud with a teal O III core, two blue
+  // reflection nebulae, a violet one where both mix) and two small planetary rings. Kept faint
+  // (NEB_ALPHA, RING_ALPHA) so they tint the sky rather than dominate it.
   const float NEB_ALPHA=0.5, RING_ALPHA=0.3;
-  vec3 neb3=nebula(d,-gn*0.65+vec3(-0.5,0.0,0.65),0.12,23.0,vec3(0.16,0.26,0.6),vec3(0.35,0.45,0.8));
-  neb3+=nebula(d,gn*0.8+vec3(0.5,0.0,0.55),0.1,41.0,vec3(0.22,0.22,0.62),vec3(0.45,0.42,0.85));
+  vec3 neb3=nebula(d,gn*0.75+vec3(0.6,0.0,-0.5),0.16,1.0,vec3(0.62,0.1,0.2),vec3(0.1,0.42,0.4)*0.8);
+  neb3+=nebula(d,-gn*0.65+vec3(-0.5,0.0,0.65),0.12,23.0,vec3(0.16,0.26,0.6),vec3(0.35,0.45,0.8));
+  neb3+=nebula(d,gn*0.8+vec3(0.5,0.0,0.55),0.1,41.0,vec3(0.36,0.16,0.55),vec3(0.55,0.35,0.8));
   neb3+=nebula(d,-gn*0.7+vec3(0.7,0.0,-0.4),0.14,57.0,vec3(0.12,0.32,0.58),vec3(0.3,0.55,0.8));
   col+=neb3*NEB_ALPHA;
   vec3 rings=ringNebula(d,gn*0.9+vec3(-0.75,0.0,-0.45),0.035)+ringNebula(d,-gn*0.9+vec3(-0.3,0.0,-0.8),0.03);
