@@ -13,10 +13,11 @@ import { resolvable, SCAN_STAGE, scanProgress } from '../sim/scanner';
 import { galPos } from '../sim/navigation';
 import { apLabel, evalPlan } from '../sim/orbits';
 import { deltaVLeft } from '../sim/resources';
+import { TEMP, nextLimit } from '../sim/thermal';
 import { unitLabel, type Computer } from '../avionics/catalog';
 import { buildInfluences } from './influences';
 import { buildInfo } from './info';
-import type { AutopilotView, AvionicsSlotView, FlightView, NavView, GuideView, HudSnapshot, LocationView, Pill, PlannerView, Readout, SystemsView, TargetView } from './types';
+import type { AutopilotView, AvionicsSlotView, FlightView, GaugeView, NavView, GuideView, HudSnapshot, LocationView, Pill, PlannerView, Readout, SystemsView, TargetView } from './types';
 
 const tmp = new THREE.Vector3();
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
@@ -181,9 +182,28 @@ function systems(g: Game): SystemsView {
       { label: 'H₂', value: fmtMass(ship.prop), frac: ship.prop / SHIP.propCap, sub: { text: ship.burnRate > 0.01 ? `Δv ${fmtSpeedText(deltaVLeft(ship))} · burning ${fmtFlow(ship.burnRate)}` : `Δv ${fmtSpeedText(deltaVLeft(ship))} left`, warn: burnLow } },
       { label: 'EXOTIC', value: fmtMass(ship.exotic), frac: ship.exotic / SHIP.exoticCap, variant: 'ftl', sub: { text: ship.mode === 'ftl' ? `burning ${fmtFlow(ftlRate)} · ${fmtTime(ship.exotic / ftlRate)} left` : `${Math.floor(ship.exotic / jumpCost(refLy))} jumps of ${refLy.toFixed(0)} ly` } },
       { label: 'BATTERY', value: `${ship.batt.toFixed(0)} kWh`, frac: ship.batt / SHIP.battCap, variant: 'batt', sub: { text: `${netText}${battTime}`, warn: net < -0.5 } },
+      hullGauge(g),
     ],
     note,
   };
+}
+
+/**
+ * Hull temperature: the bar runs from 200 K to the failure point. The line under it says where it's
+ * heading: the time to the next limit if it will get there, otherwise where it settles.
+ */
+function hullGauge(g: Game): GaugeView {
+  const T = g.ship.temp,
+    h = g.heat;
+  let text = 'steady';
+  if (h) {
+    const next = nextLimit(T);
+    const perMin = h.rate * 60;
+    const trend = Math.abs(perMin) < 0.05 ? 'steady' : `${perMin > 0 ? '+' : '−'}${Math.abs(perMin).toFixed(Math.abs(perMin) < 10 ? 1 : 0)} K/min`;
+    text =
+      next && h.rate > 0 && h.eq >= next.at ? `${trend} · ${next.what} (${next.at} K) in ${fmtTime((next.at - T) / h.rate)}` : `${trend} · settles at ${h.eq.toFixed(0)} K`;
+  }
+  return { label: 'HULL', value: `${T.toFixed(0)} K`, frac: (T - 200) / (TEMP.fail - 200), variant: 'heat', sub: { text, warn: T >= TEMP.warn } };
 }
 
 function autopilotView(g: Game): AutopilotView {

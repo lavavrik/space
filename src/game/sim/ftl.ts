@@ -1,4 +1,5 @@
 import { FTL_CHARGE_TIME, FTL_MAX, NORMAL_MAX, REARTH, SHIP, ftlBurn } from '../constants';
+import { heatBlocked } from './thermal';
 import { fmtDist } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
@@ -38,7 +39,7 @@ export function ftlSpeedLimit(g: Game) {
 export function ftlBlocked(ship: Ship) {
   if (ship.exotic < SHIP.ftlChargeKg) return 'Not enough exotic matter to start the FTL drive';
   if (ship.batt < 6) return 'Battery too low to charge the FTL drive (needs 6 kWh)';
-  return null;
+  return heatBlocked(ship.temp);
 }
 
 /** Exotic matter and power while the FTL drive runs. Returns false if the drive fails. */

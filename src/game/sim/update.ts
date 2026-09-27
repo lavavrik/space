@@ -13,6 +13,7 @@ import { maybeFtlLeg } from './planner';
 import { updateScan } from './scanner';
 import { updateNav } from './navroute';
 import { refillShip, scoop, solarPower } from './resources';
+import { updateThermal } from './thermal';
 
 const qa = new THREE.Quaternion();
 const AX = new THREE.Vector3(1, 0, 0),
@@ -129,6 +130,7 @@ export function update(g: Game, dt: number) {
   power.net = power.solar - power.draw;
   ship.batt = Math.min(SHIP.battCap, Math.max(0, ship.batt + (power.net * dt) / 3600));
   if (ship.batt > 1) g.warned.batt = false;
+  updateThermal(g, dt, inTunnel);
   // dt can be 0 (two frames on one timestamp); 0/0 would stick NaN in the smoothed rate forever
   if (dt > 0) ship.burnRate += (power.burn / dt - ship.burnRate) * Math.min(1, dt * 3);
   power.thrustKW = power.ftlKW = power.chargeKW = power.burn = 0;

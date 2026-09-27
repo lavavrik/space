@@ -6,7 +6,8 @@
  *   FTL      mass lock (and how far to climb out) and which gravity well caps FTL speed
  *   Star     light and solar power, shadow, and how far the scoop zones are
  */
-import { AU, C, WT } from '../constants';
+import { AU, C, SCOOP_FLUX_FULL, SCOOP_FLUX_MIN, WT, fluxDist } from '../constants';
+import { HULL, S0, TEMP } from '../sim/thermal';
 import { fmtDist, fmtPower, fmtSpeedText } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
@@ -87,12 +88,25 @@ export function buildInfluences(g: Game): InfluencesView {
   const light: [string, string | Readout][] = [];
   light.push(['STARLIGHT', `${power.flux.toFixed(power.flux < 10 ? 2 : 0)} × Earth's · ${(ship.pos.distanceTo(star.pos) / AU).toFixed(3)} AU from ${star.name}`]);
   light.push(['SOLAR POWER', power.shadow ? { text: `none · in ${power.shadow.name}'s shadow`, warn: true } : `${fmtPower(power.solar)} (panels ${Math.round((Math.acos(Math.max(-1, Math.min(1, power.cos))) * 180) / Math.PI)}° off the star)`]);
-  light.push(['CORONA SCOOP', starAlt < star.radius * 1.5 ? { text: 'in range · skimming', warn: false } : `${fmtDist(starAlt - star.radius * 1.5)} to go`]);
+  const scoopAt = fluxDist(star.L, SCOOP_FLUX_MIN, star.radius) - star.radius;
+  light.push(['CORONA SCOOP', starAlt < scoopAt ? { text: `in range · ${Math.round(Math.min(1, power.flux / SCOOP_FLUX_FULL) * 100)}% rate`, warn: false } : `${fmtDist(starAlt - scoopAt)} to go`]);
   const giants = g.cur.bodies
     .filter((b) => b.kind !== 'star' && b.type >= WT.GasGiant)
     .map((b) => ({ b, d: ship.pos.distanceTo(b.pos) - b.radius * 1.05 }))
     .sort((x, y) => x.d - y.d);
   if (giants[0]) light.push(['GAS GIANT SCOOP', giants[0].d < 0 ? `in ${giants[0].b.name}'s band` : `${giants[0].b.name} · ${fmtDist(giants[0].d)} to its band`]);
 
-  return { gravity, frame, ftl, light };
+  // heat: what's warming the hull and where it's heading (see sim/thermal.ts)
+  const heat: [string, string | Readout][] = [];
+  const h = g.heat;
+  if (h) {
+    const mw = (w: number) => fmtPower(w / 1000);
+    heat.push(['HULL', { text: `${ship.temp.toFixed(0)} K · settles at ${h.eq.toFixed(0)} K`, warn: ship.temp >= TEMP.warn || h.eq >= TEMP.drives }]);
+    heat.push(['STARLIGHT ABSORBED', power.shadow ? 'none · in shadow' : `${mw(h.star)} · ${Math.round(((h.star / Math.max(power.flux * S0 * HULL.absorb, 1e-9)) / HULL.sideArea) * 100)}% of side-on`]);
+    if (h.planets > 1000) heat.push(['NEARBY WORLDS', mw(h.planets)]);
+    heat.push(['SHIP SYSTEMS', mw(h.internal)]);
+    heat.push(['RADIATED', mw(h.out)]);
+    if (h.star > 0.3 * h.out && !power.shadow) heat.push(['TIP', 'nose-on to the star cuts starlight heating ~6×']);
+  }
+  return { gravity, frame, ftl, light, heat };
 }

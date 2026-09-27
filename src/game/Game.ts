@@ -19,6 +19,7 @@ import { updateBodies } from './sim/kepler';
 import { updateStations } from './sim/stations';
 import { buildStations } from './universe/stations';
 import { buildSystem } from './universe/system';
+import { TEMP, type HeatBudget } from './sim/thermal';
 
 function newShip(): Ship {
   return {
@@ -26,7 +27,7 @@ function newShip(): Ship {
     mode: 'normal', throttle: 0, cruise: false, ftlSpooled: false, ftlSpeed: 0, ftlCharge: 0, vmax: 0,
     fa: true, decoupled: false, travelDir: new THREE.Vector3(0, 0, -1), ap: null, landed: null, dead: null, grav: null,
     prop: SHIP.propCap, exotic: SHIP.exoticCap, batt: SHIP.battCap,
-    burnRate: 0, sunTrack: false, tanker: null, scoop: '', avionics: defaultAvionics(),
+    burnRate: 0, sunTrack: false, tanker: null, scoop: '', avionics: defaultAvionics(), temp: TEMP.start,
   };
 }
 
@@ -50,6 +51,8 @@ export class Game {
   jump: Jump | null = null;
   planner: Planner | null = null;
   guide: Guide | null = null;
+  /** This frame's heat budget (see sim/thermal.ts). */
+  heat: HeatBudget | null = null;
 
   simTime = 0;
   curSpeed = 0;

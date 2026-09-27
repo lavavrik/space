@@ -56,7 +56,7 @@ export interface GaugeView {
   label: string;
   value: string;
   frac: number;
-  variant?: 'ftl' | 'batt';
+  variant?: 'ftl' | 'batt' | 'heat';
   sub: Readout;
 }
 
@@ -92,6 +92,7 @@ export interface InfluencesView {
   frame: [string, string | Readout][];
   ftl: [string, string | Readout][];
   light: [string, string | Readout][];
+  heat: [string, string | Readout][];
 }
 
 /** One fitted computer in the avionics panel (U). */

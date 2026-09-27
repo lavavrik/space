@@ -55,8 +55,17 @@ export const JUMP_CHARGE_TIME = 5;
 export const JUMP_TUNNEL_BASE = 8;
 /** Between the charge and hyperspace the ship accelerates out of the system for this long (s), see sim/hyperspace.ts. */
 export const JUMP_DEPART_TIME = 5;
-/** A hyperjump drops you this many star radii from the destination star's centre. */
-export const ARRIVE_STAR_RADII = 10;
+/**
+ * Starlight, in multiples of what Earth gets (1361 W/m²), where things happen near a star. By flux,
+ * not star radii, so a hot B star and a red dwarf are equally safe (see docs/thermal.md):
+ * a hyperjump drops you where it's ARRIVE_FLUX (a Sun-like star's 0.22 AU, ~48 radii); the corona
+ * scoop starts working at SCOOP_FLUX_MIN and reaches its full rate at SCOOP_FLUX_FULL (0.1 AU).
+ */
+export const ARRIVE_FLUX = 20;
+export const SCOOP_FLUX_MIN = 25;
+export const SCOOP_FLUX_FULL = 100;
+/** Distance (m) from a star of luminosity L (L☉) where its flux is F (Earth units), never inside 3 radii. */
+export const fluxDist = (L: number, F: number, radius: number) => Math.max(radius * 3, 1.496e11 * Math.sqrt(L / F));
 export const JUMP_TUNNEL_PER_LY = 0.32;
 export const TANKER_TIME = 30;
 export const RESPAWN_TIME = 4;

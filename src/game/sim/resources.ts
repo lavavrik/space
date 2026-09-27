@@ -1,7 +1,8 @@
-import { AU, SHIP, WT } from '../constants';
+import { AU, SCOOP_FLUX_FULL, SCOOP_FLUX_MIN, SHIP, WT } from '../constants';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import type { Ship } from '../types';
+import { TEMP } from './thermal';
 
 export const shipMass = (ship: Ship) => SHIP.dry + ship.prop;
 /** Rocket equation: Δv the remaining propellant can deliver. */
@@ -62,7 +63,7 @@ export function solarPower(g: Game) {
   }
   power.flux = s.L * (AU / d) ** 2;
   power.cos = new THREE.Vector3(0, 1, 0).applyQuaternion(ship.q).dot(toS);
-  if (power.shadow) return 0;
+  if (power.shadow || ship.temp >= TEMP.panels) return 0; // too hot: panels feathered edge-on
   return Math.min(SHIP.solarMax, SHIP.solarRated * power.flux * Math.max(0, power.cos));
 }
 
@@ -75,8 +76,11 @@ export function scoop(g: Game, dt: number) {
   for (const b of cur.bodies) {
     const alt = b.pos.distanceTo(ship.pos) - b.radius;
     if (b.kind === 'star') {
-      if (alt < b.radius * 1.5) {
-        const f = Math.min(1, (b.radius * 1.5 - alt) / (b.radius * 0.9));
+      // the outer corona / inner stellar wind: its density, and so the scoop rate, falls off like
+      // the starlight (∝ 1/r²); too thin to bother below SCOOP_FLUX_MIN, full rate from SCOOP_FLUX_FULL
+      const F = b.L * (AU / (alt + b.radius)) ** 2;
+      if (F >= SCOOP_FLUX_MIN) {
+        const f = Math.min(1, F / SCOOP_FLUX_FULL);
         dp += 2500 * f * dt;
         dx += 1.2 * f * dt;
         ship.scoop = `Skimming the corona of ${b.name}`;

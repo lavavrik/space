@@ -14,7 +14,7 @@
 /* Left column: location, then the controls list or the target info panel. */
 #leftcol {
   position: fixed; top: calc(1.167rem + env(safe-area-inset-top, 0px)); left: 1.333rem;
-  width: 27.5rem; max-width: calc(100% - 2.667rem); max-height: calc(100% - 17rem); overflow: hidden; /* stops above the bottom HUD */
+  width: 27.5rem; max-width: calc(100% - 2.667rem); max-height: calc(100% - 24rem); overflow: hidden; /* stops above the bottom HUD (the 4-gauge ship panel with a note line) */
   display: flex; flex-direction: column; gap: 0.833rem; pointer-events: none;
 }
 #info { display: flex; flex-direction: column; gap: 2px; }

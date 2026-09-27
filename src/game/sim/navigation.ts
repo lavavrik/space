@@ -1,4 +1,4 @@
-import { ARRIVE_STAR_RADII, JUMP_CHARGE_TIME, JUMP_RANGE, LY, SHIP, jumpCost } from '../constants';
+import { ARRIVE_FLUX, JUMP_CHARGE_TIME, JUMP_RANGE, LY, SHIP, fluxDist, jumpCost } from '../constants';
 import type { Game } from '../Game';
 import { mulberry32, rr } from '../lib/rng';
 import { THREE } from '../lib/three';
@@ -8,6 +8,7 @@ import type { Body, Ship, StarSystem, Target } from '../types';
 import { resetFrame } from './frame';
 import { addNavPoint, pickNavStar } from './navroute';
 import { massLock } from './ftl';
+import { heatBlocked } from './thermal';
 import { dominantBody } from './gravity';
 import { startJumpGuide } from './guide';
 import { transitTime } from './hyperspace';
@@ -236,6 +237,11 @@ export function startJump(g: Game) {
     g.showMsg(`Mass-locked by ${lock.name}`, 'warn');
     return;
   }
+  const hot = heatBlocked(ship.temp);
+  if (hot) {
+    g.showMsg(hot, 'warn');
+    return;
+  }
   const block = jumpBlocker(g, dest);
   if (block) {
     g.showMsg(`${block.name} is in the way · move so the destination isn't behind it`, 'warn');
@@ -266,9 +272,11 @@ export function arriveAt(g: Game, sys: StarSystem) {
   g.loadSystem(sys);
   const r = mulberry32(sys.seed + 5);
   const dir = new THREE.Vector3(rr(r, -1, 1), rr(r, 0.15, 0.5), rr(r, -1, 1)).normalize();
-  // drop in close: ARRIVE_STAR_RADII from the centre the star spans ~11° of sky, outside the corona
-  // (scooping starts at 2.5 radii) and well clear of the FTL drop-out altitude (1.6 radii)
-  ship.pos.copy(g.cur.star.pos).addScaledVector(dir, g.cur.star.radius * ARRIVE_STAR_RADII);
+  // drop in where the starlight is ARRIVE_FLUX × Earth's: close enough to see the star as a disc
+  // (~2.4° for a Sun-like star) and just outside the corona scoop, far enough that the hull only
+  // warms slowly (it would settle around 470 K side-on, over hours; see docs/thermal.md)
+  const s = g.cur.star;
+  ship.pos.copy(s.pos).addScaledVector(dir, fluxDist(s.L, ARRIVE_FLUX, s.radius));
   lookAt(ship, g.cur.star.pos);
   ship.vel.set(0, 0, 0);
   resetFrame(g, dominantBody(g.cur, ship.pos));

@@ -14,7 +14,8 @@
  * needed), an autopilot hold skimming a star's corona to refuel, and finally the autopilot's orbit
  * or station rendezvous. Disengaging the autopilot during a leg cancels the route.
  */
-import { JUMP_CHARGE_TIME, JUMP_RANGE, JUMP_TUNNEL_BASE, JUMP_TUNNEL_PER_LY, LY, SHIP, jumpCost } from '../constants';
+import { JUMP_CHARGE_TIME, JUMP_RANGE, JUMP_TUNNEL_BASE, JUMP_TUNNEL_PER_LY, LY, SCOOP_FLUX_FULL, SHIP, fluxDist, jumpCost } from '../constants';
+import { THREE } from '../lib/three';
 import { fmtDist } from '../format';
 import type { Game } from '../Game';
 import type { StarSystem, Target } from '../types';
@@ -55,8 +56,10 @@ export interface Route {
 
 /** Seconds a hyperjump takes door to door: charge, transit, and realigning afterwards. */
 const hopTime = (ly: number) => JUMP_CHARGE_TIME + transitTime(ly) + 20;
-/** Rough time to skim a star from empty to full (corona scoop at ~0.6 kg/s of exotic matter). */
-const REFUEL_TIME = SHIP.exoticCap / 0.6 + 60;
+/** Rough time to skim a star from empty to full (corona scoop at its full 1.2 kg/s, plus getting there). */
+const REFUEL_TIME = SHIP.exoticCap / 1.2 + 90;
+/** While skimming, the nose points at the star tipped this far (rad) so the panels on top still catch light. */
+const SKIM_TILT = 0.17;
 /** Keep this much exotic matter spare on every hop. */
 const EXOTIC_MARGIN = 1;
 const MAX_EXPANSIONS = 6000;
@@ -430,14 +433,21 @@ export function updateNav(g: Game, dt: number) {
     case 'refuel': {
       const star = g.cur.star;
       if (!r.legStarted) {
-        // hold one stellar radius above the photosphere, inside the corona where the scoop works
+        // hold where the scoop reaches its full rate (starlight 100× Earth's, see docs/thermal.md)
+        const r0 = fluxDist(star.L, SCOOP_FLUX_FULL, star.radius);
         const u = ship.pos.clone().sub(star.pos).normalize();
-        engageAutopilot(g, { body: star, type: 'hold', r0: star.radius * 2, period: NaN, n: null, point: u.multiplyScalar(star.radius * 2), station: null }, true);
+        engageAutopilot(g, { body: star, type: 'hold', r0, period: NaN, n: null, point: u.multiplyScalar(r0), station: null }, true);
         r.legStarted = true;
-        ship.sunTrack = true; // recharge the battery for the jumps ahead while skimming
       }
+      // Nose on the star: the hull shows it 113 m² instead of 720 side-on, so it settles near 450 K
+      // instead of ~700 (which would lock the drives out). Tipped SKIM_TILT so the panels on top get
+      // sin(10°) of 100× Earth's light, still more than the bus can take.
+      ship.sunTrack = false;
+      const m = new THREE.Matrix4().lookAt(ship.pos, star.pos, new THREE.Vector3(0, 1, 0).applyQuaternion(ship.q));
+      const aim = new THREE.Quaternion().setFromRotationMatrix(m).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -SKIM_TILT));
+      ship.q.slerp(aim, Math.min(1, dt)).normalize();
       if (!ship.ap) return endRoute(g, 'Route cancelled · autopilot disengaged', 'warn');
-      r.status = ship.ap.settled ? `skimming the corona · ${ship.exotic.toFixed(0)} / ${SHIP.exoticCap} kg exotic` : 'flying to the corona';
+      r.status = ship.scoop ? `skimming the corona · ${ship.exotic.toFixed(0)} / ${SHIP.exoticCap} kg exotic` : 'flying to the corona';
       if (ship.exotic >= SHIP.exoticCap - 0.5 && ship.prop >= SHIP.propCap * 0.98) {
         disengageAP(g);
         nextLeg(g);

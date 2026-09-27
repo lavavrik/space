@@ -35,6 +35,10 @@ export function InfluencesPanel({ v }: { v: InfluencesView }) {
       {v.light.map(([k, val]) => (
         <Row key={k} label={k} value={val} />
       ))}
+      {v.heat.length > 0 && <div className="isec">HEAT</div>}
+      {v.heat.map(([k, val]) => (
+        <Row key={k} label={k} value={val} />
+      ))}
     </Panel>
   );
 }

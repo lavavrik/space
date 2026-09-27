@@ -1,4 +1,4 @@
-import { CRASH_SPEED, NORMAL_ACC, NORMAL_BOOST, NORMAL_MAX, RESPAWN_TIME, WT } from '../constants';
+import { ARRIVE_FLUX, CRASH_SPEED, NORMAL_ACC, NORMAL_BOOST, NORMAL_MAX, RESPAWN_TIME, WT, fluxDist } from '../constants';
 import { fmtDist, nf0 } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
@@ -9,6 +9,7 @@ import { dropAlt } from './ftl';
 import { lookAt } from './navigation';
 import { closePlanner, disengageAP } from './planner';
 import { applyThrust, refillShip } from './resources';
+import { TEMP } from './thermal';
 
 const tmp = new THREE.Vector3(),
   tmp2 = new THREE.Vector3();
@@ -132,7 +133,7 @@ export function respawn(g: Game) {
   const { ship } = g;
   const b = ship.dead!.body;
   const u = ship.pos.clone().sub(b.pos).normalize();
-  const alt = b.kind === 'star' ? b.radius * 20 : Math.max(dropAlt(b) * 2, b.radius * 1.5);
+  const alt = b.kind === 'star' ? fluxDist(b.L, ARRIVE_FLUX, b.radius) - b.radius : Math.max(dropAlt(b) * 2, b.radius * 1.5);
   ship.pos.copy(b.pos).addScaledVector(u, b.radius + alt);
   ship.vel.set(0, 0, 0);
   resetFrame(g, dominantBody(g.cur, ship.pos));
@@ -142,6 +143,7 @@ export function respawn(g: Game) {
   ship.sunTrack = false;
   ship.tanker = null;
   refillShip(g);
+  ship.temp = TEMP.start;
   lookAt(ship, b.pos);
   ship.dead = null;
   g.showMsg(`Replacement ship delivered ${fmtDist(alt)} above ${b.name} · tanks full`);

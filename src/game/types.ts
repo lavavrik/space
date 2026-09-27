@@ -179,6 +179,7 @@ export interface Ship {
   tanker: Tanker | null;
   scoop: string; // what we are refuelling from this frame
   avionics: Avionics; // fitted computers (see avionics/catalog.ts)
+  temp: number; // K, hull temperature (see sim/thermal.ts)
 }
 
 /** Per-frame power bookkeeping. */
