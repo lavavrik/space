@@ -1,16 +1,14 @@
 varying vec3 vDir;
 // Pixels per radian of whatever this bake renders into: the whole-sky cube map, or the periscope's
-// zoomed patch (SceneRenderer.updateSkyPatch). Fine structure and faint stars live at FIXED scales
-// on the sky; each layer just fades in once its features span a few of these pixels. So zooming
-// never changes the pattern, it only reveals more of it.
+// zoomed patch (SceneRenderer.updateSkyPatch). Fine structure lives at FIXED scales on the sky; each
+// layer just fades in once its features span a few of these pixels. So zooming never changes the
+// pattern, it only sharpens it (no new objects appear: stars are the real systems, drawn as points).
 uniform float uPxPerRad;
 #pragma farlight_noise
 
 // how visible a layer of features `freq` per radian is at this resolution: 0 below ~1.5 px, 1 from 4 px
 float vis(float freq){ return smoothstep(1.5,4.0,uPxPerRad/freq); }
 
-// cheap hash of a lattice cell (Dave Hoskins' hash13), fine for the large coordinates of a zoomed patch
-float hash13(vec3 p3){ p3=fract(p3*0.1031); p3+=dot(p3,p3.zyx+31.32); return fract((p3.x+p3.y)*p3.z); }
 
 // A nebula centred on direction c with angular radius r: domain-warped noise gives it filaments,
 // a gaussian falloff its extent, a second noise its dark dust lanes. `outer` colours the cloud,
@@ -59,6 +57,8 @@ void main(){
   // fine structure at fixed scales, octave by octave (each 4× finer), faded in by resolution:
   // light and dark patches, a grainy texture, and dark dust lanes only in some regions
   // (starting at 640/rad, finer than the whole-sky cube map resolves, so the normal view is unchanged)
+  // the same detail sharpens the nebulae (det, below), and the band also gets its dust lanes
+  float det=1.0;
   for(int k=0;k<4;k++){
     float F=640.0*pow(4.0,float(k));
     float v=vis(F);
@@ -66,6 +66,7 @@ void main(){
     float n=snoise(d*F+float(k)*17.0);
     float rid=1.0-abs(snoise(d*F*1.7+float(k)*31.0));
     float region=smoothstep(0.35,0.7,snoise(d*F*0.3+float(k)*7.0));
+    det*=1.0+v*0.12*n;
     i*=1.0+v*(0.12*n-0.3*pow(clamp(rid,0.0,1.0),12.0)*region*exp(-b*b/0.008));
   }
   vec3 col=mix(vec3(0.55,0.62,0.85),vec3(1.0,0.84,0.62),clamp(c*1.2+n2*0.3-0.2,0.0,1.0))*i;
@@ -82,25 +83,8 @@ void main(){
   neb3+=nebula(d,-gn*0.65+vec3(-0.5,0.0,0.65),0.12,23.0,vec3(0.16,0.26,0.6),vec3(0.35,0.45,0.8));
   neb3+=nebula(d,gn*0.8+vec3(0.5,0.0,0.55),0.1,41.0,vec3(0.36,0.16,0.55),vec3(0.55,0.35,0.8));
   neb3+=nebula(d,-gn*0.7+vec3(0.7,0.0,-0.4),0.14,57.0,vec3(0.12,0.32,0.58),vec3(0.3,0.55,0.8));
-  col+=neb3*NEB_ALPHA;
+  col+=neb3*NEB_ALPHA*det;
   vec3 rings=ringNebula(d,gn*0.9+vec3(-0.75,0.0,-0.45),0.035)+ringNebula(d,-gn*0.9+vec3(-0.3,0.0,-0.8),0.03);
-  col+=rings*RING_ALPHA;
-  // the band resolves into stars: layers of fixed lattices on the sky (each 4× denser and fainter
-  // than the last), one candidate star per cell, more of them where the band is bright. A star is
-  // a dot about a pixel wide, faded in with its layer.
-  float dens=clamp(0.05+i*5.0,0.0,0.7);
-  for(int k=0;k<6;k++){
-    float C=500.0*pow(4.0,float(k));
-    float v=smoothstep(2.0,4.0,uPxPerRad/C); // cells at least ~3 px apart
-    if(v<=0.0) break;
-    vec3 cell=floor(d*C);
-    if(hash13(cell+float(k)*101.0)<dens){
-      vec3 off=vec3(hash13(cell+1.3),hash13(cell+2.7),hash13(cell+4.1));
-      vec3 sdir=normalize(cell+0.2+off*0.6);
-      float ang=length(cross(d,sdir))*uPxPerRad; // pixels from the star
-      float br=(0.25+0.75*pow(hash13(cell+7.7),3.0))*0.9*pow(0.5,float(k));
-      col+=mix(vec3(1.0,0.85,0.7),vec3(0.75,0.85,1.0),hash13(cell+9.1))*br*v*exp(-ang*ang*1.2);
-    }
-  }
+  col+=rings*RING_ALPHA*det;
   gl_FragColor=vec4(col,1.0);
 }

@@ -183,7 +183,7 @@ export class SceneRenderer {
   /**
    * Through the periscope the 1024² cube map is far too coarse (at 100× a cube texel spans ~7 screen
    * pixels), so the procedural sky is re-baked for just the view: a patch 30% wider than the screen
-   * at 65% of its resolution, with finer glow, dust and unresolved stars at the zoomed scale. It's
+   * at 65% of its resolution, with finer glow and dust in the band and the nebulae (no new stars). It's
    * only re-baked when the view turns by more than a tenth of the field or the zoom changes by 1.4×,
    * so a steady view costs nothing extra and a re-bake is a few milliseconds.
    */
