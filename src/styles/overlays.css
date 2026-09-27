@@ -148,7 +148,7 @@
 /* ship stats (U): avionics tiles, 2 × 2 */
 .avgrid { display: grid; grid-template-columns: 1fr 1fr; gap: .4rem; }
 .avtile {
-  pointer-events: auto; cursor: pointer; display: flex; gap: .55rem; align-items: center; text-align: left; min-width: 0;
+  position: relative; pointer-events: auto; cursor: pointer; display: flex; gap: .55rem; align-items: center; text-align: left; min-width: 0;
   background: rgba(255, 165, 58, .04); border: 1px solid var(--amber-faint); padding: .45rem .5rem; color: inherit; font: inherit;
 }
 .avtile:hover { border-color: var(--amber-dim); background: rgba(255, 165, 58, .09); }
@@ -158,8 +158,8 @@
 .avtile.busy .avicon { color: var(--cyan); }
 .avtile .avtext { display: flex; flex-direction: column; min-width: 0; }
 .avtile .avkind { display: flex; align-items: center; gap: .35rem; font-size: .72rem; letter-spacing: .16em; color: var(--amber); }
-.avtile .avkind kbd { font: .72rem "Share Tech Mono", ui-monospace, monospace; color: var(--text); border: 1px solid var(--amber-dim); padding: 0 .25rem; letter-spacing: 0; }
-.avtile .avunit { font-size: .98rem; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.avtile .avkind kbd { position: absolute; top: .45rem; right: .5rem; font: .72rem "Share Tech Mono", ui-monospace, monospace; color: var(--text); border: 1px solid var(--amber-dim); padding: 0 .25rem; letter-spacing: 0; } /* hotkey pinned to the tile's top-right */
+.avtile .avunit { padding-right: 1.6rem; font-size: .98rem; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .avtile .avstatus { font: .78rem "Share Tech Mono", ui-monospace, monospace; color: var(--amber-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 0; }
 .avtile.busy .avstatus { color: var(--cyan); }
 .avmods { display: flex; gap: .25rem; margin-top: .1rem; font-size: .95rem; color: var(--amber); }
