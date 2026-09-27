@@ -9,7 +9,12 @@ uniform float uPadOn;    // 1 if a pad is granted at this station
 uniform float uTime;
 uniform float uSeed;
 varying vec3 vObj; varying vec3 vWN; varying vec3 vWP;
-uniform float uHeadKi; // headlight: candela → brightness against the hangar lamps (render/exposure.ts)
+// Lamp light is physical (the lamps ≙ 1.0 here, HANGAR_LUX), scaled to scene units by uIntK and
+// then by the exposure; pad markers and the tunnel guide lights are display-referred signals,
+// added after it (render/exposure.ts).
+uniform float uHeadKi; // headlight: candela → brightness against the hangar lamps
+uniform float uIntK;   // HANGAR_LUX × LUX
+uniform float uExp;    // exposure
 #pragma farlight_headlight
 
 const float R = 0.42;          // HANGAR_R
@@ -66,6 +71,8 @@ void main(){
     float strip = fract(phi / (6.2831853 / COLS));
     col += vec3(1.0, 0.9, 0.75) * smoothstep(0.006, 0.0, min(strip, 1.0 - strip)) * 0.8;
   }
+  col *= uIntK * uExp;
+  vec3 sig = vec3(0.0); // display-referred signal lights
 
   // pads on the hangar wall
   if (wall) {
@@ -75,18 +82,21 @@ void main(){
       bool mine = uPadOn > 0.5 && distance(c, uPad) < 0.001;
       vec3 lc = mine ? vec3(1.0, 0.62, 0.2) : vec3(0.35, 0.75, 0.85);
       float pulse = mine ? 0.6 + 0.4 * sin(uTime * 4.0) : 0.5;
-      col = mix(col, vec3(0.09, 0.095, 0.1), 0.7);                     // pad surface
-      col += lc * smoothstep(0.003, 0.0, abs(d - PAD_R * 0.93)) * pulse * 1.4; // outer ring
-      col += lc * smoothstep(0.002, 0.0, abs(d - PAD_R * 0.45)) * pulse * 0.7; // inner ring
-      if (mine) col += lc * 0.08 * pulse;
+      col *= 0.3;                                                       // pad surface
+      sig += lc * smoothstep(0.003, 0.0, abs(d - PAD_R * 0.93)) * pulse * 1.4; // outer ring
+      sig += lc * smoothstep(0.002, 0.0, abs(d - PAD_R * 0.45)) * pulse * 0.7; // inner ring
+      if (mine) sig += lc * 0.08 * pulse;
     }
   }
 
   // slot tunnel guide lights: green on +x, red on −x, running along it
   if (tunnel) {
     float run = smoothstep(0.3, 0.0, abs(fract(p.z * 40.0 - uTime * 1.5) - 0.5));
-    if (N.x < -0.5) col += vec3(0.2, 1.0, 0.4) * run * 0.8;
-    if (N.x > 0.5) col += vec3(1.0, 0.2, 0.15) * run * 0.8;
+    if (N.x < -0.5) sig += vec3(0.2, 1.0, 0.4) * run * 0.8;
+    if (N.x > 0.5) sig += vec3(1.0, 0.2, 0.15) * run * 0.8;
   }
-  gl_FragColor = vec4(col, 1.0);
+  // alpha: the physical share of this pixel, so the exposure meter ignores the signal lights
+  // (render/hdr.ts); otherwise they'd hold the exposure down in the dark
+  vec3 W = vec3(0.2126, 0.7152, 0.0722);
+  gl_FragColor = vec4(col + sig, dot(col, W) / (dot(col + sig, W) + 1e-9));
 }

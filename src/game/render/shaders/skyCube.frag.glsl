@@ -7,6 +7,7 @@ uniform samplerCube uSky;
 uniform sampler2D uPatch, uPatchPrev;
 uniform mat4 uPatchVP, uPatchPrevVP;
 uniform float uPatchOn, uMix;
+uniform float uSkyExp; // SKY_K × exposure (render/exposure.ts)
 varying vec3 vDir;
 vec3 patchOr(sampler2D t, mat4 vp, vec3 d, vec3 base){
   vec4 q=vp*vec4(d,1.0);
@@ -21,5 +22,5 @@ void main(){
   vec3 c=textureCube(uSky,d).rgb;
   // uPatchOn is a weight (0…1): the patch blends in gradually as the zoom grows
   if(uPatchOn>0.0) c=mix(c,mix(patchOr(uPatchPrev,uPatchPrevVP,d,c),patchOr(uPatch,uPatchVP,d,c),uMix),uPatchOn);
-  gl_FragColor=vec4(c*c,1.0);
+  gl_FragColor=vec4(c*c*uSkyExp,1.0);
 }

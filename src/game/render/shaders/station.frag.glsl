@@ -10,8 +10,14 @@ uniform vec3 uPlanetColor;
 uniform float uPlanetSize; // cosine of the world's angular radius
 uniform float uSeed;
 uniform float uTime;
-uniform float uHeadK;  // headlight: candela → brightness at this exposure (render/exposure.ts)
-uniform float uFloodK; // the station's floodlights at this exposure
+// Physical light (sun, reflections, floods, headlight, windows) is in scene units and multiplied by
+// the exposure; signal lights (slot rim, approach and nav lights) are display-referred, added after
+// it, so they read the same in sunlight and in shadow (render/exposure.ts).
+uniform float uExp;    // exposure
+uniform float uSkyK;   // the sky's level against sunlight (SKY_K)
+uniform float uHeadK;  // headlight: candela → scene units (HEAD_CD × LUX)
+uniform float uFloodK; // the station's floodlights (FLOOD_LUX × LUX)
+uniform float uWinK;   // lit windows (WINDOW_K)
 varying vec3 vObj; varying vec3 vWN; varying vec3 vWP;
 #pragma farlight_noise
 #pragma farlight_headlight
@@ -21,9 +27,10 @@ float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7)) + uSeed) * 43758
 vec3 envColor(vec3 R, vec3 L){
   vec3 gn = normalize(vec3(0.05, 1.0, 0.12));
   float b = dot(R, gn);
-  vec3 c = vec3(0.012, 0.014, 0.022) + vec3(0.07, 0.07, 0.09) * exp(-b * b / 0.02);
+  vec3 c = (vec3(0.012, 0.014, 0.022) + vec3(0.07, 0.07, 0.09) * exp(-b * b / 0.02)) * uSkyK;
   float cp = dot(R, uPlanetDir);
-  c += uPlanetColor * smoothstep(uPlanetSize - 0.02, uPlanetSize + 0.01, cp) * 0.35;
+  // the world is only bright on its day side, which faces the station only when it's in sunlight
+  c += uPlanetColor * smoothstep(uPlanetSize - 0.02, uPlanetSize + 0.01, cp) * 0.35 * uLit;
   float rl = max(dot(R, L), 0.0);
   c += uStarColor * uLit * (pow(rl, 900.0) * 30.0 + pow(rl, 60.0) * 0.6);
   return c;
@@ -53,7 +60,7 @@ void main(){
   float ndl = max(dot(Np, L), 0.0);
   vec3 H = normalize(L + V);
   float gloss = pow(max(dot(Np, H), 0.0), 140.0) * 2.5; // broad sheen from the star
-  float planetShine = max(dot(N, uPlanetDir), 0.0) * 0.12; // light bounced off the world below
+  float planetShine = max(dot(N, uPlanetDir), 0.0) * 0.12 * uLit; // light bounced off the world's day side
   vec3 col = envColor(R, L) * F
     + base * uStarColor * ndl * uLit * 0.55
     + F * uStarColor * gloss * uLit * ndl
@@ -66,6 +73,12 @@ void main(){
   // the ship's headlights
   col += headlight(Np, vWP, base, uHeadK);
   col *= mix(0.25, 1.0, seam);
+  // scattered windows, so the station is visible on its night side too
+  vec2 wc = floor(uv * 60.0);
+  float win = step(0.99, hash(wc + 7.0)) * smoothstep(0.35, 0.1, length(fract(uv * 60.0) - 0.5));
+  col += vec3(1.0, 0.85, 0.6) * win * 0.7 * uWinK;
+  col *= uExp;
+  vec3 sig = vec3(0.0); // display-referred signal lights
 
   // the docking slot on the front face: a dark recess with a lit rim; approach lights run in toward
   // it along its long axis, green on one side (+x) and red on the other, like the tunnel inside
@@ -73,14 +86,14 @@ void main(){
     vec2 d = abs(uv - 0.5) - vec2(0.2, 0.06);
     float slot = step(max(d.x, d.y), 0.0);
     float rim = smoothstep(0.012, 0.0, abs(max(d.x, d.y)));
-    col = mix(col, vec3(0.003), slot);
-    col += vec3(0.25, 0.9, 0.55) * rim * 0.9;
+    col = mix(col, vec3(0.0), slot);
+    sig += vec3(0.25, 0.9, 0.55) * rim * 0.9;
     float ax = abs(uv.x - 0.5);
     if (ax > 0.21 && abs(uv.y - 0.5) < 0.012) {
       float cell = fract(ax * 30.0);
       float lamp = smoothstep(0.25, 0.0, abs(cell - 0.5)) * smoothstep(0.009, 0.0, abs(uv.y - 0.5));
       float run = 0.25 + 0.75 * pow(fract(ax * 3.0 + uTime * 0.8), 6.0); // pulses running inward
-      col += (uv.x > 0.5 ? vec3(0.2, 1.0, 0.4) : vec3(1.0, 0.2, 0.15)) * lamp * run * 2.0;
+      sig += (uv.x > 0.5 ? vec3(0.2, 1.0, 0.4) : vec3(1.0, 0.2, 0.15)) * lamp * run * 2.0;
     }
   }
   // navigation lights at the corners: blinking red / green by side, white strobes top and bottom
@@ -88,11 +101,10 @@ void main(){
   if (ac.x > 0.47 && ac.y > 0.47 && ac.z > 0.47) {
     float blink = step(0.8, fract(uTime * 0.7 + (vObj.z > 0.0 ? 0.0 : 0.5)));
     vec3 nc = vObj.y > 0.0 ? vec3(1.0) : vObj.x > 0.0 ? vec3(0.2, 1.0, 0.4) : vec3(1.0, 0.2, 0.15);
-    col += nc * blink * 3.0;
+    sig += nc * blink * 3.0;
   }
-  // scattered windows and running lights, so the station is visible on its night side too
-  vec2 wc = floor(uv * 60.0);
-  float win = step(0.99, hash(wc + 7.0)) * smoothstep(0.35, 0.1, length(fract(uv * 60.0) - 0.5));
-  col += vec3(1.0, 0.85, 0.6) * win * 0.7;
-  gl_FragColor = vec4(col, 1.0);
+  // alpha: the physical share of this pixel, so the exposure meter ignores the signal lights
+  // (render/hdr.ts); otherwise they'd hold the exposure down in the dark
+  vec3 W = vec3(0.2126, 0.7152, 0.0722);
+  gl_FragColor = vec4(col + sig, dot(col, W) / (dot(col + sig, W) + 1e-9));
 }

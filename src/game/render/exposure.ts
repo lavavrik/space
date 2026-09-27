@@ -1,66 +1,210 @@
 /*
- * Exposure for artificial light. The shaders are calibrated so a sunlit surface reads ~0.55 whatever
- * the star (the "eye" is adapted to sunlight). Lamps are physical:
- *   - the ship's headlight, HEAD_CD candela: a 5 kW LED floodlight (~500,000 lm) in a ~20° cone;
- *   - station floodlights, FLOOD_LUX on the hull.
- * Next to sunlight (SUN_LUX) they're nothing: 130 lux at 100 m is 1/800 of daylight. In the dark the
- * eye adapts: here the exposure gain follows the brightest light on the station you're looking at,
- * if it's in shadow, and maps it to KEY (a dim-but-clear level), easing over ~1.5 s like eyes do.
- * Inside a hangar its lamps (HANGAR_LUX ≙ 1.0 in the interior shader) set the level.
+ * Auto-exposure: the "eye" adapts to whatever you're looking at, like a camera or a pupil.
+ *
+ * Scene units. Every shader works in one physical scale ("scene luminance"): a sunlit surface reads
+ * ~SUNLIT (0.55) whatever the star, so 1 lux of illumination is LUX = SUNLIT / SUN_LUX. Everything
+ * else is placed on that scale:
+ *   - the ship's headlight, HEAD_CD candela (a 5 kW LED floodlight, ~500,000 lm in a ~20° cone);
+ *   - station floodlights, FLOOD_LUX on the hull; hangar lamps, HANGAR_LUX; lit windows, WINDOW;
+ *   - the Milky Way and the stars at SKY_K of their old display level: the real ratio between the
+ *     night sky and a sunlit surface is ~1e-8, compressed here to 1e-4 so the eye can still reach
+ *     it (fully dark-adapted, MAX_EXP = 1/SKY_K, the sky looks exactly as it did before);
+ *   - a star's disc STAR_K times brighter than a sunlit surface (really ~1e5×), so looking at it
+ *     dazzles; its glow (the eye's scatter) at GLOW_K.
+ * Signal lights (nav, approach, slot rim, pads, the approach corridor, the orbit ring, dust and
+ * station beacons) are display-referred instead: they're added after exposure, so they look the
+ * same in sunlight and in the dark, like a well-designed beacon does to the eye.
+ *
+ * Pipeline (render/SceneRenderer.ts): the frame is drawn into a half-float target, with every
+ * physical shader multiplied by the current exposure (uExp, "pre-exposure", which keeps the
+ * values in half-float's range). The frame is shrunk 64× and read back asynchronously; the meter
+ * turns that into scene luminance and picks a target exposure (see meter), and the exposure eases
+ * toward it in log space: quickly when the view gets brighter, slowly into the dark, as eyes do. A final pass rolls the highlights off
+ * with a soft shoulder (linear below 0.8), so a sunlit scene looks as before (exposure ≈ 1).
+ *
+ * The effects: stars fade next to a sunlit planet and vanish when the sun is in view; in a world's
+ * shadow they come back, and a station's floodlights and your headlights become plainly visible.
  */
-import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 
+export const SUNLIT = 0.55;
+export const SUN_LUX = 1e5;
+/** Scene units per lux of illumination (times albedo). */
+export const LUX = SUNLIT / SUN_LUX;
 export const HEAD_CD = 1.3e6;
-const FLOOD_LUX = 30,
-  SUN_LUX = 1e5,
-  HANGAR_LUX = 500;
-/** Where an adapted dark scene lands, relative to a sunlit one (0.55). */
-const KEY = 0.4;
-/** How fast the adaptation eases (1/s, in log space). */
-const ADAPT = 1.5;
-/** Sunlit brightness in the hull shader. */
-const SUNLIT = 0.55;
+export const FLOOD_LUX = 30;
+export const HANGAR_LUX = 500;
+/** Lit windows, relative to the old display level (~200 cd/m²). */
+export const WINDOW_K = 8e-3;
+/** The sky (Milky Way, stars, distant worlds as dots) against sunlit surfaces. */
+export const SKY_K = 1e-4;
+/** A star's disc and its glow against a sunlit surface. */
+export const STAR_K = 1000,
+  GLOW_K = 2;
 
-export class Exposure {
-  /** Gain on artificial light, 1 = adapted to sunlight. */
-  gain = 1;
+/** Exposure limits: fully dark-adapted shows the sky as it used to be. */
+const MIN_EXP = 0.02,
+  MAX_EXP = 1 / SKY_K;
+/** The centre-weighted log-average lands here… */
+const KEY = 0.18;
+/** …unless that would push the brightest HIGHLIGHT_SHARE of the frame above this. */
+const WHITE = 0.9;
+/**
+ * "Sunny 16": while sunlit things fill a real part of the view, exposure stays at 1 (sunlight),
+ * as a photographer's does; the cap lifts steeply as they shrink ((SUNNY / highlights)⁴ below it).
+ */
+const SUNNY = 0.05;
+/** Even a small patch can't go above this: a star's glare dims the view (a sunlit moon barely does). */
+const GLARE = 30;
+/** Adaptation rates (1/s, in log exposure): toward a brighter view, and into the dark. */
+const ADAPT_BRIGHT = 3,
+  ADAPT_DARK = 0.8;
+
+/**
+ * Asynchronous readback of a small float render target: readPixels into a pixel-pack buffer,
+ * then collect it a frame or two later once its fence has passed, so the GPU never stalls.
+ */
+class Readback {
+  private pbo: WebGLBuffer | null = null;
+  private fence: WebGLSync | null = null;
+  private w = 0;
+  private h = 0;
+  private tag = 0;
+  private buf = new Float32Array(0);
+
+  constructor(private readonly gl: WebGL2RenderingContext) {}
+
+  /** Start a read of `rt` if none is in flight, tagging it (e.g. with the exposure it was drawn at). */
+  start(r: THREE.WebGLRenderer, rt: THREE.WebGLRenderTarget, tag: number) {
+    if (this.fence) return;
+    const gl = this.gl;
+    const prev = r.getRenderTarget();
+    r.setRenderTarget(rt);
+    this.pbo ??= gl.createBuffer();
+    this.w = rt.width;
+    this.h = rt.height;
+    this.tag = tag;
+    const n = this.w * this.h * 4;
+    if (this.buf.length !== n) this.buf = new Float32Array(n);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.pbo);
+    gl.bufferData(gl.PIXEL_PACK_BUFFER, n * 4, gl.STREAM_READ);
+    gl.readPixels(0, 0, this.w, this.h, gl.RGBA, gl.FLOAT, 0);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    this.fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+    gl.flush();
+    r.setRenderTarget(prev);
+  }
+
+  /** The finished read, if one has landed since the last call. */
+  collect(): { data: Float32Array; w: number; h: number; tag: number } | null {
+    const gl = this.gl;
+    if (!this.fence) return null;
+    const s = gl.clientWaitSync(this.fence, 0, 0);
+    if (s !== gl.ALREADY_SIGNALED && s !== gl.CONDITION_SATISFIED) return null;
+    gl.deleteSync(this.fence);
+    this.fence = null;
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.pbo);
+    gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, this.buf);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    return { data: this.buf, w: this.w, h: this.h, tag: this.tag };
+  }
+
+  dispose() {
+    if (this.fence) this.gl.deleteSync(this.fence);
+    if (this.pbo) this.gl.deleteBuffer(this.pbo);
+  }
+}
+
+export class AutoExposure {
+  /** Current exposure: scene luminance × value = display value. */
+  value = 1;
+  /** Where it's heading, and the last reading (scene luminance: centre-weighted log-average, the highlight level), for debugging. */
+  target = 1;
+  stats = { mean: 0, max: 0 };
   private last = 0;
+  private first = true;
+  private readonly rb: Readback;
 
-  /** Work out the target gain from what the ship is looking at, and ease toward it. */
-  update(g: Game, litOf: (st: Game['cur']['stations'][number]) => boolean) {
+  constructor(gl: THREE.WebGLRenderer) {
+    this.rb = new Readback(gl.getContext() as WebGL2RenderingContext);
+  }
+
+  /**
+   * Each frame, after the meter target has been drawn: collect a finished reading (if any), start
+   * the next, and ease the exposure toward the target.
+   */
+  update(r: THREE.WebGLRenderer, meterRT: THREE.WebGLRenderTarget) {
+    const got = this.rb.collect();
+    if (got) {
+      this.target = meter(got.data, got.w, got.h, got.tag, this.stats);
+      if (this.first) this.value = this.target;
+      this.first = false;
+    }
+    this.rb.start(r, meterRT, this.value);
     const now = performance.now() / 1000;
     const dt = this.last ? Math.min(0.2, now - this.last) : 0;
     this.last = now;
-    let target = 1;
-    if (!g.inStation) {
-      // the nearest station roughly ahead (within ~30°) and within 10 km, if it's in shadow
-      const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(g.ship.q);
-      let best: { d: number; lit: boolean } | null = null;
-      for (const st of g.cur.stations) {
-        const rel = st.pos.clone().sub(g.ship.pos);
-        const d = rel.length();
-        if (d > 10e3 || rel.dot(fwd) < d * 0.85) continue;
-        if (!best || d < best.d) best = { d, lit: litOf(st) };
-      }
-      if (best && !best.lit) {
-        const surf = Math.max(20, best.d - 600);
-        const eKey = Math.max(FLOOD_LUX, g.lights ? HEAD_CD / (surf * surf) : 0);
-        target = Math.min(1e5, Math.max(1, (KEY / SUNLIT) * (SUN_LUX / eKey)));
-      }
-    }
-    const k = Math.min(1, ADAPT * dt);
-    this.gain = Math.exp(Math.log(this.gain) + (Math.log(target) - Math.log(this.gain)) * k);
+    const d = Math.log(this.target) - Math.log(this.value);
+    const k = 1 - Math.exp(-(d < 0 ? ADAPT_BRIGHT : ADAPT_DARK) * dt);
+    this.value = Math.exp(Math.log(this.value) + d * k);
   }
 
-  /** Headlight constant for the hull shader: candela → brightness (÷ d² in the shader). */
-  get headK() {
-    return (HEAD_CD * SUNLIT * this.gain) / SUN_LUX;
+  dispose() {
+    this.rb.dispose();
   }
-  /** Floodlight brightness on the hull. */
-  get floodK() {
-    return (FLOOD_LUX * SUNLIT * this.gain) / SUN_LUX;
+}
+
+/** Share of the frame that has to be bright before it caps the exposure (smaller things may blow out). */
+const HIGHLIGHT_SHARE = 0.02;
+const scratch: number[] = [];
+
+/**
+ * The target exposure from a small image of the frame (RGBA floats, drawn at exposure `exp`; each
+ * value is the average over a ~64 px patch):
+ *   - the centre-weighted log-average of scene luminance maps to KEY (a log-average, so a small
+ *     bright moon doesn't drag a starry view dark, and black sky doesn't wash out a planet);
+ *   - but the brightest HIGHLIGHT_SHARE of the frame is held at WHITE, so a sunlit world or a
+ *     star's glare that fills a real part of the view pulls the exposure down;
+ *   - and while sunlit things fill that share, it stays at 1 (SUNNY);
+ *   - and the single brightest patch stays under GLARE, so looking at a star dims everything.
+ */
+export function meter(
+  data: Float32Array,
+  w: number,
+  h: number,
+  exp: number,
+  out?: { mean: number; max: number },
+) {
+  let sum = 0,
+    wsum = 0;
+  const aspect = w / h;
+  scratch.length = 0;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const L = (0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]) / exp;
+      if (!(L >= 0)) continue; // NaN guard
+      const u = ((x + 0.5) / w - 0.5) * aspect,
+        v = (y + 0.5) / h - 0.5;
+      const wt = Math.exp(-(u * u + v * v) / (2 * 0.3 * 0.3));
+      sum += wt * Math.log(L + 1e-8);
+      wsum += wt;
+      scratch.push(L);
+    }
   }
-  /** Headlight constant inside a hangar, against its lamps. */
-  static readonly headKi = HEAD_CD / HANGAR_LUX;
+  const mean = wsum > 0 ? Math.exp(sum / wsum) : 0;
+  scratch.sort((a, b) => b - a);
+  const high =
+    scratch[Math.min(scratch.length - 1, Math.floor(scratch.length * HIGHLIGHT_SHARE))] ?? 0;
+  if (out) {
+    out.mean = mean;
+    out.max = high;
+  }
+  const t = Math.min(
+    mean > 0 ? KEY / mean : MAX_EXP,
+    high > 0 ? WHITE / high : MAX_EXP,
+    high > 0 ? Math.max(1, (SUNNY / high) ** 4) : MAX_EXP,
+    scratch[0] > 0 ? GLARE / scratch[0] : MAX_EXP,
+  );
+  return Math.min(MAX_EXP, Math.max(MIN_EXP, t));
 }

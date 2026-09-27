@@ -8,7 +8,8 @@ import { HyperspaceView } from './Hyperspace';
 import { createNoiseTexture } from './noise3d';
 import { skyColor, skyLook } from '../sim/hyperspace';
 import { CORRIDOR_LEN, corridorGeometry, hullGeometry, interiorGeometry } from './stationMesh';
-import { Exposure } from './exposure';
+import { AutoExposure, FLOOD_LUX, HANGAR_LUX, HEAD_CD, LUX, SKY_K, WINDOW_K } from './exposure';
+import { HdrTarget } from './hdr';
 import { padLocal, stationQuat } from '../sim/stationGeom';
 import { ATMO_FS, BODY_VS, GLOW_FS, GLOW_VS, PLANET_FS, POINT_FS, POINT_VS, RING_FS, SKYPT_FS, SKYPT_VS, SKY_BAKE_FS, SKY_CUBE_FS, SKY_VS, STAR_FS, STATION_FS, STATION_INTERIOR_FS, CORRIDOR_FS } from './shaders';
 
@@ -59,9 +60,18 @@ export class SceneRenderer {
   readonly views = new Map<Body, BodyView>();
   readonly stationViews = new Map<Station, { mesh: THREE.Group; uni: Uniforms; inner: THREE.Mesh; innerUni: Uniforms; corridor: THREE.Mesh; corridorUni: Uniforms; dist: number; pxR: number }>();
   /** Headlights, shared by every station material: the ship's nose (world axes) and on/off. */
-  private readonly headUni = { uHeadDir: { value: new THREE.Vector3(0, 0, -1) }, uHeadOn: { value: 1 }, uHeadK: { value: 0 }, uFloodK: { value: 0 }, uHeadKi: { value: Exposure.headKi } };
-  /** Eye adaptation for artificial light (render/exposure.ts). */
-  private readonly exposure = new Exposure();
+  /** Exposure, shared by every physically lit material (render/exposure.ts): uExp, and uSkyExp = SKY_K × uExp for the sky. */
+  private readonly expUni = { uExp: { value: 1 }, uSkyExp: { value: SKY_K } };
+  /** Station lights in scene units (render/exposure.ts). */
+  private readonly headUni = {
+    uHeadDir: { value: new THREE.Vector3(0, 0, -1) }, uHeadOn: { value: 1 },
+    uHeadK: { value: HEAD_CD * LUX }, uFloodK: { value: FLOOD_LUX * LUX }, uHeadKi: { value: HEAD_CD / HANGAR_LUX },
+    uIntK: { value: HANGAR_LUX * LUX }, uWinK: { value: WINDOW_K }, uSkyK: { value: SKY_K },
+    ...this.expUni,
+  };
+  /** HDR frame, metering and tone mapping (render/hdr.ts), and the eye's adaptation. */
+  private readonly hdr: HdrTarget;
+  private readonly exposure: AutoExposure;
   private readonly stationCorridor = corridorGeometry();
   /** Station hull (slot cut in the front) and interior, shared by every station (render/stationMesh.ts). */
   private readonly stationHull = hullGeometry();
@@ -97,7 +107,7 @@ export class SceneRenderer {
     uMix: { value: number };
   };
   private skyGeo!: THREE.SphereGeometry;
-  private readonly hyper = new HyperspaceView(() => this.pointsMaterial());
+  private readonly hyper = new HyperspaceView(() => this.pointsMaterial(), this.expUni.uSkyExp);
   /** Orbit preview (L): the planned or autopilot orbit as a ring, depth-tested so the planet hides its far side. */
   private readonly ring = new THREE.LineLoop(
     new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(RING_N * 3), 3)),
@@ -112,9 +122,11 @@ export class SceneRenderer {
   private readonly tmp3 = new THREE.Vector3();
 
   constructor(canvas: HTMLCanvasElement) {
-    this.gl = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true });
+    this.gl = new THREE.WebGLRenderer({ canvas, antialias: false, logarithmicDepthBuffer: true }); // MSAA happens in the HDR target
     this.gl.autoClear = false;
     this.setPixelRatio(innerWidth, innerHeight);
+    this.hdr = new HdrTarget(this.gl);
+    this.exposure = new AutoExposure(this.gl);
     this.buildSky();
 
     // distant bodies drawn as dots of reflected starlight
@@ -158,10 +170,11 @@ export class SceneRenderer {
     this.camera.aspect = this.skyCam.aspect = W / H;
     this.camera.updateProjectionMatrix();
     this.skyCam.updateProjectionMatrix();
+    this.hdr.resize();
   }
 
   private pointsMaterial() {
-    return new THREE.ShaderMaterial({ vertexShader: SKYPT_VS, fragmentShader: SKYPT_FS, uniforms: { uPR: this.uPR }, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
+    return new THREE.ShaderMaterial({ vertexShader: SKYPT_VS, fragmentShader: SKYPT_FS, uniforms: { uPR: this.uPR, uSkyExp: this.expUni.uSkyExp }, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
   }
 
   /**
@@ -188,6 +201,7 @@ export class SceneRenderer {
       uPatchPrevVP: { value: new THREE.Matrix4() },
       uPatchOn: { value: 0 },
       uMix: { value: 1 },
+      uSkyExp: this.expUni.uSkyExp,
     };
     const sky = new THREE.Mesh(geo, new THREE.ShaderMaterial({ vertexShader: SKY_VS, fragmentShader: SKY_CUBE_FS, uniforms: this.skyUni, side: THREE.BackSide, depthWrite: false }));
     this.skyScene.add(sky);
@@ -244,10 +258,11 @@ export class SceneRenderer {
       cam.updateMatrixWorld();
       p.mat.uniforms.uPxPerRad.value = h / 2 / Math.tan(((cam.fov / 2) * Math.PI) / 180);
       const next = 1 - p.cur;
+      const prevRT = this.gl.getRenderTarget();
       this.gl.setRenderTarget(p.rts[next]);
       this.gl.clear();
       this.gl.render(p.scene, cam);
-      this.gl.setRenderTarget(null);
+      this.gl.setRenderTarget(prevRT);
       // the old patch becomes the one we fade from
       u.uPatchPrev.value = first ? p.rts[next].texture : p.rts[p.cur].texture;
       u.uPatchPrevVP.value.copy(first ? new THREE.Matrix4().multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse) : u.uPatchVP.value);
@@ -352,7 +367,9 @@ export class SceneRenderer {
     const corridorUni: Uniforms = { uTime: { value: 0 }, uLen: { value: CORRIDOR_LEN } };
     const corridor = new THREE.Mesh(
       this.stationCorridor,
-      new THREE.ShaderMaterial({ vertexShader: BODY_VS, fragmentShader: CORRIDOR_FS, uniforms: corridorUni, side: THREE.DoubleSide, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }),
+      new THREE.ShaderMaterial({ vertexShader: BODY_VS, fragmentShader: CORRIDOR_FS, uniforms: corridorUni, side: THREE.DoubleSide, transparent: true, depthWrite: false,
+        // colour adds; alpha multiplies the meter weight underneath (render/hdr.ts)
+        blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.SrcAlphaFactor }),
     );
     corridor.visible = false;
     group.add(corridor);
@@ -364,12 +381,12 @@ export class SceneRenderer {
   private attachStar(b: Star): BodyView {
     const group = new THREE.Group();
     this.scene.add(group);
-    const mesh = new THREE.Mesh(this.geoMid, new THREE.ShaderMaterial({ vertexShader: BODY_VS, fragmentShader: STAR_FS, uniforms: { uColor: { value: b.color }, uTime: { value: 0 }, uSeed: { value: b.seed } } }));
+    const mesh = new THREE.Mesh(this.geoMid, new THREE.ShaderMaterial({ vertexShader: BODY_VS, fragmentShader: STAR_FS, uniforms: { uColor: { value: b.color }, uTime: { value: 0 }, uSeed: { value: b.seed }, uExp: this.expUni.uExp } }));
     mesh.scale.setScalar(b.radius);
     group.add(mesh);
     const glow = new THREE.Mesh(
       this.plane,
-      new THREE.ShaderMaterial({ vertexShader: GLOW_VS, fragmentShader: GLOW_FS, uniforms: { uColor: { value: b.color.clone().lerp(new THREE.Color(1, 1, 1), 0.2) }, uI: { value: 1 } }, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }),
+      new THREE.ShaderMaterial({ vertexShader: GLOW_VS, fragmentShader: GLOW_FS, uniforms: { uColor: { value: b.color.clone().lerp(new THREE.Color(1, 1, 1), 0.2) }, uI: { value: 1 }, uExp: this.expUni.uExp }, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }),
     );
     glow.frustumCulled = false;
     this.scene.add(glow);
@@ -389,6 +406,7 @@ export class SceneRenderer {
       uA: { value: b.pal.a }, uB: { value: b.pal.b }, uC: { value: b.pal.c }, uD: { value: b.pal.d },
       uAtmo: { value: atmo ? atmo.c : new THREE.Color(0, 0, 0) }, uAtmoK: { value: atmo ? atmo.k * 0.6 : 0 },
       uSea: { value: b.pal.sea }, uSeed: { value: b.seed }, uTime: { value: 0 }, uLight: { value: light }, uNoise3D: { value: this.noise3d },
+      uExp: this.expUni.uExp,
     };
     const mesh = new THREE.Mesh(this.geoMid, new THREE.ShaderMaterial({ vertexShader: BODY_VS, fragmentShader: PLANET_FS, uniforms: uni }));
     mesh.scale.setScalar(b.radius);
@@ -401,14 +419,14 @@ export class SceneRenderer {
         this.geoMid,
         new THREE.ShaderMaterial({
           vertexShader: BODY_VS, fragmentShader: ATMO_FS, side: THREE.BackSide, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false,
-          uniforms: { uAtmo: { value: atmo.c }, uLight: { value: light }, uK: { value: atmo.k }, uEdge: { value: Math.sqrt(1 - 1 / (k * k)) } },
+          uniforms: { uAtmo: { value: atmo.c }, uLight: { value: light }, uK: { value: atmo.k }, uEdge: { value: Math.sqrt(1 - 1 / (k * k)) }, uExp: this.expUni.uExp },
         }),
       );
       view.atmo.scale.setScalar(b.radius * k);
       tilt.add(view.atmo);
     }
     if (b.ring) {
-      view.ringUni = { uColor: { value: b.ring.color }, uLight: { value: light }, uPC: { value: new THREE.Vector3() }, uPR: { value: b.radius }, uIn: { value: b.ring.inner }, uOut: { value: b.ring.outer }, uSeed: { value: b.ring.seed } };
+      view.ringUni = { uColor: { value: b.ring.color }, uLight: { value: light }, uPC: { value: new THREE.Vector3() }, uPR: { value: b.radius }, uIn: { value: b.ring.inner }, uOut: { value: b.ring.outer }, uSeed: { value: b.ring.seed }, uExp: this.expUni.uExp };
       const rm = new THREE.Mesh(new THREE.RingGeometry(b.ring.inner, b.ring.outer, 256, 1), new THREE.ShaderMaterial({ vertexShader: BODY_VS, fragmentShader: RING_FS, uniforms: view.ringUni, side: THREE.DoubleSide, transparent: true, depthWrite: false }));
       rm.rotation.x = -Math.PI / 2;
       rm.scale.setScalar(b.radius);
@@ -418,7 +436,20 @@ export class SceneRenderer {
     return view;
   }
 
+  /**
+   * Draw the frame into the HDR target at the current exposure, then meter it, adapt and tone-map
+   * it to the screen (render/exposure.ts).
+   */
   render(g: Game) {
+    const e = this.exposure.value;
+    this.expUni.uExp.value = e;
+    this.expUni.uSkyExp.value = SKY_K * e;
+    this.gl.setRenderTarget(this.hdr.target);
+    this.renderScene(g);
+    this.hdr.finish(this.exposure);
+  }
+
+  private renderScene(g: Game) {
     const { ship, cur, simTime } = g;
     // in hyperspace: only the Milky Way and the real stars streaming past, no system scene
     const inTunnel = !!g.jump && g.jump.phase === 'tunnel';
@@ -442,9 +473,6 @@ export class SceneRenderer {
     const { camera, skyCam, dotGeo, PR, tmp, tmp2 } = this;
     this.headUni.uHeadDir.value.set(0, 0, -1).applyQuaternion(ship.q);
     this.headUni.uHeadOn.value = g.lights ? 1 : 0;
-    this.exposure.update(g, (st) => this.stationLit(st, cur.star.pos));
-    this.headUni.uHeadK.value = this.exposure.headK;
-    this.headUni.uFloodK.value = this.exposure.floodK;
     camera.position.set(0, 0, 0);
     camera.quaternion.copy(ship.q);
     camera.updateMatrixWorld();
@@ -504,9 +532,10 @@ export class SceneRenderer {
           dPos[nd * 3] = rel.x;
           dPos[nd * 3 + 1] = rel.y;
           dPos[nd * 3 + 2] = rel.z;
-          dCol[nd * 3] = c.r * a;
-          dCol[nd * 3 + 1] = c.g * a;
-          dCol[nd * 3 + 2] = c.b * a;
+          const k = a * this.expUni.uSkyExp.value; // at sky level, like the stars
+          dCol[nd * 3] = c.r * k;
+          dCol[nd * 3 + 1] = c.g * k;
+          dCol[nd * 3 + 2] = c.b * k;
           dSize[nd] = (2.2 + 2.5 * a) * PR;
           nd++;
         }
@@ -603,7 +632,7 @@ export class SceneRenderer {
       pos[i * 3 + 2] = centre.z + a.z * c + b.z * s;
     }
     this.ring.geometry.attributes.position.needsUpdate = true;
-    (this.ring.material as THREE.LineBasicMaterial).color.copy(pv.engaged ? RING_AP : RING_PLAN);
+    (this.ring.material as THREE.LineBasicMaterial).color.copy(pv.engaged ? RING_AP : RING_PLAN).convertLinearToSRGB(); // display-referred: the HDR target isn't sRGB-encoded
   }
 
   /**
@@ -660,6 +689,8 @@ export class SceneRenderer {
       this.patch = null;
     }
     this.noise3d.dispose();
+    this.hdr.dispose();
+    this.exposure.dispose();
     for (const geo of [this.geoHi, this.geoMid, this.geoLo, this.plane, this.box]) geo.dispose();
     this.gl.dispose();
   }

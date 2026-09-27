@@ -1,5 +1,6 @@
 #include <logdepthbuf_pars_fragment>
 uniform vec3 uColor; uniform vec3 uLight; uniform vec3 uPC; uniform float uPR; uniform float uIn; uniform float uOut; uniform float uSeed;
+uniform float uExp; // exposure (render/exposure.ts)
 varying vec3 vObj; varying vec3 vWN; varying vec3 vWP;
 #pragma farlight_noise
 void main(){
@@ -14,5 +15,5 @@ void main(){
   float perp=length(toP-along*L);
   float sh=(along<0.0&&perp<uPR)?0.06:1.0;
   float lit=0.35+0.65*abs(dot(normalize(vWN),L));
-  gl_FragColor=vec4(uColor*lit*sh,alpha);
+  gl_FragColor=vec4(uColor*lit*sh*uExp,alpha);
 }

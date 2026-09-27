@@ -15,5 +15,7 @@ void main(){
   float edge = smoothstep(0.93, 1.0, min(q.x, q.y));          // near a corner line
   float pulse = pow(fract(along * 6.0 + uTime * 0.6), 8.0);   // bands running in toward the slot
   float a = (0.05 + 0.5 * edge + 0.35 * pulse) * (1.0 - along) * (1.0 - along);
-  gl_FragColor = vec4(vec3(0.25, 1.0, 0.55) * a, 1.0);
+  // display-referred (not scaled by exposure). Blended additively; alpha multiplies the pixel's
+  // meter weight (render/hdr.ts) so the exposure ignores the corridor
+  gl_FragColor = vec4(vec3(0.25, 1.0, 0.55) * a, 1.0 - clamp(a * 4.0, 0.0, 1.0));
 }

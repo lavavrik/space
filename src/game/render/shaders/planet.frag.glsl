@@ -2,6 +2,7 @@
 uniform int uType; uniform int uOct;
 uniform vec3 uA; uniform vec3 uB; uniform vec3 uC; uniform vec3 uD;
 uniform vec3 uAtmo; uniform float uAtmoK; uniform float uSea; uniform float uSeed; uniform float uTime; uniform vec3 uLight;
+uniform float uExp; // exposure (render/exposure.ts)
 varying vec3 vObj; varying vec3 vWN; varying vec3 vWP;
 #pragma farlight_noise
 #pragma farlight_noise3d
@@ -80,11 +81,12 @@ void main(){
   float diff=clamp(ndl*1.05+0.03,0.0,1.0);
   vec3 R=reflect(-L,N);
   float s=pow(max(dot(R,V),0.0),60.0)*0.7*spec*diff;
-  col=col*(diff+0.008)+vec3(1.0,0.95,0.85)*s;
-  col=mix(col,vec3(1.0)*(diff*0.97+0.006),cloud);
+  // the night side is lit only by starlight: sky level (SKY_K), so it goes black against the stars
+  col=col*(diff+0.008e-4)+vec3(1.0,0.95,0.85)*s;
+  col=mix(col,vec3(1.0)*(diff*0.97+0.006e-4),cloud);
   float rim=pow(1.0-max(dot(N,V),0.0),3.0);
   col+=uAtmo*uAtmoK*rim*clamp(ndl+0.25,0.0,1.0)*1.1;
   col=mix(col,uAtmo*diff,uAtmoK*0.08);
   col+=emit;
-  gl_FragColor=vec4(col,1.0);
+  gl_FragColor=vec4(col*uExp,1.0);
 }
