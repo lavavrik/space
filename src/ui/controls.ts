@@ -38,6 +38,7 @@ export const GROUPS: { id: ControlGroup; title: string; keys: [string, string][]
       ['Click', 'target it'],
       ['Y', 'scan target'],
       ['I', 'target info'],
+      ['B', 'influences'],
       ['U', 'avionics'],
     ],
   },
@@ -77,7 +78,7 @@ export const KEYBOARD: Keycap[][] = [
   [['`', 1.25, 'ship'], ['1', 1, 'planner'], ['2', 1, 'planner'], ['3', 1, 'planner'], ['4', 1, 'planner'], ['5', 1], ['6', 1], ['7', 1], ['8', 1], ['9', 1], ['0', 1]],
   [['Tab', 1.5, 'ship'], ['Q', 1, 'flight'], ['W', 1, 'flight'], ['E', 1, 'flight'], ['R', 1, 'planner'], ['T', 1, 'target'], ['Y', 1, 'target'], ['U', 1, 'target'], ['I', 1, 'target'], ['O', 1, 'ship'], ['P', 1, 'ship'], ['[', 1, 'planner'], [']', 1, 'planner']],
   [['Caps', 1.75], ['A', 1, 'flight'], ['S', 1, 'flight'], ['D', 1, 'flight'], ['F', 1, 'ftl'], ['G', 1, 'target'], ['H', 1, 'ftl'], ['J', 1, 'ftl'], ['K', 1, 'ship'], ['L', 1, 'planner'], ['⏎', 1.5, 'planner']],
-  [['Shift', 2.25, 'flight'], ['Z', 1, 'flight'], ['X', 1, 'flight'], ['C', 1, 'flight'], ['V', 1, 'flight'], ['B', 1], ['N', 1, 'ftl'], ['M', 1, 'ftl'], ['↑', 1, 'flight']],
+  [['Shift', 2.25, 'flight'], ['Z', 1, 'flight'], ['X', 1, 'flight'], ['C', 1, 'flight'], ['V', 1, 'flight'], ['B', 1, 'target'], ['N', 1, 'ftl'], ['M', 1, 'ftl'], ['↑', 1, 'flight']],
   [['Ctrl', 1.5, 'flight'], ['Space', 5.5, 'flight'], ['', 1.25], ['←', 1, 'flight'], ['↓', 1, 'flight'], ['→', 1, 'flight']],
 ];
 

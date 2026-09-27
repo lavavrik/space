@@ -69,6 +69,8 @@ export class Game {
   infoVisible = false;
   /** Avionics panel (U): the fitted computers; shares the left column with info and controls. */
   avionicsVisible = false;
+  /** Influences panel (B): gravity, frames, mass lock, light; same column as info and avionics. */
+  influencesVisible = false;
   /** Scan progress (0…1) per object key (see sim/scanner.ts), and whether the target is being scanned. */
   /** Navigation computer (M): the panel, its planned or running route, destination star and mode. */
   navPanel = false;

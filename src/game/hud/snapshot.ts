@@ -14,6 +14,7 @@ import { galPos } from '../sim/navigation';
 import { apLabel, evalPlan } from '../sim/orbits';
 import { deltaVLeft } from '../sim/resources';
 import { unitLabel, type Computer } from '../avionics/catalog';
+import { buildInfluences } from './influences';
 import { buildInfo } from './info';
 import type { AutopilotView, AvionicsSlotView, FlightView, NavView, GuideView, HudSnapshot, LocationView, Pill, PlannerView, Readout, SystemsView, TargetView } from './types';
 
@@ -34,6 +35,7 @@ export function buildSnapshot(g: Game): HudSnapshot {
     planner: planner(g),
     autopilot: g.apPanel && g.ship.ap ? autopilotView(g) : null,
     avionics: g.avionicsVisible ? avionicsView(g) : null,
+    influences: g.influencesVisible ? buildInfluences(g) : null,
     nav: g.navPanel || g.route?.running ? navView(g) : null,
     guide: g.guide ? guide(g.guide) : null,
   };

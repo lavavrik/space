@@ -82,6 +82,14 @@ export interface AutopilotView {
   confirm: boolean; // disengage armed, waiting for the second press
 }
 
+/** Influences panel (B): what's acting on the ship (see hud/influences.ts). */
+export interface InfluencesView {
+  gravity: { name: string; value: string; detail: string; frac: number; applied: boolean }[];
+  frame: [string, string | Readout][];
+  ftl: [string, string | Readout][];
+  light: [string, string | Readout][];
+}
+
 /** One fitted computer in the avionics panel (U). */
 export interface AvionicsSlotView {
   id: ComputerKind; // what opening this entry does (see Game.openAvionics)
@@ -160,6 +168,7 @@ export interface HudSnapshot {
   planner: PlannerView | null;
   autopilot: AutopilotView | null;
   avionics: AvionicsSlotView[] | null; // the avionics panel, when open
+  influences: InfluencesView | null;
   nav: NavView | null;
   guide: GuideView | null;
 }

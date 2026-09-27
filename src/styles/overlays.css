@@ -83,3 +83,15 @@
 .avstatus { font: .85rem "Share Tech Mono", ui-monospace, monospace; color: var(--amber-dim); margin-top: .1rem; }
 .avslot.busy .avstatus { color: var(--cyan); }
 .avspecs { font: .8rem "Share Tech Mono", ui-monospace, monospace; color: var(--amber-dim); line-height: 1.4; padding-left: 2.5rem; }
+
+/* influences panel (B) */
+#influences { display: flex; flex-direction: column; gap: .15rem; }
+/* values like "Venydes 5 · edge 0.011 AU away" are long: wrap them rather than cut them off */
+#influences .row { align-items: baseline; gap: .6rem; }
+#influences .row span { flex: none; }
+#influences .row b { text-align: right; min-width: 0; white-space: normal; }
+.infl { display: flex; flex-direction: column; gap: .15rem; margin-bottom: .3rem; }
+.infl .gtop span { color: var(--amber-dim); }
+.infl.applied .gtop span { color: var(--amber); }
+.infl em { font-style: normal; font-size: .75rem; letter-spacing: .12em; color: var(--cyan); text-transform: uppercase; }
+.infl .bar { height: .3rem; }

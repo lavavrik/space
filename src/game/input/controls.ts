@@ -15,14 +15,16 @@ export function onPress(g: Game, code: string) {
   if (!g.started) return;
   g.invalidateHud();
   if (code === 'Tab') g.helpVisible = !g.helpVisible;
-  if (code === 'KeyU') {
-    g.avionicsVisible = !g.avionicsVisible;
-    if (g.avionicsVisible) g.infoVisible = false;
-  }
-  if (code === 'KeyI') {
-    g.infoVisible = !g.infoVisible;
-    if (g.infoVisible) g.avionicsVisible = false;
-    if (g.infoVisible && !g.target) g.showMsg('Target something (T, G or click) to see its details');
+  // info (I), avionics (U) and influences (B) share the left column: opening one closes the others
+  if (code === 'KeyU' || code === 'KeyI' || code === 'KeyB') {
+    const was = { KeyU: g.avionicsVisible, KeyI: g.infoVisible, KeyB: g.influencesVisible }[code];
+    g.avionicsVisible = g.infoVisible = g.influencesVisible = false;
+    if (code === 'KeyU') g.avionicsVisible = !was;
+    if (code === 'KeyB') g.influencesVisible = !was;
+    if (code === 'KeyI') {
+      g.infoVisible = !was;
+      if (g.infoVisible && !g.target) g.showMsg('Target something (T, G or click) to see its details');
+    }
   }
   if ((g.jump && g.jump.phase === 'tunnel') || ship.dead) return;
 
