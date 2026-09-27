@@ -10,9 +10,11 @@ import { cx } from './primitives';
  */
 
 const W = 360,
-  H = 262;
-const BUS_X = 150;
-const LOAD_X = 196,
+  H = 280;
+/** Source boxes end at SRC_R; the bus sits midway between them and the loads, so wires match both sides. */
+const SRC_R = 122,
+  BUS_X = 160;
+const LOAD_X = 2 * BUS_X - SRC_R,
   LOAD_W = W - LOAD_X - 4,
   LOAD_H = 40,
   LOAD_GAP = 50,
@@ -42,14 +44,14 @@ export function ElectricalSchematic({ e }: { e: ElectricalView }) {
     <svg className="esch" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Power schematic">
       {/* bus bar */}
       <line x1={BUS_X} y1={Math.min(busTop, solarMid)} x2={BUS_X} y2={Math.max(busBot, battMid)} className="ebus" />
-      <text x={BUS_X} y={H - 6} className="elab mid">
+      <text x={BUS_X} y={H - 4} className="elab mid">
         BUS {fmtPower(bus.drawKW)} / {fmtPower(bus.capKW)}
       </text>
 
       {/* sources */}
-      <Wire d={`M118 ${solarMid} H${BUS_X}`} kw={solar.kw} />
+      <Wire d={`M${SRC_R} ${solarMid} H${BUS_X}`} kw={solar.kw} />
       <g className={cx('ebox', solar.state !== 'ok' && 'off', solar.state === 'feathered' && 'warn')}>
-        <rect x={4} y={solarY} width={114} height={56} />
+        <rect x={4} y={solarY} width={SRC_R - 4} height={56} />
         <text x={12} y={solarY + 16} className="etitle">
           SOLAR PANELS
         </text>
@@ -61,14 +63,14 @@ export function ElectricalSchematic({ e }: { e: ElectricalView }) {
         </text>
       </g>
       {solar.curtailed > 1 && (
-        <text x={61} y={solarY + 70} className="esub mid">
+        <text x={(4 + SRC_R) / 2} y={solarY + 70} className="esub mid">
           {fmtPower(solar.curtailed)} unused
         </text>
       )}
 
-      <Wire d={`M118 ${battMid} H${BUS_X}`} kw={Math.abs(battery.flowKW)} rev={charging} />
+      <Wire d={`M${SRC_R} ${battMid} H${BUS_X}`} kw={Math.abs(battery.flowKW)} rev={charging} />
       <g className={cx('ebox', battFrac < 0.15 && 'warn')}>
-        <rect x={4} y={battY} width={114} height={80} />
+        <rect x={4} y={battY} width={SRC_R - 4} height={80} />
         <text x={12} y={battY + 16} className="etitle">
           BATTERY
         </text>
@@ -78,13 +80,13 @@ export function ElectricalSchematic({ e }: { e: ElectricalView }) {
         <text x={12} y={battY + 47} className="eval">
           {battery.kwh.toFixed(0)} / {battery.cap} kWh
         </text>
-        <rect x={12} y={battY + 53} width={98} height={5} className="egauge" />
-        <rect x={12} y={battY + 53} width={98 * battFrac} height={5} className="egauge fill" />
+        <rect x={12} y={battY + 53} width={SRC_R - 20} height={5} className="egauge" />
+        <rect x={12} y={battY + 53} width={(SRC_R - 20) * battFrac} height={5} className="egauge fill" />
         <text x={12} y={battY + 72} className="esub">
           {fmtPower(battery.maxKW)} out · {fmtPower(battery.chargeKW)} in
         </text>
       </g>
-      <text x={134} y={battMid - 6} className={cx('esub', 'mid', (charging || discharging) && 'flow')}>
+      <text x={(SRC_R + BUS_X) / 2} y={battMid - 6} className={cx('esub', 'mid', (charging || discharging) && 'flow')}>
         {charging ? '◀' : discharging ? '▶' : ''}
       </text>
 

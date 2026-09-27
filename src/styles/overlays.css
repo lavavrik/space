@@ -120,7 +120,7 @@
 }
 
 /* electrical schematic (U): wires carry power; dashes march the way it flows */
-.esch { width: 100%; height: auto; flex: none; aspect-ratio: 360 / 262; display: block; margin: .2rem 0 .3rem; font-family: "Share Tech Mono", ui-monospace, monospace; }
+.esch { width: 100%; height: auto; flex: none; aspect-ratio: 360 / 280; display: block; margin: .2rem 0 .3rem; font-family: "Share Tech Mono", ui-monospace, monospace; }
 .esch .ebus { stroke: var(--amber); stroke-width: 3; stroke-linecap: round; }
 .esch .ew { fill: none; stroke: var(--amber-faint); stroke-dasharray: 2 4; }
 .esch .ew.on { stroke: #a8e68c; stroke-dasharray: 7 5; animation: eflow .9s linear infinite; }
