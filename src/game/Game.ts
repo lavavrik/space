@@ -22,6 +22,7 @@ import { buildSystem } from './universe/system';
 import { TEMP, toggleRadiators, type HeatBudget } from './sim/thermal';
 import { STOCK_BATTERY, emptyOutfit } from './outfit/catalog';
 import { ZOOM_START, updatePeriscope } from './sim/periscope';
+import { startPivot } from './sim/pivot';
 import { launch, refuelDocked, type Dock } from './sim/docking';
 import { fitBattery, fitModule, removeModule } from './outfit/fit';
 
@@ -67,6 +68,8 @@ export class Game {
   inStation: Station | null = null;
   /** The ship's offset from that station's centre at the end of the last step (m). */
   inStationRel = new THREE.Vector3();
+  /** Turning to face the target (middle mouse button; sim/pivot.ts). */
+  pivot = false;
   /** Periscope (sim/periscope.ts): up or not, the magnification set, and the current (eased) one. */
   zoom = { on: false, mag: ZOOM_START, cur: 1 };
   /** Vertical field of view (degrees) right now: FOV narrowed by the periscope. */
@@ -151,6 +154,10 @@ export class Game {
         this.invalidateHud();
       },
       isActive: () => true,
+      onMiddleClick: () => {
+        startPivot(this);
+        this.invalidateHud();
+      },
       onPointerLockChange: (locked) => {
         this.pointerLocked = locked;
         this.invalidateHud();

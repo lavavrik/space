@@ -15,6 +15,8 @@ export interface InputHandlers {
   onWheel(deltaY: number): void;
   /** A click that didn't drag, at canvas pixel (x, y). While the pointer is locked it's always the centre. */
   onClick(x: number, y: number, locked: boolean): void;
+  /** Middle mouse button (wheel click): pivot to the target. */
+  onMiddleClick(): void;
   /** Whether the mouse steers the ship yet. */
   isActive(): boolean;
   onPointerLockChange(locked: boolean): void;
@@ -54,6 +56,11 @@ export class Input {
     // Unlocked: dragging steers, and a click either targets what's under the cursor or (via the
     // handler) captures the mouse. Locked: a click targets what's under the crosshair.
     this.listen(canvas, 'mousedown', (e: MouseEvent) => {
+      if (e.button === 1) {
+        e.preventDefault(); // no autoscroll
+        handlers.onMiddleClick();
+        return;
+      }
       if (!handlers.isActive() || e.button !== 0) return;
       this.dragging = true;
       this.dragDist = 0;

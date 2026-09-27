@@ -16,6 +16,7 @@ import { refillShip, scoop, solarPower } from './resources';
 import { updateThermal } from './thermal';
 import { beginPower, grant, settleBattery } from './power';
 import { railsStep, stopWarp, warpBlocked } from './timewarp';
+import { updatePivot } from './pivot';
 import { SHORE_POWER, holdDocked, rotationCorrection, stationContact } from './docking';
 
 const qa = new THREE.Quaternion();
@@ -75,6 +76,9 @@ export function update(g: Game, dt: number, realDt = dt) {
       g.showMsg('Sun tracking off · manual steering');
     }
     ship.q.multiply(qa.setFromAxisAngle(AY, yaw)).multiply(qa.setFromAxisAngle(AX, pitch)).multiply(qa.setFromAxisAngle(AZ, roll)).normalize();
+    // middle-click pivot (sim/pivot.ts); a deliberate mouse move or steering key takes over, jitter doesn't
+    const steered = Math.abs(mdx) + Math.abs(mdy) > 2 || keys.ArrowUp || keys.ArrowDown || keys.ArrowLeft || keys.ArrowRight || keys.KeyQ || keys.KeyE;
+    updatePivot(g, realDt, !!steered);
   }
   g.qInv.copy(ship.q).invert();
   g.fwd.set(0, 0, -1).applyQuaternion(ship.q);
