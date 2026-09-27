@@ -25,14 +25,14 @@ export function onPress(g: Game, code: string) {
     g.avionicsVisible = g.infoVisible = g.influencesVisible = g.outfitVisible = false;
     if (outfit) g.outfitVisible = !was;
     else if (code === 'KeyU') g.avionicsVisible = !was;
-    // ship stats, outfit and influences are clicked through (entries, refit buttons, body names):
-    // free the cursor on opening
-    if (g.avionicsVisible || g.outfitVisible || g.influencesVisible) document.exitPointerLock?.();
     if (code === 'KeyB') g.influencesVisible = !was;
     if (code === 'KeyI') {
       g.infoVisible = !was;
       if (g.infoVisible && !g.target) g.showMsg('Target something (T, G or click) to see its details');
     }
+    // ship stats, outfit and influences are clicked through (entries, refit buttons, body names):
+    // free the cursor on opening (checked after every toggle above, or B was never seen as open)
+    if (g.avionicsVisible || g.outfitVisible || g.influencesVisible) document.exitPointerLock?.();
   }
   if ((g.jump && g.jump.phase !== 'charge') || ship.dead) return;
 
