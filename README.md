@@ -20,7 +20,8 @@ The build is a static site with relative paths, so `dist/` can be hosted anywher
 src/
   main.tsx, ui/            React: mounts the game and renders the HUD panels, start screen and toasts
     hooks/useGame.ts       creates the Game and subscribes to its HUD snapshots
-    components/            Hud, ShipSystems, ManeuverGuide, OrbitPlanner, HelpPanel, StartScreen, Toast
+    components/            Hud (location, gauges, flight cluster, target card), BodyInfo, ManeuverGuide,
+                           OrbitPlanner, HelpPanel, StartScreen, Toast
   styles/                  global CSS (theme, HUD, panels, start screen)
   game/                    framework-free game engine
     Game.ts                owns all state and runs the frame loop (simulate → render → overlay → HUD)
@@ -34,6 +35,8 @@ src/
     render/                three.js scene renderer, 2D overlay canvas, GLSL shaders
     hud/                   builds the HUD view model that React renders
 ```
+**HUD.** A minimal cockpit: location and jump destination (top left); ship gauges (bottom left: H₂ with Δv, exotic matter with jumps left, battery with net power); the flight cluster (bottom centre: mode, speed, speed-limit or throttle bar, altitude and orbit near a body, and status chips for flight assist, decoupled, cruise and g-load); and the target card (bottom right). The maneuver guide and orbit planner appear top right only while in use. Tab opens the controls, and I the target details. Everything is sized in `rem` off one root font size that scales with the window (14–22 px), so it stays readable on 4K. The canvas labels follow the same scale.
+
 The simulation never touches the DOM. Each frame it steps the physics, draws the 3D scene and the overlay canvas, and about twelve times a second publishes a HUD snapshot (plain strings and flags) that React picks up through `useSyncExternalStore`.
 
 ## The universe
@@ -60,7 +63,9 @@ The simulation never touches the DOM. Each frame it steps the physics, draws the
 | T / G | Target body or station ahead / cycle by distance |
 | Click | Target the body, station or reachable star under the cursor (or the crosshair, with the mouse captured). Clicking empty space captures the mouse |
 | N / H | Pick a star system (aim at it, or cycle by distance) / hyperjump |
-| O | Orbit planner (equatorial, polar, stationary, hold position) |
+| O | Orbit planner (equatorial, polar, stationary, hold position). While the autopilot flies, O opens its status instead: target versus current orbit, how far off you are, time and Δv used |
+| Backspace ×2 | Disengage the autopilot (from its status panel, confirmed within 3 s; also clickable). Thrust keys and J no longer switch it off |
+| L | Orbit preview ring on / off: the planned orbit (amber) or the one the autopilot is flying (cyan), drawn around the body |
 | P | Turn the solar panels to the star |
 | K | Call a fuel tanker |
 | ` | Performance overlay: FPS, frame-time graph, per-stage timings (see docs/perf.md) |

@@ -1,8 +1,6 @@
-/* Narrow screens. */
-@media (max-width: 980px) {
-  #hud { flex-wrap: wrap; }
-  .side { width: auto; flex: 1 1 260px; }
-  .mid { order: -1; flex: 1 1 100%; }
-  #msg { bottom: 330px; }
-  #leftcol { max-height: calc(100% - 400px); } /* the bottom HUD wraps taller here */
+/* Narrow screens: stack the bottom HUD, flight cluster first. */
+@media (max-width: 62rem) {
+  #hud { grid-template-columns: 1fr 1fr; }
+  #centre { grid-column: 1 / -1; justify-self: center; order: -1; }
+  #leftcol { max-height: calc(100% - 26rem); }
 }

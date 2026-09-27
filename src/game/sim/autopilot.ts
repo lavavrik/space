@@ -1,4 +1,4 @@
-import { AP_ACC, AP_KP, AP_TAU, AP_VMAX } from '../constants';
+import { AP_ACC, AP_TAU } from '../constants';
 import { fmtDist, fmtTime } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
@@ -29,11 +29,59 @@ export function apInsertion(ship: Ship, ap: Autopilot) {
   return { P: b.pos.clone().addScaledVector(up, rT), rT };
 }
 
-/** How far the ship's velocity (relative to the body) is from circular orbital velocity. */
+/*
+ * Approach profile for closing a distance (altitude, distance out of the orbit plane, distance to a
+ * hold point): cruise at up to `cap`, brake at APPROACH_ACC so you arrive at rest, and finish with a
+ * short linear tail (time constant 1/APPROACH_K). Replaces a pure proportional law whose 17 s
+ * exponential tail and 2.5 m/s² braking made insertions take a quarter of an hour.
+ */
+export const APPROACH_ACC = 25; // m/s², braking
+export const APPROACH_K = 0.3; // 1/s, final linear tail
+export const RADIAL_CAP = 5000; // m/s, climb / descent
+export const PLANE_CAP = 3000; // m/s, sideways into the orbit plane (these cost Δv both ways)
+
+/** Settling an orbit: trim to within this before announcing it (m, m/s)... */
+export const ORBIT_TRIM = { alt: 100, vel: 1 };
+/**
+ * ...then coast, with no thrust at all, while it stays within this. The altitude band scales with
+ * the orbit: a leftover speed error δv swings the altitude by about ±2rδv/v, which is ~10 km for
+ * 1 m/s high up (a fixed 1 km band made high orbits re-trim every so often).
+ */
+export const ORBIT_BAND = { alt: 1000, vel: 3 };
+export const orbitBandAlt = (r: number, v: number) => Math.max(ORBIT_BAND.alt, (3 * r * ORBIT_TRIM.vel) / v);
+
+/** Speed to close a remaining distance d (m). */
+export function approachSpeed(d: number, cap: number) {
+  return Math.min(cap, Math.sqrt(2 * APPROACH_ACC * d), APPROACH_K * d);
+}
+
+/** Time (s) the approach profile takes to bring d down to `done`: cruise, braking, then the tail. */
+export function approachTime(d: number, cap: number, done: number) {
+  if (d <= done) return 0;
+  const x1 = (2 * APPROACH_ACC) / (APPROACH_K * APPROACH_K); // below this, the linear tail
+  const x2 = (cap * cap) / (2 * APPROACH_ACC); // above this, cruising at the cap
+  let t = 0;
+  if (d > x2) {
+    t += (d - x2) / cap;
+    d = x2;
+  }
+  const lo = Math.max(x1, done); // the braking phase ends at the tail, or at the finish if that's sooner
+  if (d > lo) {
+    t += Math.sqrt(2 / APPROACH_ACC) * (Math.sqrt(d) - Math.sqrt(lo));
+    d = lo;
+  }
+  return t + Math.log(Math.max(1, d / done)) / APPROACH_K;
+}
+
+/**
+ * How far the ship's orbital (horizontal, in-plane) speed is from circular speed at its current
+ * radius. Climbing, descending and moving into the plane are left to their own steps, so this can
+ * be matched straight away instead of waiting for the altitude (which is why it used to stall).
+ */
 export function orbitVelErr(g: Game, ap: Autopilot) {
-  const { b, up } = apGeom(g.ship, ap);
-  const tang = new THREE.Vector3().crossVectors(ap.n!, up).multiplyScalar(Math.sqrt(b.mu / ap.r0));
-  return velRel(g, b).distanceTo(tang);
+  const { b, r, up } = apGeom(g.ship, ap);
+  const tang = new THREE.Vector3().crossVectors(ap.n!, up);
+  return Math.abs(velRel(g, b).dot(tang) - Math.sqrt(b.mu / Math.max(r, b.radius)));
 }
 
 /** The hold point in the system frame (it's stored as an offset from the moving body). */
@@ -56,7 +104,7 @@ export function autopilot(g: Game, dt: number, grav: Gravity) {
   if (ap.type === 'hold') {
     const e = holdPoint(ap).sub(ship.pos),
       dist = e.length();
-    vDes = e.multiplyScalar(Math.min(AP_KP, AP_VMAX / Math.max(dist, 1)));
+    vDes = e.multiplyScalar(approachSpeed(dist, RADIAL_CAP) / Math.max(dist, 1));
     aFF = grav.vec.clone().negate();
     if (!ap.settled && dist < 100 && vRel.length() < 5) {
       ap.settled = true;
@@ -69,26 +117,41 @@ export function autopilot(g: Game, dt: number, grav: Gravity) {
     up.normalize();
     const vt = Math.sqrt(b.mu / Math.max(r, b.radius));
     const tang = new THREE.Vector3().crossVectors(n, up);
-    const clampV = (x: number) => Math.max(-AP_VMAX, Math.min(AP_VMAX, x));
-    // climbing or descending costs twice the peak radial speed, so keep it modest
+    // climbing / descending and moving into the plane each cost twice their peak speed in Δv,
+    // hence the caps; the braking profile makes them arrive at rest instead of creeping in
     const er = ap.r0 - r,
-      vrMax = Math.min(AP_VMAX, Math.max(300, Math.sqrt(Math.abs(er) * 5)));
-    const vr = Math.max(-vrMax, Math.min(vrMax, er * AP_KP));
-    const vn = clampV(-rv.dot(n) * AP_KP);
+      dn = -rv.dot(n);
+    const vr = Math.sign(er) * approachSpeed(Math.abs(er), RADIAL_CAP);
+    const vn = Math.sign(dn) * approachSpeed(Math.abs(dn), PLANE_CAP);
+    const vCirc = tang.clone().multiplyScalar(vt); // circular velocity here (before tang is reused below)
     vDes = tang.multiplyScalar(vt).addScaledVector(up, vr).addScaledVector(n, vn);
     aFF = up
       .clone()
       .multiplyScalar((-vt * vt) / r)
       .sub(grav.vec);
-    if (!ap.settled && Math.abs(ap.r0 - r) < Math.max(200, ap.r0 * 0.002) && vRel.distanceTo(vDes) < 5 + vt * 0.003) {
+    // Settled = the trim is done: within ORBIT_TRIM of the altitude, plane and circular velocity.
+    // (Announcing earlier left ~16 kg of trim burns right after "Orbit established"; comparing
+    // against the steering velocity vDes announced it mid-dive.)
+    const dAlt = Math.abs(ap.r0 - r),
+      dPlane = Math.abs(rv.dot(n)),
+      dVel = vRel.distanceTo(vCirc);
+    if (!ap.settled && dAlt < ORBIT_TRIM.alt && dPlane < ORBIT_TRIM.alt && dVel < ORBIT_TRIM.vel) {
       ap.settled = true;
       g.showMsg(`Orbit established · ${fmtDist(ap.r0 - b.radius)} · period ${fmtTime(ap.period)}`, 'ftl');
+    }
+    // Once settled, coast: a real orbit needs no thrust. Only if it drifts out of the ORBIT_BAND
+    // (it shouldn't, short of a collision or a disengage-and-re-engage) does it go back to trimming.
+    if (ap.settled) {
+      const band = orbitBandAlt(ap.r0, vt);
+      if (dAlt < band && dPlane < band && dVel < ORBIT_BAND.vel) {
+        ship.vel.addScaledVector(grav.vec, dt);
+        return;
+      }
+      ap.settled = false;
     }
   }
   const err = vDes.sub(vRel);
   const a = err.clone().divideScalar(AP_TAU).add(aFF);
-  // once in a stable orbit, ignore tiny errors: a real orbit needs no thrust to keep
-  if (ap.settled && ap.type !== 'hold' && err.length() < 1 && Math.abs(ap.r0 - r) < 500) a.set(0, 0, 0);
   if (a.length() > AP_ACC) a.setLength(AP_ACC);
   const T = a.multiplyScalar(dt);
   applyThrust(g, T, dt);

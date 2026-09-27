@@ -1,60 +1,82 @@
-import type { FlightView, NavigationView, TargetView } from '../../game/hud/types';
-import { Bar, Panel, Row, Sub } from './primitives';
+import type { FlightView, LocationView, SystemsView, TargetView } from '../../game/hud/types';
+import { Bar, Panel, cx } from './primitives';
 
-function NavigationPanel({ nav }: { nav: NavigationView }) {
+/**
+ * The cockpit HUD: a location line (top left) and, along the bottom, ship gauges (left), the
+ * flight cluster (centre) and the target card (right). Everything scales with the window via the
+ * root font size (see theme.css). Detail lives elsewhere: I opens target info, ` performance.
+ */
+
+/** Top left: system, star, galactic position and clock, and the jump destination. */
+export function Location({ loc }: { loc: LocationView }) {
   return (
-    <Panel name="nav" className="pan side" title="NAVIGATION" right={nav.clock}>
-      <Row label="SYSTEM" value={nav.system} />
-      <Row label="STAR" value={nav.star} />
-      <Row label="GALACTIC" value={nav.galactic} />
-      <div className="sep" />
-      <Row label="X" value={nav.x} />
-      <Row label="Y" value={nav.y} />
-      <Row label="Z" value={nav.z} />
+    <div id="loc">
+      <div className="lsys">{loc.system.toUpperCase()}</div>
+      <div className="lstar">{loc.star}</div>
+      <div className="lsub">{loc.sub}</div>
+      <div className={cx('ljump', !loc.jump.text.startsWith('JUMP') && 'hint')}>{loc.jump.text}</div>
+    </div>
+  );
+}
+
+/** Bottom left: three gauges with one line of detail each, and a note when something needs attention. */
+export function ShipGauges({ s }: { s: SystemsView }) {
+  return (
+    <Panel name="sys" id="gauges" className="pan card" title="SHIP">
+      {s.gauges.map((gv) => (
+        <div key={gv.label} className="gauge">
+          <div className="gtop">
+            <span>{gv.label}</span>
+            <b>{gv.value}</b>
+          </div>
+          <Bar frac={gv.frac} variant={gv.variant} lowWarn />
+          <div className={cx('gsubl', gv.sub.warn && 'warnc')}>{gv.sub.text}</div>
+        </div>
+      ))}
+      {s.note && <div className={cx('gnote', s.note.warn && 'warnc')}>{s.note.text}</div>}
     </Panel>
   );
 }
 
-function FlightPanel({ flight }: { flight: FlightView }) {
+/** Bottom centre: mode, speed, speed-limit or throttle bar, altitude and orbit, status pills. Never collapses. */
+export function FlightCluster({ f }: { f: FlightView }) {
   return (
-    <section className="pan mid">
-      <div id="hMode" className={flight.modeClass}>
-        {flight.mode}
+    <section id="flight" className="pan">
+      <div id="hMode" className={f.modeClass}>
+        {f.mode}
       </div>
-      <div className="spd">{flight.speed}</div>
-      <div className="unit">{flight.unit}</div>
-      <Bar frac={flight.barFrac} variant={flight.barFtl ? 'ftl' : undefined} />
-      <Sub left={<span>{flight.barLabel}</span>} right={<span>{flight.barValue}</span>} />
-      <Sub
-        left={<span className={flight.flightAssist.warn ? 'warnc' : undefined}>{flight.flightAssist.text}</span>}
-        right={<span className={flight.gravity.warn ? 'warnc' : undefined}>{flight.gravity.text}</span>}
-      />
+      <div className="spd">{f.speed}</div>
+      <div className="unit">{f.unit}</div>
+      <Bar frac={f.barFrac} variant={f.barFtl ? 'ftl' : undefined} />
+      <div className="barcap">
+        <span>{f.barLabel}</span>
+        <span>{f.barValue}</span>
+      </div>
+      {f.alt && <div className={cx('fline', f.alt.warn && 'warnc')}>{f.alt.text}</div>}
+      {f.orbit && <div className={cx('fline', f.orbit.warn && 'warnc')}>{f.orbit.text}</div>}
+      <div className="pills">
+        {f.pills.map((p) => (
+          <span key={p.text} className={cx('pill', p.kind)}>
+            {p.text}
+          </span>
+        ))}
+      </div>
     </section>
   );
 }
 
-function TargetPanel({ target }: { target: TargetView }) {
+/** Bottom right: the target's name, type, distance and ETA. */
+export function TargetCard({ t }: { t: TargetView }) {
   return (
-    <Panel name="target" className="pan side" title="TARGET" right={target.type}>
-      <Row label="BODY" value={target.body} />
-      <Row label="DISTANCE" value={target.distance} />
-      <Row label="ETA" value={target.eta} />
-      <div className="sep" />
-      <Row label="NEAREST" value={target.nearest} />
-      <Row label="VERTICAL" value={target.vertical} />
-      <Row label="ORBIT" value={target.orbit} />
-      <Row label="JUMP TO" value={target.jump} />
+    <Panel name="target" id="target" className={cx('pan card', t.none && 'none')} title="TARGET">
+      <div className="tname">{t.name}</div>
+      <div className="ttype">{t.type}</div>
+      {!t.none && (
+        <div className="tdist">
+          <b>{t.distance}</b>
+          <span>{t.eta}</span>
+        </div>
+      )}
     </Panel>
-  );
-}
-
-/** Bottom HUD: navigation, flight and target panels. All but the flight panel (the speedo) collapse. */
-export function Hud({ nav, flight, target }: { nav: NavigationView; flight: FlightView; target: TargetView }) {
-  return (
-    <div id="hud">
-      <NavigationPanel nav={nav} />
-      <FlightPanel flight={flight} />
-      <TargetPanel target={target} />
-    </div>
   );
 }

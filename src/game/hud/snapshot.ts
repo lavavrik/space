@@ -1,16 +1,18 @@
 /* Turns game state into the display strings and flags the HUD shows. */
 import { NORMAL_ACC, NORMAL_BOOST, NORMAL_MAX, SHIP, ftlBurn, jumpCost } from '../constants';
-import { fmtClock, fmtCoord, fmtDist, fmtFlow, fmtMass, fmtPower, fmtSpeed, fmtSpeedText, fmtTime } from '../format';
+import { fmtClock, fmtDist, fmtFlow, fmtMass, fmtPower, fmtSpeed, fmtSpeedText, fmtTime } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
-import { orbitElements } from '../sim/gravity';
+import { holdPoint, orbitVelErr } from '../sim/autopilot';
+import { velRel } from '../sim/frame';
+import { orbitElements, orbitElementsRel } from '../sim/gravity';
 import { guideEta, type Guide } from '../sim/guide';
 import { transitState } from '../sim/hyperspace';
 import { galPos } from '../sim/navigation';
 import { evalPlan } from '../sim/orbits';
-import { deltaVLeft, shipMass } from '../sim/resources';
+import { deltaVLeft } from '../sim/resources';
 import { buildInfo } from './info';
-import type { FlightView, GuideView, HudSnapshot, NavigationView, PlannerView, SystemsView, TargetView } from './types';
+import type { AutopilotView, FlightView, GuideView, HudSnapshot, LocationView, Pill, PlannerView, Readout, SystemsView, TargetView } from './types';
 
 const tmp = new THREE.Vector3();
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
@@ -22,27 +24,25 @@ export function buildSnapshot(g: Game): HudSnapshot {
     info: g.infoVisible && g.target ? buildInfo(g, g.target) : null,
     showRelock: g.started && !g.pointerLocked,
     toast: { text: g.msg.text, kind: g.msg.kind, visible: g.msg.on },
-    nav: navigation(g),
+    location: location(g),
     flight: flight(g),
     target: target(g),
     systems: systems(g),
     planner: planner(g),
+    autopilot: g.apPanel && g.ship.ap ? autopilotView(g) : null,
     guide: g.guide ? guide(g.guide) : null,
   };
 }
 
-function navigation(g: Game): NavigationView {
-  const { ship } = g;
+function location(g: Game): LocationView {
   const st = g.cur.sys.star;
   const gp = galPos(g);
+  const d = g.jumpDest;
   return {
-    clock: fmtClock(g.simTime),
     system: g.cur.sys.name,
     star: `${st.spec} · ${st.R.toFixed(2)} R☉ · ${Math.round(st.T)} K`,
-    galactic: `${gp.x.toFixed(2)}  ${gp.y.toFixed(2)}  ${gp.z.toFixed(2)} ly`,
-    x: fmtCoord(ship.pos.x),
-    y: fmtCoord(ship.pos.y),
-    z: fmtCoord(ship.pos.z),
+    sub: `${gp.x.toFixed(2)} ${gp.y.toFixed(2)} ${gp.z.toFixed(2)} ly · ${fmtClock(g.simTime)}`,
+    jump: d ? { text: `JUMP → ${d.name} · ${d.star.spec} · ${d.pos.distanceTo(gp).toFixed(1)} ly` } : { text: 'N or click a star to set a jump · Tab for controls', warn: false },
   };
 }
 
@@ -59,7 +59,7 @@ function flightMode(g: Game): [string, FlightView['modeClass']] {
   if (jump && jump.phase === 'tunnel') return ['HYPERSPACE', 'ftl'];
   if (jump) return [`HYPERDRIVE ${jump.t.toFixed(1)}`, 'ftl'];
   if (ship.ftlCharge > 0) return [`FTL CHARGING ${ship.ftlCharge.toFixed(1)}`, 'ftl'];
-  if (ship.mode === 'ftl') return ['FTL DRIVE', 'ftl'];
+  if (ship.mode === 'ftl') return ['FTL', 'ftl'];
   if (ship.landed) return ['LANDED', ''];
   return ['NORMAL SPACE', ''];
 }
@@ -67,123 +67,131 @@ function flightMode(g: Game): [string, FlightView['modeClass']] {
 function flight(g: Game): FlightView {
   const { ship, keys, jump } = g;
   const [mode, modeClass] = flightMode(g);
-  const [speed, speedUnit] = jump && jump.phase === 'tunnel' ? [transitState(jump).speed.toFixed(2), 'LIGHT-YEARS / S · HYPERSPACE'] : fmtSpeed(g.curSpeed);
-  const unit = g.refFrame && ship.mode === 'normal' ? `${speedUnit} · REL. ${g.refFrame.name.toUpperCase()}` : speedUnit;
+  const [speed, speedUnit] = jump && jump.phase === 'tunnel' ? [transitState(jump).speed.toFixed(2), 'LY / S'] : fmtSpeed(g.curSpeed);
+  const unit = g.refFrame && ship.mode === 'normal' ? `${speedUnit} · REL. ${g.refFrame.name.toUpperCase()}` : speedUnit === 'TIMES LIGHT SPEED (C)' ? '× LIGHT SPEED' : speedUnit;
+  // in hyperspace: just the transit, none of the local flight readouts
+  if (jump && jump.phase === 'tunnel') {
+    const st = transitState(jump);
+    return { mode, modeClass, speed, unit, barFrac: st.u, barFtl: true, barLabel: 'TRANSIT', barValue: `${st.left.toFixed(1)} ly to go`, alt: null, orbit: null, pills: [] };
+  }
   let barFrac: number, barLabel: string, barValue: string;
   const barFtl = ship.mode === 'ftl';
   if (barFtl) {
     barFrac = ship.throttle;
-    barLabel = ship.cruise ? 'THROTTLE · CRUISE' : 'THROTTLE';
+    barLabel = 'THROTTLE';
     barValue = Math.round(ship.throttle * 100) + '%';
   } else {
     const boost = !!(keys.ShiftLeft || keys.ShiftRight);
     barFrac = Math.min(1, g.curSpeed / (boost ? NORMAL_BOOST : NORMAL_MAX));
-    barLabel = boost ? 'BOOST' : 'SPEED / LIMIT';
+    barLabel = boost ? 'BOOST' : 'SPEED LIMIT';
     barValue = Math.round(barFrac * 100) + '%';
   }
-  const gr = ship.grav;
-  let gravity;
+
+  // altitude, vertical speed and orbit, relative to the body pulling on you (skipped far out in a star's pull)
+  const gr = ship.grav,
+    ap = ship.ap;
+  let alt: Readout | null = null,
+    orbit: Readout | null = null;
+  if (gr && ship.mode === 'normal' && !ship.dead && (gr.body.kind !== 'star' || gr.g >= 0.02)) {
+    const b = gr.body;
+    const oe = orbitElements(ship, b);
+    const h = oe.r - b.radius;
+    const up = oe.vr > -0.5;
+    let impact = '';
+    if (oe.vr < -1 && oe.pe < b.radius && !ship.landed && !ap) impact = ` · impact ${fmtTime((oe.vr + Math.sqrt(oe.vr * oe.vr + 2 * gr.g * h)) / gr.g)}`;
+    alt = { text: `ALT ${fmtDist(h)} · ${up ? '▲' : '▼'} ${fmtSpeedText(Math.abs(oe.vr))}${impact}`, warn: !!impact };
+    if (ship.landed) orbit = { text: `LANDED ON ${b.name.toUpperCase()}` };
+    else if (ap && ap.type === 'hold' && ap.settled) orbit = { text: 'HOVERING ON THRUSTERS' };
+    else if (gr.g < 0.02 && !ap) orbit = null;
+    else if (oe.escape) orbit = { text: `ESCAPING ${b.name.toUpperCase()}` };
+    else if (oe.pe < b.radius) orbit = { text: `SUBORBITAL · AP ${fmtDist(oe.ap - b.radius)}`, warn: !ap };
+    else orbit = { text: `IN ORBIT · PE ${fmtDist(oe.pe - b.radius)} · AP ${fmtDist(oe.ap - b.radius)}` };
+  }
+
+  const pills: Pill[] = [{ text: ship.fa ? 'FA ON' : 'FA OFF', kind: ship.fa ? 'on' : 'warn' }];
+  if (ship.decoupled) pills.push({ text: 'DECOUPLED', kind: 'warn' });
+  if (ship.mode === 'ftl') pills.push({ text: ship.cruise ? 'CRUISE' : 'HOLD W', kind: ship.cruise ? 'ftl' : '' });
   if (gr && ship.mode === 'normal' && !ship.dead) {
     const gs = gr.g / 9.80665;
-    gravity = { text: `${gs < 0.01 ? gs.toExponential(1) : gs.toFixed(gs < 1 ? 3 : 2)} G · ${gr.body.name.toUpperCase()}`, warn: gr.g > NORMAL_ACC };
-  } else {
-    gravity = { text: gr ? `${gr.body.name.toUpperCase()} WELL` : '—' };
+    pills.push({ text: `${gs < 0.01 ? gs.toExponential(1) : gs.toFixed(gs < 1 ? 2 : 1)} g`, kind: gr.g > NORMAL_ACC ? 'warn' : '' });
   }
-  return {
-    mode, modeClass, speed, unit, barFrac, barFtl, barLabel, barValue,
-    flightAssist: { text: (ship.fa ? 'FLIGHT ASSIST ON' : 'FLIGHT ASSIST OFF') + (ship.decoupled ? ' · DECOUPLED' : ''), warn: !ship.fa || ship.decoupled },
-    gravity,
-  };
+  return { mode, modeClass, speed, unit, barFrac, barFtl, barLabel, barValue, alt, orbit, pills };
 }
 
 function target(g: Game): TargetView {
   const { ship } = g;
-  const view: TargetView = {
-    type: '', body: 'None · press T', distance: '—', eta: '—',
-    nearest: { text: '—' }, vertical: { text: '—' }, orbit: { text: '—' }, jump: 'None · press N',
-  };
   const t = g.target;
-  if (t) {
-    const d = t.pos.distanceTo(ship.pos) - t.radius;
-    view.body = t.name;
-    view.type = t.typeName.toUpperCase();
-    view.distance = fmtDist(d);
-    const dir = tmp.subVectors(t.pos, ship.pos).normalize();
-    const vel = ship.mode === 'ftl' ? ship.travelDir.clone().multiplyScalar(ship.ftlSpeed) : ship.vel.clone();
-    vel.add(g.frameBody.vel).sub(t.vel); // everything moves, so close on the target in its own frame
-    const closing = vel.dot(dir);
-    view.eta = closing > 1 ? fmtTime(d / closing) : 'not closing';
-  }
-  const near = g.nearest;
-  if (near) view.nearest = { text: `${near.name} · ${fmtDist(g.nearestAlt)}`, warn: near.kind !== 'star' ? g.nearestAlt < 2e4 : g.nearestAlt < near.radius };
-  if (g.jumpDest) view.jump = `${g.jumpDest.name} · ${g.jumpDest.star.spec} · ${g.jumpDest.pos.distanceTo(galPos(g)).toFixed(2)} ly`;
-
-  // vertical speed and orbit relative to the body pulling on us
-  const gr = ship.grav,
-    ap = ship.ap;
-  if (gr && ship.mode === 'normal' && !ship.dead) {
-    const oe = orbitElements(ship, gr.body);
-    const alt = oe.r - gr.body.radius;
-    let vs = `${oe.vr > -0.5 ? '+' : '−'}${fmtSpeedText(Math.abs(oe.vr))}`;
-    let impact = false;
-    if (oe.vr < -1 && oe.pe < gr.body.radius && !ship.landed && !ap) {
-      const tt = (oe.vr + Math.sqrt(oe.vr * oe.vr + 2 * gr.g * alt)) / gr.g;
-      vs += ` · impact ${fmtTime(tt)}`;
-      impact = true;
-    }
-    view.vertical = { text: vs, warn: impact };
-    let orb: string;
-    if (ship.landed) orb = `on the surface of ${gr.body.name}`;
-    else if (ap && ap.type === 'hold' && ap.settled) orb = 'hovering on thrusters';
-    else if (gr.g < 0.02 && !ap) orb = 'negligible gravity';
-    else if (oe.escape) orb = `escape trajectory · Pe ${fmtDist(oe.pe - gr.body.radius)}`;
-    else if (oe.pe < gr.body.radius) orb = `suborbital · Ap ${fmtDist(oe.ap - gr.body.radius)}`;
-    else orb = `Pe ${fmtDist(oe.pe - gr.body.radius)} · Ap ${fmtDist(oe.ap - gr.body.radius)}`;
-    view.orbit = { text: orb, warn: !oe.escape && oe.pe < gr.body.radius && !ship.landed && !ap && gr.g >= 0.02 };
-  } else {
-    view.orbit = { text: ship.mode === 'ftl' ? 'in FTL' : '—' };
-  }
-  return view;
+  if (!t) return { name: 'NO TARGET', type: 'T · G · CLICK', distance: '—', eta: '', none: true };
+  const d = t.pos.distanceTo(ship.pos) - (t.kind === 'station' ? t.size / 2 : t.radius);
+  const dir = tmp.subVectors(t.pos, ship.pos).normalize();
+  const vel = ship.mode === 'ftl' ? ship.travelDir.clone().multiplyScalar(ship.ftlSpeed) : ship.vel.clone();
+  vel.add(g.frameBody.vel).sub(t.vel); // everything moves, so close on the target in its own frame
+  const closing = vel.dot(dir);
+  return { name: t.name, type: t.kind === 'station' ? 'ORBITAL STATION' : t.typeName.toUpperCase(), distance: fmtDist(d), eta: closing > 1 ? `ETA ${fmtTime(d / closing)}` : 'NOT CLOSING', none: false };
 }
 
 function systems(g: Game): SystemsView {
   const { ship, power } = g;
   const refLy = g.jumpDest ? g.jumpDest.pos.distanceTo(galPos(g)) : 15;
-  const ftlRate = ship.mode === 'ftl' ? ftlBurn(ship.ap ? 1 : ship.throttle) : 0;
   const net = power.net;
-  let solar: string;
-  if (power.shadow) solar = `0 kW · in shadow`;
-  else {
-    const off = (Math.acos(Math.max(-1, Math.min(1, power.cos))) * 180) / Math.PI;
-    solar = `${fmtPower(power.solar)} · ${off.toFixed(0)}° off${ship.sunTrack ? ' · track' : ''}`;
-  }
-  let note = '';
-  if (ship.tanker) note = `Tanker arriving in ${Math.ceil(ship.tanker.t)} s · hold still`;
-  else if (ship.scoop) note = ship.scoop;
-  else if (ship.prop <= 0) note = 'No propellant. Press K for a tanker, or glide to ice, a gas giant or a star.';
-  else if (ship.batt <= 0) note = 'Battery flat. Turn the panels to the star (P).';
+  const netText = `${net >= 0 ? '+' : '−'}${fmtPower(Math.abs(net))}`;
+  const battTime = net < -0.5 ? ` · empty in ${fmtTime((ship.batt / -net) * 3600)}` : net > 0.5 && ship.batt < SHIP.battCap - 0.05 ? ` · full in ${fmtTime(((SHIP.battCap - ship.batt) / net) * 3600)}` : '';
+  const ftlRate = ship.mode === 'ftl' ? ftlBurn(ship.ap ? 1 : ship.throttle) : 0;
+  let note: Readout | null = null;
+  if (ship.tanker) note = { text: `Tanker arriving in ${Math.ceil(ship.tanker.t)} s · hold still` };
+  else if (ship.scoop) note = { text: ship.scoop };
+  else if (ship.prop <= 0) note = { text: 'No propellant · K for a tanker, or skim a gas giant or star', warn: true };
+  else if (ship.batt <= 0) note = { text: 'Battery flat · P turns the panels to the star', warn: true };
+  else if (power.shadow) note = { text: `In ${power.shadow.name}'s shadow · no solar power` };
+  const burnLow = ship.burnRate > 1 && ship.prop / Math.max(ship.burnRate, 1e-9) < 300;
   return {
-    mass: `SHIP MASS ${fmtMass(shipMass(ship))}`,
-    prop: `${fmtMass(ship.prop)} / ${fmtMass(SHIP.propCap)}`,
-    propFrac: ship.prop / SHIP.propCap,
-    deltaV: `Δv left ${fmtSpeedText(deltaVLeft(ship))}`,
-    flow: { text: `burn ${fmtFlow(ship.burnRate)}`, warn: ship.burnRate > 1 && ship.prop / Math.max(ship.burnRate, 1e-9) < 300 },
-    exotic: `${fmtMass(ship.exotic)} / ${fmtMass(SHIP.exoticCap)}`,
-    exoticFrac: ship.exotic / SHIP.exoticCap,
-    jumps: `${Math.floor(ship.exotic / jumpCost(refLy))} jumps of ${refLy.toFixed(1)} ly`,
-    exoticRate: ship.mode === 'ftl' ? `burn ${fmtFlow(ftlRate)} · ${fmtTime(ship.exotic / ftlRate)}` : 'drive idle',
-    batt: `${ship.batt.toFixed(1)} / ${SHIP.battCap} kWh`,
-    battFrac: ship.batt / SHIP.battCap,
-    net: { text: `${net >= 0 ? '+' : '−'}${fmtPower(Math.abs(net))} ${net >= 0 ? 'charging' : 'draining'}`, warn: net < 0 },
-    battTime:
-      net < -0.5
-        ? `empty in ${fmtTime((ship.batt / -net) * 3600)}`
-        : net > 0.5 && ship.batt < SHIP.battCap - 0.05
-          ? `full in ${fmtTime(((SHIP.battCap - ship.batt) / net) * 3600)}`
-          : '',
-    solar: { text: solar, warn: !!power.shadow || power.cos <= 0 },
-    load: fmtPower(power.draw),
+    gauges: [
+      { label: 'H₂', value: fmtMass(ship.prop), frac: ship.prop / SHIP.propCap, sub: { text: ship.burnRate > 0.01 ? `Δv ${fmtSpeedText(deltaVLeft(ship))} · burning ${fmtFlow(ship.burnRate)}` : `Δv ${fmtSpeedText(deltaVLeft(ship))} left`, warn: burnLow } },
+      { label: 'EXOTIC', value: fmtMass(ship.exotic), frac: ship.exotic / SHIP.exoticCap, variant: 'ftl', sub: { text: ship.mode === 'ftl' ? `burning ${fmtFlow(ftlRate)} · ${fmtTime(ship.exotic / ftlRate)} left` : `${Math.floor(ship.exotic / jumpCost(refLy))} jumps of ${refLy.toFixed(0)} ly` } },
+      { label: 'BATTERY', value: `${ship.batt.toFixed(0)} kWh`, frac: ship.batt / SHIP.battCap, variant: 'batt', sub: { text: `${netText}${battTime}`, warn: net < -0.5 } },
+    ],
     note,
+  };
+}
+
+function autopilotView(g: Game): AutopilotView {
+  const { ship } = g;
+  const ap = ship.ap!;
+  const b = ap.body,
+    R = b.radius;
+  const label = { equatorial: 'Equatorial orbit', polar: 'Polar orbit', sync: 'Stationary orbit', hold: 'Hold position' }[ap.type];
+  const [mode] = flightMode(g);
+  const rv = ship.pos.clone().sub(b.pos);
+  const v = velRel(g, b);
+  const used = Math.max(0, ap.prop0 - ship.prop);
+  const dv = SHIP.ve * Math.log((SHIP.dry + ap.prop0) / (SHIP.dry + ship.prop));
+  const rows: [string, string | Readout][] = [];
+  if (ap.type === 'hold') {
+    const off = holdPoint(ap).distanceTo(ship.pos);
+    rows.push(['TARGET', `${fmtDist(ap.r0 - R)} above ${b.name}`]);
+    rows.push(['OFF THE POINT', { text: fmtDist(off), warn: ap.settled && off > 1000 }]);
+    rows.push(['DRIFT', fmtSpeedText(v.length())]);
+    const gr = ship.grav ? ship.grav.g : 0;
+    rows.push(['HOVER COST', `${fmtFlow(ship.burnRate)} · tank lasts ${fmtTime(deltaVLeft(ship) / Math.max(gr, 1e-9))}`]);
+  } else {
+    const oe = orbitElementsRel(rv, v, b.mu);
+    rows.push(['TARGET', `${fmtDist(ap.r0 - R)} · period ${fmtTime(ap.period)}`]);
+    rows.push(['CURRENT', oe.escape ? 'escape trajectory' : `Pe ${fmtDist(oe.pe - R)} · Ap ${fmtDist(oe.ap - R)}`]);
+    const dAlt = rv.length() - ap.r0;
+    const dPlane = Math.abs(rv.dot(ap.n!));
+    const dVel = orbitVelErr(g, ap);
+    const big = (x: number, lim: number) => ap.settled && x > lim;
+    rows.push(['ALTITUDE OFF', { text: `${dAlt >= 0 ? '+' : '−'}${fmtDist(Math.abs(dAlt))}`, warn: big(Math.abs(dAlt), Math.max(2000, ap.r0 * 0.004)) }]);
+    rows.push(['PLANE OFF', { text: fmtDist(dPlane), warn: big(dPlane, 5000) }]);
+    rows.push(['SPEED OFF', { text: fmtSpeedText(dVel), warn: big(dVel, 20) }]);
+  }
+  rows.push(['ENGAGED', `${fmtTime(g.simTime - ap.t0)} · Δv ${fmtSpeedText(dv)} · ${fmtMass(used)} H₂`]);
+  return {
+    title: label,
+    sub: `${b.name} · ${ap.type === 'hold' ? fmtDist(ap.r0 - R) + ' up' : fmtDist(ap.r0 - R) + ' · ' + fmtTime(ap.period)}`,
+    state: { text: mode.replace('AUTOPILOT · ', ''), warn: false },
+    rows,
+    confirm: g.apConfirm > 0,
   };
 }
 

@@ -1,52 +1,93 @@
-/* Panels and the bottom HUD: navigation, flight and target readouts. */
+/* Cockpit HUD: gauges (left), flight cluster (centre), target card (right) along the bottom. All
+   sizes in rem, so the root font size in theme.css scales everything together. */
 #hud {
   position: fixed; left: 0; right: 0; bottom: 0;
-  padding: 0 16px calc(14px + env(safe-area-inset-bottom, 0px));
-  display: flex; justify-content: center; align-items: flex-end; gap: 12px;
+  padding: 0 1.2rem calc(1rem + env(safe-area-inset-bottom, 0px));
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; gap: 1rem;
   pointer-events: none;
 }
+#gauges { justify-self: start; }
+#centre { position: relative; }
+#target { justify-self: end; }
 .pan {
   background: var(--panel);
   border: 1px solid var(--amber-faint);
-  padding: 10px 14px 12px;
-  clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
-  /* no backdrop-filter: blurring the live 3D view behind 7+ panels is re-done every frame and is
+  padding: .8rem 1.1rem 1rem;
+  clip-path: polygon(.9rem 0, 100% 0, 100% calc(100% - .9rem), calc(100% - .9rem) 100%, 0 100%, 0 .9rem);
+  /* no backdrop-filter: blurring the live 3D view behind the panels is re-done every frame and is
      costly at 4K; a slightly denser background keeps text as readable */
   min-width: 0;
 }
-.side { width: 300px; }
-.mid { width: 250px; text-align: center; display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+.card { width: 20rem; max-width: 100%; display: flex; flex-direction: column; gap: .35rem; }
 .h {
-  font-size: 11px; font-weight: 600; letter-spacing: .2em; color: var(--amber-dim);
-  display: flex; justify-content: space-between; margin-bottom: 4px;
+  font-size: .85rem; font-weight: 600; letter-spacing: .2em; color: var(--amber-dim);
+  display: flex; justify-content: space-between; margin-bottom: .25rem;
 }
 /* collapsible panels: the heading is the one clickable part of a panel (the rest lets clicks
    through to the 3D view, which steers and targets) */
 .h.toggle { pointer-events: auto; cursor: pointer; user-select: none; }
 .h.toggle:hover { color: var(--amber); }
 .h .caret { font-style: normal; display: inline-block; width: 1.1em; }
-.pan.collapsed { padding-bottom: 6px; }
+.pan.collapsed { padding-bottom: .5rem; }
 .pan.collapsed .h { margin-bottom: 0; }
-.row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 12px; line-height: 1.6; }
-.row span { color: var(--amber-dim); letter-spacing: .1em; flex: none; }
+
+/* shared readouts (info panel, planner) */
+.row { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; font-size: 1rem; line-height: 1.55; }
+.row span { color: var(--amber-dim); letter-spacing: .08em; flex: none; font-size: .9em; }
 .row b {
   font-family: "Share Tech Mono", ui-monospace, Consolas, monospace; font-weight: 400;
   color: var(--text); font-variant-numeric: tabular-nums;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
 }
-.sep { height: 1px; background: var(--amber-faint); margin: 6px 0; }
-#hMode {
-  align-self: center; font-size: 11px; font-weight: 700; letter-spacing: .22em;
-  padding: 3px 10px; border: 1px solid currentColor; color: var(--amber);
-}
-#hMode.ftl { color: var(--cyan); }
-#hMode.warn { color: var(--red); }
-.spd { font-family: "Share Tech Mono", ui-monospace, Consolas, monospace; font-size: 42px; line-height: 1; color: var(--text); font-variant-numeric: tabular-nums; }
-.unit { font-size: 11px; letter-spacing: .24em; color: var(--amber-dim); margin-top: -2px; }
-.bar { height: 6px; background: var(--amber-faint); position: relative; }
+.sep { height: 1px; background: var(--amber-faint); margin: .5rem 0; }
+.bar { height: .45rem; background: var(--amber-faint); position: relative; }
 .bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--amber); }
 .bar.ftl { background: var(--cyan-faint); }
 .bar.ftl i { background: var(--cyan); }
-.sub { font-size: 10px; letter-spacing: .2em; color: var(--amber-dim); display: flex; justify-content: space-between; }
-.ftlc { color: var(--cyan); }
+.bar.batt { background: rgba(160, 230, 140, .18); }
+.bar.batt i { background: #a8e68c; }
+.bar.low i { background: var(--red) !important; }
+.sub { font-size: .8rem; letter-spacing: .14em; color: var(--amber-dim); display: flex; justify-content: space-between; }
 .warnc { color: var(--red) !important; }
+
+/* location, top left */
+#loc { display: flex; flex-direction: column; gap: .1rem; margin-bottom: .4rem; }
+.lsys { font-size: 1.6rem; font-weight: 700; letter-spacing: .18em; color: var(--text); line-height: 1.1; }
+.lstar { font-size: .95rem; letter-spacing: .08em; color: var(--amber); }
+.lsub { font: .85rem "Share Tech Mono", ui-monospace, monospace; color: var(--amber-dim); }
+.ljump { font-size: .95rem; letter-spacing: .06em; color: var(--cyan); margin-top: .15rem; }
+.ljump.hint { color: var(--amber-dim); font-size: .85rem; }
+
+/* ship gauges, bottom left */
+.gauge { display: flex; flex-direction: column; gap: .2rem; margin-bottom: .35rem; }
+.gtop { display: flex; justify-content: space-between; align-items: baseline; font-size: .95rem; letter-spacing: .12em; }
+.gtop span { color: var(--amber); }
+.gtop b { font: 400 1.05rem "Share Tech Mono", ui-monospace, monospace; color: var(--text); letter-spacing: 0; }
+.gsubl { font-size: .85rem; color: var(--amber-dim); }
+.gnote { font-size: .9rem; line-height: 1.4; color: var(--text); border-top: 1px solid var(--amber-faint); padding-top: .4rem; }
+
+/* flight cluster, bottom centre: the speedo */
+#flight { width: 22rem; max-width: 100%; text-align: center; display: flex; flex-direction: column; gap: .35rem; align-items: stretch; }
+#hMode {
+  align-self: center; font-size: .9rem; font-weight: 700; letter-spacing: .22em;
+  padding: .2rem .8rem; border: 1px solid currentColor; color: var(--amber);
+}
+#hMode.ftl { color: var(--cyan); }
+#hMode.warn { color: var(--red); }
+.spd { font-family: "Share Tech Mono", ui-monospace, Consolas, monospace; font-size: 4rem; line-height: 1; color: var(--text); font-variant-numeric: tabular-nums; }
+.unit { font-size: .85rem; letter-spacing: .2em; color: var(--amber-dim); margin-top: -.15rem; }
+.barcap { display: flex; justify-content: space-between; font-size: .8rem; letter-spacing: .16em; color: var(--amber-dim); }
+.fline { font: 1rem "Share Tech Mono", ui-monospace, monospace; color: var(--text); letter-spacing: .03em; }
+.pills { display: flex; justify-content: center; flex-wrap: wrap; gap: .35rem; margin-top: .15rem; }
+.pill { font-size: .8rem; font-weight: 600; letter-spacing: .14em; padding: .1rem .5rem; border: 1px solid var(--amber-faint); color: var(--amber-dim); }
+.pill.on { color: var(--amber); border-color: var(--amber-dim); }
+.pill.ftl { color: var(--cyan); border-color: var(--cyan); }
+.pill.warn { color: var(--red); border-color: var(--red); }
+
+/* target card, bottom right */
+.tname { font-size: 1.35rem; font-weight: 700; letter-spacing: .06em; color: var(--text); line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ttype { font-size: .85rem; letter-spacing: .14em; color: var(--amber-dim); }
+.tdist { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; margin-top: .2rem; }
+.tdist b { font: 400 1.5rem "Share Tech Mono", ui-monospace, monospace; color: var(--text); }
+.tdist span { font: .95rem "Share Tech Mono", ui-monospace, monospace; color: var(--amber); }
+#target.none .tname { color: var(--amber-dim); font-size: 1.1rem; }

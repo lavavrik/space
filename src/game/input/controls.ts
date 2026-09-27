@@ -4,7 +4,7 @@ import { toggleCruise, toggleDecoupled, toggleFTL } from '../sim/ftl';
 import { startTankerGuide } from '../sim/guide';
 import { pickDest, cycleTarget, startJump, targetAhead } from '../sim/navigation';
 import { ORBIT_TYPES } from '../sim/orbits';
-import { adjustAlt, closePlanner, disengageAP, engageOrbit, openPlanner, reversePlannerDir, selectOrbitType } from '../sim/planner';
+import { adjustAlt, closePlanner, engageOrbit, openPlanner, requestDisengage, reversePlannerDir, selectOrbitType, toggleOrbitPreview } from '../sim/planner';
 
 /** Handle a key press (not held keys, which the simulation polls). */
 export function onPress(g: Game, code: string) {
@@ -44,11 +44,28 @@ export function onPress(g: Game, code: string) {
     }
   }
 
+  // autopilot status panel: Backspace (twice) disengages, Enter plans a different orbit
+  if (ship.ap && g.apPanel && !g.planner) {
+    if (code === 'Backspace') {
+      requestDisengage(g);
+      return;
+    }
+    if (code === 'Enter' || code === 'NumpadEnter') {
+      g.apPanel = false;
+      openPlanner(g);
+      g.showMsg('Plan the new orbit · the autopilot keeps flying until you engage it');
+      return;
+    }
+  }
+
   switch (code) {
     case 'KeyO':
-      if (ship.ap) disengageAP(g, 'Autopilot off');
-      else if (g.planner) closePlanner(g);
-      else if (g.jump) g.showMsg('Hyperdrive is charging', 'warn');
+      // while the autopilot flies, O shows its status instead of switching it off
+      if (g.planner) closePlanner(g);
+      else if (ship.ap) {
+        g.apPanel = !g.apPanel;
+        g.apConfirm = 0;
+      } else if (g.jump) g.showMsg('Hyperdrive is charging', 'warn');
       else openPlanner(g);
       break;
     case 'KeyP':
@@ -70,6 +87,9 @@ export function onPress(g: Game, code: string) {
     case 'KeyF':
       toggleCruise(g);
       break;
+    case 'KeyL':
+      toggleOrbitPreview(g);
+      break;
     case 'KeyV':
       toggleDecoupled(g);
       break;
@@ -78,7 +98,10 @@ export function onPress(g: Game, code: string) {
       g.showMsg(ship.fa ? 'Flight assist on' : 'Flight assist off · pure Newtonian flight');
       break;
     case 'KeyJ':
-      if (ship.ap) disengageAP(g, 'Autopilot off');
+      if (ship.ap) {
+        g.showMsg('The autopilot is flying · O for its status (disengage there)', 'warn');
+        break;
+      }
       toggleFTL(g);
       break;
     case 'KeyT':

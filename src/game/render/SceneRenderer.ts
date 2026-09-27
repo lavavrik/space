@@ -3,6 +3,7 @@ import type { Game } from '../Game';
 import { mulberry32 } from '../lib/rng';
 import { THREE } from '../lib/three';
 import type { Body, CurrentSystem, Star, StarSystem, Station, World } from '../types';
+import { orbitPreview } from '../sim/planner';
 import { HyperspaceView } from './Hyperspace';
 import { ATMO_FS, BODY_VS, GLOW_FS, GLOW_VS, PLANET_FS, POINT_FS, POINT_VS, RING_FS, SKYPT_FS, SKYPT_VS, SKY_BAKE_FS, SKY_CUBE_FS, SKY_VS, STAR_FS, STATION_FS } from './shaders';
 
@@ -27,6 +28,10 @@ const MAXDOTS = 256;
 const SKY_CUBE_SIZE = 1024;
 /** Most pixels the 3D view renders per frame (≈ 2980×1680); see setPixelRatio. */
 const MAX_RENDER_PIXELS = 5e6;
+/** Vertices in the orbit preview ring (spaced densely near the ship; see updateRing). */
+const RING_N = 720;
+const RING_PLAN = new THREE.Color(1, 0.65, 0.23); // amber while planning
+const RING_AP = new THREE.Color(0.5, 0.86, 1); // cyan once the autopilot flies it
 /** Colour of a distant station's beacon dot (and its overlay marker): mint, unlike any body. */
 export const STATION_RGB = new THREE.Color(0.45, 1, 0.7);
 const DUST = 700,
@@ -56,6 +61,11 @@ export class SceneRenderer {
   private sysStars: THREE.Points | null = null;
   private skyCube!: THREE.WebGLCubeRenderTarget;
   private readonly hyper = new HyperspaceView(() => this.pointsMaterial());
+  /** Orbit preview (L): the planned or autopilot orbit as a ring, depth-tested so the planet hides its far side. */
+  private readonly ring = new THREE.LineLoop(
+    new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(RING_N * 3), 3)),
+    new THREE.LineBasicMaterial({ color: RING_PLAN.clone(), transparent: true, opacity: 0.8, depthWrite: false }),
+  );
   private readonly dotGeo = new THREE.BufferGeometry();
   private readonly dustGeo = new THREE.BufferGeometry();
   private readonly dust: THREE.Points;
@@ -77,6 +87,9 @@ export class SceneRenderer {
     const dots = new THREE.Points(this.dotGeo, new THREE.ShaderMaterial({ vertexShader: POINT_VS, fragmentShader: POINT_FS, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
     dots.frustumCulled = false;
     this.scene.add(dots);
+    this.ring.frustumCulled = false;
+    this.ring.visible = false;
+    this.scene.add(this.ring);
 
     // dust around the ship, so you can feel your speed in normal space
     const g = mulberry32(99);
@@ -381,12 +394,56 @@ export class SceneRenderer {
     dotGeo.attributes.position.needsUpdate = dotGeo.attributes.aColor.needsUpdate = dotGeo.attributes.aSize.needsUpdate = true;
 
     this.updateDust(g);
+    this.updateRing(g);
 
     const gl = this.gl;
     gl.clear();
     gl.render(this.skyScene, skyCam);
     gl.clearDepth();
     gl.render(this.scene, camera);
+  }
+
+  /**
+   * Orbit preview ring, placed relative to the ship like everything else. An orbit is a full
+   * circle in its plane; a hold point gets a small circle facing the body, sized to stay visible.
+   */
+  private updateRing(g: Game) {
+    const pv = orbitPreview(g);
+    this.ring.visible = !!pv;
+    if (!pv) return;
+    const { ship } = g;
+    const pos = this.ring.geometry.attributes.position.array as Float32Array;
+    const centre = this.tmp.copy(pv.point ?? pv.body.pos).sub(ship.pos);
+    let n: THREE.Vector3, r: number;
+    if (pv.n) {
+      n = pv.n;
+      r = pv.r;
+    } else {
+      n = this.tmp2.subVectors(pv.point!, pv.body.pos).normalize();
+      r = Math.max(2e3, 0.012 * centre.length()); // ~0.7° across wherever you view it from
+    }
+    // two unit vectors spanning the plane, with `a` pointing at the ship's own angle on the orbit
+    const a = new THREE.Vector3().subVectors(ship.pos, pv.point ?? pv.body.pos);
+    a.addScaledVector(n, -a.dot(n));
+    if (a.lengthSq() < 1e-6) a.set(1, 0, 0).cross(n);
+    if (a.lengthSq() < 1e-6) a.set(0, 1, 0).cross(n);
+    a.normalize();
+    const b = new THREE.Vector3().crossVectors(n, a);
+    for (let i = 0; i < RING_N; i++) {
+      // A uniform polygon's chords sag ~300 m below a low orbit between vertices, so the line near
+      // you wobbled in and out as you flew along it. Instead, start the ring at the ship and space
+      // vertices cubically: centimetres apart beside you, ~2° apart on the far side (where a
+      // kilometre of sag is invisible from 10,000+ km away).
+      const u = (2 * i) / RING_N - 1; // −1…1, 0 = the ship
+      const t = pv.n ? Math.PI * u * u * u : (i / RING_N) * Math.PI * 2,
+        c = Math.cos(t) * r,
+        s = Math.sin(t) * r;
+      pos[i * 3] = centre.x + a.x * c + b.x * s;
+      pos[i * 3 + 1] = centre.y + a.y * c + b.y * s;
+      pos[i * 3 + 2] = centre.z + a.z * c + b.z * s;
+    }
+    this.ring.geometry.attributes.position.needsUpdate = true;
+    (this.ring.material as THREE.LineBasicMaterial).color.copy(pv.engaged ? RING_AP : RING_PLAN);
   }
 
   /** Dust particles wrap around the ship in a box, fading toward its edges. */
@@ -420,6 +477,8 @@ export class SceneRenderer {
   dispose() {
     this.disposeSystem();
     this.hyper.dispose();
+    this.ring.geometry.dispose();
+    (this.ring.material as THREE.Material).dispose();
     const dispose = (o: THREE.Object3D) => {
       const m = o as THREE.Mesh;
       if (m.geometry) m.geometry.dispose();

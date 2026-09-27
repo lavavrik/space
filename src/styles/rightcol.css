@@ -1,26 +1,26 @@
-/* Right column: ship systems, maneuver guide, orbit planner; pointer-lock hint. */
+/* Right column: maneuver guide and orbit planner (only while in use); pointer-lock hint. */
 #rightcol {
-  position: fixed; top: calc(36px + env(safe-area-inset-top, 0px)); right: 16px;
-  width: 310px; max-width: calc(100% - 32px); pointer-events: none;
-  display: flex; flex-direction: column; gap: 10px;
+  position: fixed; top: calc(3rem + env(safe-area-inset-top, 0px)); right: 1.333rem;
+  width: 25.833rem; max-width: calc(100% - 2.667rem); pointer-events: none;
+  display: flex; flex-direction: column; gap: 0.833rem;
 }
 #orbit, #sys { display: flex; flex-direction: column; gap: 2px; }
 
 /* maneuver guide */
-#guide { display: flex; flex-direction: column; gap: 6px; }
+#guide { display: flex; flex-direction: column; gap: 0.5rem; }
 #gEta { color: var(--text); font-family: "Share Tech Mono", ui-monospace, monospace; letter-spacing: .08em; }
-.gsub { font-size: 12px; color: var(--text); margin-top: -2px; }
-#gSteps { list-style: none; margin: 2px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.step { display: grid; grid-template-columns: 22px 1fr auto; column-gap: 8px; row-gap: 3px; align-items: baseline; }
+.gsub { font-size: 1rem; color: var(--text); margin-top: -2px; }
+#gSteps { list-style: none; margin: 2px 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.667rem; }
+.step { display: grid; grid-template-columns: 1.833rem 1fr auto; column-gap: 0.667rem; row-gap: 0.25rem; align-items: baseline; }
 .step .n {
-  grid-row: 1 / span 4; align-self: start; width: 20px; height: 20px; display: grid; place-items: center;
-  font: 11px "Share Tech Mono", ui-monospace, monospace; border: 1px solid var(--amber-dim); color: var(--amber-dim);
+  grid-row: 1 / span 4; align-self: start; width: 1.667rem; height: 1.667rem; display: grid; place-items: center;
+  font: 0.917rem "Share Tech Mono", ui-monospace, monospace; border: 1px solid var(--amber-dim); color: var(--amber-dim);
 }
-.step .t { font-size: 12.5px; font-weight: 600; color: var(--amber-dim); min-width: 0; }
-.step .e { font: 12px "Share Tech Mono", ui-monospace, monospace; color: var(--amber-dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
-.step .d { grid-column: 2 / -1; font-size: 11px; line-height: 1.4; color: var(--text); opacity: .85; }
-.step .bar { grid-column: 2 / -1; height: 3px; }
-.step .x { grid-column: 2 / -1; font: 10.5px "Share Tech Mono", ui-monospace, monospace; color: var(--amber-dim); }
+.step .t { font-size: 1.042rem; font-weight: 600; color: var(--amber-dim); min-width: 0; }
+.step .e { font: 1rem "Share Tech Mono", ui-monospace, monospace; color: var(--amber-dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.step .d { grid-column: 2 / -1; font-size: 0.917rem; line-height: 1.4; color: var(--text); opacity: .85; }
+.step .bar { grid-column: 2 / -1; height: 0.25rem; }
+.step .x { grid-column: 2 / -1; font: 0.875rem "Share Tech Mono", ui-monospace, monospace; color: var(--amber-dim); }
 .step.pending { opacity: .5; }
 .step.pending .d, .step.pending .bar, .step.done .bar, .step.done .d { display: none; }
 .step.active .n { background: var(--amber); border-color: var(--amber); color: #1a0f03; }
@@ -31,26 +31,38 @@
 .step.done .n { border-color: #a8e68c; color: #a8e68c; }
 .step.done .t { color: var(--amber-dim); }
 .step.active .n { animation: stepPulse 1.6s ease-in-out infinite; }
-@keyframes stepPulse { 50% { box-shadow: 0 0 0 4px rgba(255, 165, 58, .18); } }
+@keyframes stepPulse { 50% { box-shadow: 0 0 0 0.333rem rgba(255, 165, 58, .18); } }
 @media (prefers-reduced-motion: reduce) { .step.active .n { animation: none; } }
-.gend { font-size: 12px; font-weight: 600; letter-spacing: .08em; color: #a8e68c; }
+.gend { font-size: 1rem; font-weight: 600; letter-spacing: .08em; color: #a8e68c; }
 .gend.bad { color: var(--red); }
-#rightcol { max-height: calc(100% - 250px); overflow: hidden; }
-.gauge { display: flex; flex-direction: column; gap: 3px; margin-bottom: 6px; }
-.bar.batt { background: rgba(160, 230, 140, .18); }
-.bar.batt i { background: #a8e68c; }
-.bar.low i { background: var(--red) !important; }
-.otypes { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 6px 0; }
+#rightcol { max-height: calc(100% - 20.833rem); overflow: hidden; }
+.otypes { display: grid; grid-template-columns: 1fr 1fr; gap: 0.333rem; margin: 0.5rem 0; }
 .otypes div {
-  font-size: 12px; padding: 4px 8px; border: 1px solid var(--amber-faint); color: var(--amber-dim);
-  display: flex; gap: 8px; align-items: baseline;
+  font-size: 1rem; padding: 0.333rem 0.667rem; border: 1px solid var(--amber-faint); color: var(--amber-dim);
+  display: flex; gap: 0.667rem; align-items: baseline;
 }
 .otypes div.on { border-color: var(--amber); color: var(--text); background: rgba(255, 165, 58, .12); }
 .otypes kbd, .okeys kbd { font-family: "Share Tech Mono", ui-monospace, monospace; color: var(--amber); }
-.onote { margin: 6px 0 4px; font-size: 12px; line-height: 1.45; color: var(--text); }
+.onote { margin: 0.5rem 0 0.333rem; font-size: 1rem; line-height: 1.45; color: var(--text); }
 .onote.bad { color: var(--red); }
-.okeys { font-size: 11px; color: var(--amber-dim); line-height: 1.5; }
+.okeys { font-size: 0.917rem; color: var(--amber-dim); line-height: 1.5; }
 #relock {
-  position: fixed; top: calc(14px + env(safe-area-inset-top, 0px)); right: 16px;
-  font-size: 11px; letter-spacing: .16em; color: var(--amber-dim); pointer-events: none;
+  position: fixed; top: calc(1.167rem + env(safe-area-inset-top, 0px)); right: 1.333rem;
+  font-size: 0.917rem; letter-spacing: .16em; color: var(--amber-dim); pointer-events: none;
 }
+
+/* autopilot status panel: the only controls in the HUD that take clicks (with the mouse free) */
+#apstat { display: flex; flex-direction: column; gap: .15rem; }
+.apsub { font-size: 1rem; color: var(--text); }
+.apstate { font-size: .85rem; letter-spacing: .16em; color: var(--cyan); margin-bottom: .3rem; }
+.apbtns { display: flex; gap: .5rem; margin-top: .6rem; }
+.apbtn {
+  pointer-events: auto; cursor: pointer; flex: 1;
+  font: 600 .85rem "Chakra Petch", system-ui, sans-serif; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--amber); background: rgba(255, 165, 58, .06); border: 1px solid var(--amber-dim); padding: .45rem .5rem;
+}
+.apbtn:hover { background: rgba(255, 165, 58, .16); }
+.apbtn kbd { font-family: "Share Tech Mono", ui-monospace, monospace; color: var(--text); margin-right: .3rem; }
+.apbtn.danger { color: var(--red); border-color: rgba(255, 91, 70, .6); background: rgba(255, 91, 70, .06); }
+.apbtn.danger:hover { background: rgba(255, 91, 70, .16); }
+.apbtn.armed { background: rgba(255, 91, 70, .3); color: #fff; border-color: var(--red); }

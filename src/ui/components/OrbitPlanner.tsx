@@ -28,7 +28,7 @@ export function OrbitPlanner({ p }: { p: PlannerView }) {
       <Row label="DIRECTION" value={p.dir} />
       <p className={cx('onote', p.note.warn && 'bad')}>{p.note.text}</p>
       <div className="okeys">
-        <kbd>[ ]</kbd> or wheel altitude · <kbd>Shift</kbd> big steps · <kbd>R</kbd> direction · <kbd>Enter</kbd> engage
+        <kbd>[ ]</kbd> or wheel altitude · <kbd>Shift</kbd> big steps · <kbd>R</kbd> direction · <kbd>L</kbd> preview ring · <kbd>Enter</kbd> engage
       </div>
     </Panel>
   );

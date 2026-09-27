@@ -136,6 +136,8 @@ export interface Autopilot {
   point: Vec3 | null; // hold point, as an offset from the body (only when holding position)
   phase: 'charge' | 'transfer' | 'insert';
   settled: boolean;
+  t0: number; // sim time when engaged
+  prop0: number; // propellant (kg) when engaged, for the Δv-used readout
 }
 
 export interface Tanker {

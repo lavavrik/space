@@ -19,6 +19,7 @@ export class Overlay {
   private readonly ctx: CanvasRenderingContext2D;
   private W = 1;
   private H = 1;
+  private ui = 1; // HUD scale factor for label sizes
   private readonly tmp = new THREE.Vector3();
   private readonly tmp2 = new THREE.Vector3();
   private transit?: TransitState;
@@ -33,11 +34,18 @@ export class Overlay {
   resize(W: number, H: number) {
     this.W = W;
     this.H = H;
+    // labels follow the HUD's scale (the root font size, 12px at the old design size)
+    this.ui = parseFloat(getComputedStyle(document.documentElement).fontSize) / 12 || 1;
     // markers and labels: sharp up to 2×, but no more than ~8 MP, the cost of compositing it every frame
     const dpr = Math.min(devicePixelRatio || 1, 2, Math.sqrt(8.3e6 / Math.max(1, W * H)));
     this.canvas.width = W * dpr;
     this.canvas.height = H * dpr;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  /** A canvas font at `px` design pixels, scaled like the HUD. */
+  private font(px: number, family: string, bold = false) {
+    return `${bold ? '700 ' : ''}${Math.round(px * this.ui)}px ${family}`;
   }
 
   /** Project a ship-relative position to screen pixels. */
@@ -70,7 +78,7 @@ export class Overlay {
     ctx.fill();
     ctx.restore();
     ctx.fillStyle = color + '0.85)';
-    ctx.font = `11px ${MONO}`;
+    ctx.font = this.font(11, MONO);
     ctx.textAlign = 'center';
     ctx.fillText(label, x, y + 22);
   }
@@ -147,7 +155,7 @@ export class Overlay {
     ctx.fillRect(0, 0, W, H);
     ctx.textAlign = 'center';
     ctx.fillStyle = CYA + '0.9)';
-    ctx.font = `12px ${MONO}`;
+    ctx.font = this.font(12, MONO);
     ctx.fillText(`${j.dest.name.toUpperCase()} · ${st.left.toFixed(2)} LY TO GO`, cx, cy - Math.min(W, H) * 0.3);
   }
 
@@ -160,13 +168,13 @@ export class Overlay {
     ctx.fillRect(0, 0, W, H);
     ctx.textAlign = 'center';
     ctx.fillStyle = `rgba(255,91,70,${k})`;
-    ctx.font = `700 34px ${SANS}`;
+    ctx.font = this.font(34, SANS, true);
     ctx.fillText('SHIP DESTROYED', cx, cy - 30);
     ctx.fillStyle = `rgba(255,230,199,${k})`;
-    ctx.font = `15px ${SANS}`;
+    ctx.font = this.font(15, SANS);
     ctx.fillText(reason, cx, cy + 4);
     ctx.fillStyle = `rgba(255,165,58,${0.8 * k})`;
-    ctx.font = `12px ${MONO}`;
+    ctx.font = this.font(12, MONO);
     ctx.fillText(`RESTORING SHIP IN ${Math.max(0, t).toFixed(1)} S`, cx, cy + 34);
   }
 
@@ -222,7 +230,7 @@ export class Overlay {
   private drawBodies(g: Game) {
     const { ctx, W, H } = this;
     const { ship } = g;
-    ctx.font = `11px ${MONO}`;
+    ctx.font = this.font(11, MONO);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
     for (const b of g.cur.bodies) {
@@ -281,7 +289,7 @@ export class Overlay {
    */
   private drawStations(g: Game) {
     const { ctx, W, H } = this;
-    ctx.font = `11px ${MONO}`;
+    ctx.font = this.font(11, MONO);
     ctx.textAlign = 'center';
     for (const st of g.cur.stations) {
       const view = this.scene.stationViews.get(st);
@@ -328,7 +336,7 @@ export class Overlay {
     const { ctx } = this;
     const gp = galPos(g);
     const dir = this.tmp;
-    ctx.font = `10px ${MONO}`;
+    ctx.font = this.font(10, MONO);
     ctx.textAlign = 'center';
     for (const s of reachable(g)) {
       if (s.id === g.jumpDest?.id) continue;

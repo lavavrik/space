@@ -1,39 +1,40 @@
 /* Toast messages and the controls list. */
 #msg {
-  position: fixed; left: 50%; bottom: 190px; transform: translateX(-50%);
-  font-size: 13px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+  /* sits just above the flight cluster, whatever its height */
+  position: absolute; left: 50%; bottom: calc(100% + .8rem); transform: translateX(-50%); width: max-content;
+  font-size: 1.083rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
   color: var(--text); background: var(--panel); border: 1px solid var(--amber-faint);
-  padding: 6px 14px; pointer-events: none; opacity: 0; transition: opacity .25s;
-  max-width: calc(100% - 32px); text-align: center;
+  padding: 0.5rem 1.167rem; pointer-events: none; opacity: 0; transition: opacity .25s;
+  max-width: 90vw; text-align: center;
 }
 #msg.on { opacity: 1; }
 #msg.ftl { border-color: var(--cyan-faint); color: var(--cyan); }
 #msg.warn { border-color: var(--red); color: var(--red); }
 
-/* Left column: controls list, then the body info panel. */
+/* Left column: location, then the controls list or the target info panel. */
 #leftcol {
-  position: fixed; top: calc(14px + env(safe-area-inset-top, 0px)); left: 16px;
-  width: 330px; max-width: calc(100% - 32px); max-height: calc(100% - 270px); overflow: hidden;
-  display: flex; flex-direction: column; gap: 10px; pointer-events: none;
+  position: fixed; top: calc(1.167rem + env(safe-area-inset-top, 0px)); left: 1.333rem;
+  width: 27.5rem; max-width: calc(100% - 2.667rem); max-height: calc(100% - 17rem); overflow: hidden; /* stops above the bottom HUD */
+  display: flex; flex-direction: column; gap: 0.833rem; pointer-events: none;
 }
 #info { display: flex; flex-direction: column; gap: 2px; }
 #info .row b { text-align: right; max-width: 62%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.itype { font-size: 11px; letter-spacing: .14em; color: var(--amber-dim); margin: -2px 0 4px; }
-.isec { font-size: 11px; letter-spacing: .14em; color: var(--amber); margin: 8px 0 2px; border-top: 1px solid var(--amber-faint); padding-top: 6px; }
+.itype { font-size: 0.917rem; letter-spacing: .14em; color: var(--amber-dim); margin: -2px 0 0.333rem; }
+.isec { font-size: 0.917rem; letter-spacing: .14em; color: var(--amber); margin: 0.667rem 0 2px; border-top: 1px solid var(--amber-faint); padding-top: 0.5rem; }
 #help {
   background: var(--panel); border: 1px solid var(--amber-faint);
-  padding: 10px 14px; font-size: 12px; pointer-events: none;
+  padding: 0.833rem 1.167rem; font-size: 1rem; pointer-events: none;
 }
-#help.collapsed { padding-bottom: 6px; }
-#help .keys { display: grid; grid-template-columns: auto 1fr; gap: 0 8px; font-size: 11px; line-height: 1.4; }
+#help.collapsed { padding-bottom: 0.5rem; }
+#help .keys { display: grid; grid-template-columns: auto 1fr; gap: 0 0.667rem; font-size: 0.917rem; line-height: 1.4; }
 #help .keys span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* keyboard schema: keycaps coloured by control group; the legend below uses the same colours */
 #help { --g-flight: var(--amber); --g-ftl: var(--cyan); --g-target: #73ffb2; --g-ship: #e6d3ff; --g-planner: #ffd27a; }
-.kb { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 8px; }
+.kb { display: flex; flex-direction: column; gap: 2px; margin: 0.333rem 0 0.667rem; }
 .kbrow { display: flex; gap: 2px; }
 .kc {
-  flex: none; height: 19px; display: grid; place-items: center; box-sizing: border-box;
-  font: 10px "Share Tech Mono", ui-monospace, monospace; color: rgba(255, 230, 199, .28);
+  flex: none; height: 1.583rem; display: grid; place-items: center; box-sizing: border-box;
+  font: 0.833rem "Share Tech Mono", ui-monospace, monospace; color: rgba(255, 230, 199, .28);
   border: 1px solid rgba(255, 165, 58, .12); border-radius: 2px; overflow: hidden; white-space: nowrap;
 }
 .kc.gap { border-color: transparent; }
@@ -43,9 +44,9 @@
 .kc.ship { --c: var(--g-ship); }
 .kc.planner { --c: var(--g-planner); }
 .kc.on { color: var(--c, inherit); border-color: var(--c, transparent); background: color-mix(in srgb, var(--c, transparent) 14%, transparent); }
-.klegend { columns: 2; column-gap: 14px; }
-.kgroup { break-inside: avoid; margin-bottom: 6px; }
-.kgt { font-size: 10.5px; letter-spacing: .16em; margin-bottom: 1px; }
+.klegend { columns: 2; column-gap: 1.167rem; }
+.kgroup { break-inside: avoid; margin-bottom: 0.5rem; }
+.kgt { font-size: 0.875rem; letter-spacing: .16em; margin-bottom: 1px; }
 .kgroup.flight .kgt, .kgroup.flight kbd { color: var(--g-flight); }
 .kgroup.ftl .kgt, .kgroup.ftl kbd { color: var(--g-ftl); }
 .kgroup.target .kgt, .kgroup.target kbd { color: var(--g-target); }
@@ -53,9 +54,9 @@
 .kgroup.planner .kgt, .kgroup.planner kbd { color: var(--g-planner); }
 #help kbd {
   font-family: "Share Tech Mono", ui-monospace, monospace; color: var(--text);
-  font-size: 11px; white-space: nowrap;
+  font-size: 0.917rem; white-space: nowrap;
 }
 #help span { color: var(--amber-dim); }
 
 /* performance overlay (`): top centre, above everything, never takes clicks */
-#perf { position: fixed; top: calc(8px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); width: 330px; height: 150px; pointer-events: none; z-index: 50; }
+#perf { position: fixed; top: calc(0.667rem + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); width: 27.5rem; height: 12.5rem; pointer-events: none; z-index: 50; }

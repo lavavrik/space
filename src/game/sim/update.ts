@@ -8,7 +8,7 @@ import { gravityAt } from './gravity';
 import { updateGuide } from './guide';
 import { arriveAt, galPos } from './navigation';
 import { advanceBodies, relVel, syncFrame, updateFrame } from './frame';
-import { disengageAP } from './planner';
+import { maybeFtlLeg } from './planner';
 import { refillShip, scoop, solarPower } from './resources';
 
 const qa = new THREE.Quaternion();
@@ -72,12 +72,27 @@ export function update(g: Game, dt: number) {
   const down = keys.ControlLeft || keys.ControlRight || keys.KeyC;
   const inp = [(keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0), (keys.Space ? 1 : 0) - (down ? 1 : 0), (keys.KeyS ? 1 : 0) - (keys.KeyW ? 1 : 0)];
   const anyInput = inp[0] || inp[1] || inp[2] || keys.KeyX;
-  if (ship.ap && anyInput) disengageAP(g, 'Autopilot off · manual control');
+  // the autopilot keeps control: manual input is ignored (with a reminder) rather than switching
+  // it off, which was far too easy to do by accident; disengage from its status panel (O)
+  if (ship.ap) {
+    if (anyInput && !g.warned.apInput) {
+      g.warned.apInput = true;
+      g.showMsg('The autopilot is flying · O for its status (disengage there)', 'warn');
+    }
+    if (!anyInput) g.warned.apInput = false;
+    inp[0] = inp[1] = inp[2] = 0;
+  }
+  if (g.apConfirm > 0 && (g.apConfirm -= dt) <= 0) {
+    g.apConfirm = 0;
+    g.invalidateHud();
+  }
+  if (!ship.ap) g.apPanel = false;
 
   if (!inTunnel) {
     if (ship.mode === 'normal') {
       const grav = (ship.grav = gravityAt(g.cur, ship.pos));
       syncFrame(g, grav.body);
+      maybeFtlLeg(g);
       if (ship.ap && ship.ap.phase === 'insert') autopilot(g, dt, grav);
       else manualFlight(g, dt, grav, inp);
       ship.pos.addScaledVector(ship.vel, dt);

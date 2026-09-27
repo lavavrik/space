@@ -1,10 +1,10 @@
 /* Maneuver guide: a read-only checklist of what the ship is doing. Each step reports progress
    as 1 − error/initial error, and an ETA from how fast that error is shrinking (or a timer). */
-import { SHIP } from '../constants';
+import { AP_ACC, AP_TAU, SHIP } from '../constants';
 import { fmtDist, fmtFlow, fmtMass, fmtPower, fmtSpeedText, fmtTime } from '../format';
 import type { Game } from '../Game';
 import type { Autopilot, Jump, Tanker } from '../types';
-import { apGeom, apInsertion, holdPoint, orbitVelErr } from './autopilot';
+import { apGeom, apInsertion, approachTime, holdPoint, orbitVelErr, PLANE_CAP, RADIAL_CAP } from './autopilot';
 import { velRel } from './frame';
 import { orbitElements } from './gravity';
 import { deltaVLeft, shipMass } from './resources';
@@ -121,11 +121,11 @@ export function startOrbitGuide(g: Game, ap: Autopilot) {
     const dist = () => holdPoint(ap).distanceTo(ship.pos);
     const vRel = () => velRel(g, b).length();
     steps.push(mkStep({
-      title: 'Fly to hold point', group: 'move', active: ins, done: () => ins() && dist() < 200, err: dist,
+      title: 'Fly to hold point', group: 'move', active: ins, done: () => ins() && dist() < 200, err: dist, etaFn: () => approachTime(dist(), RADIAL_CAP, 200),
       detail: () => `${fmtDist(dist())} to go · ${fmtDist(ap.r0 - b.radius)} above ${b.name}`,
     }));
     steps.push(mkStep({
-      title: 'Cancel velocity', group: 'move', active: ins, done: () => ins() && dist() < 1000 && vRel() < 5, err: vRel,
+      title: 'Cancel velocity', group: 'move', active: ins, done: () => ins() && dist() < 1000 && vRel() < 5, err: vRel, etaFn: () => approachTime(dist(), RADIAL_CAP, 1000),
       detail: () => `${fmtSpeedText(vRel())} relative to ${b.name}`,
     }));
     steps.push(mkStep({
@@ -139,21 +139,27 @@ export function startOrbitGuide(g: Game, ap: Autopilot) {
     const R = b.radius,
       vc = Math.sqrt(b.mu / ap.r0);
     const altErr = () => Math.abs(apGeom(ship, ap).r - ap.r0);
+    const altDone = Math.max(1000, ap.r0 * 0.002);
     steps.push(mkStep({
       titleFn: () => (apGeom(ship, ap).r > ap.r0 ? 'Descend to orbital altitude' : 'Climb to orbital altitude'),
-      group: 'ins', active: ins, done: () => ins() && altErr() < Math.max(1000, ap.r0 * 0.002), err: altErr,
+      group: 'ins', active: ins, done: () => ins() && altErr() < altDone, err: altErr,
+      // the approach profile is deterministic, so compute the ETA instead of extrapolating the error
+      etaFn: () => approachTime(altErr(), RADIAL_CAP, altDone),
       detail: () => `${fmtDist(apGeom(ship, ap).r - R)} → ${fmtDist(ap.r0 - R)}`,
     }));
     steps.push(mkStep({
       title: 'Match orbital velocity', group: 'ins', active: ins,
       done: () => ins() && orbitVelErr(g, ap) < Math.max(5, vc * 0.005), err: () => orbitVelErr(g, ap),
-      detail: () => `${fmtSpeedText(velRel(g, b).length())} of ${fmtSpeedText(vc)} · off by ${fmtSpeedText(orbitVelErr(g, ap))}`,
+      // matched by the autopilot's full thrust in a few seconds (then held as the altitude changes)
+      etaFn: () => orbitVelErr(g, ap) / AP_ACC + AP_TAU * Math.log(Math.max(1, orbitVelErr(g, ap) / Math.max(5, vc * 0.005))),
+      detail: () => `orbital speed off by ${fmtSpeedText(orbitVelErr(g, ap))} (target ${fmtSpeedText(vc)})`,
     }));
     const planeErr = () => Math.abs(apGeom(ship, ap).rv.dot(ap.n!)) + Math.abs(velRel(g, b).dot(ap.n!)) * 30;
     if (planeErr() > 2000) {
       steps.push(mkStep({
         title: ap.type === 'polar' ? 'Align to polar plane' : 'Align to equator', group: 'ins', active: ins,
         done: () => ins() && planeErr() < 2000, err: planeErr,
+        etaFn: () => approachTime(Math.abs(apGeom(ship, ap).rv.dot(ap.n!)), PLANE_CAP, 1000),
         detail: () => `${fmtDist(Math.abs(apGeom(ship, ap).rv.dot(ap.n!)))} out of plane`,
       }));
     }

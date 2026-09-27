@@ -9,7 +9,7 @@ import { PerfMonitor } from './debug/Perf';
 import { SceneRenderer } from './render/SceneRenderer';
 import type { Guide } from './sim/guide';
 import { pickAt, placeAtHome } from './sim/navigation';
-import { closePlanner } from './sim/planner';
+import { closePlanner, openPlanner, requestDisengage } from './sim/planner';
 import { update } from './sim/update';
 import type { Body, CurrentSystem, Jump, Message, MsgKind, Planner, Power, Ship, StarSystem, Station, Target } from './types';
 import { systemsNear } from './universe/galaxy';
@@ -62,9 +62,15 @@ export class Game {
   msg: Message = { text: '', kind: '', on: false, t: 0 };
 
   started = false;
-  helpVisible = true;
+  helpVisible = false; // Tab opens the controls; the start screen lists the keys
   /** Body info panel (I), shown in place of the controls list while open. */
   infoVisible = false;
+  /** Draw the planned / autopilot orbit as a ring (L). */
+  orbitPreview = true;
+  /** Autopilot status panel (O while the autopilot flies). */
+  apPanel = false;
+  /** Seconds left to confirm disengaging the autopilot (0 = not armed). */
+  apConfirm = 0;
   pointerLocked = false;
 
   /** Inverse ship orientation and forward vector, refreshed each simulation step. */
@@ -159,6 +165,20 @@ export class Game {
     this.ship.ap = null;
     this.ship.landed = null;
     closePlanner(this);
+  }
+
+  /** Autopilot panel button: first click arms, second disengages (see requestDisengage). */
+  requestDisengage() {
+    requestDisengage(this);
+    this.invalidateHud();
+  }
+
+  /** Autopilot panel button: plan a different orbit; the autopilot keeps flying until it's engaged. */
+  changeOrbit() {
+    if (!this.ship.ap) return;
+    this.apPanel = false;
+    openPlanner(this);
+    this.invalidateHud();
   }
 
   /** Fast-forward the simulation (for debugging from the console). */

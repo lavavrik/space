@@ -22,9 +22,9 @@ export const NORMAL_BOOST = 15000;
 /* Gravity and autopilot */
 export const CRASH_SPEED = 150; // m/s: faster than this into the ground destroys the ship
 export const AP_ACC = NORMAL_ACC * 3; // autopilot may use full boost thrust
-export const AP_VMAX = NORMAL_BOOST;
-export const AP_KP = 0.06;
 export const AP_TAU = 1.2;
+/** The orbit autopilot takes an FTL leg when the orbit's entry point is farther than this (m). */
+export const AP_FTL_MIN = 500e3;
 
 /* Ship: fusion torch on hydrogen reaction mass, FTL on exotic matter, solar + battery electrics */
 export const SHIP = {

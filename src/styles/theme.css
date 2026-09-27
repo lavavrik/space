@@ -11,6 +11,9 @@
   --panel: rgba(16, 11, 6, .74);
   --void: #000;
 }
+/* The whole HUD is sized in rem: this one value scales it with the window, from 14px on small
+   screens (≈ 1.2× the old HUD) to 22px on a 4K-wide viewport. */
+html { font-size: clamp(14px, 0.42vw + 8px, 22px); }
 [hidden] { display: none !important; }
 html, body { height: 100%; margin: 0; background: var(--void); overflow: hidden; }
 body {
