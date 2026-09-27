@@ -9,8 +9,10 @@ uniform vec3 uPlanetDir;  // direction to the parent world
 uniform vec3 uPlanetColor;
 uniform float uPlanetSize; // cosine of the world's angular radius
 uniform float uSeed;
+uniform float uTime;
 varying vec3 vObj; varying vec3 vWN; varying vec3 vWP;
 #pragma farlight_noise
+#pragma farlight_headlight
 
 float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7)) + uSeed) * 43758.5453); }
 
@@ -54,15 +56,37 @@ void main(){
     + base * uStarColor * ndl * uLit * 0.55
     + F * uStarColor * gloss * uLit * ndl
     + base * uPlanetColor * planetShine;
+  // the station's own floodlights: pools of warm light washing each face from lamps at its edge
+  // midpoints, so it's never pitch dark, even in its world's shadow
+  vec2 e = uv - 0.5;
+  float flood = exp(-dot(vec2(abs(e.x) - 0.5, e.y), vec2(abs(e.x) - 0.5, e.y)) / 0.06) + exp(-dot(vec2(e.x, abs(e.y) - 0.5), vec2(e.x, abs(e.y) - 0.5)) / 0.06);
+  col += base * vec3(1.0, 0.9, 0.75) * flood * 0.28;
+  // the ship's headlights
+  col += headlight(Np, vWP, base);
   col *= mix(0.25, 1.0, seam);
 
-  // the docking slot on the front face: a dark recess with a lit rim
+  // the docking slot on the front face: a dark recess with a lit rim; approach lights run in toward
+  // it along its long axis, green on one side (+x) and red on the other, like the tunnel inside
   if (front) {
     vec2 d = abs(uv - 0.5) - vec2(0.2, 0.06);
     float slot = step(max(d.x, d.y), 0.0);
     float rim = smoothstep(0.012, 0.0, abs(max(d.x, d.y)));
     col = mix(col, vec3(0.003), slot);
     col += vec3(0.25, 0.9, 0.55) * rim * 0.9;
+    float ax = abs(uv.x - 0.5);
+    if (ax > 0.21 && abs(uv.y - 0.5) < 0.012) {
+      float cell = fract(ax * 30.0);
+      float lamp = smoothstep(0.25, 0.0, abs(cell - 0.5)) * smoothstep(0.009, 0.0, abs(uv.y - 0.5));
+      float run = 0.25 + 0.75 * pow(fract(ax * 3.0 + uTime * 0.8), 6.0); // pulses running inward
+      col += (uv.x > 0.5 ? vec3(0.2, 1.0, 0.4) : vec3(1.0, 0.2, 0.15)) * lamp * run * 2.0;
+    }
+  }
+  // navigation lights at the corners: blinking red / green by side, white strobes top and bottom
+  vec3 ac = abs(vObj);
+  if (ac.x > 0.47 && ac.y > 0.47 && ac.z > 0.47) {
+    float blink = step(0.8, fract(uTime * 0.7 + (vObj.z > 0.0 ? 0.0 : 0.5)));
+    vec3 nc = vObj.y > 0.0 ? vec3(1.0) : vObj.x > 0.0 ? vec3(0.2, 1.0, 0.4) : vec3(1.0, 0.2, 0.15);
+    col += nc * blink * 3.0;
   }
   // scattered windows and running lights, so the station is visible on its night side too
   vec2 wc = floor(uv * 60.0);

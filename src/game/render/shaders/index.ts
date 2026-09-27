@@ -11,6 +11,8 @@ import pointVert from './point.vert.glsl?raw';
 import pointFrag from './point.frag.glsl?raw';
 import skyVert from './sky.vert.glsl?raw';
 import stationInteriorFrag from './stationInterior.frag.glsl?raw';
+import headlightGlsl from './headlight.glsl?raw';
+import corridorFrag from './corridor.frag.glsl?raw';
 import skyFrag from './sky.frag.glsl?raw';
 import skyCubeFrag from './skyCube.frag.glsl?raw';
 import skyPointVert from './skyPoint.vert.glsl?raw';
@@ -30,9 +32,12 @@ export const GLOW_VS = glowVert;
 export const GLOW_FS = glowFrag;
 export const RING_FS = withNoise(ringFrag);
 /** Orbital stations (drawn with BODY_VS on a unit cube). */
-export const STATION_FS = withNoise(stationFrag);
+const withHeadlight = (src: string) => src.replace('#pragma farlight_headlight', headlightGlsl);
+export const STATION_FS = withHeadlight(withNoise(stationFrag));
 /** Station interiors: slot tunnel, hangar and pads (drawn with BODY_VS). */
-export const STATION_INTERIOR_FS = stationInteriorFrag;
+export const STATION_INTERIOR_FS = withHeadlight(stationInteriorFrag);
+/** The lit approach corridor in front of a station's slot while you have a pad there. */
+export const CORRIDOR_FS = corridorFrag;
 /** Point sprites: distant bodies and dust. */
 export const POINT_VS = pointVert;
 export const POINT_FS = pointFrag;

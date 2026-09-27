@@ -457,7 +457,7 @@ function electricalView(g: Game): ElectricalView {
     battery: { unit: moduleLabel(b), kwh: ship.batt, cap, flowKW: net, maxKW: b.caps.maxKW, chargeKW: b.caps.chargeKW },
     bus: { capKW: power.cap, drawKW: power.draw },
     loads: [
-      { id: 'base', name: 'LIFE SUPPORT · AVIONICS', kw: SHIP.baseLoad, limited: null },
+      { id: 'base', name: power.lightsKW > 0 ? 'LIFE SUPPORT · AVIONICS · LIGHTS' : 'LIFE SUPPORT · AVIONICS', kw: SHIP.baseLoad + power.lightsKW, limited: null },
       { id: 'thrust', name: 'THRUSTERS', kw: power.thrustKW, limited: limitOf('thrust') },
       { id: 'ftl', name: 'FTL DRIVE', kw: power.ftlKW, limited: limitOf('ftl') },
       { id: 'charge', name: g.jump?.phase === 'charge' ? 'HYPERDRIVE CHARGING' : 'DRIVE CHARGING', kw: power.chargeKW, limited: limitOf('charge') },

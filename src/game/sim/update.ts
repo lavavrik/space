@@ -26,6 +26,8 @@ const AX = new THREE.Vector3(1, 0, 0),
   AY = new THREE.Vector3(0, 1, 0),
   AZ = new THREE.Vector3(0, 0, 1);
 const MOUSE_SENS = 0.0021;
+/** Headlights' draw (kW): a few floodlights. */
+const LIGHTS_KW = 5;
 
 /**
  * Advance the simulation by dt seconds. Under time warp dt is the warped step and realDt the frame's
@@ -58,6 +60,7 @@ export function update(g: Game, dt: number, realDt = dt) {
   const apSteering = !!ship.ap && ship.ap.phase === 'transfer';
   beginPower(g); // this frame's power budget (sim/power.ts)
   updateRadar(g, dt);
+  power.lightsKW = g.lights ? grant(g, LIGHTS_KW, 'headlights') : 0;
 
   // --- rotation
   const [mdx, mdy] = input.consumeMouse();
@@ -163,7 +166,7 @@ export function update(g: Game, dt: number, realDt = dt) {
   // no sunlight inside a station; docked, the station's shore power stands in for the panels
   power.solar = inTunnel || g.inStation ? 0 : solarPower(g);
   power.shore = g.dock?.docked ? SHORE_POWER : 0;
-  power.draw = SHIP.baseLoad + power.thrustKW + power.ftlKW + power.chargeKW + power.pumpKW + power.radarKW;
+  power.draw = SHIP.baseLoad + power.thrustKW + power.ftlKW + power.chargeKW + power.pumpKW + power.radarKW + power.lightsKW;
   settleBattery(g, dt);
   if (ship.batt > 1) g.warned.batt = false;
   updateThermal(g, dt, inTunnel);

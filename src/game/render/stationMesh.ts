@@ -104,3 +104,27 @@ function mergeInto(a: THREE.BufferGeometry, b: THREE.BufferGeometry) {
   g.setAttribute('normal', cat('normal'));
   return g;
 }
+
+/** Length of the approach corridor in front of the slot (unit coordinates: 1.3 station sizes). */
+export const CORRIDOR_LEN = 1.3;
+
+/**
+ * The approach corridor: four walls running out from the slot along the spin axis, widening to
+ * 2.5× the slot's size at the far end (drawn additively with the corridor shader).
+ */
+export function corridorGeometry() {
+  const pos: number[] = [],
+    nor: number[] = [];
+  const z0 = 0.5,
+    z1 = 0.5 + CORRIDOR_LEN,
+    k = 2.5;
+  const x0 = SLOT_W / 2,
+    y0 = SLOT_H / 2,
+    x1 = x0 * k,
+    y1 = y0 * k;
+  quad(pos, nor, [-x0, y0, z0], [x0, y0, z0], [x1, y1, z1], [-x1, y1, z1], [0, 1, 0]);
+  quad(pos, nor, [-x0, -y0, z0], [-x1, -y1, z1], [x1, -y1, z1], [x0, -y0, z0], [0, -1, 0]);
+  quad(pos, nor, [x0, -y0, z0], [x1, -y1, z1], [x1, y1, z1], [x0, y0, z0], [1, 0, 0]);
+  quad(pos, nor, [-x0, -y0, z0], [-x0, y0, z0], [-x1, y1, z1], [-x1, -y1, z1], [-1, 0, 0]);
+  return geometry(pos, nor);
+}

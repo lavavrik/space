@@ -50,7 +50,7 @@ export class Game {
   /** Systems around the current one that a jump could reach (with a margin for moving within it). */
   nearby: StarSystem[] = [];
   readonly ship = newShip();
-  readonly power: Power = { solar: 0, shore: 0, cos: 0, shadow: null, draw: 0, net: 0, thrustKW: 0, ftlKW: 0, chargeKW: 0, pumpKW: 0, radarKW: 0, burn: 0, flux: 0, cap: 0, left: 0, limited: null, curtailed: 0, ftlShort: 0 };
+  readonly power: Power = { solar: 0, shore: 0, cos: 0, shadow: null, draw: 0, net: 0, thrustKW: 0, ftlKW: 0, chargeKW: 0, pumpKW: 0, radarKW: 0, lightsKW: 0, burn: 0, flux: 0, cap: 0, left: 0, limited: null, curtailed: 0, ftlShort: 0 };
   target: Target | null = null;
   /** Station whose frame flight assist works in, or null for the system frame (see sim/frame.ts). */
   refFrame: Station | null = null;
@@ -83,6 +83,8 @@ export class Game {
   /** Radar (sim/radar.ts): seconds left of the sweep in progress (0 = idle), and every object it
    *  has found (scan keys, so per system). */
   radar: { sweep: number; seen: Set<string> } = { sweep: 0, seen: new Set() };
+  /** Headlights (Shift+L): a floodlight cone along the nose (render/shaders/headlight.glsl). */
+  lights = true;
   /** Radar window (Shift+Y), in the left column. */
   radarVisible = false;
   /** Turning to face the target (middle mouse button; sim/pivot.ts). */

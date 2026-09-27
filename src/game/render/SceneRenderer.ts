@@ -7,9 +7,9 @@ import { orbitPreview } from '../sim/planner';
 import { HyperspaceView } from './Hyperspace';
 import { createNoiseTexture } from './noise3d';
 import { skyColor, skyLook } from '../sim/hyperspace';
-import { hullGeometry, interiorGeometry } from './stationMesh';
+import { CORRIDOR_LEN, corridorGeometry, hullGeometry, interiorGeometry } from './stationMesh';
 import { padLocal, stationQuat } from '../sim/stationGeom';
-import { ATMO_FS, BODY_VS, GLOW_FS, GLOW_VS, PLANET_FS, POINT_FS, POINT_VS, RING_FS, SKYPT_FS, SKYPT_VS, SKY_BAKE_FS, SKY_CUBE_FS, SKY_VS, STAR_FS, STATION_FS, STATION_INTERIOR_FS } from './shaders';
+import { ATMO_FS, BODY_VS, GLOW_FS, GLOW_VS, PLANET_FS, POINT_FS, POINT_VS, RING_FS, SKYPT_FS, SKYPT_VS, SKY_BAKE_FS, SKY_CUBE_FS, SKY_VS, STAR_FS, STATION_FS, STATION_INTERIOR_FS, CORRIDOR_FS } from './shaders';
 
 type Uniforms = Record<string, THREE.IUniform>;
 
@@ -56,7 +56,10 @@ const DUST_FADE_FROM = 20e3,
 export class SceneRenderer {
   readonly gl: THREE.WebGLRenderer;
   readonly views = new Map<Body, BodyView>();
-  readonly stationViews = new Map<Station, { mesh: THREE.Group; uni: Uniforms; inner: THREE.Mesh; innerUni: Uniforms; dist: number; pxR: number }>();
+  readonly stationViews = new Map<Station, { mesh: THREE.Group; uni: Uniforms; inner: THREE.Mesh; innerUni: Uniforms; corridor: THREE.Mesh; corridorUni: Uniforms; dist: number; pxR: number }>();
+  /** Headlights, shared by every station material: the ship's nose (world axes) and on/off. */
+  private readonly headUni = { uHeadDir: { value: new THREE.Vector3(0, 0, -1) }, uHeadOn: { value: 1 } };
+  private readonly stationCorridor = corridorGeometry();
   /** Station hull (slot cut in the front) and interior, shared by every station (render/stationMesh.ts). */
   private readonly stationHull = hullGeometry();
   private readonly stationInside = interiorGeometry();
@@ -325,15 +328,24 @@ export class SceneRenderer {
     const uni: Uniforms = {
       uLight: { value: new THREE.Vector3() }, uStarColor: { value: star.color.clone().lerp(new THREE.Color(1, 1, 1), 0.5) }, uLit: { value: 1 },
       uPlanetDir: { value: new THREE.Vector3() }, uPlanetColor: { value: p.a.clone().lerp(p.b, 0.5) }, uPlanetSize: { value: 1 }, uSeed: { value: st.seed },
+      uTime: { value: 0 }, ...this.headUni,
     };
     const group = new THREE.Group();
     group.add(new THREE.Mesh(this.stationHull, new THREE.ShaderMaterial({ vertexShader: BODY_VS, fragmentShader: STATION_FS, uniforms: uni, side: THREE.DoubleSide })));
-    const innerUni: Uniforms = { uPad: { value: new THREE.Vector3() }, uPadOn: { value: 0 }, uTime: { value: 0 }, uSeed: { value: st.seed } };
+    const innerUni: Uniforms = { uPad: { value: new THREE.Vector3() }, uPadOn: { value: 0 }, uTime: { value: 0 }, uSeed: { value: st.seed }, ...this.headUni };
     const inner = new THREE.Mesh(this.stationInside, new THREE.ShaderMaterial({ vertexShader: BODY_VS, fragmentShader: STATION_INTERIOR_FS, uniforms: innerUni, side: THREE.DoubleSide }));
     group.add(inner);
+    // the lit approach corridor, shown while you have a pad here
+    const corridorUni: Uniforms = { uTime: { value: 0 }, uLen: { value: CORRIDOR_LEN } };
+    const corridor = new THREE.Mesh(
+      this.stationCorridor,
+      new THREE.ShaderMaterial({ vertexShader: BODY_VS, fragmentShader: CORRIDOR_FS, uniforms: corridorUni, side: THREE.DoubleSide, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }),
+    );
+    corridor.visible = false;
+    group.add(corridor);
     group.scale.setScalar(st.size);
     this.scene.add(group);
-    return { mesh: group, uni, inner, innerUni, dist: Infinity, pxR: 0 };
+    return { mesh: group, uni, inner, innerUni, corridor, corridorUni, dist: Infinity, pxR: 0 };
   }
 
   private attachStar(b: Star): BodyView {
@@ -415,6 +427,8 @@ export class SceneRenderer {
     this.hyper.dispose();
     const { pxPerRad } = g.view;
     const { camera, skyCam, dotGeo, PR, tmp, tmp2 } = this;
+    this.headUni.uHeadDir.value.set(0, 0, -1).applyQuaternion(ship.q);
+    this.headUni.uHeadOn.value = g.lights ? 1 : 0;
     camera.position.set(0, 0, 0);
     camera.quaternion.copy(ship.q);
     camera.updateMatrixWorld();
@@ -493,8 +507,12 @@ export class SceneRenderer {
       v.mesh.visible = v.pxR > 0.5;
       // the interior only matters up close (it's seen through the slot, or from inside)
       v.inner.visible = d < st.size * 8;
+      const now = performance.now() / 1000;
+      v.uni.uTime.value = now;
+      const dk = g.dock;
+      v.corridor.visible = !!dk && dk.station === st && !dk.docked && !g.inStation;
+      if (v.corridor.visible) v.corridorUni.uTime.value = now;
       if (v.inner.visible) {
-        const dk = g.dock;
         v.innerUni.uPadOn.value = dk && dk.station === st && !dk.docked ? 1 : 0;
         if (dk && dk.station === st) (v.innerUni.uPad.value as THREE.Vector3).copy(padLocal(dk.pad).pos);
         v.innerUni.uTime.value = performance.now() / 1000;

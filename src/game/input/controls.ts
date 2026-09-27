@@ -181,7 +181,11 @@ export function onPress(g: Game, code: string) {
       toggleScan(g);
       break;
     case 'KeyL':
-      toggleOrbitPreview(g);
+      // Shift+L: headlights; L: the orbit preview ring
+      if (keys.ShiftLeft || keys.ShiftRight) {
+        g.lights = !g.lights;
+        g.showMsg(g.lights ? 'Headlights on' : 'Headlights off');
+      } else toggleOrbitPreview(g);
       break;
     case 'KeyV':
       toggleDecoupled(g);
