@@ -25,6 +25,14 @@
  */
 import { THREE } from '../lib/three';
 
+/**
+ * Auto-exposure switch. Off (for now): exposure stays at 1, the frame is only tone-mapped (no
+ * metering), and every light uses a fixed display level instead of its squashed physical one: the
+ * sky and stars as they always looked, floodlights 0.28, hangar lamps 1.0, windows 0.7, and a
+ * headlight that reads 1.8 at 100 m. Set to true to bring the eye adaptation back.
+ */
+export const AUTO_EXPOSURE = false;
+
 export const SUNLIT = 0.55;
 const SUN_LUX = 1e5;
 /** How much the real range of light levels is squashed (see above). */
@@ -32,18 +40,18 @@ const GAMMA = 0.4;
 /** Scene brightness of a white surface lit by `lux`, squashed. */
 const lit = (lux: number) => SUNLIT * (lux / SUN_LUX) ** GAMMA;
 /** Floodlights on the hull, and the hangar (its lamps ≙ 1.0 in the interior shader). */
-export const FLOOD_K = lit(30),
-  INT_K = lit(500);
+export const FLOOD_K = AUTO_EXPOSURE ? lit(30) : 0.28,
+  INT_K = AUTO_EXPOSURE ? lit(500) : 1;
 /** Headlight: K / d² in the shaders, matching lit() at 100 m (1.3 million cd). */
-export const HEAD_K = lit(1.3e6 / 100 ** 2) * 100 ** 2;
+export const HEAD_K = (AUTO_EXPOSURE ? lit(1.3e6 / 100 ** 2) : 1.8) * 100 ** 2;
 /** Lit windows (~200 cd/m²) against their old display level. */
-export const WINDOW_K = 0.18;
+export const WINDOW_K = AUTO_EXPOSURE ? 0.18 : 1;
 /** The sky (Milky Way, stars, distant worlds as dots) against sunlit surfaces. */
-export const SKY_K = 0.025;
+export const SKY_K = AUTO_EXPOSURE ? 0.025 : 1;
 
 /** Exposure limits: fully dark-adapted shows the sky as it used to be. */
 const MIN_EXP = 0.25;
-export const MAX_EXP = 1 / SKY_K;
+export const MAX_EXP = 40; // 1 / SKY_K with auto-exposure on
 /**
  * Stars (points) follow only part of the exposure: (exposure / MAX_EXP)^STAR_EXP_P, so fully
  * dark-adapted they're as always, and next to a sunlit world (exposure ~1) they keep ~30%
@@ -139,6 +147,7 @@ export class AutoExposure {
    * the next, and ease the exposure toward the target.
    */
   update(r: THREE.WebGLRenderer, meterRT: THREE.WebGLRenderTarget) {
+    if (!AUTO_EXPOSURE) return; // fixed at 1
     const got = this.rb.collect();
     if (got) {
       this.target = meter(got.data, got.w, got.h, got.tag, this.stats);

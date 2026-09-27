@@ -9,7 +9,7 @@
  *      channel, so over-bright light rolls off to white instead of clipping flat.
  */
 import { THREE } from '../lib/three';
-import type { AutoExposure } from './exposure';
+import { AUTO_EXPOSURE, type AutoExposure } from './exposure';
 
 const QUAD_VS =
   'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
@@ -102,9 +102,11 @@ export class HdrTarget {
   /** Meter, adapt and tone-map the frame just drawn into `target`. */
   finish(exposure: AutoExposure) {
     const gl = this.gl;
-    this.pass(this.down, this.target, this.small);
-    this.pass(this.down, this.small, this.meterRT);
-    exposure.update(gl, this.meterRT);
+    if (AUTO_EXPOSURE) {
+      this.pass(this.down, this.target, this.small);
+      this.pass(this.down, this.small, this.meterRT);
+      exposure.update(gl, this.meterRT);
+    }
     this.quad.material = this.tone;
     gl.setRenderTarget(null);
     gl.render(this.scene, this.cam);

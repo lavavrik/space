@@ -8,7 +8,7 @@ import { HyperspaceView } from './Hyperspace';
 import { createNoiseTexture } from './noise3d';
 import { skyColor, skyLook } from '../sim/hyperspace';
 import { CORRIDOR_LEN, corridorGeometry, hullGeometry, interiorGeometry } from './stationMesh';
-import { AutoExposure, FLOOD_K, HEAD_K, INT_K, MAX_EXP, SKY_EXP_P, SKY_K, STAR_EXP_P, WINDOW_K } from './exposure';
+import { AUTO_EXPOSURE, AutoExposure, FLOOD_K, HEAD_K, INT_K, MAX_EXP, SKY_EXP_P, SKY_K, STAR_EXP_P, WINDOW_K } from './exposure';
 import { HdrTarget } from './hdr';
 import { padLocal, stationQuat } from '../sim/stationGeom';
 import { ATMO_FS, BODY_VS, GLOW_FS, GLOW_VS, PLANET_FS, POINT_FS, POINT_VS, RING_FS, SKYPT_FS, SKYPT_VS, SKY_BAKE_FS, SKY_CUBE_FS, SKY_VS, STAR_FS, STATION_FS, STATION_INTERIOR_FS, CORRIDOR_FS } from './shaders';
@@ -445,8 +445,8 @@ export class SceneRenderer {
   render(g: Game) {
     const e = this.exposure.value;
     this.expUni.uExp.value = e;
-    this.expUni.uSkyExp.value = (e / MAX_EXP) ** SKY_EXP_P;
-    this.expUni.uStarExp.value = (e / MAX_EXP) ** STAR_EXP_P;
+    this.expUni.uSkyExp.value = AUTO_EXPOSURE ? (e / MAX_EXP) ** SKY_EXP_P : 1;
+    this.expUni.uStarExp.value = AUTO_EXPOSURE ? (e / MAX_EXP) ** STAR_EXP_P : 1;
     this.gl.setRenderTarget(this.hdr.target);
     this.renderScene(g);
     this.hdr.finish(this.exposure);
