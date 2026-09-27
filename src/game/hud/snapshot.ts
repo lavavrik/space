@@ -11,7 +11,7 @@ import { transitState } from '../sim/hyperspace';
 import { NAV_MODES } from '../sim/navroute';
 import { resolvable, SCAN_STAGE, scanProgress } from '../sim/scanner';
 import { galPos } from '../sim/navigation';
-import { evalPlan } from '../sim/orbits';
+import { apLabel, evalPlan } from '../sim/orbits';
 import { deltaVLeft } from '../sim/resources';
 import { unitLabel, type Computer } from '../avionics/catalog';
 import { buildInfo } from './info';
@@ -47,7 +47,7 @@ function location(g: Game): LocationView {
     system: g.cur.sys.name,
     star: `${st.spec} · ${st.R.toFixed(2)} R☉ · ${Math.round(st.T)} K`,
     sub: `${gp.x.toFixed(2)} ${gp.y.toFixed(2)} ${gp.z.toFixed(2)} ly · ${fmtClock(g.simTime)}`,
-    jump: d ? { text: `JUMP → ${d.name} · ${d.star.spec} · ${d.pos.distanceTo(gp).toFixed(1)} ly` } : { text: 'N or click a star to set a jump · Tab for controls', warn: false },
+    jump: d ? { text: `JUMP → ${d.name} · ${d.star.spec} · ${d.pos.distanceTo(gp).toFixed(1)} ly` } : { text: 'N or click a star to set a jump · U avionics · Tab controls', warn: false },
   };
 }
 
@@ -220,25 +220,63 @@ function autopilotView(g: Game): AutopilotView {
 
 const fmtArcsec = (rad: number) => `${((rad * 180 * 3600) / Math.PI).toFixed(rad < 1e-5 ? 1 : 0)}″`;
 
+/**
+ * Avionics (U): a table of contents for the ship's computers. Each entry: its key, unit, what it's
+ * for, what it's doing now, and its specs; clicking it (or its key) opens its tool.
+ */
 function avionicsView(g: Game): AvionicsSlotView[] {
-  const { orbit, scanner, nav } = g.ship.avionics;
-  const unit = (kind: string, c: Computer | null, specs: [string, string][]): AvionicsSlotView =>
-    c ? { kind, unit: unitLabel(c), maker: c.maker, blurb: c.blurb, specs } : { kind, unit: 'none fitted', maker: '', blurb: '', specs: [] };
+  const { ship } = g;
+  const { orbit, scanner, nav } = ship.avionics;
   const list = (...xs: (string | false)[]) => xs.filter(Boolean).join(' · ') || '—';
+  const base = (c: Computer | null) => (c ? { unit: unitLabel(c), maker: c.maker, blurb: c.blurb } : { unit: 'none fitted', maker: '', blurb: '' });
+
+  // orbit computer: flying / planning / idle
+  const ap = ship.ap;
+  const orbitStatus: Readout = ap
+    ? { text: `${ap.settled ? 'holding' : 'flying'} · ${apLabel(ap)}${ap.type === 'rendezvous' ? '' : ' around ' + ap.body.name}` }
+    : g.planner
+      ? { text: `planning · ${g.planner.body.name}` }
+      : { text: 'idle' };
+
+  // scanner: the current target's scan state
+  const t = g.target;
+  let scanStatus: Readout = { text: 'no target' };
+  if (g.scanning) scanStatus = { text: `scanning ${g.scanning.name} · ${Math.floor(scanProgress(g, g.scanning) * 100)} %` };
+  else if (t && scanner) {
+    const p = scanProgress(g, t);
+    const r = resolvable(g, t);
+    scanStatus = p >= 1 ? { text: `${t.name} scanned` } : r.ok ? { text: `${t.name} ${p > 0 ? Math.floor(p * 100) + ' % scanned' : 'unscanned'} · ready` } : { text: `${t.name} out of resolution`, warn: true };
+  }
+
+  // navigation: route state
+  const r = g.route;
+  const jumps = r?.legs.filter((l) => l.kind === 'jump').length ?? 0;
+  const navStatus: Readout = r?.running
+    ? { text: `flying route · leg ${r.i + 1} / ${r.legs.length} · ${r.destName.split(' · ')[0]}` }
+    : r
+      ? { text: `route ready · ${r.destName.split(' · ')[0]}${jumps ? ` · ${jumps} jumps` : ''}` }
+      : { text: 'no route' };
+
   return [
-    unit('ORBIT COMPUTER', orbit, orbit ? [
-      ['ORBITS', list(...orbit.caps.types.map((t) => ({ equatorial: 'equatorial', polar: 'polar', sync: 'stationary', hold: 'hold' })[t]))],
-      ['INSERTION', `${orbit.caps.profile.acc} m/s² braking · ${fmtSpeedText(orbit.caps.profile.radialCap)} climb`],
-      ['FEATURES', list(orbit.caps.preview && 'preview ring', orbit.caps.ftlLeg && 'FTL leg', orbit.caps.readouts && 'deviation readouts')],
-    ] : []),
-    unit('SCANNER', scanner, scanner ? [
-      ['RESOLUTION', fmtArcsec(scanner.caps.resolution)],
-      ['SCAN SPEED', `${scanner.caps.rate}×`],
-    ] : []),
-    unit('NAVIGATION', nav, nav ? [
-      ['ROUTES', nav.caps.crossSystem ? (isFinite(nav.caps.maxHops) ? `up to ${nav.caps.maxHops} jumps` : 'unlimited jumps') : 'in-system only'],
-      ['FEATURES', list(nav.caps.refuelStops && 'refuel stops', nav.caps.optimise && 'route optimisation')],
-    ] : []),
+    {
+      id: 'orbit', key: 'O', kind: 'ORBIT COMPUTER', does: 'Plan an orbit and let the autopilot fly it', ...base(orbit), status: orbitStatus, active: !!ap,
+      specs: orbit ? [
+        ['ORBITS', list(...orbit.caps.types.map((x) => ({ equatorial: 'equatorial', polar: 'polar', sync: 'stationary', hold: 'hold' })[x]))],
+        ['INSERTION', `${orbit.caps.profile.acc} m/s² braking · ${fmtSpeedText(orbit.caps.profile.radialCap)} climb`],
+        ['FEATURES', list(orbit.caps.preview && 'preview ring (L)', orbit.caps.ftlLeg && 'FTL leg', orbit.caps.readouts && 'deviation readouts')],
+      ] : [],
+    },
+    {
+      id: 'scanner', key: 'Y', kind: 'SCANNER', does: 'Scan the target to reveal what it is', ...base(scanner), status: scanStatus, active: !!g.scanning,
+      specs: scanner ? [['RESOLUTION', fmtArcsec(scanner.caps.resolution)], ['SCAN SPEED', `${scanner.caps.rate}×`]] : [],
+    },
+    {
+      id: 'nav', key: 'M', kind: 'NAVIGATION', does: 'Plot a route to a star or target and fly it', ...base(nav), status: navStatus, active: !!r?.running,
+      specs: nav ? [
+        ['ROUTES', nav.caps.crossSystem ? (isFinite(nav.caps.maxHops) ? `up to ${nav.caps.maxHops} jumps` : 'unlimited jumps') : 'in-system only'],
+        ['FEATURES', list(nav.caps.refuelStops && 'refuel stops', nav.caps.optimise && 'route modes 1–3')],
+      ] : [],
+    },
   ];
 }
 

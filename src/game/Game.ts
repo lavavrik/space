@@ -5,7 +5,7 @@ import { onPress, onRepeat, onWheel } from './input/controls';
 import { Input } from './input/Input';
 import { THREE } from './lib/three';
 import { Overlay } from './render/Overlay';
-import { defaultAvionics } from './avionics/catalog';
+import { defaultAvionics, type ComputerKind } from './avionics/catalog';
 import { PerfMonitor } from './debug/Perf';
 import { engageRoute, requestCancelRoute, type NavMode, type Route } from './sim/navroute';
 import { SceneRenderer } from './render/SceneRenderer';
@@ -185,6 +185,15 @@ export class Game {
   /** Autopilot panel button: first click arms, second disengages (see requestDisengage). */
   requestDisengage() {
     requestDisengage(this);
+    this.invalidateHud();
+  }
+
+  /**
+   * Avionics table of contents (U): open a computer's tool, as its key would: the orbit planner
+   * (or the autopilot's status while it flies), a scan of the target, or the nav panel.
+   */
+  openAvionics(kind: ComputerKind) {
+    onPress(this, { orbit: 'KeyO', scanner: 'KeyY', nav: 'KeyM' }[kind]);
     this.invalidateHud();
   }
 

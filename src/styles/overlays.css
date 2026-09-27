@@ -61,9 +61,25 @@
 /* performance overlay (`): top centre, above everything, never takes clicks */
 #perf { position: fixed; top: calc(0.667rem + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); width: 27.5rem; height: 12.5rem; pointer-events: none; z-index: 50; }
 
-/* avionics panel (U) */
-#avionics { display: flex; flex-direction: column; gap: .1rem; }
-.avslot .isec:first-child { margin-top: .2rem; }
-.avunit { font-size: 1.15rem; font-weight: 700; letter-spacing: .06em; color: var(--text); }
-.avmaker { font-size: .8rem; letter-spacing: .14em; color: var(--amber-dim); text-transform: uppercase; }
-.avblurb { font-size: .9rem; color: var(--text); opacity: .8; margin: .15rem 0 .2rem; line-height: 1.35; }
+/* avionics panel (U): a table of contents; each entry is a button that opens its tool */
+#avionics { display: flex; flex-direction: column; gap: .5rem; }
+.avslot { display: flex; flex-direction: column; gap: .05rem; border-top: 1px solid var(--amber-faint); padding-top: .45rem; }
+.avslot:first-of-type { border-top: 0; padding-top: 0; }
+.aventry {
+  pointer-events: auto; cursor: pointer; display: flex; gap: .7rem; align-items: flex-start; text-align: left;
+  background: none; border: 1px solid transparent; padding: .3rem .4rem; margin: 0 -.4rem .15rem; color: inherit; font: inherit;
+}
+.aventry:hover { border-color: var(--amber-dim); background: rgba(255, 165, 58, .07); }
+.aventry:disabled { cursor: default; opacity: .5; }
+.aventry kbd {
+  font: 1rem "Share Tech Mono", ui-monospace, monospace; color: var(--text); flex: none;
+  width: 1.7rem; height: 1.7rem; display: grid; place-items: center; border: 1px solid var(--amber-dim);
+}
+.avslot.busy .aventry kbd { border-color: var(--cyan); color: var(--cyan); }
+.avtext { display: flex; flex-direction: column; min-width: 0; }
+.avkind { font-size: .75rem; letter-spacing: .16em; color: var(--amber); }
+.avunit { font-size: 1.1rem; font-weight: 700; letter-spacing: .04em; color: var(--text); }
+.avdoes { font-size: .85rem; color: var(--text); opacity: .75; }
+.avstatus { font: .85rem "Share Tech Mono", ui-monospace, monospace; color: var(--amber-dim); margin-top: .1rem; }
+.avslot.busy .avstatus { color: var(--cyan); }
+.avspecs { font: .8rem "Share Tech Mono", ui-monospace, monospace; color: var(--amber-dim); line-height: 1.4; padding-left: 2.5rem; }

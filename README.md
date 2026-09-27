@@ -57,7 +57,7 @@ The simulation never touches the DOM. Each frame it steps the physics, draws the
 | Shift · X | Boost · all stop |
 | Y | Scan the target with the fitted scanner (it must resolve it: angular size ≥ the scanner's resolution). Scans reveal type and size → mass and gravity → orbit → climate, atmosphere, moons and stations; the home system starts scanned |
 | M | Navigation computer: route to a star (click any star within 100 ly while the panel is open) or to the target (orbit a body, rendezvous with a station). 1–3 route mode (fewest jumps / least exotic / fastest), Enter engages, Backspace clears; while flying, Backspace ×2 cancels. It flies every leg: jumps, corona-skimming refuel stops, then the orbit or rendezvous |
-| U | Avionics: the fitted computers (orbit computer, scanner, navigation) with their specs |
+| U | Avionics: a table of contents for the ship's computers. Each entry shows its key, unit, what it's for, what it's doing now and its specs; click an entry (mouse free) or press its key to open it |
 | I | Target info: size, mass, gravity, climate, its orbit, and your speed and orbit relative to it (shown in place of the controls list) |
 | Z | Flight assist on / off |
 | V | Decoupled: turn without changing course (normal space and FTL) |

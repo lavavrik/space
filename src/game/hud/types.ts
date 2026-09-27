@@ -1,3 +1,4 @@
+import type { ComputerKind } from '../avionics/catalog';
 import type { MsgKind, OrbitType } from '../types';
 
 /** A text readout, optionally flagged as a warning. */
@@ -83,6 +84,11 @@ export interface AutopilotView {
 
 /** One fitted computer in the avionics panel (U). */
 export interface AvionicsSlotView {
+  id: ComputerKind; // what opening this entry does (see Game.openAvionics)
+  key: string; // the key that opens it
+  does: string; // what it's for, in a few words
+  status: Readout; // what it's doing right now
+  active: boolean; // busy (flying, scanning, routing)
   kind: string; // ORBIT COMPUTER, SCANNER, NAVIGATION
   unit: string; // HX-9100 Periastron, or 'none fitted'
   maker: string;

@@ -20,7 +20,7 @@ export function App() {
         <>
           <div id="leftcol">
             <Location loc={hud.location} />
-            {hud.info ? <BodyInfo info={hud.info} /> : hud.avionics ? <AvionicsPanel slots={hud.avionics} /> : hud.helpVisible && <HelpPanel />}
+            {hud.info ? <BodyInfo info={hud.info} /> : hud.avionics ? <AvionicsPanel slots={hud.avionics} onOpen={(k) => game!.openAvionics(k)} /> : hud.helpVisible && <HelpPanel />}
           </div>
           <div id="rightcol">
             {hud.nav && <NavPanel n={hud.nav} onEngage={() => game!.engageRoute()} onCancel={() => game!.cancelRoute()} />}
