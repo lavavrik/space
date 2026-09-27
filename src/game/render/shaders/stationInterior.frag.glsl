@@ -9,6 +9,7 @@ uniform float uPadOn;    // 1 if a pad is granted at this station
 uniform float uTime;
 uniform float uSeed;
 varying vec3 vObj; varying vec3 vWN; varying vec3 vWP;
+uniform float uHeadKi; // headlight: candela → brightness against the hangar lamps (render/exposure.ts)
 #pragma farlight_headlight
 
 const float R = 0.42;          // HANGAR_R
@@ -58,7 +59,7 @@ void main(){
   } else if (!tunnel) {
     light += 0.8 * smoothstep(0.006, 0.0, abs(r - R * 0.96));
   }
-  vec3 col = base * light + headlight(N, vWP, base);
+  vec3 col = base * light + headlight(N, vWP, base, uHeadKi);
   // lamps glow themselves
   if (wall) {
     float phi = atan(p.y, p.x);

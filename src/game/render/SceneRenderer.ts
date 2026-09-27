@@ -8,6 +8,7 @@ import { HyperspaceView } from './Hyperspace';
 import { createNoiseTexture } from './noise3d';
 import { skyColor, skyLook } from '../sim/hyperspace';
 import { CORRIDOR_LEN, corridorGeometry, hullGeometry, interiorGeometry } from './stationMesh';
+import { Exposure } from './exposure';
 import { padLocal, stationQuat } from '../sim/stationGeom';
 import { ATMO_FS, BODY_VS, GLOW_FS, GLOW_VS, PLANET_FS, POINT_FS, POINT_VS, RING_FS, SKYPT_FS, SKYPT_VS, SKY_BAKE_FS, SKY_CUBE_FS, SKY_VS, STAR_FS, STATION_FS, STATION_INTERIOR_FS, CORRIDOR_FS } from './shaders';
 
@@ -58,7 +59,9 @@ export class SceneRenderer {
   readonly views = new Map<Body, BodyView>();
   readonly stationViews = new Map<Station, { mesh: THREE.Group; uni: Uniforms; inner: THREE.Mesh; innerUni: Uniforms; corridor: THREE.Mesh; corridorUni: Uniforms; dist: number; pxR: number }>();
   /** Headlights, shared by every station material: the ship's nose (world axes) and on/off. */
-  private readonly headUni = { uHeadDir: { value: new THREE.Vector3(0, 0, -1) }, uHeadOn: { value: 1 } };
+  private readonly headUni = { uHeadDir: { value: new THREE.Vector3(0, 0, -1) }, uHeadOn: { value: 1 }, uHeadK: { value: 0 }, uFloodK: { value: 0 }, uHeadKi: { value: Exposure.headKi } };
+  /** Eye adaptation for artificial light (render/exposure.ts). */
+  private readonly exposure = new Exposure();
   private readonly stationCorridor = corridorGeometry();
   /** Station hull (slot cut in the front) and interior, shared by every station (render/stationMesh.ts). */
   private readonly stationHull = hullGeometry();
@@ -323,6 +326,16 @@ export class SceneRenderer {
     this.stationViews.clear();
   }
 
+  /** Is the station in sunlight (not in its world's shadow)? */
+  private readonly litA = new THREE.Vector3();
+  private readonly litB = new THREE.Vector3();
+  private stationLit(st: Station, starPos: THREE.Vector3) {
+    const toStar = this.litA.subVectors(starPos, st.pos).normalize();
+    const w = this.litB.subVectors(st.parent.pos, st.pos);
+    const t = w.dot(toStar);
+    return !(t > 0 && w.lengthSq() - t * t < st.parent.radius * st.parent.radius);
+  }
+
   private attachStation(st: Station, star: Star) {
     const p = st.parent.pal;
     const uni: Uniforms = {
@@ -429,6 +442,9 @@ export class SceneRenderer {
     const { camera, skyCam, dotGeo, PR, tmp, tmp2 } = this;
     this.headUni.uHeadDir.value.set(0, 0, -1).applyQuaternion(ship.q);
     this.headUni.uHeadOn.value = g.lights ? 1 : 0;
+    this.exposure.update(g, (st) => this.stationLit(st, cur.star.pos));
+    this.headUni.uHeadK.value = this.exposure.headK;
+    this.headUni.uFloodK.value = this.exposure.floodK;
     camera.position.set(0, 0, 0);
     camera.quaternion.copy(ship.q);
     camera.updateMatrixWorld();
@@ -522,8 +538,7 @@ export class SceneRenderer {
       // in the parent's shadow if the line to the star passes through it
       const par = st.parent;
       const w = this.tmp3.subVectors(par.pos, st.pos);
-      const t = w.dot(toStar);
-      v.uni.uLit.value = t > 0 && w.lengthSq() - t * t < par.radius * par.radius ? 0 : 1;
+      v.uni.uLit.value = this.stationLit(st, starPos) ? 1 : 0;
       const pd = w.length();
       (v.uni.uPlanetDir.value as THREE.Vector3).copy(w).divideScalar(pd);
       v.uni.uPlanetSize.value = Math.cos(Math.asin(Math.min(1, par.radius / pd)));

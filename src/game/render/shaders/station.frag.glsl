@@ -10,6 +10,8 @@ uniform vec3 uPlanetColor;
 uniform float uPlanetSize; // cosine of the world's angular radius
 uniform float uSeed;
 uniform float uTime;
+uniform float uHeadK;  // headlight: candela → brightness at this exposure (render/exposure.ts)
+uniform float uFloodK; // the station's floodlights at this exposure
 varying vec3 vObj; varying vec3 vWN; varying vec3 vWP;
 #pragma farlight_noise
 #pragma farlight_headlight
@@ -60,9 +62,9 @@ void main(){
   // midpoints, so it's never pitch dark, even in its world's shadow
   vec2 e = uv - 0.5;
   float flood = exp(-dot(vec2(abs(e.x) - 0.5, e.y), vec2(abs(e.x) - 0.5, e.y)) / 0.06) + exp(-dot(vec2(e.x, abs(e.y) - 0.5), vec2(e.x, abs(e.y) - 0.5)) / 0.06);
-  col += base * vec3(1.0, 0.9, 0.75) * flood * 0.28;
+  col += base * vec3(1.0, 0.9, 0.75) * flood * uFloodK;
   // the ship's headlights
-  col += headlight(Np, vWP, base);
+  col += headlight(Np, vWP, base, uHeadK);
   col *= mix(0.25, 1.0, seam);
 
   // the docking slot on the front face: a dark recess with a lit rim; approach lights run in toward
