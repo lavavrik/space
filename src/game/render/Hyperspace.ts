@@ -1,6 +1,6 @@
 import { FOV, SKY_RADIUS } from '../constants';
 import { THREE } from '../lib/three';
-import { transitState, type TransitState } from '../sim/hyperspace';
+import { skyLook, transitState, type TransitState } from '../sim/hyperspace';
 import type { Jump, StarSystem } from '../types';
 import { systemsNear } from '../universe/galaxy';
 
@@ -41,10 +41,9 @@ export class HyperspaceView {
     this.stars.forEach((s, i) => {
       const rel = this.rel.subVectors(s.pos, st.pos);
       const d = Math.max(rel.length(), 1e-4);
-      // same log-flux brightness as the normal sky, so nothing pops at the start or the end
-      const lf = Math.log10(s.star.L / (d * d));
-      const a = Math.max(0, Math.min(1, (lf + 6) / 5.5));
-      const c = this.c.copy(s.star.color).lerp(white, 0.25).multiplyScalar(0.14 + 1.2 * a ** 1.4);
+      // same look as the normal sky (skyLook), so nothing pops at the start or the end
+      const { a, size, fade } = skyLook(s.star.L, d);
+      const c = this.c.copy(s.star.color).lerp(white, 0.25).multiplyScalar((0.14 + 1.2 * a ** 1.4) * fade);
       hp[i * 3] = lp[i * 6] = rel.x;
       hp[i * 3 + 1] = lp[i * 6 + 1] = rel.y;
       hp[i * 3 + 2] = lp[i * 6 + 2] = rel.z;
@@ -59,9 +58,7 @@ export class HyperspaceView {
       hc[i * 3] = c.r * hk;
       hc[i * 3 + 1] = c.g * hk;
       hc[i * 3 + 2] = c.b * hk;
-      // past the normal sky's brightest, keep swelling: a star you fly close to (the destination
-      // at the end) blooms into a disc of glare before the arrival flash
-      hs[i] = Math.min(56, 1.5 + 6.5 * a * a + 7 * Math.max(0, lf + 0.5));
+      hs[i] = size;
       lc[i * 6] = c.r * 1.3;
       lc[i * 6 + 1] = c.g * 1.3;
       lc[i * 6 + 2] = c.b * 1.3;

@@ -6,6 +6,7 @@ import type { Body, CurrentSystem, Star, StarSystem, Station, World } from '../t
 import { orbitPreview } from '../sim/planner';
 import { HyperspaceView } from './Hyperspace';
 import { createNoiseTexture } from './noise3d';
+import { skyLook } from '../sim/hyperspace';
 import { ATMO_FS, BODY_VS, GLOW_FS, GLOW_VS, PLANET_FS, POINT_FS, POINT_VS, RING_FS, SKYPT_FS, SKYPT_VS, SKY_BAKE_FS, SKY_CUBE_FS, SKY_VS, STAR_FS, STATION_FS } from './shaders';
 
 type Uniforms = Record<string, THREE.IUniform>;
@@ -37,6 +38,9 @@ const RING_AP = new THREE.Color(0.5, 0.86, 1); // cyan once the autopilot flies 
 export const STATION_RGB = new THREE.Color(0.45, 1, 0.7);
 const DUST = 700,
   DUSTBOX = 3000;
+/** Dust fades out between these speeds (m/s), see updateDust. The boost limit (15 km/s) keeps it all. */
+const DUST_FADE_FROM = 20e3,
+  DUST_FADE_TO = 60e3;
 
 /**
  * Draws the system around the ship with three.js. The camera sits at the origin and every body
@@ -164,15 +168,12 @@ export class SceneRenderer {
     const white = new THREE.Color(1, 1, 1);
     others.forEach((s, i) => {
       const d = s.pos.clone().sub(cur.pos);
-      const ly = Math.max(d.length(), 0.05);
+      const { a, size: sz, fade } = skyLook(s.star.L, d.length());
       d.normalize().multiplyScalar(80);
       pos.set([d.x, d.y, d.z], i * 3);
-      // log-flux brightness: a dim red dwarf at 100 ly (L/ly² ≈ 1e-6) is barely visible,
-      // a Sun at a few ly (≈ 0.1) is bright, a B star nearby saturates
-      const a = Math.max(0, Math.min(1, (Math.log10(s.star.L / (ly * ly)) + 6) / 5.5));
-      const c = s.star.color.clone().lerp(white, 0.25).multiplyScalar(0.14 + 1.2 * a ** 1.4);
+      const c = s.star.color.clone().lerp(white, 0.25).multiplyScalar((0.14 + 1.2 * a ** 1.4) * fade);
       col.set([c.r, c.g, c.b], i * 3);
-      size[i] = 1.5 + 6.5 * a * a;
+      size[i] = sz;
     });
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
@@ -449,11 +450,18 @@ export class SceneRenderer {
     (this.ring.material as THREE.LineBasicMaterial).color.copy(pv.engaged ? RING_AP : RING_PLAN);
   }
 
-  /** Dust particles wrap around the ship in a box, fading toward its edges. */
+  /**
+   * Dust particles wrap around the ship in a box, fading toward its edges. They fade out with speed
+   * too: past a few km per frame the box is crossed several times a frame, so the grains would just
+   * be re-scattered at random every frame and read as a field of extra faint stars (seen during a
+   * hyperjump's departure, then "vanishing" when hyperspace began). Real grains that fast are
+   * invisible anyway.
+   */
   private updateDust(g: Game) {
     const { ship } = g;
     const dust = this.dust;
-    dust.visible = ship.mode === 'normal';
+    const fade = 1 - THREE.MathUtils.smoothstep(g.curSpeed, DUST_FADE_FROM, DUST_FADE_TO);
+    dust.visible = ship.mode === 'normal' && fade > 0;
     if (!dust.visible) return;
     const p = this.dustGeo.attributes.position.array as Float32Array,
       c = this.dustGeo.attributes.aColor.array as Float32Array;
@@ -469,7 +477,7 @@ export class SceneRenderer {
       p[i * 3] = x;
       p[i * 3 + 1] = y;
       p[i * 3 + 2] = z;
-      const f = Math.max(0, 1 - Math.sqrt(x * x + y * y + z * z) / h) * 0.55;
+      const f = Math.max(0, 1 - Math.sqrt(x * x + y * y + z * z) / h) * 0.55 * fade;
       c[i * 3] = f;
       c[i * 3 + 1] = f * 0.92;
       c[i * 3 + 2] = f * 0.85;

@@ -13,7 +13,7 @@
  *
  * Tunnel distances are in light-years, in the galactic frame; the departure is in metres, in the system.
  */
-import { JUMP_DEPART_TIME, JUMP_TUNNEL_BASE, JUMP_TUNNEL_PER_LY, LY } from '../constants';
+import { JUMP_DEPART_TIME, JUMP_TUNNEL_BASE, JUMP_TUNNEL_PER_LY, LY, SKY_RADIUS } from '../constants';
 import { THREE } from '../lib/three';
 import type { Jump } from '../types';
 
@@ -22,6 +22,23 @@ export const ARRIVE_LY = 0.004;
 
 /** Transit time for a jump of `ly` light-years: longer hops take a little longer. */
 export const transitTime = (ly: number) => JUMP_TUNNEL_BASE + JUMP_TUNNEL_PER_LY * ly;
+
+/**
+ * How a star system looks in the sky from `ly` light-years away: `a` (0..1) is the log-flux
+ * brightness, `size` the point size in px (it keeps swelling past the brightest, so a star you fly
+ * close to blooms into a disc of glare), and `fade` (0..1) dims stars near SKY_RADIUS so they fade
+ * in and out at the edge of the visible set instead of popping. The system sky and the hyperspace
+ * view both use this, so the sky doesn't change when hyperspace begins or ends.
+ */
+export function skyLook(L: number, ly: number) {
+  const d = Math.max(ly, 1e-4);
+  const lf = Math.log10(L / (d * d));
+  // a dim red dwarf at 100 ly (L/ly² ≈ 1e-6) is barely visible, a Sun at a few ly (≈ 0.1) is bright
+  const a = Math.max(0, Math.min(1, (lf + 6) / 5.5));
+  const size = Math.min(56, 1.5 + 6.5 * a * a + 7 * Math.max(0, lf + 0.5));
+  const fade = 1 - Math.max(0, Math.min(1, (d - SKY_RADIUS * 0.85) / (SKY_RADIUS * 0.15)));
+  return { a, size, fade };
+}
 
 /** Speed at the start of the departure, m/s. */
 const DEPART_V0 = 5;
