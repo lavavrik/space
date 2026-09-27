@@ -19,7 +19,7 @@ import { railsStep, stopWarp, warpBlocked } from './timewarp';
 import { updatePivot } from './pivot';
 import { updateRadar } from './radar';
 import { autodock } from './autodock';
-import { SHORE_POWER, holdDocked, rotationCorrection, stationContact } from './docking';
+import { SHORE_POWER, holdDocked, rotationCorrection, stationContact, updateDockRequest } from './docking';
 
 const qa = new THREE.Quaternion();
 const AX = new THREE.Vector3(1, 0, 0),
@@ -171,6 +171,7 @@ export function update(g: Game, dt: number, realDt = dt) {
   if (dt > 0) ship.burnRate += (power.burn / dt - ship.burnRate) * Math.min(1, dt * 3);
   if (!inTunnel) scoop(g, dt);
   updateTanker(g, dt);
+  updateDockRequest(g, dt);
   updateGuide(g, dt);
   updateScan(g, dt);
   updateNav(g, dt);

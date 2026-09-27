@@ -16,7 +16,9 @@ and the mesh in `render/stationMesh.ts`.
 
 ## Flying it (`sim/docking.ts`)
 
-1. Target the station within 10 km and press **K**. The station grants a pad (random for now).
+1. Target the station within 10 km and press **K**. That sends a request; traffic control answers
+   after 4–8 s with a pad (random for now). A DOCKING progress panel tracks the procedure: get within
+   10 km, request docking, approach the slot, enter, land on the pad.
 2. **Approach control:** within 3 km of the station, flight assist caps speed at 150 m/s. The HUD
    outlines the slot (turning with the station) and marks your pad with its number and distance.
 3. **Inside** (tunnel or hangar):
@@ -52,6 +54,8 @@ An avionics unit (U → DOCKING tile, key K) from Wharfside Avionics:
 | WD-300 Berth (default) | requests it itself at 10 km | 50 km | 150 / 60 m/s (up to 1.5 km/s far out) | flies you out |
 
 It flies these phases:
+0. **approach** (WD-300 engaged from afar) to within range, then **wait**: request sent, holding
+   still until traffic control answers.
 1. **hold:** a point on the spin axis 600 m in front of the slot, at rest against the station's orbit.
 2. **align:** nose to the slot, wings along its long side, rolling with the station.
 3. **enter:** down the axis to the hangar, level with the pad row.

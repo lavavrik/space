@@ -68,6 +68,8 @@ export class Game {
   warp = 1;
   /** Docking (sim/docking.ts): the granted pad, and whether we're on it. */
   dock: Dock | null = null;
+  /** A docking request waiting for traffic control's answer (s left). */
+  dockRequest: { station: Station; t: number } | null = null;
   /** The station whose hull the ship is inside this frame (slot, tunnel or hangar), if any. */
   inStation: Station | null = null;
   /** The ship's offset from that station's centre at the end of the last step (m). */
@@ -212,6 +214,7 @@ export class Game {
     this.cur = { sys, bodies, star: bodies[0] as CurrentSystem['star'], stations };
     this.frameBody = this.cur.star; // callers place the ship and then pick its frame
     this.dock = null;
+    this.dockRequest = null;
     this.inStation = null;
     this.autodock = null;
     this.autodockStation = null;

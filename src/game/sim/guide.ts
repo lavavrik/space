@@ -3,7 +3,9 @@
 import { AP_ACC, AP_TAU, SHIP } from '../constants';
 import { fmtDist, fmtFlow, fmtMass, fmtPower, fmtSpeedText, fmtTime } from '../format';
 import type { Game } from '../Game';
-import type { Autopilot, Jump, Tanker } from '../types';
+import type { Autopilot, Jump, Station, Tanker } from '../types';
+import { padWorld } from './docking';
+import { toLocal } from './stationGeom';
 import { apGeom, apInsertion, approachTime, holdPoint, orbitVelErr, profileOf, RDV_STANDOFF } from './autopilot';
 import { velRel } from './frame';
 import { orbitElements } from './gravity';
@@ -327,4 +329,61 @@ export function guideEta(man: Guide) {
     if (known.length) total += Math.max(...known);
   }
   return { total, unknown, empty: groups.size === 0 };
+}
+
+/**
+ * Docking (sim/docking.ts, sim/autodock.ts): get in range, request a pad and wait for the answer,
+ * approach the slot, enter, land on the pad. Works the same whether you or the docking computer fly.
+ */
+export function startDockGuide(g: Game, st: Station) {
+  const { ship } = g;
+  const dist = () => st.pos.distanceTo(ship.pos);
+  const granted = () => g.dock?.station === st;
+  const docked = () => granted() && !!g.dock!.docked;
+  const inside = () => g.inStation === st;
+  const phase = () => g.autodock?.phase;
+  const landing = () => docked() || (inside() && (phase() === 'descend' || (!g.autodock && !!g.dock && isInHangar(g, st))));
+  const unit = ship.avionics.dock;
+  startGuide(g, {
+    title: 'DOCKING',
+    sub: `${st.name}${unit ? ` · ${unit.model} ${unit.name}` : ' · manual'}`,
+    doneText: `Docked at ${st.name}`,
+    abort: () => (!g.dock && !g.dockRequest && !g.autodock ? 'Docking cancelled' : g.dock && g.dock.station !== st ? 'Docking cancelled' : null),
+    steps: [
+      mkStep({
+        title: 'Get within 10 km', active: () => !granted() && !g.dockRequest && dist() > DOCK_RANGE, done: () => granted() || !!g.dockRequest || dist() <= DOCK_RANGE,
+        err: () => Math.max(0, dist() - DOCK_RANGE), detail: () => `${fmtDist(Math.max(0, dist() - DOCK_RANGE))} to go`,
+      }),
+      mkStep({
+        title: 'Request docking', active: () => !!g.dockRequest && g.dockRequest.station === st, done: () => granted(),
+        err: () => g.dockRequest?.t ?? 0, etaFn: () => g.dockRequest?.t ?? 0, guess: () => 6,
+        detail: () => `Waiting for ${st.name} traffic control`,
+      }),
+      mkStep({
+        titleFn: () => (phase() === 'align' ? 'Line up with the slot' : 'Approach the slot'), active: () => granted() && !inside() && !docked(), done: () => inside() || docked(),
+        err: () => dist(), detail: () => `${fmtDist(Math.max(0, dist() - st.size / 2))} · roll with the slot as you go in`,
+      }),
+      mkStep({
+        title: 'Enter the station', active: () => granted() && inside() && !landing(), done: () => landing(),
+        err: () => null, detail: () => 'Through the tunnel into the hangar',
+      }),
+      mkStep({
+        titleFn: () => `Land on pad ${g.dock ? g.dock.pad + 1 : ''}`, active: () => landing() && !docked(), done: () => docked(),
+        err: () => (padDistance(g) ?? null), detail: () => `${padDistance(g) !== null ? fmtDist(padDistance(g)!) : ''} · under 6 m/s, top toward the axis`,
+      }),
+    ],
+  });
+}
+
+/** Within 10 km a station takes docking requests. */
+const DOCK_RANGE = 10e3;
+
+function isInHangar(g: Game, st: Station) {
+  const p = toLocal(st, g.simTime, g.ship.pos);
+  return p.z < 0.4;
+}
+
+function padDistance(g: Game) {
+  const w = padWorld(g);
+  return w ? w.distanceTo(g.ship.pos) : null;
 }

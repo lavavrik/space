@@ -4,6 +4,8 @@
  * (K); the WD-300 can be engaged from 50 km out with K, flies toward the station, and asks for a
  * pad itself on reaching DOCK_REQUEST_RANGE.
  *
+ *   approach — (WD-300, engaged from afar) toward the station until in range to ask for a pad
+ *   wait    — request sent: hold still until traffic control answers
  *   hold    — to a point on the station's spin axis, HOLD_OUT in front of the slot, at rest
  *             against the station's orbit
  *   align   — nose toward the slot along the axis, wings along the slot's long side, rolling with
@@ -26,11 +28,11 @@
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import type { Station } from '../types';
-import { DOCK_REQUEST_RANGE, requestPad } from './docking';
+import { DOCK_REQUEST_RANGE, requestDocking } from './docking';
 import { applyThrust } from './resources';
 import { HANGAR_R, padLocal, stationPointVelAt, stationQuat } from './stationGeom';
 
-export type AutoPhase = 'hold' | 'align' | 'enter' | 'descend' | 'rise' | 'exit';
+export type AutoPhase = 'approach' | 'wait' | 'hold' | 'align' | 'enter' | 'descend' | 'rise' | 'exit';
 
 /** How far out on the axis the approach holds before going in (m). */
 const HOLD_OUT = 600;
@@ -56,9 +58,9 @@ export function engageAutodock(g: Game, st: Station) {
   if (!unit || g.dock?.docked) return;
   g.ship.ap = null;
   g.ship.sunTrack = false;
-  g.autodock = { phase: 'hold' };
+  g.autodock = { phase: g.dock ? 'hold' : g.dockRequest ? 'wait' : 'approach' };
   g.autodockStation = st;
-  const how = g.dock ? `pad ${g.dock.pad + 1}` : 'will request clearance on approach';
+  const how = g.dock ? `pad ${g.dock.pad + 1}` : g.dockRequest ? 'waiting for clearance' : 'will request clearance on approach';
   g.showMsg(`${unit.model} ${unit.name} · docking at ${st.name} · ${how} · thrust keys take over`);
 }
 
@@ -87,12 +89,18 @@ export function autodock(g: Game, dt: number, gravVec: THREE.Vector3) {
   const unit = ship.avionics.dock!;
   const st = g.dock?.station ?? g.autodockStation;
   if (!st) return stopAutodock(g, 'Docking computer off · no station');
-  // no pad yet: the WD-300 asks for one once it's in range; without one it can't go in
+  // no pad yet: fly within range (WD-300), ask for one, and hold still until the answer comes
   if (!g.dock && ad.phase !== 'rise' && ad.phase !== 'exit') {
-    if (st.pos.distanceTo(ship.pos) < DOCK_REQUEST_RANGE) {
+    const inRange = st.pos.distanceTo(ship.pos) < DOCK_REQUEST_RANGE * 0.95;
+    if (g.dockRequest) ad.phase = 'wait';
+    else if (inRange) {
       if (!unit.caps.clearance) return stopAutodock(g, 'Docking computer off · request a pad first (K)');
-      requestPad(g, st, `Docking computer · clearance granted · ${st.name} · pad`);
-    } else if (ad.phase !== 'hold') return stopAutodock(g, 'Docking computer off · no pad');
+      requestDocking(g, st);
+      ad.phase = 'wait';
+    } else ad.phase = 'approach';
+  } else if (ad.phase === 'wait' || ad.phase === 'approach') {
+    ad.phase = 'hold'; // the pad came through
+    g.showMsg(`Docking computer · to ${st.name}, pad ${g.dock!.pad + 1}`);
   }
   const d = g.dock;
   ship.vel.addScaledVector(gravVec, dt);
@@ -118,6 +126,16 @@ export function autodock(g: Game, dt: number, gravVec: THREE.Vector3) {
     upL = new THREE.Vector3(0, 1, 0);
   const holdPt = new THREE.Vector3(0, 0, S / 2 + HOLD_OUT);
   switch (ad.phase) {
+    case 'approach':
+      // toward the hold point, until in range to ask for a pad
+      target = holdPt;
+      cap = far ? FAR_SPEED : unit.caps.approachSpeed;
+      break;
+    case 'wait':
+      // hold still against the station while traffic control answers
+      target = p.clone();
+      cap = 0;
+      break;
     case 'hold':
       target = holdPt;
       cap = far ? FAR_SPEED : unit.caps.approachSpeed;
@@ -183,7 +201,9 @@ export function autodock(g: Game, dt: number, gravVec: THREE.Vector3) {
   applyThrust(g, T, dt);
   ship.vel.add(T);
 
-  // attitude: turn toward the wanted one (with the station's spin carried by rotation correction)
+  // attitude: turn toward the wanted one (with the station's spin carried by rotation correction);
+  // not while still getting in range or waiting for the answer
+  if (ad.phase === 'approach' || ad.phase === 'wait') return;
   const fwdW = toWorld(fwdL),
     upW = toWorld(upL);
   const m = new THREE.Matrix4().makeBasis(new THREE.Vector3().crossVectors(upW, fwdW.clone().negate()).normalize(), upW, fwdW.clone().negate());

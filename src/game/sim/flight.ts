@@ -126,6 +126,7 @@ export function destroyShip(g: Game, reason: string, body: Body) {
   const { ship } = g;
   ship.dead = { t: RESPAWN_TIME, reason, body };
   g.dock = null;
+  g.dockRequest = null;
   g.inStation = null;
   ship.ap = null;
   ship.ftlCharge = 0;

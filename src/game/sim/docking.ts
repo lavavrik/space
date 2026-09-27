@@ -23,6 +23,7 @@ import { THREE } from '../lib/three';
 import type { Station } from '../types';
 import { destroyShip } from './flight';
 import { engageAutoLaunch, engageAutodock } from './autodock';
+import { startDockGuide } from './guide';
 import { HANGAR_R, PAD_COUNT, PAD_R, padLocal, stationPointVel, stationQuat, toLocal, toWorld, whereIs } from './stationGeom';
 
 /** Within this distance (m) of a targeted station, K asks for a pad. */
@@ -67,6 +68,7 @@ export function dockKey(g: Game) {
   const unit = g.ship.avionics.dock;
   if (dist > DOCK_REQUEST_RANGE && unit?.caps.clearance && dist < unit.caps.range && g.ship.mode === 'normal' && !d) {
     engageAutodock(g, t);
+    startDockGuide(g, t);
     return true;
   }
   if (dist > DOCK_REQUEST_RANGE) {
@@ -83,18 +85,43 @@ export function dockKey(g: Game) {
     else g.showMsg(`Docking already granted · ${t.name} · pad ${d.pad + 1}`);
     return true;
   }
-  requestPad(g, t, `Docking granted · ${t.name} · pad`);
-  // a docking computer takes it from here (the WD-100 needs the pad first: this was it)
+  if (g.dockRequest?.station === t) {
+    g.showMsg(`Waiting for ${t.name} traffic control…`);
+    return true;
+  }
+  requestDocking(g, t);
+  // a docking computer takes it from here: it holds position until the pad comes through
   if (g.ship.avionics.dock) engageAutodock(g, t);
-  else g.showMsg(`${g.msg.text} · enter through the slot, matching its spin`);
   return true;
 }
 
-/** The station grants a pad (random for now). `msg` gets the pad number appended. */
-export function requestPad(g: Game, st: Station, msg: string) {
+/** Traffic control answers a docking request after this long (s), give or take. */
+const REPLY_TIME = [4, 8];
+
+/** Ask for a pad: traffic control answers after a few seconds (updateDockRequest). */
+export function requestDocking(g: Game, st: Station) {
+  g.dock = null;
+  g.dockRequest = { station: st, t: REPLY_TIME[0] + Math.random() * (REPLY_TIME[1] - REPLY_TIME[0]) };
+  g.showMsg(`Requesting docking · ${st.name}…`);
+  startDockGuide(g, st);
+}
+
+/** Each frame: count down a pending request; when traffic control answers, the pad is granted. */
+export function updateDockRequest(g: Game, dt: number) {
+  const r = g.dockRequest;
+  if (!r) return;
+  if (r.station.pos.distanceTo(g.ship.pos) > DOCK_REVOKE_RANGE) {
+    g.dockRequest = null;
+    g.showMsg(`Docking request dropped · out of ${r.station.name}'s range`, 'warn');
+    return;
+  }
+  r.t -= dt;
+  if (r.t > 0) return;
+  g.dockRequest = null;
   const pad = Math.floor(Math.random() * PAD_COUNT);
-  g.dock = { station: st, pad, docked: false };
-  g.showMsg(`${msg} ${pad + 1}`);
+  g.dock = { station: r.station, pad, docked: false };
+  g.showMsg(`Docking granted · ${r.station.name} · pad ${pad + 1}${g.autodock ? '' : ' · enter through the slot, matching its spin'}`);
+  g.invalidateHud();
 }
 
 /** The ship's last clear position (station unit coordinates) near each station, for bouncing back to. */
