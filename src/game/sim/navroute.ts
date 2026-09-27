@@ -17,7 +17,7 @@
 import { JUMP_CHARGE_TIME, JUMP_RANGE, JUMP_TUNNEL_BASE, JUMP_TUNNEL_PER_LY, LY, SCOOP_FLUX_FULL, SHIP, fluxDist, jumpCost } from '../constants';
 import { THREE } from '../lib/three';
 import { scoopFitted } from '../outfit/catalog';
-import { fmtDist } from '../format';
+import { fmtDist, fmtEnergy } from '../format';
 import type { Game } from '../Game';
 import type { StarSystem, Target } from '../types';
 import { systemsNear } from '../universe/galaxy';
@@ -504,7 +504,7 @@ function waitForBattery(g: Game) {
   if (ship.batt >= LEG_BATTERY) return false;
   if (ship.mode === 'ftl' && !ship.ap) dropFTL(g, false);
   ship.sunTrack = true;
-  g.route!.status = `waiting · charging the battery (${ship.batt.toFixed(0)} / ${LEG_BATTERY} kWh)`;
+  g.route!.status = `waiting · charging the battery (${fmtEnergy(ship.batt)} / ${fmtEnergy(LEG_BATTERY)})`;
   return true;
 }
 

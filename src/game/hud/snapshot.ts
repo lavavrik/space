@@ -1,6 +1,6 @@
 /* Turns game state into the display strings and flags the HUD shows. */
 import { FTL_CHARGE_TIME, JUMP_CHARGE_TIME, LY, JUMP_DEPART_TIME, NORMAL_ACC, NORMAL_BOOST, NORMAL_MAX, SHIP, ftlBurn, jumpCost } from '../constants';
-import { fmtArea, fmtClock, fmtDist, fmtFlow, fmtMass, fmtPower, fmtSpeed, fmtSpeedText, fmtTime } from '../format';
+import { fmtArea, fmtClock, fmtEnergy, fmtDist, fmtFlow, fmtMass, fmtPower, fmtSpeed, fmtSpeedText, fmtTime } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import { holdPoint, orbitVelErr } from '../sim/autopilot';
@@ -221,7 +221,7 @@ function systems(g: Game): SystemsView {
       },
       {
         label: 'BATTERY',
-        value: `${ship.batt.toFixed(0)} kWh`,
+        value: fmtEnergy(ship.batt),
         frac: ship.batt / cap,
         variant: 'batt',
         sub: { text: `${netText}${battTime}`, warn: net < -0.5 },
@@ -330,7 +330,7 @@ function outfitView(g: Game): OutfitView {
   const h = g.heat;
   const rads = radiatorsFitted(o);
   const pump = pumpFitted(o);
-  const bSpecs = (b: BatteryModule) => `${b.caps.capacity} kWh · ${fmtPower(b.caps.maxKW)} out (${b.caps.maxKW / b.caps.capacity}C) · ${fmtPower(b.caps.chargeKW)} in · ${fmtMass(b.mass)}`;
+  const bSpecs = (b: BatteryModule) => `${fmtEnergy(b.caps.capacity)} · ${fmtPower(b.caps.maxKW)} out (${b.caps.maxKW / b.caps.capacity}C) · ${fmtPower(b.caps.chargeKW)} in · ${fmtMass(b.mass)}`;
   return {
     station: st?.name ?? null,
     battery: { unit: moduleLabel(o.battery), specs: bSpecs(o.battery), options: st ? BATTERIES.map((b) => ({ id: b.id, unit: moduleLabel(b), specs: `${b.blurb} · ${bSpecs(b)}`, current: b === o.battery })) : [] },

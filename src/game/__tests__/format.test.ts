@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AU, C, LY } from '../constants';
-import { fmtClock, fmtCoord, fmtDist, fmtFlow, fmtMass, fmtPower, fmtSpeed, fmtTime } from '../format';
+import { fmtClock, fmtCoord, fmtDist, fmtEnergy, fmtFlow, fmtMass, fmtPower, fmtSpeed, fmtTime } from '../format';
 
 describe('formatting', () => {
   it('picks distance units by scale', () => {
@@ -32,6 +32,11 @@ describe('formatting', () => {
     expect(fmtFlow(24.3)).toBe('24.3 kg/s');
     expect(fmtPower(6000)).toBe('6.00 MW');
     expect(fmtPower(40)).toBe('40 kW');
+    // the unit is chosen after rounding: no "1000 kW"
+    expect(fmtPower(999.7)).toBe('1.00 MW');
+    expect(fmtPower(999.4)).toBe('999 kW');
+    expect(fmtPower(9999.9)).toBe('10.0 MW');
+    expect(fmtEnergy(200)).toBe('200 kWh');
     expect(fmtClock(342.7)).toBe('05:42');
     expect(fmtClock(3 * 3600 + 5 * 60 + 9)).toBe('3:05:09');
     expect(fmtClock(2 * 86400 + 7 * 3600 + 30 * 60)).toBe('day 3 · 7:30');

@@ -1,5 +1,5 @@
 import type { ElectricalView } from '../../game/hud/types';
-import { fmtPower } from '../../game/format';
+import { fmtEnergy, fmtPower } from '../../game/format';
 import { cx } from './primitives';
 
 /*
@@ -78,7 +78,7 @@ export function ElectricalSchematic({ e }: { e: ElectricalView }) {
           {battery.unit}
         </text>
         <text x={12} y={battY + 47} className="eval">
-          {battery.kwh.toFixed(0)} / {battery.cap} kWh
+          {fmtEnergy(battery.kwh)} / {fmtEnergy(battery.cap)}
         </text>
         <rect x={12} y={battY + 53} width={SRC_R - 20} height={5} className="egauge" />
         <rect x={12} y={battY + 53} width={(SRC_R - 20) * battFrac} height={5} className="egauge fill" />

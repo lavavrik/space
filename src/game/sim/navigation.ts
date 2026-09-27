@@ -1,4 +1,5 @@
 import { ARRIVE_FLUX, JUMP_CHARGE_TIME, JUMP_RANGE, LY, SHIP, fluxDist, jumpCost } from '../constants';
+import { fmtEnergy } from '../format';
 import type { Game } from '../Game';
 import { mulberry32, rr } from '../lib/rng';
 import { THREE } from '../lib/three';
@@ -254,7 +255,7 @@ export function startJump(g: Game) {
   }
   const needKWh = (SHIP.jumpChargeKW * JUMP_CHARGE_TIME) / 3600 + 1;
   if (ship.batt < needKWh) {
-    g.showMsg(`Hyperdrive needs ${needKWh.toFixed(0)} kWh of battery to charge`, 'warn');
+    g.showMsg(`Hyperdrive needs ${fmtEnergy(needKWh)} of battery to charge`, 'warn');
     return;
   }
   ship.ftlCharge = 0;

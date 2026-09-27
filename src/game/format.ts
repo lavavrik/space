@@ -47,8 +47,22 @@ export function fmtTime(s: number) {
   return h ? `${h}h ${String(m).padStart(2, '0')}m` : `${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
 }
 
+/**
+ * Power, always with the same precision: 9.5 kW, 640 kW, 1.00 MW, 12.5 MW. The unit is picked after
+ * rounding, so 999.7 kW reads 1.00 MW rather than "1000 kW".
+ */
 export function fmtPower(kw: number) {
-  return kw >= 1000 ? `${(kw / 1000).toFixed(kw < 1e4 ? 2 : 1)} MW` : `${kw.toFixed(kw < 10 ? 1 : 0)} kW`;
+  const a = Math.abs(kw);
+  if (a < 9.95) return `${kw.toFixed(1)} kW`;
+  if (a < 999.5) return `${kw.toFixed(0)} kW`;
+  const mw = kw / 1000,
+    m = Math.abs(mw);
+  return `${mw.toFixed(m < 9.995 ? 2 : m < 99.95 ? 1 : 0)} MW`;
+}
+
+/** Energy in the same style: 6.0 kWh, 200 kWh, 1.20 MWh. */
+export function fmtEnergy(kwh: number) {
+  return fmtPower(kwh) + 'h';
 }
 
 /** Mission clock: mm:ss, then h:mm:ss, then days (time warp runs it up fast). */
