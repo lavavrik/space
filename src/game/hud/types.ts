@@ -117,6 +117,15 @@ export interface AvionicsSlotView {
   specs: [string, string][];
 }
 
+/** Ship stats (U), electrical section: drawn as a schematic (sources → bus → loads), plus a few rows. */
+export interface ElectricalView {
+  solar: { kw: number; max: number; state: 'ok' | 'shadow' | 'feathered' | 'dark'; curtailed: number };
+  battery: { unit: string; kwh: number; cap: number; flowKW: number; maxKW: number; chargeKW: number };
+  bus: { capKW: number; drawKW: number };
+  loads: { id: string; name: string; kw: number; limited: number | null }[];
+  rows: [string, string | Readout][];
+}
+
 /** Outfit panel (Shift+U): the utility slots, the thermal hardware's state, and fitting at a station. */
 export interface OutfitView {
   station: string | null; // the station that can fit modules right now
@@ -192,7 +201,7 @@ export interface HudSnapshot {
   planner: PlannerView | null;
   autopilot: AutopilotView | null;
   avionics: AvionicsSlotView[] | null; // the ship stats panel (U), when open
-  electrical: [string, string | Readout][] | null; // its electrical section
+  electrical: ElectricalView | null; // its electrical section
   influences: InfluencesView | null;
   outfit: OutfitView | null;
   nav: NavView | null;

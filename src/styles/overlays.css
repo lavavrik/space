@@ -14,7 +14,7 @@
 /* Left column: location, then the controls list or the target info panel. */
 #leftcol {
   position: fixed; top: calc(1.167rem + env(safe-area-inset-top, 0px)); left: 1.333rem;
-  width: 27.5rem; max-width: calc(100% - 2.667rem); max-height: calc(100% - 24rem); overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--amber-faint) transparent; /* stops above the bottom HUD (the 4-gauge ship panel with a note line) */
+  width: 27.5rem; max-width: calc(100% - 2.667rem); max-height: calc(100% - 24rem); overflow: hidden; /* stops above the bottom HUD (the 4-gauge ship panel with a note line) */
   display: flex; flex-direction: column; gap: 0.833rem; pointer-events: none;
 }
 #info { display: flex; flex-direction: column; gap: 2px; }
@@ -111,6 +111,33 @@
 .obtn.cur, .obtn:disabled { border-color: var(--amber); color: var(--amber); cursor: default; background: rgba(255, 165, 58, .1); }
 #avionics .isec.first { border-top: 0; margin-top: 0; padding-top: 0; }
 #avionics .row b { text-align: right; min-width: 0; white-space: normal; }
-/* the left column scrolls when its panel is taller than the room above the bottom HUD, so it takes
-   the wheel over its panels (they're opaque anyway) */
-#leftcol > .pan { pointer-events: auto; }
+/* the location header stays put; the panel under it scrolls when it's taller than the room left
+   above the bottom HUD, so it takes the wheel (panels are opaque anyway) */
+#loc { flex: none; }
+#leftcol > .pan {
+  pointer-events: auto; flex: 0 1 auto; min-height: 0; overflow-y: auto;
+  scrollbar-width: thin; scrollbar-color: var(--amber-faint) transparent;
+}
+
+/* electrical schematic (U): wires carry power; dashes march the way it flows */
+.esch { width: 100%; height: auto; flex: none; aspect-ratio: 360 / 262; display: block; margin: .2rem 0 .3rem; font-family: "Share Tech Mono", ui-monospace, monospace; }
+.esch .ebus { stroke: var(--amber); stroke-width: 3; stroke-linecap: round; }
+.esch .ew { fill: none; stroke: var(--amber-faint); stroke-dasharray: 2 4; }
+.esch .ew.on { stroke: #a8e68c; stroke-dasharray: 7 5; animation: eflow .9s linear infinite; }
+.esch .ew.on.rev { animation-direction: reverse; }
+.esch .ew.lim { stroke: var(--red); }
+@keyframes eflow { from { stroke-dashoffset: 12; } to { stroke-dashoffset: 0; } }
+.esch .ebox rect { fill: rgba(255, 165, 58, .05); stroke: var(--amber-dim); stroke-width: 1; }
+.esch .ebox.off rect { stroke: var(--amber-faint); fill: none; }
+.esch .ebox.warn rect { stroke: var(--red); }
+.esch .etitle { font-size: 9px; letter-spacing: .1em; fill: var(--amber); }
+.esch .ebox.off .etitle, .esch .ebox.off .eval { fill: var(--amber-dim); }
+.esch .eval { font-size: 12px; fill: var(--text); }
+.esch .ebox.warn .eval { fill: var(--red); }
+.esch .esub { font-size: 8.5px; fill: var(--amber-dim); }
+.esch .esub.flow { fill: #a8e68c; font-size: 10px; }
+.esch .elab { font-size: 9px; letter-spacing: .08em; fill: var(--amber); }
+.esch .mid { text-anchor: middle; }
+.esch .egauge { fill: var(--amber-faint); }
+.esch .egauge.fill { fill: #a8e68c; }
+@media (prefers-reduced-motion: reduce) { .esch .ew.on { animation: none; } }

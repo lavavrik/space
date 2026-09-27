@@ -16,6 +16,7 @@
  */
 import { JUMP_CHARGE_TIME, JUMP_RANGE, JUMP_TUNNEL_BASE, JUMP_TUNNEL_PER_LY, LY, SCOOP_FLUX_FULL, SHIP, fluxDist, jumpCost } from '../constants';
 import { THREE } from '../lib/three';
+import { scoopFitted } from '../outfit/catalog';
 import { fmtDist } from '../format';
 import type { Game } from '../Game';
 import type { StarSystem, Target } from '../types';
@@ -156,10 +157,11 @@ export function planRoute(g: Game, mode: NavMode): Route | string {
         cost = jumpCost(ly);
       exoticNeeded += cost;
       if (ex < cost + EXOTIC_MARGIN) {
-        if (nav.caps.refuelStops) {
+        if (nav.caps.refuelStops && scoopFitted(g.ship.outfit)?.caps.exotic) {
           legs.push({ kind: 'refuel', at, time: REFUEL_TIME });
           ex = SHIP.exoticCap;
-        } else if (!warning) warning = `Exotic matter runs out before ${to.name} · refuel on the way`;
+        } else if (!warning)
+          warning = nav.caps.refuelStops ? `Exotic matter runs out before ${to.name} · refuel stops need a corona scoop (FS-3 or FS-5)` : `Exotic matter runs out before ${to.name} · refuel on the way`;
       }
       legs.push({ kind: 'jump', to, ly, cost, time: hopTime(ly) });
       ex -= cost;

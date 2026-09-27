@@ -8,6 +8,7 @@
  */
 import { AU, C, SCOOP_FLUX_FULL, SCOOP_FLUX_MIN, WT, fluxDist } from '../constants';
 import { HULL, S0, TEMP } from '../sim/thermal';
+import { scoopFitted } from '../outfit/catalog';
 import { fmtDist, fmtPower, fmtSpeedText } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
@@ -89,7 +90,8 @@ export function buildInfluences(g: Game): InfluencesView {
   light.push(['STARLIGHT', `${power.flux.toFixed(power.flux < 10 ? 2 : 0)} × Earth's · ${(ship.pos.distanceTo(star.pos) / AU).toFixed(3)} AU from ${star.name}`]);
   light.push(['SOLAR POWER', power.shadow ? { text: `none · in ${power.shadow.name}'s shadow`, warn: true } : `${fmtPower(power.solar)} (panels ${Math.round((Math.acos(Math.max(-1, Math.min(1, power.cos))) * 180) / Math.PI)}° off the star)`]);
   const scoopAt = fluxDist(star.L, SCOOP_FLUX_MIN, star.radius) - star.radius;
-  light.push(['CORONA SCOOP', starAlt < scoopAt ? { text: `in range · ${Math.round(Math.min(1, power.flux / SCOOP_FLUX_FULL) * 100)}% rate`, warn: false } : `${fmtDist(starAlt - scoopAt)} to go`]);
+  const unit = scoopFitted(ship.outfit);
+  light.push(['CORONA SCOOP', !unit ? { text: 'no fuel scoop fitted', warn: false } : starAlt < scoopAt ? { text: `in range · ${Math.round(Math.min(1, power.flux / SCOOP_FLUX_FULL) * 100)}% rate`, warn: false } : `${fmtDist(starAlt - scoopAt)} to go`]);
   const giants = g.cur.bodies
     .filter((b) => b.kind !== 'star' && b.type >= WT.GasGiant)
     .map((b) => ({ b, d: ship.pos.distanceTo(b.pos) - b.radius * 1.05 }))

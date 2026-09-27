@@ -21,7 +21,7 @@
  * Physics in sim/thermal.ts; numbers in docs/thermal.md.
  */
 
-export type ModuleKind = 'radiator' | 'heatpump';
+export type ModuleKind = 'radiator' | 'heatpump' | 'scoop';
 
 interface ModuleBase {
   id: string;
@@ -48,7 +48,20 @@ export interface HeatPumpModule extends ModuleBase {
   };
 }
 
-export type Module = RadiatorModule | HeatPumpModule;
+/**
+ * Fuel scoop: a magnetic ram intake that funnels thin gas into the tanks while you skim a gas
+ * giant's upper atmosphere or a star's outer corona (normal space only: in FTL the ship isn't
+ * really moving through the gas). The corona models also separate exotic matter from the solar wind.
+ */
+export interface ScoopModule extends ModuleBase {
+  kind: 'scoop';
+  caps: {
+    exotic: boolean; // collects exotic matter in a corona (otherwise hydrogen only)
+    rate: number; // × the baseline intake (sim/resources.ts)
+  };
+}
+
+export type Module = RadiatorModule | HeatPumpModule | ScoopModule;
 
 /** Most thrust (m/s², ~3 g) deployed radiators can take; more is capped while they're out. */
 export const RADIATOR_MAX_ACC = 30;
@@ -67,6 +80,21 @@ export const MODULES: Module[] = [
     id: 'kr-25', kind: 'radiator', maker: 'Kelvin Dynamics', model: 'KR-25', name: 'Glacier', mass: 3500,
     blurb: '2 × 1,250 m² fins, 5,000 m² radiating: about triples it',
     caps: { area: 2500, deployTime: 30 },
+  },
+  {
+    id: 'fs-1', kind: 'scoop', maker: 'Aerodyne Fuel Systems', model: 'FS-1', name: 'Draught', mass: 2000,
+    blurb: 'Hydrogen from gas giants and stellar coronae: 1.5–2.5 t/s. No exotic matter',
+    caps: { exotic: false, rate: 1 },
+  },
+  {
+    id: 'fs-3', kind: 'scoop', maker: 'Aerodyne Fuel Systems', model: 'FS-3', name: 'Corona', mass: 3500,
+    blurb: 'Hydrogen, plus exotic matter from stellar coronae (up to 1.2 kg/s)',
+    caps: { exotic: true, rate: 1 },
+  },
+  {
+    id: 'fs-5', kind: 'scoop', maker: 'Aerodyne Fuel Systems', model: 'FS-5', name: 'Maelstrom', mass: 5500,
+    blurb: 'Twice the intake of the FS-3: hydrogen and exotic matter',
+    caps: { exotic: true, rate: 2 },
   },
   {
     id: 'kh-2', kind: 'heatpump', maker: 'Kelvin Dynamics', model: 'KH-2', name: 'Coldsink', mass: 1200,
@@ -114,7 +142,7 @@ export const moduleById = (id: string) => MODULES.find((m) => m.id === id) ?? nu
 export const moduleLabel = (m: Module | BatteryModule) => `${m.model} ${m.name}`;
 
 /** Utility slots on the default hull. */
-export const UTILITY_SLOTS = 2;
+export const UTILITY_SLOTS = 3;
 
 /** What's fitted and the state of the deployable hardware. */
 export interface Outfit {
@@ -137,3 +165,7 @@ export const radiatorsFitted = (o: Outfit) => o.slots.filter((x): x is RadiatorM
 export const pumpFitted = (o: Outfit) => o.slots.find((x): x is HeatPumpModule => x?.kind === 'heatpump') ?? null;
 /** Radiator area per face (m²) that's out right now. */
 export const radiatorArea = (o: Outfit) => radiatorsFitted(o).reduce((a, r) => a + r.caps.area, 0) * o.radiatorsOut;
+
+/** The fitted fuel scoop with the best intake, if any (one is enough; a second adds nothing). */
+export const scoopFitted = (o: Outfit) =>
+  o.slots.filter((x): x is ScoopModule => x?.kind === 'scoop').sort((a, b) => Number(b.caps.exotic) - Number(a.caps.exotic) || b.caps.rate - a.caps.rate)[0] ?? null;

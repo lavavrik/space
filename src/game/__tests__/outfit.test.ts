@@ -24,3 +24,14 @@ describe('outfit', () => {
     expect(flow).toBeLessThan(11);
   });
 });
+
+describe('fuel scoops', () => {
+  it('picks the best fitted scoop', async () => {
+    const { scoopFitted } = await import('../outfit/catalog');
+    const o = emptyOutfit();
+    expect(scoopFitted(o)).toBeNull(); // none by default
+    o.slots[0] = moduleById('fs-1');
+    o.slots[1] = moduleById('fs-3');
+    expect(scoopFitted(o)?.id).toBe('fs-3'); // the exotic-capable one wins
+  });
+});

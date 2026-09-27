@@ -4,7 +4,7 @@ import { THREE } from '../lib/three';
 import type { Ship } from '../types';
 import { TEMP } from './thermal';
 import { battCap, grant } from './power';
-import { RADIATOR_MAX_ACC, outfitMass } from '../outfit/catalog';
+import { RADIATOR_MAX_ACC, outfitMass, scoopFitted } from '../outfit/catalog';
 
 /** Dry mass: the hull plus whatever modules are fitted. */
 export const dryMass = (ship: Ship) => SHIP.dry + outfitMass(ship.outfit);
@@ -78,29 +78,49 @@ export function solarPower(g: Game) {
   return Math.min(SHIP.solarMax, SHIP.solarRated * power.flux * Math.max(0, power.cos));
 }
 
-/** Refuelling: skim a star's corona or a gas giant's upper atmosphere, or mine ice on the ground. */
+/**
+ * Refuelling: skim a star's corona or a gas giant's upper atmosphere with a fitted fuel scoop
+ * (normal space only), or mine ice on the ground (built in).
+ */
 export function scoop(g: Game, dt: number) {
   const { ship, cur } = g;
   ship.scoop = '';
   let dp = 0,
     dx = 0;
+  const unit = scoopFitted(ship.outfit);
+  const k = unit?.caps.rate ?? 0;
   for (const b of cur.bodies) {
     const alt = b.pos.distanceTo(ship.pos) - b.radius;
+    const inZone = b.kind === 'star' ? b.L * (AU / (alt + b.radius)) ** 2 >= SCOOP_FLUX_MIN : b.type >= WT.GasGiant && alt < b.radius * 0.05;
+    if (inZone && (!unit || ship.mode !== 'normal')) {
+      // say why nothing's coming in (once per visit)
+      if (!unit) warnOnce(g, 'noScoop', `${b.kind === 'star' ? 'In the corona' : 'In the upper atmosphere'} of ${b.name} · no fuel scoop fitted (fit one at a station, Shift+U)`);
+      else warnOnce(g, 'ftlScoop', 'The fuel scoop only works in normal space · drop out of FTL');
+      continue;
+    }
+    if (!unit) continue;
     if (b.kind === 'star') {
       // the outer corona / inner stellar wind: its density, and so the scoop rate, falls off like
       // the starlight (∝ 1/r²); too thin to bother below SCOOP_FLUX_MIN, full rate from SCOOP_FLUX_FULL
       const F = b.L * (AU / (alt + b.radius)) ** 2;
       if (F >= SCOOP_FLUX_MIN) {
         const f = Math.min(1, F / SCOOP_FLUX_FULL);
-        dp += 2500 * f * dt;
-        dx += 1.2 * f * dt;
+        dp += 2500 * k * f * dt;
+        if (unit.caps.exotic) dx += 1.2 * k * f * dt;
         ship.scoop = `Skimming the corona of ${b.name}`;
       }
-    } else if (b.type >= WT.GasGiant && ship.mode === 'normal' && alt < b.radius * 0.05) {
+    } else if (inZone) {
       const f = Math.min(1, (b.radius * 0.05 - alt) / (b.radius * 0.03));
-      dp += 1500 * f * dt;
+      dp += 1500 * k * f * dt;
       ship.scoop = `Skimming hydrogen from ${b.name}`;
     }
+  }
+  if (!ship.scoop) {
+    const anyZone = cur.bodies.some((b) => {
+      const alt = b.pos.distanceTo(ship.pos) - b.radius;
+      return b.kind === 'star' ? b.L * (AU / (alt + b.radius)) ** 2 >= SCOOP_FLUX_MIN : b.type >= WT.GasGiant && alt < b.radius * 0.05;
+    });
+    if (!anyZone) g.warned.noScoop = g.warned.ftlScoop = false;
   }
   const landed = ship.landed;
   if (landed && landed.kind !== 'star' && ([WT.EarthLike, WT.Ocean, WT.Icy] as number[]).includes(landed.type)) {

@@ -20,7 +20,7 @@ import { OUTFIT_MAX_SPEED, outfitter } from '../outfit/fit';
 import { unitLabel, type Computer } from '../avionics/catalog';
 import { buildInfluences } from './influences';
 import { buildInfo } from './info';
-import type { AutopilotView, AvionicsSlotView, OutfitView, FlightView, GaugeBadge, GaugeView, NavView, GuideView, HudSnapshot, LocationView, Pill, PlannerView, Readout, SystemsView, TargetView } from './types';
+import type { AutopilotView, AvionicsSlotView, ElectricalView, OutfitView, FlightView, GaugeBadge, GaugeView, NavView, GuideView, HudSnapshot, LocationView, Pill, PlannerView, Readout, SystemsView, TargetView } from './types';
 
 const tmp = new THREE.Vector3();
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
@@ -322,7 +322,9 @@ function outfitView(g: Game): OutfitView {
   const specsOf = (m: Module) =>
     m.kind === 'radiator'
       ? `${fmtArea(2 * m.caps.area)} radiating · ${m.caps.deployTime} s to deploy · ${fmtMass(m.mass)}`
-      : `lift ${m.caps.lift} K · up to ${fmtPower(m.caps.maxKW)} · ${fmtMass(m.mass)}`;
+      : m.kind === 'heatpump'
+        ? `lift ${m.caps.lift} K · up to ${fmtPower(m.caps.maxKW)} · ${fmtMass(m.mass)}`
+        : `${m.caps.exotic ? 'H₂ + exotic' : 'H₂ only'} · ${m.caps.rate}× intake · ${fmtMass(m.mass)}`;
   const h = g.heat;
   const rads = radiatorsFitted(o);
   const pump = pumpFitted(o);
@@ -332,7 +334,7 @@ function outfitView(g: Game): OutfitView {
     battery: { unit: moduleLabel(o.battery), specs: bSpecs(o.battery), options: st ? BATTERIES.map((b) => ({ id: b.id, unit: moduleLabel(b), specs: `${b.blurb} · ${bSpecs(b)}`, current: b === o.battery })) : [] },
     hint: g.refFrame ? `Slow to under ${OUTFIT_MAX_SPEED} m/s relative to ${g.refFrame.name} to change modules` : 'Modules are fitted at a station: rendezvous with one (in its local frame, nearly at rest)',
     slots: o.slots.map((m) => (m ? { unit: moduleLabel(m), blurb: m.blurb, specs: specsOf(m), empty: false } : { unit: 'empty', blurb: '', specs: '', empty: true })),
-    catalogue: st ? MODULES.map((m) => ({ id: m.id, unit: moduleLabel(m), kind: m.kind === 'radiator' ? 'RADIATORS' : 'HEAT PUMP', blurb: m.blurb, specs: specsOf(m) })) : [],
+    catalogue: st ? MODULES.map((m) => ({ id: m.id, unit: moduleLabel(m), kind: { radiator: 'RADIATORS', heatpump: 'HEAT PUMP', scoop: 'FUEL SCOOP' }[m.kind], blurb: m.blurb, specs: specsOf(m) })) : [],
     radiators: {
       fitted: rads.length > 0,
       out: o.radiatorsOut,
@@ -363,39 +365,47 @@ function outfitView(g: Game): OutfitView {
 }
 
 /**
- * Ship stats (U), electrical section: the battery and its limits, what the panels give, what every
- * load draws, and what's being held back. Loads are shown as granted this frame (sim/power.ts).
+ * Ship stats (U), electrical section: sources (panels, battery) feeding the bus, and every load it
+ * serves, as granted this frame (sim/power.ts). The panel draws it as a schematic.
  */
-function electricalView(g: Game): [string, string | Readout][] {
+function electricalView(g: Game): ElectricalView {
   const { ship, power } = g;
   const b = ship.outfit.battery;
   const cap = b.caps.capacity;
-  const rows: [string, string | Readout][] = [];
-  rows.push(['BATTERY', `${moduleLabel(b)} · ${cap} kWh`]);
-  rows.push(['CHARGE', { text: `${ship.batt.toFixed(1)} / ${cap} kWh · ${Math.round((ship.batt / cap) * 100)} %`, warn: ship.batt < cap * 0.15 }]);
-  rows.push(['DISCHARGE LIMIT', `${fmtPower(b.caps.maxKW)} (${(b.caps.maxKW / cap).toFixed(0)}C)`]);
-  rows.push(['CHARGE LIMIT', `${fmtPower(b.caps.chargeKW)} (${(b.caps.chargeKW / cap).toFixed(0)}C)`]);
-  rows.push([
-    'SOLAR',
-    power.shadow ? { text: 'none · in shadow', warn: true } : ship.temp >= TEMP.panels ? { text: 'none · panels feathered (heat)', warn: true } : `${fmtPower(power.solar)} · panels max ${fmtPower(SHIP.solarMax)}${power.curtailed > 1 ? ` · ${fmtPower(power.curtailed)} unused` : ''}`,
-  ]);
-  rows.push(['BUS CAPACITY', `${fmtPower(power.cap)} (solar + battery)`]);
-  const loads: [string, number][] = [
-    ['life support, avionics', SHIP.baseLoad],
-    ['thrusters', power.thrustKW],
-    ['FTL drive', power.ftlKW],
-    ['drive charging', power.chargeKW],
-    ['heat pump', power.pumpKW],
-  ];
-  rows.push(['DRAW', `${fmtPower(power.draw)} · ${loads.filter(([, kw]) => kw > 0.5).map(([n, kw]) => `${n} ${fmtPower(kw)}`).join(' · ')}`]);
+  const lim = power.limited;
+  const limitOf = (id: string) => {
+    if (!lim) return null;
+    const is = { charge: /charging/, thrust: /thrusters/, ftl: /FTL drive/, pump: /heat pump/ }[id];
+    return is?.test(lim.what) ? lim.frac : null;
+  };
   const net = power.net;
   const t = net < -0.5 ? `empty in ${fmtTime((ship.batt / -net) * 3600)}` : net > 0.5 && ship.batt < cap - 0.05 ? `full in ${fmtTime(((cap - ship.batt) / net) * 3600)}` : 'holding';
-  rows.push(['BATTERY FLOW', { text: `${net >= 0 ? '+' : '−'}${fmtPower(Math.abs(net))} · ${t}`, warn: net < -0.5 }]);
-  if (power.limited) rows.push(['LIMITED', { text: `${power.limited.what} at ${Math.round(power.limited.frac * 100)} % of what it asks`, warn: true }]);
-  const ftlS = (SHIP.ftlChargeKW * FTL_CHARGE_TIME) / Math.max(1, Math.min(SHIP.ftlChargeKW, power.cap - SHIP.baseLoad));
-  const jumpS = (SHIP.jumpChargeKW * JUMP_CHARGE_TIME) / Math.max(1, Math.min(SHIP.jumpChargeKW, power.cap - SHIP.baseLoad));
-  rows.push(['CHARGE TIMES', `FTL ${fmtTime(ftlS)} · hyperjump ${fmtTime(jumpS)} at this bus`]);
-  return rows;
+  const spare = Math.max(1, Math.min(SHIP.jumpChargeKW, power.cap - SHIP.baseLoad));
+  const ftlS = (SHIP.ftlChargeKW * FTL_CHARGE_TIME) / Math.min(SHIP.ftlChargeKW, spare);
+  const jumpS = (SHIP.jumpChargeKW * JUMP_CHARGE_TIME) / spare;
+  const rows: [string, string | Readout][] = [
+    ['BATTERY', { text: `${net >= 0 ? '+' : '−'}${fmtPower(Math.abs(net))} · ${t}`, warn: net < -0.5 }],
+    ['CHARGE TIMES', `FTL ${fmtTime(ftlS)} · hyperjump ${fmtTime(jumpS)} at this bus`],
+  ];
+  if (lim) rows.push(['LIMITED', { text: `${lim.what} at ${Math.round(lim.frac * 100)} % of what it asks`, warn: true }]);
+  return {
+    solar: {
+      kw: power.solar,
+      max: SHIP.solarMax,
+      state: power.shadow ? 'shadow' : ship.temp >= TEMP.panels ? 'feathered' : power.solar < 1 ? 'dark' : 'ok',
+      curtailed: power.curtailed,
+    },
+    battery: { unit: moduleLabel(b), kwh: ship.batt, cap, flowKW: net, maxKW: b.caps.maxKW, chargeKW: b.caps.chargeKW },
+    bus: { capKW: power.cap, drawKW: power.draw },
+    loads: [
+      { id: 'base', name: 'LIFE SUPPORT · AVIONICS', kw: SHIP.baseLoad, limited: null },
+      { id: 'thrust', name: 'THRUSTERS', kw: power.thrustKW, limited: limitOf('thrust') },
+      { id: 'ftl', name: 'FTL DRIVE', kw: power.ftlKW, limited: limitOf('ftl') },
+      { id: 'charge', name: g.jump?.phase === 'charge' ? 'HYPERDRIVE CHARGING' : 'DRIVE CHARGING', kw: power.chargeKW, limited: limitOf('charge') },
+      { id: 'pump', name: 'HEAT PUMP', kw: power.pumpKW, limited: limitOf('pump') },
+    ],
+    rows,
+  };
 }
 
 function avionicsView(g: Game): AvionicsSlotView[] {
@@ -453,7 +463,7 @@ function avionicsView(g: Game): AvionicsSlotView[] {
       ] : [],
     },
     {
-      id: 'outfit', key: '⇧U', kind: 'OUTFIT', does: 'Utility modules: radiators, heat pump', unit: o.slots.filter(Boolean).map((m) => moduleLabel(m!)).join(' · ') || 'no modules fitted', maker: '', blurb: '',
+      id: 'outfit', key: '⇧U', kind: 'OUTFIT', does: 'Battery and utility modules: fuel scoop, radiators, heat pump', unit: o.slots.filter(Boolean).map((m) => moduleLabel(m!)).join(' · ') || 'no modules fitted', maker: '', blurb: '',
       status: { text: outfitter(g) ? `alongside ${g.refFrame!.name} · can refit` : 'refit at a station' }, active: o.radiatorsOut > 0 || ship.vent,
       specs: [],
     },
