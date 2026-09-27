@@ -22,6 +22,8 @@ export function onPress(g: Game, code: string) {
     g.avionicsVisible = g.infoVisible = g.influencesVisible = g.outfitVisible = false;
     if (outfit) g.outfitVisible = !was;
     else if (code === 'KeyU') g.avionicsVisible = !was;
+    // ship stats and outfit are clicked through (entries, refit buttons): free the cursor on opening
+    if (g.avionicsVisible || g.outfitVisible) document.exitPointerLock?.();
     if (code === 'KeyB') g.influencesVisible = !was;
     if (code === 'KeyI') {
       g.infoVisible = !was;

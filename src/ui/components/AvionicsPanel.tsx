@@ -26,7 +26,7 @@ export function AvionicsPanel({ slots, electrical, onOpen }: { slots: AvionicsSl
           {s.specs.length > 0 && <div className="avspecs">{s.specs.map(([, v]) => v).join(' · ')}</div>}
         </div>
       ))}
-      <div className="okeys">Click an entry (mouse free: Esc) or press its key</div>
+      <div className="okeys">Click an entry or press its key</div>
       {electrical && (
         <>
           <div className="isec">ELECTRICAL</div>
