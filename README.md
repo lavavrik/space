@@ -13,7 +13,7 @@ npm run preview   # serve the production build
 npm test          # unit tests (vitest)
 npm run lint
 ```
-The build is a static site with relative paths, so `dist/` can be hosted anywhere. The included workflow (`.github/workflows/deploy.yml`) builds every push and deploys `main` to GitHub Pages; set **Settings → Pages → Source** to *GitHub Actions* to turn it on.
+The build is a static site with relative paths, so `dist/` can be hosted anywhere. The CI workflow (`.github/workflows/ci.yml`) lints, tests and builds every push and pull request. Deployment isn't set up yet.
 
 ## Code layout
 ```

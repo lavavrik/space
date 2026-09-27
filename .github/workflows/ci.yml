@@ -1,0 +1,27 @@
+# CI only for now: lint, test and build on every push and pull request.
+# Deployment is not set up yet (GitHub Pages was never enabled for this repo, so the old deploy
+# job failed on every push); add a deploy job here once hosting is chosen.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
