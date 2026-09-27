@@ -14,7 +14,7 @@
  * needed), an autopilot hold skimming a star's corona to refuel, and finally the autopilot's orbit
  * or station rendezvous. Disengaging the autopilot during a leg cancels the route.
  */
-import { JUMP_CHARGE_TIME, JUMP_RANGE, JUMP_TUNNEL_BASE, JUMP_TUNNEL_PER_LY, SHIP, SKY_RADIUS, jumpCost } from '../constants';
+import { JUMP_CHARGE_TIME, JUMP_RANGE, JUMP_TUNNEL_BASE, JUMP_TUNNEL_PER_LY, SHIP, jumpCost } from '../constants';
 import type { Game } from '../Game';
 import type { StarSystem, Target } from '../types';
 import { systemsNear } from '../universe/galaxy';
@@ -105,7 +105,10 @@ export function searchPath(from: StarSystem, to: StarSystem, mode: NavMode): Sta
   return null;
 }
 
-/** Plot a route to the nav destination (a picked star) or the current target, or say why not. */
+/**
+ * Plot a route through the nav waypoints (stars, in order; each stretch searched separately and
+ * optimal for the mode), or, with no waypoints, to the current target in this system. Or say why not.
+ */
 export function planRoute(g: Game, mode: NavMode): Route | string {
   const nav = g.ship.avionics.nav;
   if (!nav) return 'No navigation computer fitted';
@@ -113,15 +116,28 @@ export function planRoute(g: Game, mode: NavMode): Route | string {
   let warning: string | null = null,
     exoticNeeded = 0,
     destName: string;
-  const destSys = g.navDest;
+  const points = g.navPoints;
+  const destSys = points[points.length - 1] ?? null;
   const target: Target | null = destSys ? null : g.target;
-  if (destSys && destSys.id !== g.cur.sys.id) {
+  if (destSys) {
     if (!nav.caps.crossSystem) return `${nav.model} plots in-system routes only`;
-    let path = searchPath(g.cur.sys, destSys, mode);
-    // over the unit's hop limit: the fewest-jumps route is the best it can do
-    if (path && path.length > nav.caps.maxHops && mode !== 'jumps') path = searchPath(g.cur.sys, destSys, 'jumps');
-    if (!path) return `No route to ${destSys.name} found`;
-    if (path.length > nav.caps.maxHops) return `${destSys.name} is ${path.length} jumps away · ${nav.model} plots up to ${nav.caps.maxHops}`;
+    // chain the stretches between waypoints; over the unit's hop limit, fewest jumps is the best it can do
+    const chain = (m: NavMode) => {
+      const all: StarSystem[] = [];
+      let from = g.cur.sys;
+      for (const p of points) {
+        if (p.id === from.id) continue;
+        const seg = searchPath(from, p, m);
+        if (!seg) return { path: null, stuck: p };
+        all.push(...seg);
+        from = p;
+      }
+      return { path: all, stuck: null };
+    };
+    let { path, stuck } = chain(mode);
+    if (path && path.length > nav.caps.maxHops && mode !== 'jumps') ({ path, stuck } = chain('jumps'));
+    if (!path) return `No route to ${stuck!.name} found`;
+    if (path.length > nav.caps.maxHops) return `That's ${path.length} jumps · ${nav.model} plots up to ${nav.caps.maxHops}`;
     let ex = g.ship.exotic,
       at = g.cur.sys;
     for (const to of path) {
@@ -138,7 +154,7 @@ export function planRoute(g: Game, mode: NavMode): Route | string {
       ex -= cost;
       at = to;
     }
-    destName = `${destSys.name} · ${destSys.star.spec} · ${destSys.pos.distanceTo(g.cur.sys.pos).toFixed(1)} ly`;
+    destName = `${destSys.name} · ${destSys.star.spec} · ${destSys.pos.distanceTo(g.cur.sys.pos).toFixed(1)} ly${points.length > 1 ? ` · via ${points.length - 1} waypoint${points.length > 2 ? 's' : ''}` : ''}`;
   } else if (target && target.kind === 'station') {
     legs.push({ kind: 'rendezvous', station: target.name, time: 150 });
     destName = `${target.name} · ${target.parent.name}`;
@@ -146,7 +162,7 @@ export function planRoute(g: Game, mode: NavMode): Route | string {
     legs.push({ kind: 'orbit', body: target.name, time: 180 });
     destName = target.name;
   } else {
-    return 'Pick a destination: click a star (with this panel open) or target a body or station';
+    return 'Pick a destination: click or search for a star, or target a body or station';
   }
   return { destName, mode, legs, warning, exoticNeeded, running: false, i: 0, legStarted: false, retry: 0, status: '' };
 }
@@ -158,6 +174,40 @@ export function replan(g: Game) {
   g.route = typeof r === 'string' ? null : r;
   g.navError = typeof r === 'string' ? r : null;
   g.invalidateHud();
+}
+
+/** Add a star as the next waypoint (not the current system, nor a repeat of the last). */
+export function addNavPoint(g: Game, s: StarSystem) {
+  if (g.route?.running) return;
+  const last = g.navPoints[g.navPoints.length - 1];
+  if (s.id === g.cur.sys.id || s.id === last?.id) return;
+  g.navPoints.push(s);
+  replan(g);
+  g.showMsg(`Waypoint ${g.navPoints.length} · ${s.name} · ${s.pos.distanceTo((last ?? g.cur.sys).pos).toFixed(1)} ly from ${last ? last.name : 'here'}`, 'ftl');
+}
+
+/** Remove the last waypoint (Backspace or the button in the nav panel). */
+export function removeNavPoint(g: Game) {
+  if (g.route?.running) return;
+  const p = g.navPoints.pop();
+  replan(g);
+  if (p) g.showMsg(`Removed waypoint · ${p.name}`);
+}
+
+/**
+ * Star search for the nav panel: systems in the sky whose names contain `query`, nearest first,
+ * measured from the ship or from the last waypoint.
+ */
+export function searchStars(g: Game, query: string, from: 'ship' | 'last', limit = 8) {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const last = g.navPoints[g.navPoints.length - 1];
+  const origin = from === 'last' && last ? last.pos : g.cur.sys.pos;
+  return g.sky
+    .filter((s) => s.id !== g.cur.sys.id && s.id !== last?.id && s.name.toLowerCase().includes(q))
+    .map((s) => ({ s, d: s.pos.distanceTo(origin) }))
+    .sort((a, b) => a.d - b.d)
+    .slice(0, limit);
 }
 
 /* ---------- flying ---------- */
@@ -189,7 +239,7 @@ export function requestCancelRoute(g: Game) {
 function endRoute(g: Game, msg: string, kind: '' | 'ftl' | 'warn' = '') {
   g.route = null;
   g.navConfirm = 0;
-  g.navDest = null;
+  g.navPoints = [];
   g.showMsg(msg, kind);
   g.invalidateHud();
 }
@@ -311,7 +361,7 @@ function waitForBattery(g: Game) {
 export function pickNavStar(g: Game, missPx: (s: StarSystem) => number) {
   let best: StarSystem | null = null,
     bestMiss = 14;
-  for (const s of systemsNear(g.cur.sys.pos, SKY_RADIUS)) {
+  for (const s of g.sky) {
     if (s.id === g.cur.sys.id) continue;
     const miss = missPx(s);
     if (miss < bestMiss) {

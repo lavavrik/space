@@ -8,7 +8,7 @@ import { velRel } from '../sim/frame';
 import { orbitElements, orbitElementsRel } from '../sim/gravity';
 import { guideEta, type Guide } from '../sim/guide';
 import { transitState } from '../sim/hyperspace';
-import { NAV_MODES } from '../sim/navroute';
+import { NAV_MODES, searchStars } from '../sim/navroute';
 import { resolvable, SCAN_STAGE, scanProgress } from '../sim/scanner';
 import { galPos } from '../sim/navigation';
 import { apLabel, evalPlan } from '../sim/orbits';
@@ -303,7 +303,11 @@ function navView(g: Game): NavView {
     running: !!r?.running,
     status: r?.running ? r.status : '',
     confirm: g.navConfirm > 0,
-    hint: r?.running ? '' : 'Click a star to route there, or target a body or station · Backspace clears',
+    hint: r?.running ? '' : 'Click or search a star to add a waypoint · or target a body/station · Backspace removes the last',
+    points: g.navPoints.map((p) => p.name),
+    query: g.navQuery,
+    sortFrom: g.navSortFrom,
+    results: searchStars(g, g.navQuery, g.navSortFrom).map(({ s, d }) => ({ id: s.id, name: s.name, spec: s.star.spec, dist: `${d.toFixed(1)} ly` })),
   };
 }
 

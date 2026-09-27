@@ -6,7 +6,7 @@ import { relVel } from '../sim/frame';
 import { transitState, type TransitState } from '../sim/hyperspace';
 import { scanProgress } from '../sim/scanner';
 import { galPos, reachable } from '../sim/navigation';
-import type { Jump } from '../types';
+import type { Jump, StarSystem } from '../types';
 import type { SceneRenderer } from './SceneRenderer';
 
 const AMB = 'rgba(255,165,58,',
@@ -133,6 +133,7 @@ export class Overlay {
     this.drawReachable(g);
     this.drawJumpDest(g);
     this.drawNavDest(g);
+    this.drawNavHover(g);
 
     if (g.flash > 0) {
       ctx.fillStyle = `rgba(220,240,255,${g.flash})`;
@@ -382,31 +383,83 @@ export class Overlay {
     }
   }
 
-  /** Route destination (nav computer): a double diamond on its star, or an arrow when off-screen. */
+  /** Route waypoints (nav computer): numbered double diamonds on their stars, arrows when off-screen. */
   private drawNavDest(g: Game) {
-    const dest = g.navDest;
-    if (!dest || dest.id === g.cur.sys.id) return;
+    const pts = g.navPoints;
+    if (!pts.length) return;
     const { ctx, W, H } = this;
-    const dir = dest.pos.clone().sub(galPos(g));
-    const ly = dir.length();
-    const s = this.toScreen(g, dir.normalize().multiplyScalar(1e6));
-    const label = `ROUTE → ${dest.name} · ${ly.toFixed(1)} ly`;
-    if (s.behind || s.x < 0 || s.x > W || s.y < 0 || s.y > H) return this.edgeArrow(s.v, CYA, label);
-    ctx.strokeStyle = CYA + '0.9)';
-    ctx.lineWidth = 1.2;
-    for (const k of [10, 16]) {
-      ctx.beginPath();
-      ctx.moveTo(s.x, s.y - k);
-      ctx.lineTo(s.x + k, s.y);
-      ctx.lineTo(s.x, s.y + k);
-      ctx.lineTo(s.x - k, s.y);
-      ctx.closePath();
-      ctx.stroke();
-    }
-    ctx.fillStyle = CYA + '0.95)';
+    const gp = galPos(g);
     ctx.font = this.font(11, MONO);
     ctx.textAlign = 'center';
-    ctx.fillText(label, s.x, s.y + 30);
+    pts.forEach((p, i) => {
+      const dir = p.pos.clone().sub(gp);
+      const ly = dir.length();
+      const s = this.toScreen(g, dir.normalize().multiplyScalar(1e6));
+      const last = i === pts.length - 1;
+      const label = `${i + 1} · ${p.name} · ${ly.toFixed(1)} ly`;
+      if (s.behind || s.x < 0 || s.x > W || s.y < 0 || s.y > H) {
+        if (last) this.edgeArrow(s.v, CYA, `ROUTE ${label}`);
+        return;
+      }
+      ctx.strokeStyle = CYA + (last ? '0.95)' : '0.6)');
+      ctx.lineWidth = 1.2;
+      for (const k of last ? [10, 16] : [9]) {
+        ctx.beginPath();
+        ctx.moveTo(s.x, s.y - k);
+        ctx.lineTo(s.x + k, s.y);
+        ctx.lineTo(s.x, s.y + k);
+        ctx.lineTo(s.x - k, s.y);
+        ctx.closePath();
+        ctx.stroke();
+      }
+      ctx.fillStyle = CYA + (last ? '0.95)' : '0.7)');
+      ctx.fillText(label, s.x, s.y + 28);
+    });
+  }
+
+  /**
+   * With the nav panel open and the mouse free, the star under the cursor (within 14 px) gets a
+   * ring and its name, type and distance, so you can see what a click would add to the route.
+   */
+  private drawNavHover(g: Game) {
+    const m = g.input.mouse;
+    if (!g.navPanel || g.pointerLocked || !m.over || g.route?.running) return;
+    const gp = galPos(g);
+    const { ctx } = this;
+    let best: StarSystem | null = null,
+      bestD = 14,
+      bx = 0,
+      by = 0;
+    for (const s of g.sky) {
+      if (s.id === g.cur.sys.id) continue;
+      const p = this.toScreen(g, this.tmp.subVectors(s.pos, gp).normalize().multiplyScalar(1e6));
+      if (p.behind) continue;
+      const d = Math.hypot(p.x - m.x, p.y - m.y);
+      if (d < bestD) {
+        bestD = d;
+        best = s;
+        bx = p.x;
+        by = p.y;
+      }
+    }
+    if (!best) return;
+    const from = g.navPoints[g.navPoints.length - 1];
+    ctx.strokeStyle = CYA + '0.95)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(bx, by, 9, 0, Math.PI * 2);
+    ctx.stroke();
+    // label on the side away from the right-hand panels
+    const left = bx > this.W * 0.5;
+    const lx = left ? bx - 14 : bx + 14;
+    ctx.textAlign = left ? 'right' : 'left';
+    ctx.fillStyle = CYA + '1)';
+    ctx.font = this.font(12, MONO);
+    ctx.fillText(`${best.name} · ${best.star.spec}`, lx, by - 4);
+    ctx.fillStyle = CYA + '0.75)';
+    ctx.font = this.font(11, MONO);
+    const dist = `${best.pos.distanceTo(gp).toFixed(1)} ly${from ? ` · ${best.pos.distanceTo(from.pos).toFixed(1)} ly from ${from.name}` : ''}`;
+    ctx.fillText(`${dist} · click to add`, lx, by + 12);
   }
 
   /** Diamond on the hyperjump destination star. */

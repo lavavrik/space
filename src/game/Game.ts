@@ -7,7 +7,7 @@ import { THREE } from './lib/three';
 import { Overlay } from './render/Overlay';
 import { defaultAvionics, type ComputerKind } from './avionics/catalog';
 import { PerfMonitor } from './debug/Perf';
-import { engageRoute, requestCancelRoute, type NavMode, type Route } from './sim/navroute';
+import { addNavPoint, engageRoute, removeNavPoint, requestCancelRoute, type NavMode, type Route } from './sim/navroute';
 import { SceneRenderer } from './render/SceneRenderer';
 import type { Guide } from './sim/guide';
 import { pickAt, placeAtHome } from './sim/navigation';
@@ -73,7 +73,13 @@ export class Game {
   /** Navigation computer (M): the panel, its planned or running route, destination star and mode. */
   navPanel = false;
   route: Route | null = null;
-  navDest: StarSystem | null = null;
+  /** Route waypoints (stars), in order; the route passes through each. */
+  navPoints: StarSystem[] = [];
+  /** Nav panel star search: the query, and whether results sort by distance from the ship or the last waypoint. */
+  navQuery = '';
+  navSortFrom: 'ship' | 'last' = 'ship';
+  /** Every system in the sky (within SKY_RADIUS), refreshed on arrival: for search, hover and clicks. */
+  sky: StarSystem[] = [];
   navMode: NavMode = 'exotic';
   navError: string | null = null;
   navConfirm = 0; // seconds left to confirm cancelling a running route
@@ -172,7 +178,8 @@ export class Game {
     this.cur = { sys, bodies, star: bodies[0] as CurrentSystem['star'], stations };
     this.frameBody = this.cur.star; // callers place the ship and then pick its frame
     this.nearby = systemsNear(sys.pos, JUMP_RANGE + 1).filter((s) => s.id !== sys.id);
-    this.scene.setSystem(this.cur, systemsNear(sys.pos, SKY_RADIUS));
+    this.sky = systemsNear(sys.pos, SKY_RADIUS);
+    this.scene.setSystem(this.cur, this.sky);
     this.target = null;
     this.scanning = null;
     this.refFrame = null;
@@ -194,6 +201,28 @@ export class Game {
    */
   openAvionics(kind: ComputerKind) {
     onPress(this, { orbit: 'KeyO', scanner: 'KeyY', nav: 'KeyM' }[kind]);
+    this.invalidateHud();
+  }
+
+  /** Nav panel search box and waypoint buttons. */
+  setNavQuery(q: string) {
+    this.navQuery = q;
+    this.invalidateHud();
+  }
+
+  setNavSort(from: 'ship' | 'last') {
+    this.navSortFrom = from;
+    this.invalidateHud();
+  }
+
+  addNavPointById(id: string) {
+    const s = this.sky.find((x) => x.id === id);
+    if (s) addNavPoint(this, s);
+    this.invalidateHud();
+  }
+
+  removeNavPoint() {
+    removeNavPoint(this);
     this.invalidateHud();
   }
 

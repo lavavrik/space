@@ -23,7 +23,19 @@ export function App() {
             {hud.info ? <BodyInfo info={hud.info} /> : hud.avionics ? <AvionicsPanel slots={hud.avionics} onOpen={(k) => game!.openAvionics(k)} /> : hud.helpVisible && <HelpPanel />}
           </div>
           <div id="rightcol">
-            {hud.nav && <NavPanel n={hud.nav} onEngage={() => game!.engageRoute()} onCancel={() => game!.cancelRoute()} />}
+            {hud.nav && (
+              <NavPanel
+                n={hud.nav}
+                a={{
+                  onEngage: () => game!.engageRoute(),
+                  onCancel: () => game!.cancelRoute(),
+                  onQuery: (q) => game!.setNavQuery(q),
+                  onSort: (f) => game!.setNavSort(f),
+                  onAdd: (id) => game!.addNavPointById(id),
+                  onRemoveLast: () => game!.removeNavPoint(),
+                }}
+              />
+            )}
             {hud.autopilot && <AutopilotPanel a={hud.autopilot} onDisengage={() => game!.requestDisengage()} onChange={() => game!.changeOrbit()} />}
             {hud.guide && <ManeuverGuide guide={hud.guide} />}
             {hud.planner && <OrbitPlanner p={hud.planner} />}

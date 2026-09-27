@@ -108,6 +108,10 @@ export interface NavView {
   status: string;
   confirm: boolean;
   hint: string;
+  points: string[]; // waypoints, in order
+  query: string;
+  sortFrom: 'ship' | 'last';
+  results: { id: string; name: string; spec: string; dist: string }[];
 }
 
 export interface PlannerView {

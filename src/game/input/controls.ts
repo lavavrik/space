@@ -2,7 +2,7 @@ import { TANKER_TIME } from '../constants';
 import type { Game } from '../Game';
 import { toggleCruise, toggleDecoupled, toggleFTL } from '../sim/ftl';
 import { toggleScan } from '../sim/scanner';
-import { engageRoute, NAV_MODES, replan, requestCancelRoute } from '../sim/navroute';
+import { engageRoute, NAV_MODES, removeNavPoint, replan, requestCancelRoute } from '../sim/navroute';
 import { startTankerGuide } from '../sim/guide';
 import { pickDest, cycleTarget, startJump, targetAhead } from '../sim/navigation';
 import { ORBIT_TYPES } from '../sim/orbits';
@@ -71,12 +71,15 @@ export function onPress(g: Game, code: string) {
       else if (!r) g.showMsg(g.navError ?? 'No route', 'warn');
       return;
     }
+    if (code === 'Slash' && !r?.running) {
+      // search for a star: free the mouse and put the cursor in the search box
+      document.exitPointerLock?.();
+      (document.getElementById('navsearch') as HTMLInputElement | null)?.focus();
+      return;
+    }
     if (code === 'Backspace') {
       if (r?.running) requestCancelRoute(g);
-      else {
-        g.navDest = null;
-        replan(g);
-      }
+      else removeNavPoint(g);
       return;
     }
   }

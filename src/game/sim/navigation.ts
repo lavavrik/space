@@ -6,7 +6,7 @@ import { homeSystem } from '../universe/galaxy';
 import { findHome } from '../universe/system';
 import type { Ship, StarSystem, Target } from '../types';
 import { resetFrame } from './frame';
-import { pickNavStar, replan } from './navroute';
+import { addNavPoint, pickNavStar } from './navroute';
 import { massLock } from './ftl';
 import { dominantBody } from './gravity';
 import { startJumpGuide } from './guide';
@@ -100,9 +100,7 @@ export function pickAt(g: Game, sx: number, sy: number) {
       return p ? Math.hypot(p.x - sx, p.y - sy) : Infinity;
     });
     if (s) {
-      g.navDest = s;
-      replan(g);
-      g.showMsg(`Route destination · ${s.name} · ${s.pos.distanceTo(gp).toFixed(1)} ly`, 'ftl');
+      addNavPoint(g, s);
       return true;
     }
   }

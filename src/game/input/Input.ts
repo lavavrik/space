@@ -2,7 +2,7 @@
 const HANDLED = new Set([
   'KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ControlLeft', 'ControlRight', 'KeyC', 'KeyQ', 'KeyE', 'ShiftLeft', 'ShiftRight',
   'KeyJ', 'KeyH', 'KeyN', 'KeyT', 'KeyG', 'KeyX', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
-  'KeyZ', 'KeyV', 'KeyF', 'KeyI', 'KeyU', 'KeyY', 'KeyM', 'KeyL', 'Backquote', 'Backspace', 'KeyO', 'KeyR', 'KeyP', 'KeyK', 'BracketLeft', 'BracketRight', 'Enter', 'NumpadEnter', 'Digit1', 'Digit2', 'Digit3', 'Digit4',
+  'KeyZ', 'KeyV', 'KeyF', 'KeyI', 'KeyU', 'KeyY', 'KeyM', 'Slash', 'KeyL', 'Backquote', 'Backspace', 'KeyO', 'KeyR', 'KeyP', 'KeyK', 'BracketLeft', 'BracketRight', 'Enter', 'NumpadEnter', 'Digit1', 'Digit2', 'Digit3', 'Digit4',
 ]);
 
 export type Keys = Record<string, boolean | undefined>;
@@ -27,6 +27,8 @@ export class Input {
   private mdy = 0;
   private dragging = false;
   private dragDist = 0; // px moved since mousedown, to tell a click from a drag
+  /** Cursor over the canvas (CSS px), for hover highlights; `over` is false when it's elsewhere. */
+  readonly mouse = { x: 0, y: 0, over: false };
   private readonly cleanup: (() => void)[] = [];
 
   constructor(
@@ -34,6 +36,8 @@ export class Input {
     handlers: InputHandlers,
   ) {
     this.listen(window, 'keydown', (e: KeyboardEvent) => {
+      // typing into a text field (the nav search) goes to the field, not the ship
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (HANDLED.has(e.code)) e.preventDefault();
       if (!e.repeat) handlers.onPress(e.code);
       else handlers.onRepeat(e.code);
@@ -61,7 +65,12 @@ export class Input {
       }
       this.dragging = false;
     });
+    this.listen(canvas, 'mouseleave', () => (this.mouse.over = false));
     this.listen(window, 'mousemove', (e: MouseEvent) => {
+      const r = canvas.getBoundingClientRect();
+      this.mouse.x = e.clientX - r.left;
+      this.mouse.y = e.clientY - r.top;
+      this.mouse.over = e.target === canvas;
       if (this.dragging) this.dragDist += Math.abs(e.movementX) + Math.abs(e.movementY);
       if (this.isLocked() || (this.dragging && this.dragDist >= 5)) {
         this.mdx += e.movementX;
