@@ -1,5 +1,5 @@
 /* Turns game state into the display strings and flags the HUD shows. */
-import { FTL_CHARGE_TIME, JUMP_CHARGE_TIME, JUMP_DEPART_TIME, NORMAL_ACC, NORMAL_BOOST, NORMAL_MAX, SHIP, ftlBurn, jumpCost } from '../constants';
+import { FTL_CHARGE_TIME, JUMP_CHARGE_TIME, LY, JUMP_DEPART_TIME, NORMAL_ACC, NORMAL_BOOST, NORMAL_MAX, SHIP, ftlBurn, jumpCost } from '../constants';
 import { fmtArea, fmtClock, fmtDist, fmtFlow, fmtMass, fmtPower, fmtSpeed, fmtSpeedText, fmtTime } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
@@ -83,7 +83,8 @@ function flightMode(g: Game): [string, FlightView['modeClass']] {
 function flight(g: Game): FlightView {
   const { ship, keys, jump } = g;
   const [mode, modeClass] = flightMode(g);
-  const [speed, speedUnit] = jump && jump.phase === 'tunnel' ? [transitState(jump).speed.toFixed(2), 'LY / S'] : fmtSpeed(g.curSpeed);
+  // in hyperspace too the readout is in multiples of c (the transit speed is kept in ly/s)
+  const [speed, speedUnit] = fmtSpeed(jump && jump.phase === 'tunnel' ? transitState(jump).speed * LY : g.curSpeed);
   const unit = g.refFrame && ship.mode === 'normal' ? `${speedUnit} · REL. ${g.refFrame.name.toUpperCase()}` : speedUnit;
   // in hyperspace: just the transit, none of the local flight readouts
   if (jump && jump.phase === 'tunnel') {
