@@ -167,3 +167,8 @@
 .avmod.empty { color: var(--amber-faint); }
 .oicon { display: inline-flex; align-items: center; gap: .35rem; }
 .oslot.empty .oicon svg { color: var(--amber-faint); }
+.oback {
+  pointer-events: auto; cursor: pointer; align-self: flex-start; display: inline-flex; align-items: center; gap: .3rem;
+  background: none; border: 1px solid var(--amber-dim); color: var(--amber); font: 600 .78rem inherit; letter-spacing: .14em; padding: .2rem .5rem .2rem .35rem;
+}
+.oback:hover { background: rgba(255, 165, 58, .1); color: var(--text); }

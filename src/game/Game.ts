@@ -217,6 +217,13 @@ export class Game {
     this.invalidateHud();
   }
 
+  /** Outfit panel's back button: return to ship stats (U). */
+  openShipStats() {
+    this.outfitVisible = false;
+    this.avionicsVisible = true;
+    this.invalidateHud();
+  }
+
   /** Outfit panel buttons (only work alongside a station; see outfit/fit.ts). */
   fitModule(slot: number, id: string) {
     fitModule(this, slot, id);

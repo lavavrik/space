@@ -1,5 +1,5 @@
 import type { OutfitView } from '../../game/hud/types';
-import { BatteryFull } from '@phosphor-icons/react';
+import { BatteryFull, CaretLeft } from '@phosphor-icons/react';
 import type { ModuleIcon } from '../../game/hud/types';
 import { MODULE_ICONS } from './icons';
 import { Panel, cx } from './primitives';
@@ -10,6 +10,7 @@ function SlotIcon({ icon }: { icon: ModuleIcon }) {
 }
 
 interface Actions {
+  back: () => void;
   battery: (id: string) => void;
   fit: (slot: number, id: string) => void;
   remove: (slot: number) => void;
@@ -25,6 +26,9 @@ interface Actions {
 export function OutfitPanel({ v, act }: { v: OutfitView; act: Actions }) {
   return (
     <Panel name="outfit" id="outfit" className="pan" title="OUTFIT" right="⇧U HIDES">
+      <button type="button" className="oback" onClick={act.back}>
+        <CaretLeft weight="bold" /> SHIP STATS
+      </button>
       <div className="ohint">{v.station ? `Alongside ${v.station} · pick a module for a slot` : v.hint}</div>
       <div className="oslot">
         <div className="gtop">
