@@ -1,11 +1,11 @@
-import { AP_ACC, AP_TAU } from '../constants';
+import { AP_ACC, AP_FTL_MIN, AP_TAU } from '../constants';
 import { fmtDist, fmtTime } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import type { ApproachProfile } from '../avionics/catalog';
 import type { Autopilot, Body, Gravity, Ship } from '../types';
 import { velRel } from './frame';
-import { dropAlt, dropFTL, ftlSpeedLimit, ftlUpkeep } from './ftl';
+import { dropAlt, dropFTL, ftlSpeedLimit, ftlUpkeep, massLock } from './ftl';
 import { minOrbitAlt } from './orbits';
 import { applyThrust } from './resources';
 
@@ -102,6 +102,13 @@ export function apDistance(ship: Ship, ap: Autopilot) {
   if (ap.type === 'rendezvous') return ap.station!.pos.distanceTo(ship.pos);
   return apInsertion(ship, ap).P.distanceTo(ship.pos);
 }
+
+/**
+ * Climb speed (m/s) out of another world's mass lock on the way to a far target. A giant's lock
+ * reaches ~9,000 km up; at the approach cap (5–7 km/s) that climb took ~9 minutes, at this ~2.
+ * It costs about this much Δv (the FTL leg then drops the ship's own velocity).
+ */
+const CLIMB_OUT_V = 30e3;
 
 /** Closest distance from point c to the segment a→b. */
 function segmentDist(a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3) {
@@ -242,6 +249,19 @@ export function autopilot(g: Game, dt: number, grav: Gravity) {
       ap.settled = false;
     }
   }
+  // Mass-locked by a world other than the target's (e.g. setting off from low over a gas giant for
+  // a station round another planet) with the target still far: climb straight out of the lock
+  // first; maybeFtlLeg then starts the FTL leg. Otherwise the thruster path went round that world
+  // at the same altitude, never leaving the lock (a big giant's reaches ~9,000 km up), and crawled.
+  const lock = massLock(g);
+  if (lock && lock !== b && ap.type !== 'hold' && ship.avionics.orbit?.caps.ftlLeg && apDistance(ship, ap) > 2 * AP_FTL_MIN) {
+    const ul = ship.pos.clone().sub(lock.pos),
+      rl = ul.length();
+    // radially away from the locking world at CLIMB_OUT_V (no braking at the top: the FTL leg takes
+    // over there), in its frame, then expressed relative to the autopilot body
+    vDes = ul.multiplyScalar(CLIMB_OUT_V / rl).add(lock.vel).sub(b.vel);
+    aFF = grav.vec.clone().negate();
+  }
   const err = vDes.sub(vRel);
   const a = err.clone().divideScalar(AP_TAU).add(aFF);
   if (a.length() > AP_ACC) a.setLength(AP_ACC);
@@ -254,7 +274,21 @@ export function autopilot(g: Game, dt: number, grav: Gravity) {
 export function ftlTransfer(g: Game, dt: number) {
   const { ship } = g;
   const ap = ship.ap!;
-  const { P, rT, waypoint } = apInsertion(ship, ap);
+  const ins = apInsertion(ship, ap);
+  let { P, waypoint } = ins;
+  const { rT } = ins;
+  // other worlds in the way (e.g. the gas giant just left, when the target lies beyond it): go round
+  // them clear of their FTL drop-out altitude too, or the leg dives into the well, drops out, climbs
+  // back on thrusters and tries again, round and round
+  for (const o of g.cur.bodies) {
+    if (o === ap.body) continue;
+    const w = aroundBody(ship.pos, P, o, o.radius + dropAlt(o) * 1.1);
+    if (w) {
+      P = w;
+      waypoint = true;
+      break;
+    }
+  }
   const toP = P.clone().sub(ship.pos),
     dist = toP.length();
   const m = new THREE.Matrix4().lookAt(ship.pos, P, new THREE.Vector3(0, 1, 0).applyQuaternion(ship.q));

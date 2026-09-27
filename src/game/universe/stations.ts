@@ -19,8 +19,8 @@ import { findHome } from './system';
 const STATION_CHANCE = [0.2, 0.3, 0.9, 0.55, 0.1, 0.15, 0.4, 0.25];
 
 const NAMES = [
-  'Galileo', 'Kepler', 'Herschel', 'Tereshkova', 'Gagarin', 'Leonov', 'Armstrong', 'Ride', 'Hubble', 'Sagan',
-  'Tsiolkovsky', 'Korolev', 'Oberth', 'Goddard', 'Lovelace', 'Hopper', 'Noether', 'Meitner', 'Curie', 'Halley',
+  'Galileo', 'Kepler', 'Herschel', 'Payne', 'Tombaugh', 'Hale', 'Armstrong', 'Ride', 'Hubble', 'Sagan',
+  'Newton', 'Burnell', 'Oberth', 'Goddard', 'Lovelace', 'Hopper', 'Noether', 'Meitner', 'Curie', 'Halley',
   'Cassini', 'Huygens', 'Brahe', 'Copernicus', 'Lagrange', 'Laplace', 'Clarke', 'Asimov', 'Jemison', 'Chawla',
   'Hadfield', 'Aldrin', 'Glenn', 'Shepard', 'Vega', 'Leavitt', 'Rubin', 'Hawking', 'Fermi', 'Bose',
 ];
