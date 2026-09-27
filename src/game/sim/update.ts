@@ -17,6 +17,7 @@ import { updateThermal } from './thermal';
 import { beginPower, grant, settleBattery } from './power';
 import { railsStep, stopWarp, warpBlocked } from './timewarp';
 import { updatePivot } from './pivot';
+import { autodock } from './autodock';
 import { SHORE_POWER, holdDocked, rotationCorrection, stationContact } from './docking';
 
 const qa = new THREE.Quaternion();
@@ -131,7 +132,8 @@ export function update(g: Game, dt: number, realDt = dt) {
       syncFrame(g, grav.body);
       maybeFtlLeg(g);
       rotationCorrection(g, dt);
-      if (ship.ap && ship.ap.phase === 'insert') autopilot(g, dt, grav);
+      if (g.autodock) autodock(g, dt, grav.vec);
+      else if (ship.ap && ship.ap.phase === 'insert') autopilot(g, dt, grav);
       else manualFlight(g, dt, grav, inp);
       ship.pos.addScaledVector(ship.vel, dt);
       collide(g, dt);

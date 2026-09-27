@@ -25,3 +25,13 @@ describe('avionics catalogue', () => {
     for (let i = 1; i < NAV_COMPUTERS.length; i++) expect(NAV_COMPUTERS[i].caps.maxHops).toBeGreaterThan(NAV_COMPUTERS[i - 1].caps.maxHops);
   });
 });
+
+describe('docking computers', () => {
+  it('the better unit is faster and does more', async () => {
+    const { DOCK_COMPUTERS } = await import('../avionics/catalog');
+    const [basic, best] = [DOCK_COMPUTERS[0], DOCK_COMPUTERS[DOCK_COMPUTERS.length - 1]];
+    expect(best.caps.approachSpeed).toBeGreaterThan(basic.caps.approachSpeed);
+    expect(basic.caps.clearance).toBe(false); // the basic one needs you to ask for a pad
+    expect(best.caps.clearance && best.caps.launch).toBe(true);
+  });
+});

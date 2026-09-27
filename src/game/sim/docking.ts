@@ -22,6 +22,7 @@ import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import type { Station } from '../types';
 import { destroyShip } from './flight';
+import { engageAutoLaunch, engageAutodock } from './autodock';
 import { HANGAR_R, PAD_COUNT, PAD_R, padLocal, stationPointVel, stationQuat, toLocal, toWorld, whereIs } from './stationGeom';
 
 /** Within this distance (m) of a targeted station, K asks for a pad. */
@@ -60,19 +61,41 @@ export function dockKey(g: Game) {
     return true;
   }
   const t = g.target;
-  if (t?.kind !== 'station' || t.pos.distanceTo(g.ship.pos) > DOCK_REQUEST_RANGE) return false;
+  if (t?.kind !== 'station') return false;
+  const dist = t.pos.distanceTo(g.ship.pos);
+  // a WD-300 can be engaged from well out: it flies in and asks for clearance itself
+  const unit = g.ship.avionics.dock;
+  if (dist > DOCK_REQUEST_RANGE && unit?.caps.clearance && dist < unit.caps.range && g.ship.mode === 'normal' && !d) {
+    engageAutodock(g, t);
+    return true;
+  }
+  if (dist > DOCK_REQUEST_RANGE) {
+    if (dist > 100e3) return false; // far off: K is the tanker again
+    g.showMsg(`Request docking within ${DOCK_REQUEST_RANGE / 1000} km of ${t.name}`, 'warn');
+    return true;
+  }
   if (g.ship.mode !== 'normal') {
     g.showMsg('Drop out of FTL to request docking', 'warn');
     return true;
   }
   if (d?.station === t) {
-    g.showMsg(`Docking already granted · ${t.name} · pad ${d.pad + 1}`);
+    // already granted: K (again) hands over to the docking computer, if there is one
+    if (g.ship.avionics.dock && !g.autodock) engageAutodock(g, t);
+    else g.showMsg(`Docking already granted · ${t.name} · pad ${d.pad + 1}`);
     return true;
   }
-  const pad = Math.floor(Math.random() * PAD_COUNT);
-  g.dock = { station: t, pad, docked: false };
-  g.showMsg(`Docking granted · ${t.name} · pad ${pad + 1} · enter through the slot, matching its spin`);
+  requestPad(g, t, `Docking granted · ${t.name} · pad`);
+  // a docking computer takes it from here (the WD-100 needs the pad first: this was it)
+  if (g.ship.avionics.dock) engageAutodock(g, t);
+  else g.showMsg(`${g.msg.text} · enter through the slot, matching its spin`);
   return true;
+}
+
+/** The station grants a pad (random for now). `msg` gets the pad number appended. */
+export function requestPad(g: Game, st: Station, msg: string) {
+  const pad = Math.floor(Math.random() * PAD_COUNT);
+  g.dock = { station: st, pad, docked: false };
+  g.showMsg(`${msg} ${pad + 1}`);
 }
 
 /** The ship's last clear position (station unit coordinates) near each station, for bouncing back to. */
@@ -84,6 +107,9 @@ const lastClear = new WeakMap<Station, THREE.Vector3>();
  */
 export function stationContact(g: Game) {
   const { ship } = g;
+  // the docking computer's reference: the ship's offset from its station at the end of the step
+  const ds = g.dock?.station ?? g.autodockStation;
+  if (ds) g.dockRel.subVectors(ship.pos, ds.pos);
   g.inStation = null;
   if (g.dock && !g.dock.docked && g.dock.station.pos.distanceTo(ship.pos) > DOCK_REVOKE_RANGE) {
     g.showMsg(`Docking request expired · ${g.dock.station.name}`, 'warn');
@@ -104,6 +130,7 @@ export function stationContact(g: Game) {
       const d = g.dock;
       if (d && d.station === st && onPad(st, p, d.pad) && vRel.length() < PAD_SPEED && upOk(g, st, d.pad)) {
         d.docked = true;
+        g.autodock = null;
         holdDocked(g);
         g.showMsg(`Docked at ${st.name} · pad ${d.pad + 1} · services below · K launches`);
         return;
@@ -165,6 +192,7 @@ export function holdDocked(g: Game) {
   ship.vel.copy(stationPointVel(st, ship.pos)).sub(g.frameBody.vel);
   g.inStation = st;
   g.inStationRel.subVectors(ship.pos, st.pos);
+  g.dockRel.copy(g.inStationRel);
   g.curSpeed = 0;
 }
 
@@ -176,6 +204,10 @@ export function launch(g: Game) {
   g.ship.vel.addScaledVector(up, LAUNCH_SPEED);
   g.showMsg(`Launched from ${d.station.name} · fly out through the slot`);
   g.dock = null;
+  if (g.ship.avionics.dock?.caps.launch) {
+    engageAutoLaunch(g, d.station, d.pad);
+    g.showMsg(`Launched from ${d.station.name} · docking computer flying you out`);
+  }
 }
 
 /**

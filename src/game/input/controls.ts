@@ -1,5 +1,6 @@
 import { TANKER_TIME } from '../constants';
 import { dockKey } from '../sim/docking';
+import { stopAutodock } from '../sim/autodock';
 import { togglePeriscope, wheelZoom } from '../sim/periscope';
 import { changeWarp, stopWarp } from '../sim/timewarp';
 import { toggleRadiators, toggleVent } from '../sim/thermal';
@@ -66,6 +67,7 @@ export function onPress(g: Game, code: string) {
     changeWarp(g, code === 'Period' ? 1 : -1);
     return;
   }
+  if (g.autodock && ['KeyW', 'KeyS', 'KeyA', 'KeyD', 'Space', 'KeyC', 'ControlLeft', 'ControlRight', 'KeyX'].includes(code)) stopAutodock(g, 'Docking computer off · you have control');
   if (g.warp > 1 && ['KeyW', 'KeyS', 'KeyA', 'KeyD', 'Space', 'KeyC', 'ControlLeft', 'ControlRight', 'KeyX', 'KeyJ', 'KeyH', 'KeyR'].includes(code)) stopWarp(g, 'manual control');
 
   // thermal: R vents hydrogen, Shift+R folds the radiators out or in (R is the planner's direction key while it's open)

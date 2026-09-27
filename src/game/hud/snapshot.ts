@@ -159,6 +159,7 @@ function flight(g: Game): FlightView {
 
   const pills: Pill[] = [{ text: ship.fa ? 'FA ON' : 'FA OFF', kind: ship.fa ? 'on' : 'warn' }];
   if (ship.decoupled) pills.push({ text: 'DECOUPLED', kind: 'warn' });
+  if (g.autodock) pills.push({ text: `AUTO-DOCK · ${g.autodock.phase.toUpperCase()}`, kind: 'ftl' });
   if (g.dock) pills.push({ text: g.dock.docked ? `DOCKED · PAD ${g.dock.pad + 1}` : `PAD ${g.dock.pad + 1} GRANTED`, kind: g.dock.docked ? 'on' : 'ftl' });
   if (g.zoom.on) pills.push({ text: `ZOOM ${g.zoom.mag}×`, kind: 'on' });
   if (g.warp > 1) pills.push({ text: `TIME ×${g.warp.toLocaleString('en-US')}`, kind: 'warn' });
@@ -426,6 +427,7 @@ function electricalView(g: Game): ElectricalView {
 function avionicsView(g: Game): AvionicsSlotView[] {
   const { ship } = g;
   const { orbit, scanner, nav } = ship.avionics;
+  const dockUnit = ship.avionics.dock;
   const o = ship.outfit;
   const list = (...xs: (string | false)[]) => xs.filter(Boolean).join(' · ') || '—';
   const base = (c: Computer | null) => (c ? { unit: unitLabel(c), model: c.model, maker: c.maker, blurb: c.blurb } : { unit: 'none fitted', model: 'none', maker: '', blurb: '' });
@@ -476,6 +478,17 @@ function avionicsView(g: Game): AvionicsSlotView[] {
         ['ROUTES', nav.caps.crossSystem ? (isFinite(nav.caps.maxHops) ? `up to ${nav.caps.maxHops} jumps` : 'unlimited jumps') : 'in-system only'],
         ['FEATURES', list(nav.caps.refuelStops && 'refuel stops', nav.caps.optimise && 'route modes 1–3')],
       ] : [],
+    },
+    {
+      id: 'dock', key: 'K', kind: 'DOCKING', does: 'Fly in and dock at the targeted station', ...base(dockUnit),
+      status: g.autodock ? { text: `flying · ${g.autodock.phase}` } : g.dock?.docked ? { text: `docked · pad ${g.dock.pad + 1}` } : g.dock ? { text: `pad ${g.dock.pad + 1} granted` } : { text: 'standing by' },
+      active: !!g.autodock,
+      specs: dockUnit
+        ? [
+            ['SPEEDS', `${dockUnit.caps.approachSpeed} m/s approach · ${dockUnit.caps.insideSpeed} m/s inside`],
+            ['FEATURES', list(dockUnit.caps.clearance && `requests clearance (from ${fmtDist(dockUnit.caps.range)})`, dockUnit.caps.launch && 'flies you out after launch')],
+          ]
+        : [],
     },
     {
       id: 'outfit', key: '⇧U', kind: 'OUTFIT', does: 'Battery and utility modules: fuel scoop, radiators, heat pump', unit: o.slots.filter(Boolean).map((m) => moduleLabel(m!)).join(' · ') || 'no modules fitted', model: `${o.slots.filter(Boolean).length} / ${o.slots.length} slots`, maker: '', blurb: '',

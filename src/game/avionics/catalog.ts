@@ -1,12 +1,12 @@
 /*
  * Avionics: the ship's computers. Each is a commercial unit with a maker, model number and
  * product name, and a set of capabilities that the game checks instead of hard-coding features.
- * Three fictional makers: Hesperus Avionics (orbital mechanics), Argus Optics (scanners) and
- * Meridian Systems (navigation). The default ship carries the top model of each.
+ * Four fictional makers: Hesperus Avionics (orbital mechanics), Argus Optics (scanners), Meridian
+ * Systems (navigation) and Wharfside Avionics (docking). The default ship carries the top model of each.
  */
 import type { OrbitType } from '../types';
 
-export type ComputerKind = 'orbit' | 'scanner' | 'nav';
+export type ComputerKind = 'orbit' | 'scanner' | 'nav' | 'dock';
 
 interface UnitBase {
   id: string;
@@ -52,7 +52,19 @@ export interface NavComputer extends UnitBase {
   };
 }
 
-export type Computer = OrbitComputer | ScannerComputer | NavComputer;
+/** Docking computer: flies the ship from a granted pad request to touchdown (sim/autodock.ts). */
+export interface DockComputer extends UnitBase {
+  kind: 'dock';
+  caps: {
+    approachSpeed: number; // m/s, outside the station
+    insideSpeed: number; // m/s, down the slot and across the hangar
+    launch: boolean; // also flies you out through the slot after launch
+    clearance: boolean; // asks the station for a pad itself (engage from up to `range`)
+    range: number; // m: how far out it can be engaged
+  };
+}
+
+export type Computer = OrbitComputer | ScannerComputer | NavComputer | DockComputer;
 
 const ARCSEC = Math.PI / (180 * 3600);
 
@@ -86,11 +98,17 @@ export const NAV_COMPUTERS: NavComputer[] = [
   { id: 'mnv-7000', kind: 'nav', maker: 'Meridian Systems', model: 'MNV-7000', name: 'Longitude', blurb: 'Unlimited hops, refuel stops, route optimisation', caps: { crossSystem: true, maxHops: Infinity, refuelStops: true, optimise: true } },
 ];
 
+export const DOCK_COMPUTERS: DockComputer[] = [
+  { id: 'wd-100', kind: 'dock', maker: 'Wharfside Avionics', model: 'WD-100', name: 'Harbor', blurb: 'Docks for you once you have a pad (request it with K), at a careful pace', caps: { approachSpeed: 80, insideSpeed: 30, launch: false, clearance: false, range: 10e3 } },
+  { id: 'wd-300', kind: 'dock', maker: 'Wharfside Avionics', model: 'WD-300', name: 'Berth', blurb: 'Engage from 50 km: flies in, requests clearance itself, docks, and flies you out after launch', caps: { approachSpeed: 150, insideSpeed: 60, launch: true, clearance: true, range: 50e3 } },
+];
+
 /** The computers a ship has fitted, one slot per kind (null = none fitted). */
 export interface Avionics {
   orbit: OrbitComputer | null;
   scanner: ScannerComputer | null;
   nav: NavComputer | null;
+  dock: DockComputer | null;
 }
 
 /** The default ship: the best of each. */
@@ -98,6 +116,7 @@ export const defaultAvionics = (): Avionics => ({
   orbit: ORBIT_COMPUTERS[ORBIT_COMPUTERS.length - 1],
   scanner: SCANNERS[SCANNERS.length - 1],
   nav: NAV_COMPUTERS[NAV_COMPUTERS.length - 1],
+  dock: DOCK_COMPUTERS[DOCK_COMPUTERS.length - 1],
 });
 
 /** "HX-9100 Periastron" */

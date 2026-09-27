@@ -24,6 +24,7 @@ import { STOCK_BATTERY, emptyOutfit } from './outfit/catalog';
 import { ZOOM_START, updatePeriscope } from './sim/periscope';
 import { startPivot } from './sim/pivot';
 import { launch, refuelDocked, type Dock } from './sim/docking';
+import type { AutoPhase } from './sim/autodock';
 import { fitBattery, fitModule, removeModule } from './outfit/fit';
 
 function newShip(): Ship {
@@ -68,6 +69,12 @@ export class Game {
   inStation: Station | null = null;
   /** The ship's offset from that station's centre at the end of the last step (m). */
   inStationRel = new THREE.Vector3();
+  /** Docking computer (sim/autodock.ts): its phase, the station and pad it's working with, and the
+   *  ship's offset from that station at the end of the last step. */
+  autodock: { phase: AutoPhase } | null = null;
+  autodockStation: Station | null = null;
+  autodockPad = 0;
+  dockRel = new THREE.Vector3();
   /** Turning to face the target (middle mouse button; sim/pivot.ts). */
   pivot = false;
   /** Periscope (sim/periscope.ts): up or not, the magnification set, and the current (eased) one. */
@@ -198,6 +205,8 @@ export class Game {
     this.frameBody = this.cur.star; // callers place the ship and then pick its frame
     this.dock = null;
     this.inStation = null;
+    this.autodock = null;
+    this.autodockStation = null;
     this.nearby = systemsNear(sys.pos, JUMP_RANGE + 1).filter((s) => s.id !== sys.id);
     this.sky = systemsNear(sys.pos, SKY_RADIUS);
     this.scene.setSystem(this.cur, this.sky);
@@ -224,7 +233,7 @@ export class Game {
     if (kind === 'outfit') {
       this.avionicsVisible = false;
       this.outfitVisible = true;
-    } else onPress(this, { orbit: 'KeyO', scanner: 'KeyY', nav: 'KeyM' }[kind]);
+    } else onPress(this, { orbit: 'KeyO', scanner: 'KeyY', nav: 'KeyM', dock: 'KeyK' }[kind]);
     this.invalidateHud();
   }
 

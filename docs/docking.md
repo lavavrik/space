@@ -42,6 +42,36 @@ and the mesh in `render/stationMesh.ts`.
 Touching the hull, the tunnel or the hangar walls anywhere else bounces you back to your last clear
 position. Faster than 35 m/s it destroys the ship.
 
+## Docking computer (`sim/autodock.ts`)
+
+An avionics unit (U → DOCKING tile, key K) from Wharfside Avionics:
+
+| Unit | Clearance | Engage from | Approach / inside | After launch |
+|---|---|---|---|---|
+| WD-100 Harbor | you request it (K) | 10 km (with the pad granted) | 80 / 30 m/s | — |
+| WD-300 Berth (default) | requests it itself at 10 km | 50 km | 150 / 60 m/s (up to 1.5 km/s far out) | flies you out |
+
+It flies these phases:
+1. **hold:** a point on the spin axis 600 m in front of the slot, at rest against the station's orbit.
+2. **align:** nose to the slot, wings along its long side, rolling with the station.
+3. **enter:** down the axis to the hangar, level with the pad row.
+4. **descend:** out to the pad, top toward the axis, settling at 2 m/s. The normal touchdown check
+   docks it.
+
+The WD-300's launch adds **rise** (back to the axis) and **exit** (out to the hold point), then hands
+back control.
+
+Guidance:
+- a braking-limited speed profile toward each point (8 m/s² planned, 25 m/s² available);
+- matched to the station's structure inside the hull (orbit + spin), and to its orbit alone outside
+  (the spin term would be ~100 m/s a kilometre off the axis);
+- it spends real propellant and power; one test docking from 30 km used about 1.5 t of H₂.
+
+Any thrust key hands control back. Time warp is blocked while it flies.
+
+Tested from 30 km: the WD-300 got clearance at 9.5 km and docked in 165 s. The WD-100 docked from
+7 km in 145 s after a manual request.
+
 ## Frame subtleties
 
 The ship's position and velocity are relative to its frame body (patched conics). Each step it's
@@ -57,7 +87,6 @@ Using the mid-step position put ω × r about 15 m/s wrong, and bounced ships ou
 
 ## Not yet
 
-- Docking computer (automatic docking).
 - Traffic and other ships.
 - Pad assignment by ship size.
 - Station services with prices.
