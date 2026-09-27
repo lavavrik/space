@@ -205,6 +205,16 @@ export class Game {
     this.invalidateHud();
   }
 
+  /** Influences panel: click a body's name to target it. */
+  targetByName(name: string) {
+    const t = [...this.cur.bodies, ...this.cur.stations].find((x) => x.name === name);
+    if (t) {
+      this.target = t;
+      this.showMsg(`Target · ${t.name}`);
+    }
+    this.invalidateHud();
+  }
+
   /** Outfit panel buttons (only work alongside a station; see outfit/fit.ts). */
   fitModule(slot: number, id: string) {
     fitModule(this, slot, id);

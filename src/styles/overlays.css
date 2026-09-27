@@ -141,3 +141,6 @@
 .esch .egauge { fill: var(--amber-faint); }
 .esch .egauge.fill { fill: #a8e68c; }
 @media (prefers-reduced-motion: reduce) { .esch .ew.on { animation: none; } }
+/* influences: body names are links that target the body */
+.ilink { pointer-events: auto; cursor: pointer; background: none; border: 0; padding: 0; font: inherit; color: inherit; letter-spacing: inherit; text-align: left; }
+.ilink:hover { color: var(--text); text-decoration: underline; text-underline-offset: .2em; }

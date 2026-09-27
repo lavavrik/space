@@ -4,9 +4,9 @@ import { Bar, Panel, Row, cx } from './primitives';
 /**
  * Influences (B), a built-in instrument: every body's gravitational pull on the ship (strongest
  * first; the one the physics applies is marked), the frames you're in, what limits the FTL drive,
- * and starlight and fuel-scoop ranges.
+ * and starlight and fuel-scoop ranges. Clicking a body's name targets it.
  */
-export function InfluencesPanel({ v }: { v: InfluencesView }) {
+export function InfluencesPanel({ v, onTarget }: { v: InfluencesView; onTarget: (name: string) => void }) {
   return (
     <Panel name="influences" id="influences" className="pan" title="INFLUENCES" right="B HIDES">
       <div className="isec">GRAVITY</div>
@@ -14,7 +14,9 @@ export function InfluencesPanel({ v }: { v: InfluencesView }) {
         <div key={p.name} className={cx('infl', p.applied && 'applied')}>
           <div className="gtop">
             <span>
-              {p.name}
+              <button type="button" className="ilink" title={`Target ${p.name}`} onClick={() => onTarget(p.name)}>
+                {p.name}
+              </button>
               {p.applied && <em> · applied</em>}
             </span>
             <b>{p.value}</b>

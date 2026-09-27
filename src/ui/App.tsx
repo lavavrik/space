@@ -21,7 +21,7 @@ export function App() {
         <>
           <div id="leftcol">
             <Location loc={hud.location} />
-            {hud.info ? <BodyInfo info={hud.info} /> : hud.influences ? <InfluencesPanel v={hud.influences} /> : hud.outfit ? (
+            {hud.info ? <BodyInfo info={hud.info} /> : hud.influences ? <InfluencesPanel v={hud.influences} onTarget={(n) => game!.targetByName(n)} /> : hud.outfit ? (
               <OutfitPanel
                 v={hud.outfit}
                 act={{ battery: (id) => game!.fitBattery(id), fit: (s, id) => game!.fitModule(s, id), remove: (s) => game!.removeModule(s), radiators: () => game!.toggleRadiators(), pump: () => game!.togglePump() }}

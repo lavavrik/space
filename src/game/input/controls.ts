@@ -22,8 +22,9 @@ export function onPress(g: Game, code: string) {
     g.avionicsVisible = g.infoVisible = g.influencesVisible = g.outfitVisible = false;
     if (outfit) g.outfitVisible = !was;
     else if (code === 'KeyU') g.avionicsVisible = !was;
-    // ship stats and outfit are clicked through (entries, refit buttons): free the cursor on opening
-    if (g.avionicsVisible || g.outfitVisible) document.exitPointerLock?.();
+    // ship stats, outfit and influences are clicked through (entries, refit buttons, body names):
+    // free the cursor on opening
+    if (g.avionicsVisible || g.outfitVisible || g.influencesVisible) document.exitPointerLock?.();
     if (code === 'KeyB') g.influencesVisible = !was;
     if (code === 'KeyI') {
       g.infoVisible = !was;
@@ -143,6 +144,7 @@ export function onPress(g: Game, code: string) {
       break;
     case 'KeyM':
       g.navPanel = !g.navPanel;
+      if (g.navPanel) document.exitPointerLock?.(); // search box, buttons, clicking stars to add them
       if (g.navPanel) {
         if (!ship.avionics.nav) {
           g.navPanel = false;
