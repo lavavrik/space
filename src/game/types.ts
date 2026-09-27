@@ -198,6 +198,7 @@ export interface Power {
   ftlKW: number;
   chargeKW: number;
   pumpKW: number; // heat pump (set by sim/thermal.ts for the next frame)
+  radarKW: number; // radar, while it's on (sim/radar.ts)
   burn: number;
   cap: number; // kW the bus can supply this frame: solar + the battery's discharge limit (sim/power.ts)
   left: number; // kW not yet granted this frame

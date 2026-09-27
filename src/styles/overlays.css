@@ -177,3 +177,32 @@
 #docked { display: flex; flex-direction: column; gap: .35rem; }
 .dkname { display: flex; align-items: center; gap: .4rem; font-size: 1.15rem; font-weight: 700; color: var(--text); }
 .dkname svg { color: var(--amber); font-size: 1.3rem; }
+
+/* radar window (Shift+Y) */
+#radar { display: flex; flex-direction: column; gap: .35rem; }
+.rdhead { display: flex; justify-content: space-between; align-items: center; font: .85rem "Share Tech Mono", ui-monospace, monospace; color: var(--amber-dim); }
+.rdhead .obtn { display: inline-flex; align-items: center; gap: .3rem; }
+.rdscope { width: 70%; align-self: center; aspect-ratio: 1; flex: none; height: auto; }
+.rdring { fill: none; stroke: var(--amber-faint); stroke-width: .8; }
+.rdaxis { stroke: rgba(255, 165, 58, .08); stroke-width: .6; }
+.rdlab { font: 6px "Share Tech Mono", monospace; fill: var(--amber-dim); }
+.rdship { fill: var(--amber); }
+.rddot { fill: var(--text); pointer-events: auto; cursor: pointer; }
+.rddot.below { fill-opacity: .45; }
+.rddot.tgt { stroke: var(--amber); stroke-width: 1.2; }
+.rddot.star, .rdkind.star { fill: #ffd27a; background: #ffd27a; }
+.rddot.gas-giant, .rdkind.gas-giant { fill: #e0b58a; background: #e0b58a; }
+.rddot.ice-giant, .rdkind.ice-giant { fill: #8ec9ff; background: #8ec9ff; }
+.rddot.rocky-world, .rdkind.rocky-world { fill: #c9b7a4; background: #c9b7a4; }
+.rddot.moon, .rdkind.moon { fill: #9a9a9a; background: #9a9a9a; }
+.rddot.station, .rdkind.station { fill: #73ffb2; background: #73ffb2; }
+.rdlist { display: flex; flex-direction: column; gap: .15rem; }
+.rdrow { display: grid; grid-template-columns: 1fr auto auto; gap: .5rem; align-items: center; font-size: .9rem; }
+.rdrow.tgt .rdname span { color: var(--amber); }
+.rdname { pointer-events: auto; cursor: pointer; background: none; border: 0; padding: 0; font: inherit; color: var(--text); display: flex; align-items: center; gap: .4rem; text-align: left; min-width: 0; }
+.rdname span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rdname .unk { color: var(--amber-dim); font-style: italic; }
+.rdkind { width: .55rem; height: .55rem; border-radius: 50%; flex: none; display: inline-block; }
+.rddist { font: .82rem "Share Tech Mono", ui-monospace, monospace; color: var(--amber-dim); }
+.rdok { color: var(--amber); text-align: center; width: 1.5rem; }
+.rdrow .obtn { display: inline-flex; align-items: center; gap: .25rem; }

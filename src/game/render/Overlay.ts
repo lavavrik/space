@@ -10,6 +10,7 @@ import type { Jump, StarSystem } from '../types';
 import type { SceneRenderer } from './SceneRenderer';
 import { PAD_R, SLOT_H, SLOT_W, toWorld } from '../sim/stationGeom';
 import { padWorld } from '../sim/docking';
+import { contactLabel } from '../sim/radar';
 
 const AMB = 'rgba(255,165,58,',
   CYA = 'rgba(127,220,255,',
@@ -337,7 +338,8 @@ export class Overlay {
       const rel = this.tmp.subVectors(b.pos, ship.pos);
       const isT = b === g.target;
       const s = this.toScreen(g, rel);
-      const label = () => `${b.name} · ${fmtDist(view.dist - b.radius)}`;
+      const name = contactLabel(g, b);
+      const label = () => `${name} · ${fmtDist(view.dist - b.radius)}`;
       if (s.behind) {
         if (isT) this.edgeArrow(s.v, AMB, label());
         continue;
@@ -366,7 +368,7 @@ export class Overlay {
         ctx.stroke();
         if (r < H * 0.4) {
           ctx.fillStyle = AMB + '1)';
-          ctx.fillText(b.name.toUpperCase(), s.x, s.y - r - 8);
+          ctx.fillText(name.toUpperCase(), s.x, s.y - r - 8);
           ctx.fillStyle = 'rgba(255,230,199,0.9)';
           ctx.fillText(fmtDist(view.dist - b.radius), s.x, s.y + r + 15);
         }
@@ -378,7 +380,7 @@ export class Overlay {
         ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
         ctx.stroke();
         ctx.fillStyle = AMB + (b.kind === 'moon' ? '0.5)' : '0.75)');
-        ctx.fillText(b.name, s.x, s.y - r - 5);
+        ctx.fillText(name, s.x, s.y - r - 5);
       }
     }
   }
@@ -396,7 +398,8 @@ export class Overlay {
       if (!view) continue;
       const isT = st === g.target;
       const d = view.dist;
-      const label = `${st.name} · ${fmtDist(Math.max(0, d - st.size / 2))}`;
+      const stName = contactLabel(g, st);
+      const label = `${stName} · ${fmtDist(Math.max(0, d - st.size / 2))}`;
       const s = this.toScreen(g, this.tmp.subVectors(st.pos, g.ship.pos));
       const onScreen = !s.behind && s.x > -50 && s.x < W + 50 && s.y > -50 && s.y < H + 50;
       if (!onScreen) {
@@ -423,7 +426,7 @@ export class Overlay {
         ctx.strokeRect(s.x - r, s.y - r, 2 * r, 2 * r);
         if (isT || d < st.parent.radius * 25) {
           ctx.fillStyle = MINT + '0.95)';
-          ctx.fillText(isT ? label.toUpperCase() : st.name, s.x, s.y - r - 7);
+          ctx.fillText(isT ? label.toUpperCase() : stName, s.x, s.y - r - 7);
         }
       }
     }

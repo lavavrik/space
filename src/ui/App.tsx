@@ -8,6 +8,7 @@ import { FlightCluster, Location, ShipGauges, TargetCard } from './components/Hu
 import { ManeuverGuide } from './components/ManeuverGuide';
 import { NavPanel } from './components/NavPanel';
 import { OutfitPanel } from './components/OutfitPanel';
+import { RadarPanel } from './components/RadarPanel';
 import { OrbitPlanner } from './components/OrbitPlanner';
 import { Toast } from './components/Toast';
 import { useGame, useHud } from './hooks/useGame';
@@ -22,7 +23,9 @@ export function App() {
         <>
           <div id="leftcol">
             <Location loc={hud.location} />
-            {hud.info ? <BodyInfo info={hud.info} /> : hud.influences ? <InfluencesPanel v={hud.influences} onTarget={(n) => game!.targetByName(n)} /> : hud.outfit ? (
+            {hud.info ? <BodyInfo info={hud.info} /> : hud.influences ? <InfluencesPanel v={hud.influences} onTarget={(n) => game!.targetByName(n)} /> : hud.radar ? (
+              <RadarPanel v={hud.radar} act={{ toggle: () => game!.toggleRadar(), pick: (k, scan) => game!.radarPick(k, scan) }} />
+            ) : hud.outfit ? (
               <OutfitPanel
                 v={hud.outfit}
                 act={{ back: () => game!.openShipStats(), battery: (id) => game!.fitBattery(id), fit: (s, id) => game!.fitModule(s, id), remove: (s) => game!.removeModule(s), radiators: () => game!.toggleRadiators(), pump: () => game!.togglePump() }}

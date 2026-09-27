@@ -16,8 +16,8 @@ const SRC_R = 122,
   BUS_X = 160;
 const LOAD_X = 2 * BUS_X - SRC_R,
   LOAD_W = W - LOAD_X - 4,
-  LOAD_H = 40,
-  LOAD_GAP = 50,
+  LOAD_H = 34,
+  LOAD_GAP = 42,
   LOAD_Y0 = 12;
 
 /** Wire thickness for a power (kW): 1.2 px idle up to ~5 px at tens of MW. */
@@ -109,10 +109,10 @@ export function ElectricalSchematic({ e }: { e: ElectricalView }) {
             <Wire d={`M${BUS_X} ${y + LOAD_H / 2} H${LOAD_X}`} kw={l.kw} lim={lim} />
             <g className={cx('ebox', l.kw < 0.5 && 'off', lim && 'warn')}>
               <rect x={LOAD_X} y={y} width={LOAD_W} height={LOAD_H} />
-              <text x={LOAD_X + 8} y={y + 15} className="etitle">
+              <text x={LOAD_X + 8} y={y + 13} className="etitle">
                 {l.name}
               </text>
-              <text x={LOAD_X + 8} y={y + 32} className="eval">
+              <text x={LOAD_X + 8} y={y + 28} className="eval">
                 {l.kw < 0.5 ? 'off' : fmtPower(l.kw)}
                 {lim && ` · ${Math.round(l.limited! * 100)} %`}
               </text>

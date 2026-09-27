@@ -1,5 +1,5 @@
 /* Turns game state into the display strings and flags the HUD shows. */
-import { FTL_CHARGE_TIME, JUMP_CHARGE_TIME, LY, JUMP_DEPART_TIME, NORMAL_ACC, NORMAL_BOOST, NORMAL_MAX, SHIP, ftlBurn, jumpCost } from '../constants';
+import { AU, FTL_CHARGE_TIME, JUMP_CHARGE_TIME, LY, JUMP_DEPART_TIME, NORMAL_ACC, NORMAL_BOOST, NORMAL_MAX, SHIP, ftlBurn, jumpCost } from '../constants';
 import { fmtArea, fmtClock, fmtEnergy, fmtDist, fmtFlow, fmtMass, fmtPower, fmtSpeed, fmtSpeedText, fmtTime } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
@@ -18,10 +18,11 @@ import { TEMP, nextLimit } from '../sim/thermal';
 import { BATTERIES, MODULES, PUMP_ON_ABOVE, type BatteryModule, RADIATOR_MAX_ACC, moduleLabel, outfitMass, pumpFitted, radiatorsFitted, type Module } from '../outfit/catalog';
 import { outfitter } from '../outfit/fit';
 import { SHORE_POWER } from '../sim/docking';
+import { RADAR_RANGE, contactLabel, radarClass } from '../sim/radar';
 import { unitLabel, type Computer } from '../avionics/catalog';
 import { buildInfluences } from './influences';
 import { buildInfo } from './info';
-import type { AutopilotView, AvionicsSlotView, ElectricalView, ModuleIcon, OutfitView, FlightView, GaugeBadge, GaugeView, NavView, GuideView, HudSnapshot, LocationView, Pill, PlannerView, Readout, SystemsView, TargetView } from './types';
+import type { AutopilotView, AvionicsSlotView, ElectricalView, ModuleIcon, RadarView, OutfitView, FlightView, GaugeBadge, GaugeView, NavView, GuideView, HudSnapshot, LocationView, Pill, PlannerView, Readout, SystemsView, TargetView } from './types';
 
 const tmp = new THREE.Vector3();
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
@@ -42,6 +43,7 @@ export function buildSnapshot(g: Game): HudSnapshot {
     electrical: g.avionicsVisible ? electricalView(g) : null,
     influences: g.influencesVisible ? buildInfluences(g) : null,
     outfit: g.outfitVisible ? outfitView(g) : null,
+    radar: g.radarVisible ? radarView(g) : null,
     docked: g.dock?.docked
       ? {
           station: g.dock.station.name,
@@ -191,7 +193,7 @@ function target(g: Game): TargetView {
   const closing = vel.dot(dir);
   const type = sp < SCAN_STAGE.type ? 'UNKNOWN' : t.kind === 'station' ? 'ORBITAL STATION' : t.typeName.toUpperCase();
   const inside = g.inStation === t;
-  return { name: t.name, type, distance: inside ? (g.dock?.docked ? 'DOCKED' : 'INSIDE') : fmtDist(d), eta: closing > 1 ? `ETA ${fmtTime(d / closing)}` : 'NOT CLOSING', none: false, scan, scanFrac: sp };
+  return { name: contactLabel(g, t), type, distance: inside ? (g.dock?.docked ? 'DOCKED' : 'INSIDE') : fmtDist(d), eta: closing > 1 ? `ETA ${fmtTime(d / closing)}` : 'NOT CLOSING', none: false, scan, scanFrac: sp };
 }
 
 function systems(g: Game): SystemsView {
@@ -206,7 +208,7 @@ function systems(g: Game): SystemsView {
   if (ship.tanker) note = { text: `Tanker arriving in ${Math.ceil(ship.tanker.t)} s · hold still` };
   else if (ship.scoop) note = { text: ship.scoop };
   if (ship.temp >= TEMP.panels && !ship.tanker) note = { text: `Solar panels feathered · hull over ${TEMP.panels} K${ship.scoop ? ` · ${ship.scoop[0].toLowerCase()}${ship.scoop.slice(1)}` : ''}`, warn: true };
-  else if (ship.prop <= 0) note = { text: 'No propellant · K for a tanker, or skim a gas giant or star', warn: true };
+  else if (ship.prop <= 0) note = { text: 'No propellant · Shift+K for a tanker, or skim a gas giant or star', warn: true };
   else if (ship.batt <= 0) note = { text: 'Battery flat · P turns the panels to the star', warn: true };
   else if (power.shadow) note = { text: `In ${power.shadow.name}'s shadow · no solar power` };
   if (power.limited && !note?.warn) note = { text: `Power-limited · ${power.limited.what} at ${Math.round(power.limited.frac * 100)} % (bus ${fmtPower(power.cap)})`, warn: true };
@@ -329,6 +331,47 @@ const fmtArcsec = (rad: number) => `${((rad * 180 * 3600) / Math.PI).toFixed(rad
  * Avionics (U): a table of contents for the ship's computers. Each entry: its key, unit, what it's
  * for, what it's doing now, and its specs; clicking it (or its key) opens its tool.
  */
+/**
+ * Radar window (Shift+Y). The scope is the ship's view from above, nose up: each contact at its
+ * bearing, at a log-scaled distance (1,000 km at the centre to RADAR_RANGE at the rim).
+ */
+function radarView(g: Game): RadarView {
+  const r = g.radar;
+  const lo = Math.log10(1e6),
+    hi = Math.log10(RADAR_RANGE);
+  const scale = (d: number) => Math.min(1, Math.max(0, (Math.log10(Math.max(d, 1e6)) - lo) / (hi - lo)));
+  const v = new THREE.Vector3();
+  return {
+    on: r.on,
+    range: `${RADAR_RANGE / AU} AU`,
+    power: r.on ? fmtPower(g.power.radarKW) : 'off',
+    rings: [
+      { r: scale(1e7), label: '10,000 km' },
+      { r: scale(1e9), label: '1 million km' },
+      { r: scale(AU), label: '1 AU' },
+      { r: 1, label: `${RADAR_RANGE / AU} AU` },
+    ],
+    contacts: r.contacts.map((c) => {
+      v.subVectors(c.target.pos, g.ship.pos).applyQuaternion(g.qInv);
+      const h = Math.hypot(v.x, v.z) || 1;
+      const k = scale(v.length()) / h;
+      const p = scanProgress(g, c.target);
+      return {
+        key: c.key,
+        label: contactLabel(g, c.target),
+        cls: radarClass(c.target),
+        dist: fmtDist(c.dist),
+        x: v.x * k,
+        y: v.z * k, // forward (−z) is up on the scope
+        above: v.y >= 0,
+        scanned: p >= SCAN_STAGE.type,
+        scanning: g.scanning === c.target,
+        targeted: g.target === c.target,
+      };
+    }),
+  };
+}
+
 /** Outfit panel (Shift+U): slots, thermal hardware, and the station catalogue when alongside one. */
 function outfitView(g: Game): OutfitView {
   const { ship } = g;
@@ -390,7 +433,7 @@ function electricalView(g: Game): ElectricalView {
   const lim = power.limited;
   const limitOf = (id: string) => {
     if (!lim) return null;
-    const is = { charge: /charging/, thrust: /thrusters/, ftl: /FTL drive/, pump: /heat pump/ }[id];
+    const is = { charge: /charging/, thrust: /thrusters/, ftl: /FTL drive/, pump: /heat pump/, radar: /radar/ }[id];
     return is?.test(lim.what) ? lim.frac : null;
   };
   const net = power.net;
@@ -419,6 +462,7 @@ function electricalView(g: Game): ElectricalView {
       { id: 'ftl', name: 'FTL DRIVE', kw: power.ftlKW, limited: limitOf('ftl') },
       { id: 'charge', name: g.jump?.phase === 'charge' ? 'HYPERDRIVE CHARGING' : 'DRIVE CHARGING', kw: power.chargeKW, limited: limitOf('charge') },
       { id: 'pump', name: 'HEAT PUMP', kw: power.pumpKW, limited: limitOf('pump') },
+      { id: 'radar', name: 'RADAR', kw: power.radarKW, limited: limitOf('radar') },
     ],
     rows,
   };

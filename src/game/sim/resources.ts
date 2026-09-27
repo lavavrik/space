@@ -27,7 +27,7 @@ export function applyThrust(g: Game, T: THREE.Vector3, dt: number) {
   if (dv < 1e-9) return;
   if (ship.prop <= 0) {
     T.set(0, 0, 0);
-    warnOnce(g, 'prop', 'Propellant exhausted · refuel at a gas giant, a star, ice, or call a tanker (K)');
+    warnOnce(g, 'prop', 'Propellant exhausted · refuel at a gas giant, a star, ice, or call a tanker (Shift+K)');
     return;
   }
   // deployed radiator fins can't take hard acceleration

@@ -70,7 +70,6 @@ export function dockKey(g: Game) {
     return true;
   }
   if (dist > DOCK_REQUEST_RANGE) {
-    if (dist > 100e3) return false; // far off: K is the tanker again
     g.showMsg(`Request docking within ${DOCK_REQUEST_RANGE / 1000} km of ${t.name}`, 'warn');
     return true;
   }

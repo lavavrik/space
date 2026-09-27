@@ -17,6 +17,7 @@
 import { JUMP_CHARGE_TIME, JUMP_RANGE, JUMP_TUNNEL_BASE, JUMP_TUNNEL_PER_LY, LY, SCOOP_FLUX_FULL, SHIP, fluxDist, jumpCost } from '../constants';
 import { THREE } from '../lib/three';
 import { scoopFitted } from '../outfit/catalog';
+import { contactLabel, radarSeen } from './radar';
 import { fmtDist, fmtEnergy } from '../format';
 import type { Game } from '../Game';
 import type { StarSystem, Target } from '../types';
@@ -289,19 +290,25 @@ export function searchNav(g: Game, query: string, from: 'ship' | 'last', limit =
   const out: NavResult[] = [];
   const ly = (s: StarSystem) => s.pos.distanceTo(origin);
 
-  // this system: live positions, real distances
+  // this system: only what the radar has detected (sim/radar.ts), under its name once scanned,
+  // else as an unidentified class; live positions, real distances
   const here = g.cur.sys;
   const hereDetail = (m: number) => (fromLast ? `here · ${ly(here).toFixed(1)} ly from ${last.name}` : fmtNear(m));
   const hereKey = (m: number) => (fromLast ? ly(here) : m / LY);
   for (const b of g.cur.bodies) {
-    if (b.kind === 'star' || !match(b.name)) continue;
+    if (b.kind === 'star' || !radarSeen(g, b)) continue;
+    const label = contactLabel(g, b),
+      known = label === b.name;
+    if (!match(label)) continue;
     const m = Math.max(0, b.pos.distanceTo(g.ship.pos) - b.radius);
-    out.push({ key: `${b.kind}:${here.id}:${b.name}`, kind: b.kind, name: b.name, detail: `${b.typeName} · ${hereDetail(m)}`, sys: here, dist: hereKey(m) });
+    out.push({ key: `${b.kind}:${here.id}:${b.name}`, kind: b.kind, name: label, detail: `${known ? b.typeName : 'radar contact'} · ${hereDetail(m)}`, sys: here, dist: hereKey(m) });
   }
   for (const st of g.cur.stations) {
-    if (!match(st.name)) continue;
+    if (!radarSeen(g, st)) continue;
+    const label = contactLabel(g, st);
+    if (!match(label)) continue;
     const m = Math.max(0, st.pos.distanceTo(g.ship.pos) - st.size / 2);
-    out.push({ key: `station:${here.id}:${st.name}`, kind: 'station', name: st.name, detail: `station · ${st.parent.name} · ${hereDetail(m)}`, sys: here, dist: hereKey(m) });
+    out.push({ key: `station:${here.id}:${st.name}`, kind: 'station', name: label, detail: `${label === st.name ? `station · ${st.parent.name}` : 'radar contact'} · ${hereDetail(m)}`, sys: here, dist: hereKey(m) });
   }
 
   // stars
@@ -327,7 +334,8 @@ export function addNavResult(g: Game, key: string) {
   const r = searchNav(g, g.navQuery, g.navSortFrom, 200).find((x) => x.key === key);
   if (!r) return;
   if (r.kind === 'star') addNavPoint(g, r.sys);
-  else addNavFinal(g, r.sys, r.kind === 'station' ? 'station' : 'body', r.name);
+  // the real name is in the key (the shown one may be "Unidentified …" until it's scanned)
+  else addNavFinal(g, r.sys, r.kind === 'station' ? 'station' : 'body', key.split(':').slice(2).join(':'));
 }
 
 /* ---------- flying ---------- */

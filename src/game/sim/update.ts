@@ -17,6 +17,7 @@ import { updateThermal } from './thermal';
 import { beginPower, grant, settleBattery } from './power';
 import { railsStep, stopWarp, warpBlocked } from './timewarp';
 import { updatePivot } from './pivot';
+import { updateRadar } from './radar';
 import { autodock } from './autodock';
 import { SHORE_POWER, holdDocked, rotationCorrection, stationContact } from './docking';
 
@@ -56,6 +57,7 @@ export function update(g: Game, dt: number, realDt = dt) {
   }
   const apSteering = !!ship.ap && ship.ap.phase === 'transfer';
   beginPower(g); // this frame's power budget (sim/power.ts)
+  updateRadar(g, dt);
 
   // --- rotation
   const [mdx, mdy] = input.consumeMouse();
@@ -161,7 +163,7 @@ export function update(g: Game, dt: number, realDt = dt) {
   // no sunlight inside a station; docked, the station's shore power stands in for the panels
   power.solar = inTunnel || g.inStation ? 0 : solarPower(g);
   power.shore = g.dock?.docked ? SHORE_POWER : 0;
-  power.draw = SHIP.baseLoad + power.thrustKW + power.ftlKW + power.chargeKW + power.pumpKW;
+  power.draw = SHIP.baseLoad + power.thrustKW + power.ftlKW + power.chargeKW + power.pumpKW + power.radarKW;
   settleBattery(g, dt);
   if (ship.batt > 1) g.warned.batt = false;
   updateThermal(g, dt, inTunnel);

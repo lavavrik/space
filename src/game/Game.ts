@@ -24,6 +24,8 @@ import { TEMP, toggleRadiators, type HeatBudget } from './sim/thermal';
 import { STOCK_BATTERY, emptyOutfit } from './outfit/catalog';
 import { ZOOM_START, updatePeriscope } from './sim/periscope';
 import { startPivot } from './sim/pivot';
+import { contactLabel, toggleRadar, type Contact } from './sim/radar';
+import { toggleScan } from './sim/scanner';
 import { dockKey, launch, refuelDocked, type Dock } from './sim/docking';
 import type { AutoPhase } from './sim/autodock';
 import { fitBattery, fitModule, removeModule } from './outfit/fit';
@@ -48,7 +50,7 @@ export class Game {
   /** Systems around the current one that a jump could reach (with a margin for moving within it). */
   nearby: StarSystem[] = [];
   readonly ship = newShip();
-  readonly power: Power = { solar: 0, shore: 0, cos: 0, shadow: null, draw: 0, net: 0, thrustKW: 0, ftlKW: 0, chargeKW: 0, pumpKW: 0, burn: 0, flux: 0, cap: 0, left: 0, limited: null, curtailed: 0, ftlShort: 0 };
+  readonly power: Power = { solar: 0, shore: 0, cos: 0, shadow: null, draw: 0, net: 0, thrustKW: 0, ftlKW: 0, chargeKW: 0, pumpKW: 0, radarKW: 0, burn: 0, flux: 0, cap: 0, left: 0, limited: null, curtailed: 0, ftlShort: 0 };
   target: Target | null = null;
   /** Station whose frame flight assist works in, or null for the system frame (see sim/frame.ts). */
   refFrame: Station | null = null;
@@ -76,6 +78,11 @@ export class Game {
   autodockStation: Station | null = null;
   autodockPad = 0;
   dockRel = new THREE.Vector3();
+  /** Radar (sim/radar.ts): on or off, the current contacts, sweep timer, and every object it has
+   *  ever detected (scan keys, so per system). */
+  radar: { on: boolean; contacts: Contact[]; t: number; seen: Set<string> } = { on: true, contacts: [], t: 0, seen: new Set() };
+  /** Radar window (Shift+Y), in the left column. */
+  radarVisible = false;
   /** Turning to face the target (middle mouse button; sim/pivot.ts). */
   pivot = false;
   /** Periscope (sim/periscope.ts): up or not, the magnification set, and the current (eased) one. */
@@ -262,6 +269,22 @@ export class Game {
 
   launch() {
     launch(this);
+    this.invalidateHud();
+  }
+
+  /** Radar window buttons. */
+  toggleRadar() {
+    toggleRadar(this);
+    this.invalidateHud();
+  }
+
+  /** Radar row: target this contact, and with `scan` start the scanner on it. */
+  radarPick(key: string, scan: boolean) {
+    const c = this.radar.contacts.find((x) => x.key === key);
+    if (!c) return;
+    this.target = c.target;
+    if (scan) toggleScan(this);
+    else this.showMsg(`Target · ${contactLabel(this, c.target)}`);
     this.invalidateHud();
   }
 

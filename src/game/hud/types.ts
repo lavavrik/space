@@ -134,6 +134,27 @@ export interface ElectricalView {
   rows: [string, string | Readout][];
 }
 
+/** Radar window (Shift+Y): the scope and the contact list. */
+export interface RadarView {
+  on: boolean;
+  range: string;
+  power: string;
+  /** Scope rings: radius (0…1 of the scope) and label. */
+  rings: { r: number; label: string }[];
+  contacts: {
+    key: string;
+    label: string;
+    cls: string;
+    dist: string;
+    x: number; // scope position, −1…1, nose up
+    y: number;
+    above: boolean; // above or below the ship's wings
+    scanned: boolean;
+    scanning: boolean;
+    targeted: boolean;
+  }[];
+}
+
 /** Outfit panel (Shift+U): the utility slots, the thermal hardware's state, and fitting at a station. */
 export interface OutfitView {
   station: string | null; // the station that can fit modules right now
@@ -212,6 +233,7 @@ export interface HudSnapshot {
   electrical: ElectricalView | null; // its electrical section
   influences: InfluencesView | null;
   outfit: OutfitView | null;
+  radar: RadarView | null;
   /** Docked at a station: its name, the pad, and what the station is doing for the ship. */
   docked: { station: string; pad: number; notes: string[]; tanksFull: boolean } | null;
   nav: NavView | null;

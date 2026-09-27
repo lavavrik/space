@@ -20,11 +20,14 @@ export function onPress(g: Game, code: string) {
   g.invalidateHud();
   if (code === 'Tab') g.helpVisible = !g.helpVisible;
   // info (I), avionics (U), outfit (Shift+U) and influences (B) share the left column: opening one closes the others
-  if (code === 'KeyU' || code === 'KeyI' || code === 'KeyB') {
-    const outfit = code === 'KeyU' && !!(keys.ShiftLeft || keys.ShiftRight);
-    const was = outfit ? g.outfitVisible : { KeyU: g.avionicsVisible, KeyI: g.infoVisible, KeyB: g.influencesVisible }[code];
-    g.avionicsVisible = g.infoVisible = g.influencesVisible = g.outfitVisible = false;
+  const shift = !!(keys.ShiftLeft || keys.ShiftRight);
+  if (code === 'KeyU' || code === 'KeyI' || code === 'KeyB' || (code === 'KeyY' && shift)) {
+    const outfit = code === 'KeyU' && shift,
+      radar = code === 'KeyY';
+    const was = outfit ? g.outfitVisible : radar ? g.radarVisible : { KeyU: g.avionicsVisible, KeyI: g.infoVisible, KeyB: g.influencesVisible }[code as 'KeyU' | 'KeyI' | 'KeyB'];
+    g.avionicsVisible = g.infoVisible = g.influencesVisible = g.outfitVisible = g.radarVisible = false;
     if (outfit) g.outfitVisible = !was;
+    else if (radar) g.radarVisible = !was;
     else if (code === 'KeyU') g.avionicsVisible = !was;
     if (code === 'KeyB') g.influencesVisible = !was;
     if (code === 'KeyI') {
@@ -33,7 +36,8 @@ export function onPress(g: Game, code: string) {
     }
     // ship stats, outfit and influences are clicked through (entries, refit buttons, body names):
     // free the cursor on opening (checked after every toggle above, or B was never seen as open)
-    if (g.avionicsVisible || g.outfitVisible || g.influencesVisible) document.exitPointerLock?.();
+    if (g.avionicsVisible || g.outfitVisible || g.influencesVisible || g.radarVisible) document.exitPointerLock?.();
+    if (radar) return; // Shift+Y is only the window (Y alone scans)
   }
   if ((g.jump && g.jump.phase !== 'charge') || ship.dead) return;
 
@@ -140,8 +144,11 @@ export function onPress(g: Game, code: string) {
       g.showMsg(ship.sunTrack ? 'Sun tracking on · turning panels to the star (steer to cancel)' : 'Sun tracking off');
       break;
     case 'KeyK':
-      // near a targeted station (or docked) K is docking; elsewhere it calls a tanker
-      if (dockKey(g)) break;
+      // K is docking (request, docking computer, launch); Shift+K calls a tanker
+      if (!(keys.ShiftLeft || keys.ShiftRight)) {
+        if (!dockKey(g)) g.showMsg('Target a station to dock at · Shift+K calls a tanker', 'warn');
+        break;
+      }
       if (ship.tanker) {
         ship.tanker = null;
         g.showMsg('Tanker call cancelled');
