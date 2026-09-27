@@ -19,6 +19,7 @@ vec3 patchOr(sampler2D t, mat4 vp, vec3 d, vec3 base){
 void main(){
   vec3 d=normalize(vDir);
   vec3 c=textureCube(uSky,d).rgb;
-  if(uPatchOn>0.5) c=mix(patchOr(uPatchPrev,uPatchPrevVP,d,c),patchOr(uPatch,uPatchVP,d,c),uMix);
+  // uPatchOn is a weight (0…1): the patch blends in gradually as the zoom grows
+  if(uPatchOn>0.0) c=mix(c,mix(patchOr(uPatchPrev,uPatchPrevVP,d,c),patchOr(uPatch,uPatchVP,d,c),uMix),uPatchOn);
   gl_FragColor=vec4(c*c,1.0);
 }

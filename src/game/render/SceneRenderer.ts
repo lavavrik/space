@@ -190,7 +190,8 @@ export class SceneRenderer {
   private updateSkyPatch(g: Game) {
     const z = g.zoom.cur;
     const u = this.skyUni;
-    if (z < 3) {
+    // baked from 2×, blended in over 2–4× so its extra detail never pops in
+    if (z < 2) {
       u.uPatchOn.value = 0;
       if (this.patch) this.patch.zoom = 0; // start fresh next time
       return;
@@ -243,7 +244,7 @@ export class SceneRenderer {
       p.bakedAt = now;
     }
     u.uMix.value = Math.min(1, (now - p.bakedAt) / CROSSFADE);
-    u.uPatchOn.value = 1;
+    u.uPatchOn.value = THREE.MathUtils.smoothstep(z, 2, 4);
   }
 
   /** Every other system within SKY_RADIUS as a sky point, brightness and size by flux from here. */
