@@ -8,7 +8,7 @@
   --cyan: #7fdcff;
   --cyan-faint: rgba(127, 220, 255, .22);
   --red: #ff5b46;
-  --panel: rgba(16, 11, 6, .64);
+  --panel: rgba(16, 11, 6, .74);
   --void: #000;
 }
 [hidden] { display: none !important; }

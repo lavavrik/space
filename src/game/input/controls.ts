@@ -9,6 +9,7 @@ import { adjustAlt, closePlanner, disengageAP, engageOrbit, openPlanner, reverse
 /** Handle a key press (not held keys, which the simulation polls). */
 export function onPress(g: Game, code: string) {
   const { ship, keys } = g;
+  if (code === 'Backquote') g.perf.toggle(); // performance overlay, available any time
   if (!g.started) return;
   g.invalidateHud();
   if (code === 'Tab') g.helpVisible = !g.helpVisible;

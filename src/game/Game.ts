@@ -5,6 +5,7 @@ import { onPress, onRepeat, onWheel } from './input/controls';
 import { Input } from './input/Input';
 import { THREE } from './lib/three';
 import { Overlay } from './render/Overlay';
+import { PerfMonitor } from './debug/Perf';
 import { SceneRenderer } from './render/SceneRenderer';
 import type { Guide } from './sim/guide';
 import { pickAt, placeAtHome } from './sim/navigation';
@@ -74,6 +75,7 @@ export class Game {
   readonly hud = new HudStore();
   readonly input: Input;
   private readonly scene: SceneRenderer;
+  readonly perf: PerfMonitor;
   private readonly overlay: Overlay;
   private readonly glCanvas: HTMLCanvasElement;
   private readonly overlayCanvas: HTMLCanvasElement;
@@ -90,6 +92,7 @@ export class Game {
 
     this.scene = new SceneRenderer(this.glCanvas);
     this.overlay = new Overlay(this.overlayCanvas, this.scene);
+    this.perf = new PerfMonitor(host, this.scene.gl, this.overlayCanvas);
     this.input = new Input(this.glCanvas, {
       onPress: (code) => onPress(this, code),
       onRepeat: (code) => onRepeat(this, code),
@@ -173,6 +176,8 @@ export class Game {
   };
 
   private frame = (now: number) => {
+    const perf = this.perf;
+    perf.frameStart(now - this.last);
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
     if (this.started) update(this, dt);
@@ -183,10 +188,17 @@ export class Game {
       this.qInv.copy(this.ship.q).invert();
       this.ship.q.multiply(qa.setFromAxisAngle(AY, -0.012 * dt));
     }
+    perf.mark('sim');
+    perf.gpuBegin();
     this.scene.render(this);
+    perf.gpuEnd();
+    perf.mark('render');
     this.overlay.draw(this);
+    perf.mark('overlay');
     this.hudT -= dt;
     if (this.hudT <= 0) this.publishHud();
+    perf.mark('hud');
+    perf.frameEnd();
     this.raf = requestAnimationFrame(this.frame);
   };
 
@@ -200,6 +212,7 @@ export class Game {
     removeEventListener('resize', this.resize);
     this.input.dispose();
     this.scene.dispose();
+    this.perf.dispose();
     this.glCanvas.remove();
     this.overlayCanvas.remove();
   }

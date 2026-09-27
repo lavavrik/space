@@ -56,3 +56,6 @@
   font-size: 11px; white-space: nowrap;
 }
 #help span { color: var(--amber-dim); }
+
+/* performance overlay (`): top centre, above everything, never takes clicks */
+#perf { position: fixed; top: calc(8px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); width: 330px; height: 150px; pointer-events: none; z-index: 50; }

@@ -10,6 +10,7 @@ import pointVert from './point.vert.glsl?raw';
 import pointFrag from './point.frag.glsl?raw';
 import skyVert from './sky.vert.glsl?raw';
 import skyFrag from './sky.frag.glsl?raw';
+import skyCubeFrag from './skyCube.frag.glsl?raw';
 import skyPointVert from './skyPoint.vert.glsl?raw';
 import skyPointFrag from './skyPoint.frag.glsl?raw';
 import stationFrag from './station.frag.glsl?raw';
@@ -33,5 +34,9 @@ export const POINT_FS = pointFrag;
 /** Milky Way backdrop and the star field. */
 export const SKY_VS = skyVert;
 export const SKY_FS = withNoise(skyFrag);
+/** The procedural sky, writing sqrt(colour) for baking into an 8-bit cube map. */
+export const SKY_BAKE_FS = SKY_FS.replace('gl_FragColor=vec4(col,1.0);', 'gl_FragColor=vec4(sqrt(col),1.0);');
+/** Draws the baked sky cube map. */
+export const SKY_CUBE_FS = skyCubeFrag;
 export const SKYPT_VS = skyPointVert;
 export const SKYPT_FS = skyPointFrag;

@@ -4,7 +4,7 @@ import { mulberry32 } from '../lib/rng';
 import { THREE } from '../lib/three';
 import type { Body, CurrentSystem, Star, StarSystem, Station, World } from '../types';
 import { HyperspaceView } from './Hyperspace';
-import { ATMO_FS, BODY_VS, GLOW_FS, GLOW_VS, PLANET_FS, POINT_FS, POINT_VS, RING_FS, SKYPT_FS, SKYPT_VS, SKY_FS, SKY_VS, STAR_FS, STATION_FS } from './shaders';
+import { ATMO_FS, BODY_VS, GLOW_FS, GLOW_VS, PLANET_FS, POINT_FS, POINT_VS, RING_FS, SKYPT_FS, SKYPT_VS, SKY_BAKE_FS, SKY_CUBE_FS, SKY_VS, STAR_FS, STATION_FS } from './shaders';
 
 type Uniforms = Record<string, THREE.IUniform>;
 
@@ -23,6 +23,10 @@ export interface BodyView {
 }
 
 const MAXDOTS = 256;
+/** Face size of the baked Milky Way cube map (6 × 1024² × 4 bytes ≈ 25 MB of GPU memory). */
+const SKY_CUBE_SIZE = 1024;
+/** Most pixels the 3D view renders per frame (≈ 2980×1680); see setPixelRatio. */
+const MAX_RENDER_PIXELS = 5e6;
 /** Colour of a distant station's beacon dot (and its overlay marker): mint, unlike any body. */
 export const STATION_RGB = new THREE.Color(0.45, 1, 0.7);
 const DUST = 700,
@@ -41,13 +45,16 @@ export class SceneRenderer {
   private readonly skyScene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(FOV, 1, 0.5, 1e21);
   private readonly skyCam = new THREE.PerspectiveCamera(FOV, 1, 0.1, 1000);
-  private readonly PR: number;
+  /** Current render pixel ratio; point sprite sizes scale with it (shared uniform for their shaders). */
+  private PR = 1;
+  private readonly uPR = { value: 1 };
   private readonly geoHi = new THREE.SphereGeometry(1, 320, 160);
   private readonly geoMid = new THREE.SphereGeometry(1, 96, 48);
   private readonly geoLo = new THREE.SphereGeometry(1, 32, 16);
   private readonly plane = new THREE.PlaneGeometry(2, 2);
   private readonly box = new THREE.BoxGeometry(1, 1, 1);
   private sysStars: THREE.Points | null = null;
+  private skyCube!: THREE.WebGLCubeRenderTarget;
   private readonly hyper = new HyperspaceView(() => this.pointsMaterial());
   private readonly dotGeo = new THREE.BufferGeometry();
   private readonly dustGeo = new THREE.BufferGeometry();
@@ -59,9 +66,8 @@ export class SceneRenderer {
 
   constructor(canvas: HTMLCanvasElement) {
     this.gl = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true });
-    this.gl.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5));
     this.gl.autoClear = false;
-    this.PR = this.gl.getPixelRatio();
+    this.setPixelRatio(innerWidth, innerHeight);
     this.buildSky();
 
     // distant bodies drawn as dots of reflected starlight
@@ -77,13 +83,27 @@ export class SceneRenderer {
     for (let i = 0; i < DUST; i++) this.dustSeed.push([g() * DUSTBOX, g() * DUSTBOX, g() * DUSTBOX]);
     this.dustGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(DUST * 3), 3));
     this.dustGeo.setAttribute('aColor', new THREE.BufferAttribute(new Float32Array(DUST * 3), 3));
-    this.dustGeo.setAttribute('aSize', new THREE.BufferAttribute(new Float32Array(DUST).fill(2.2 * this.PR), 1));
+    this.dustGeo.setAttribute('aSize', new THREE.BufferAttribute(new Float32Array(DUST), 1));
     this.dust = new THREE.Points(this.dustGeo, dots.material);
     this.dust.frustumCulled = false;
     this.scene.add(this.dust);
   }
 
+  /**
+   * Render at up to 1.5× the CSS resolution, but never more than MAX_RENDER_PIXELS in total: a
+   * 4K screen otherwise renders 8+ megapixels a frame for little visible gain (the HUD and
+   * overlay stay sharp either way; they're drawn separately).
+   */
+  private setPixelRatio(W: number, H: number) {
+    const pr = Math.min(devicePixelRatio || 1, 1.5, Math.sqrt(MAX_RENDER_PIXELS / Math.max(1, W * H)));
+    this.gl.setPixelRatio(pr);
+    this.PR = this.uPR.value = pr;
+    (this.dustGeo.attributes.aSize?.array as Float32Array | undefined)?.fill(2.2 * pr);
+    if (this.dustGeo.attributes.aSize) this.dustGeo.attributes.aSize.needsUpdate = true;
+  }
+
   resize(W: number, H: number) {
+    this.setPixelRatio(W, H);
     this.gl.setSize(W, H, false);
     this.camera.aspect = this.skyCam.aspect = W / H;
     this.camera.updateProjectionMatrix();
@@ -91,7 +111,7 @@ export class SceneRenderer {
   }
 
   private pointsMaterial() {
-    return new THREE.ShaderMaterial({ vertexShader: SKYPT_VS, fragmentShader: SKYPT_FS, uniforms: { uPR: { value: this.PR } }, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
+    return new THREE.ShaderMaterial({ vertexShader: SKYPT_VS, fragmentShader: SKYPT_FS, uniforms: { uPR: this.uPR }, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
   }
 
   /**
@@ -99,7 +119,17 @@ export class SceneRenderer {
    * real system you can fly to (see buildSysStars), so there are no decorative points.
    */
   private buildSky() {
-    const sky = new THREE.Mesh(new THREE.SphereGeometry(100, 64, 32), new THREE.ShaderMaterial({ vertexShader: SKY_VS, fragmentShader: SKY_FS, side: THREE.BackSide, depthWrite: false }));
+    // The Milky Way depends only on view direction, so render its (expensive, noise-heavy) shader
+    // once into a cube map and just sample that every frame. Evaluating it per pixel per frame
+    // cost ~22 ms at 3840×2160; the bake takes a few ms at startup.
+    const geo = new THREE.SphereGeometry(100, 64, 32);
+    const bakeScene = new THREE.Scene();
+    const bakeMat = new THREE.ShaderMaterial({ vertexShader: SKY_VS, fragmentShader: SKY_BAKE_FS, side: THREE.BackSide, depthWrite: false });
+    bakeScene.add(new THREE.Mesh(geo, bakeMat));
+    this.skyCube = new THREE.WebGLCubeRenderTarget(SKY_CUBE_SIZE, { generateMipmaps: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+    new THREE.CubeCamera(1, 1000, this.skyCube).update(this.gl, bakeScene);
+    bakeMat.dispose();
+    const sky = new THREE.Mesh(geo, new THREE.ShaderMaterial({ vertexShader: SKY_VS, fragmentShader: SKY_CUBE_FS, uniforms: { uSky: { value: this.skyCube.texture } }, side: THREE.BackSide, depthWrite: false }));
     this.skyScene.add(sky);
   }
 
@@ -397,6 +427,7 @@ export class SceneRenderer {
     };
     this.scene.traverse(dispose);
     this.skyScene.traverse(dispose);
+    this.skyCube.dispose();
     for (const geo of [this.geoHi, this.geoMid, this.geoLo, this.plane, this.box]) geo.dispose();
     this.gl.dispose();
   }

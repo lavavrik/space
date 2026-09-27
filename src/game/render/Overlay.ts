@@ -33,7 +33,8 @@ export class Overlay {
   resize(W: number, H: number) {
     this.W = W;
     this.H = H;
-    const dpr = Math.min(devicePixelRatio || 1, 2);
+    // markers and labels: sharp up to 2×, but no more than ~8 MP, the cost of compositing it every frame
+    const dpr = Math.min(devicePixelRatio || 1, 2, Math.sqrt(8.3e6 / Math.max(1, W * H)));
     this.canvas.width = W * dpr;
     this.canvas.height = H * dpr;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);

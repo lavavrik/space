@@ -10,7 +10,8 @@
   border: 1px solid var(--amber-faint);
   padding: 10px 14px 12px;
   clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
-  backdrop-filter: blur(4px);
+  /* no backdrop-filter: blurring the live 3D view behind 7+ panels is re-done every frame and is
+     costly at 4K; a slightly denser background keeps text as readable */
   min-width: 0;
 }
 .side { width: 300px; }
