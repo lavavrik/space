@@ -20,6 +20,7 @@ import { PUMP_CARNOT, PUMP_ON_ABOVE, RADIATOR_MAX_ACC, RADIATOR_SURFACE, pumpFit
 import type { Ship, World } from '../types';
 import { destroyShip } from './flight';
 import { dryMass } from './resources';
+import { grant } from './power';
 
 const SIGMA = 5.670374e-8; // Stefan–Boltzmann, W/m²K⁴
 /** Solar constant: flux from a Sun-like star at 1 AU, W/m² (power.flux is in these units). */
@@ -173,7 +174,7 @@ export function heatBudget(g: Game, inTunnel: boolean): HeatBudget {
     internal: 1000 * (power.draw - power.thrustKW * (1 - HULL.exhaustKeep) - power.pumpKW),
     radAbs: radStar + planetFlux * ((2 * finFace) / 4),
     radArea: 2 * finFace,
-    pumpMaxW: pump && ship.outfit.pumpAuto && ship.batt > 1 ? pump.caps.maxKW * 1000 : 0,
+    pumpMaxW: pump && ship.outfit.pumpAuto ? Math.min(pump.caps.maxKW, Math.max(0, power.left)) * 1000 : 0,
     pumpLift: pump?.caps.lift ?? 0,
   };
   const now = balance(inp, ship.temp);
@@ -225,7 +226,7 @@ export function updateThermal(g: Game, dt: number, inTunnel: boolean) {
   }
 
   const h = (g.heat = heatBudget(g, inTunnel));
-  power.pumpKW = h.pumpW / 1000; // drawn from the bus next frame
+  power.pumpKW = grant(g, h.pumpW / 1000, 'heat pump'); // (it asked for no more than was left)
   if (h.ventFlow > 0) {
     const used = Math.min(ship.prop, h.ventFlow * dt);
     ship.prop -= used;

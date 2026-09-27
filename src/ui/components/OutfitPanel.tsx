@@ -2,6 +2,7 @@ import type { OutfitView } from '../../game/hud/types';
 import { Panel, cx } from './primitives';
 
 interface Actions {
+  battery: (id: string) => void;
   fit: (slot: number, id: string) => void;
   remove: (slot: number) => void;
   radiators: () => void;
@@ -17,6 +18,22 @@ export function OutfitPanel({ v, act }: { v: OutfitView; act: Actions }) {
   return (
     <Panel name="outfit" id="outfit" className="pan" title="OUTFIT" right="⇧U HIDES">
       <div className="ohint">{v.station ? `Alongside ${v.station} · pick a module for a slot` : v.hint}</div>
+      <div className="oslot">
+        <div className="gtop">
+          <span>BATTERY</span>
+          <b>{v.battery.unit}</b>
+        </div>
+        <div className="avspecs">{v.battery.specs}</div>
+        {v.battery.options.length > 0 && (
+          <div className="obtns">
+            {v.battery.options.map((b) => (
+              <button key={b.id} type="button" className={cx('obtn', b.current && 'cur')} title={b.specs} disabled={b.current} onClick={() => act.battery(b.id)}>
+                {b.unit}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       {v.slots.map((s, i) => (
         <div key={i} className={cx('oslot', s.empty && 'empty')}>
           <div className="gtop">

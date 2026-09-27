@@ -24,9 +24,9 @@ export function App() {
             {hud.info ? <BodyInfo info={hud.info} /> : hud.influences ? <InfluencesPanel v={hud.influences} /> : hud.outfit ? (
               <OutfitPanel
                 v={hud.outfit}
-                act={{ fit: (s, id) => game!.fitModule(s, id), remove: (s) => game!.removeModule(s), radiators: () => game!.toggleRadiators(), pump: () => game!.togglePump() }}
+                act={{ battery: (id) => game!.fitBattery(id), fit: (s, id) => game!.fitModule(s, id), remove: (s) => game!.removeModule(s), radiators: () => game!.toggleRadiators(), pump: () => game!.togglePump() }}
               />
-            ) : hud.avionics ? <AvionicsPanel slots={hud.avionics} onOpen={(k) => game!.openAvionics(k)} /> : hud.helpVisible && <HelpPanel />}
+            ) : hud.avionics ? <AvionicsPanel slots={hud.avionics} electrical={hud.electrical ?? []} onOpen={(k) => game!.openAvionics(k)} /> : hud.helpVisible && <HelpPanel />}
           </div>
           <div id="rightcol">
             {hud.nav && (

@@ -1,4 +1,5 @@
 import { FTL_CHARGE_TIME, FTL_MAX, NORMAL_MAX, REARTH, SHIP, ftlBurn } from '../constants';
+import { grant } from './power';
 import { heatBlocked } from './thermal';
 import { fmtDist } from '../format';
 import type { Game } from '../Game';
@@ -46,10 +47,10 @@ export function ftlBlocked(ship: Ship) {
 export function ftlUpkeep(g: Game, dt: number, load: number) {
   const { ship, power } = g;
   ship.exotic = Math.max(0, ship.exotic - ftlBurn(load) * dt);
-  power.ftlKW = SHIP.ftlCruiseKW;
+  power.ftlKW = grant(g, SHIP.ftlCruiseKW, 'FTL drive');
   let why: string | null = null;
   if (ship.exotic <= 0) why = 'Exotic matter exhausted';
-  else if (ship.batt <= 0 && power.solar < SHIP.ftlCruiseKW + SHIP.baseLoad) why = 'Power failure';
+  else if (power.ftlKW < SHIP.ftlCruiseKW) why = 'Power failure';
   if (!why) return true;
   ship.ap = null;
   dropFTL(g, false);
@@ -149,7 +150,10 @@ export function dropFTL(g: Game, forced: boolean, body?: Body) {
 export function chargeFTL(g: Game, dt: number) {
   const { ship } = g;
   if (ship.ftlCharge <= 0) return;
-  ship.ftlCharge -= dt;
+  // a fixed energy (6 MW × 3 s = 5 kWh): at less than full power it takes longer
+  const kw = grant(g, SHIP.ftlChargeKW, 'FTL charging');
+  g.power.chargeKW = kw;
+  ship.ftlCharge -= (dt * kw) / SHIP.ftlChargeKW;
   if (ship.ftlCharge <= 0) {
     ship.ftlCharge = 0;
     if (!massLock(g)) engageFTL(g);

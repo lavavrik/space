@@ -198,6 +198,10 @@ export interface Power {
   chargeKW: number;
   pumpKW: number; // heat pump (set by sim/thermal.ts for the next frame)
   burn: number;
+  cap: number; // kW the bus can supply this frame: solar + the battery's discharge limit (sim/power.ts)
+  left: number; // kW not yet granted this frame
+  limited: { what: string; frac: number } | null; // the first load that got less than it asked for
+  curtailed: number; // kW of solar the battery couldn't take
   flux: number;
 }
 

@@ -20,15 +20,15 @@ import { updateStations } from './sim/stations';
 import { buildStations } from './universe/stations';
 import { buildSystem } from './universe/system';
 import { TEMP, toggleRadiators, type HeatBudget } from './sim/thermal';
-import { emptyOutfit } from './outfit/catalog';
-import { fitModule, removeModule } from './outfit/fit';
+import { STOCK_BATTERY, emptyOutfit } from './outfit/catalog';
+import { fitBattery, fitModule, removeModule } from './outfit/fit';
 
 function newShip(): Ship {
   return {
     pos: new THREE.Vector3(), vel: new THREE.Vector3(), q: new THREE.Quaternion(),
     mode: 'normal', throttle: 0, cruise: false, ftlSpooled: false, ftlSpeed: 0, ftlCharge: 0, vmax: 0,
     fa: true, decoupled: false, travelDir: new THREE.Vector3(0, 0, -1), ap: null, landed: null, dead: null, grav: null,
-    prop: SHIP.propCap, exotic: SHIP.exoticCap, batt: SHIP.battCap,
+    prop: SHIP.propCap, exotic: SHIP.exoticCap, batt: STOCK_BATTERY.caps.capacity,
     burnRate: 0, sunTrack: false, tanker: null, scoop: '', scoopRate: { prop: 0, exotic: 0 }, avionics: defaultAvionics(), temp: TEMP.start, vent: false, outfit: emptyOutfit(),
   };
 }
@@ -43,7 +43,7 @@ export class Game {
   /** Systems around the current one that a jump could reach (with a margin for moving within it). */
   nearby: StarSystem[] = [];
   readonly ship = newShip();
-  readonly power: Power = { solar: 0, cos: 0, shadow: null, draw: 0, net: 0, thrustKW: 0, ftlKW: 0, chargeKW: 0, pumpKW: 0, burn: 0, flux: 0 };
+  readonly power: Power = { solar: 0, cos: 0, shadow: null, draw: 0, net: 0, thrustKW: 0, ftlKW: 0, chargeKW: 0, pumpKW: 0, burn: 0, flux: 0, cap: 0, left: 0, limited: null, curtailed: 0 };
   target: Target | null = null;
   /** Station whose frame flight assist works in, or null for the system frame (see sim/frame.ts). */
   refFrame: Station | null = null;
@@ -208,6 +208,11 @@ export class Game {
   /** Outfit panel buttons (only work alongside a station; see outfit/fit.ts). */
   fitModule(slot: number, id: string) {
     fitModule(this, slot, id);
+    this.invalidateHud();
+  }
+
+  fitBattery(id: string) {
+    fitBattery(this, id);
     this.invalidateHud();
   }
 

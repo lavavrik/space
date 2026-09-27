@@ -14,7 +14,7 @@
 /* Left column: location, then the controls list or the target info panel. */
 #leftcol {
   position: fixed; top: calc(1.167rem + env(safe-area-inset-top, 0px)); left: 1.333rem;
-  width: 27.5rem; max-width: calc(100% - 2.667rem); max-height: calc(100% - 24rem); overflow: hidden; /* stops above the bottom HUD (the 4-gauge ship panel with a note line) */
+  width: 27.5rem; max-width: calc(100% - 2.667rem); max-height: calc(100% - 24rem); overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--amber-faint) transparent; /* stops above the bottom HUD (the 4-gauge ship panel with a note line) */
   display: flex; flex-direction: column; gap: 0.833rem; pointer-events: none;
 }
 #info { display: flex; flex-direction: column; gap: 2px; }
@@ -108,3 +108,9 @@
 }
 .obtn:hover { background: rgba(255, 165, 58, .1); }
 .obtn.rm { border-color: var(--red); color: var(--red); }
+.obtn.cur, .obtn:disabled { border-color: var(--amber); color: var(--amber); cursor: default; background: rgba(255, 165, 58, .1); }
+#avionics .isec.first { border-top: 0; margin-top: 0; padding-top: 0; }
+#avionics .row b { text-align: right; min-width: 0; white-space: normal; }
+/* the left column scrolls when its panel is taller than the room above the bottom HUD, so it takes
+   the wheel over its panels (they're opaque anyway) */
+#leftcol > .pan { pointer-events: auto; }

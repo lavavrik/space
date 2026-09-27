@@ -5,7 +5,7 @@
 import type { Game } from '../Game';
 import { relVel } from '../sim/frame';
 import type { Station } from '../types';
-import { moduleById, moduleLabel, radiatorsFitted } from './catalog';
+import { batteryById, moduleById, moduleLabel, radiatorsFitted } from './catalog';
 
 /** Slowest relative speed (m/s) at which a station will work on the ship. */
 export const OUTFIT_MAX_SPEED = 50;
@@ -40,4 +40,15 @@ export function removeModule(g: Game, slot: number) {
     o.radiatorsOut = 0;
   }
   g.showMsg(`${st.name} · removed ${moduleLabel(m)}`);
+}
+
+/** Swap the battery. The yard installs the new pack fully charged (and keeps the old one). */
+export function fitBattery(g: Game, id: string) {
+  const st = outfitter(g),
+    b = batteryById(id),
+    o = g.ship.outfit;
+  if (!st || !b || b === o.battery) return;
+  o.battery = b;
+  g.ship.batt = b.caps.capacity;
+  g.showMsg(`${st.name} · fitted ${moduleLabel(b)} battery · ${b.caps.capacity} kWh, charged`);
 }

@@ -90,8 +90,9 @@ function ftlStepsFor(g: Game, ap: Autopilot, steps: GuideStep[]) {
     steps.push(mkStep({
       title: 'Charge FTL drive', kind: 'ftl',
       active: () => ap.phase === 'charge', done: () => ap.phase !== 'charge',
-      err: () => ship.ftlCharge, etaFn: () => ship.ftlCharge,
-      detail: () => `${fmtPower(SHIP.ftlChargeKW)} from the battery · ${SHIP.ftlChargeKg} kg exotic matter`,
+      // ftlCharge is seconds at full power; the bus may give less (sim/power.ts)
+      err: () => ship.ftlCharge, etaFn: () => (ship.ftlCharge * SHIP.ftlChargeKW) / Math.max(g.power.chargeKW, 1),
+      detail: () => `${fmtPower(g.power.chargeKW || SHIP.ftlChargeKW)} of ${fmtPower(SHIP.ftlChargeKW)} · ${SHIP.ftlChargeKg} kg exotic matter`,
     }));
   }
   if (ap.phase === 'charge' || ap.phase === 'transfer') {
@@ -209,7 +210,7 @@ export function startJumpGuide(g: Game, j: Jump, ly: number) {
     steps: [
       mkStep({
         title: 'Charge hyperdrive', kind: 'ftl', active: () => g.jump === j && j.phase === 'charge', done: () => g.jump !== j || j.phase !== 'charge',
-        err: () => j.t, etaFn: () => j.t, detail: () => `${fmtPower(SHIP.jumpChargeKW)} from the battery · ${j.cost.toFixed(1)} kg exotic matter`,
+        err: () => j.t, etaFn: () => (j.t * SHIP.jumpChargeKW) / Math.max(g.power.chargeKW, 1), detail: () => `${fmtPower(SHIP.jumpChargeKW)} from the battery · ${j.cost.toFixed(1)} kg exotic matter`,
       }),
       mkStep({
         title: 'Accelerate out', kind: 'ftl', active: () => g.jump === j && j.phase === 'depart', done: () => g.jump !== j || j.phase === 'tunnel',

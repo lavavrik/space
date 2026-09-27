@@ -12,7 +12,12 @@
  *    at half the Carnot efficiency, paid for in electrical power (which the fins also have to shed).
  *    With this ship's modest solar and battery power, it's a boost, not a miracle.
  *
- * Every module has a mass: it adds to the dry mass (so to Δv and the hull's heat capacity).
+ * The battery has a slot of its own: Voltaic Systems cells trade capacity against how hard they can
+ * be driven (the C-rate: discharge power / capacity). Everything electrical is limited by the
+ * discharge rate plus whatever the panels deliver (see sim/power.ts).
+ *
+ * Every module has a mass: it adds to the dry mass (so to Δv and the hull's heat capacity). The
+ * stock battery's mass is part of the hull's 80 t; others count the difference.
  * Physics in sim/thermal.ts; numbers in docs/thermal.md.
  */
 
@@ -70,14 +75,50 @@ export const MODULES: Module[] = [
   },
 ];
 
+/** A battery: capacity, and how fast it can be discharged and charged. */
+export interface BatteryModule extends ModuleBase {
+  kind: 'battery';
+  caps: {
+    capacity: number; // kWh
+    maxKW: number; // discharge limit
+    chargeKW: number; // charge acceptance
+  };
+}
+
+export const BATTERIES: BatteryModule[] = [
+  {
+    id: 'eb-200', kind: 'battery', maker: 'Voltaic Systems', model: 'EB-200', name: 'Cell', mass: 1300,
+    blurb: 'Stock lithium-iron pack: 200 kWh, 5C discharge, 1C charge',
+    caps: { capacity: 200, maxKW: 1000, chargeKW: 200 },
+  },
+  {
+    id: 'eb-500', kind: 'battery', maker: 'Voltaic Systems', model: 'EB-500', name: 'Reservoir', mass: 3200,
+    blurb: 'Bigger pack: 500 kWh, 5C discharge, 1C charge',
+    caps: { capacity: 500, maxKW: 2500, chargeKW: 500 },
+  },
+  {
+    id: 'hp-300', kind: 'battery', maker: 'Voltaic Systems', model: 'HP-300', name: 'Surge', mass: 3800,
+    blurb: 'Titanate power cells: 300 kWh, 30C discharge (FTL charges at full rate, jumps in ~14 s), 10C charge',
+    caps: { capacity: 300, maxKW: 9000, chargeKW: 3000 },
+  },
+  {
+    id: 'hp-600', kind: 'battery', maker: 'Voltaic Systems', model: 'HP-600', name: 'Tempest', mass: 7500,
+    blurb: 'Titanate plus supercapacitor bank: 600 kWh, 50C discharge (hyperjumps charge at full rate, 5 s), 10C charge',
+    caps: { capacity: 600, maxKW: 30000, chargeKW: 6000 },
+  },
+];
+export const STOCK_BATTERY = BATTERIES[0];
+export const batteryById = (id: string) => BATTERIES.find((b) => b.id === id) ?? null;
+
 export const moduleById = (id: string) => MODULES.find((m) => m.id === id) ?? null;
-export const moduleLabel = (m: Module) => `${m.model} ${m.name}`;
+export const moduleLabel = (m: Module | BatteryModule) => `${m.model} ${m.name}`;
 
 /** Utility slots on the default hull. */
 export const UTILITY_SLOTS = 2;
 
 /** What's fitted and the state of the deployable hardware. */
 export interface Outfit {
+  battery: BatteryModule;
   slots: (Module | null)[];
   /** 0 = stowed, 1 = fully out; moves toward `deploy` at each fitted radiator's rate. */
   radiatorsOut: number;
@@ -89,9 +130,9 @@ export interface Outfit {
 /** The pump idles below this hull temperature (K): no point spending power to cool a cool ship. */
 export const PUMP_ON_ABOVE = 300;
 
-export const emptyOutfit = (): Outfit => ({ slots: Array(UTILITY_SLOTS).fill(null), radiatorsOut: 0, deploy: false, pumpAuto: true });
+export const emptyOutfit = (): Outfit => ({ battery: STOCK_BATTERY, slots: Array(UTILITY_SLOTS).fill(null), radiatorsOut: 0, deploy: false, pumpAuto: true });
 
-export const outfitMass = (o: Outfit) => o.slots.reduce((m, x) => m + (x?.mass ?? 0), 0);
+export const outfitMass = (o: Outfit) => o.slots.reduce((m, x) => m + (x?.mass ?? 0), 0) + o.battery.mass - STOCK_BATTERY.mass;
 export const radiatorsFitted = (o: Outfit) => o.slots.filter((x): x is RadiatorModule => x?.kind === 'radiator');
 export const pumpFitted = (o: Outfit) => o.slots.find((x): x is HeatPumpModule => x?.kind === 'heatpump') ?? null;
 /** Radiator area per face (m²) that's out right now. */

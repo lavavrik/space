@@ -120,6 +120,7 @@ export interface AvionicsSlotView {
 /** Outfit panel (Shift+U): the utility slots, the thermal hardware's state, and fitting at a station. */
 export interface OutfitView {
   station: string | null; // the station that can fit modules right now
+  battery: { unit: string; specs: string; options: { id: string; unit: string; specs: string; current: boolean }[] };
   hint: string; // how to get to one, when not alongside
   slots: { unit: string; blurb: string; specs: string; empty: boolean }[];
   catalogue: { id: string; unit: string; kind: string; blurb: string; specs: string }[];
@@ -190,7 +191,8 @@ export interface HudSnapshot {
   systems: SystemsView;
   planner: PlannerView | null;
   autopilot: AutopilotView | null;
-  avionics: AvionicsSlotView[] | null; // the avionics panel, when open
+  avionics: AvionicsSlotView[] | null; // the ship stats panel (U), when open
+  electrical: [string, string | Readout][] | null; // its electrical section
   influences: InfluencesView | null;
   outfit: OutfitView | null;
   nav: NavView | null;

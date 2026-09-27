@@ -39,7 +39,7 @@ export const GROUPS: { id: ControlGroup; title: string; keys: [string, string][]
       ['Y', 'scan target'],
       ['I', 'target info'],
       ['B', 'influences'],
-      ['U', 'avionics'],
+      ['U', 'ship stats'],
     ],
   },
   {

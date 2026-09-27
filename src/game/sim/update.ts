@@ -14,6 +14,7 @@ import { updateScan } from './scanner';
 import { updateNav } from './navroute';
 import { refillShip, scoop, solarPower } from './resources';
 import { updateThermal } from './thermal';
+import { beginPower, grant, settleBattery } from './power';
 
 const qa = new THREE.Quaternion();
 const AX = new THREE.Vector3(1, 0, 0),
@@ -40,6 +41,7 @@ export function update(g: Game, dt: number) {
     return;
   }
   const apSteering = !!ship.ap && ship.ap.phase === 'transfer';
+  beginPower(g); // this frame's power budget (sim/power.ts)
 
   // --- rotation
   const [mdx, mdy] = input.consumeMouse();
@@ -123,17 +125,13 @@ export function update(g: Game, dt: number) {
     const dq = new THREE.Quaternion().setFromUnitVectors(up, toS);
     ship.q.slerp(dq.multiply(ship.q), Math.min(1, 1.2 * dt)).normalize();
   }
-  if (g.jump && g.jump.phase === 'charge') power.chargeKW = SHIP.jumpChargeKW;
-  else if (ship.ftlCharge > 0) power.chargeKW = SHIP.ftlChargeKW;
   power.solar = inTunnel ? 0 : solarPower(g);
   power.draw = SHIP.baseLoad + power.thrustKW + power.ftlKW + power.chargeKW + power.pumpKW;
-  power.net = power.solar - power.draw;
-  ship.batt = Math.min(SHIP.battCap, Math.max(0, ship.batt + (power.net * dt) / 3600));
+  settleBattery(g, dt);
   if (ship.batt > 1) g.warned.batt = false;
   updateThermal(g, dt, inTunnel);
   // dt can be 0 (two frames on one timestamp); 0/0 would stick NaN in the smoothed rate forever
   if (dt > 0) ship.burnRate += (power.burn / dt - ship.burnRate) * Math.min(1, dt * 3);
-  power.thrustKW = power.ftlKW = power.chargeKW = power.burn = 0;
   if (!inTunnel) scoop(g, dt);
   updateTanker(g, dt);
   updateGuide(g, dt);
@@ -161,7 +159,12 @@ export function update(g: Game, dt: number) {
 function updateJump(g: Game, dt: number) {
   const { jump, ship } = g;
   if (!jump) return;
-  jump.t -= dt;
+  if (jump.phase === 'charge') {
+    // the charge takes a fixed energy: at less than full power it takes longer
+    const kw = grant(g, SHIP.jumpChargeKW, 'hyperdrive charging');
+    g.power.chargeKW = kw;
+    jump.t -= (dt * kw) / SHIP.jumpChargeKW;
+  } else jump.t -= dt;
   if (jump.phase === 'charge') {
     // swing the nose onto the destination while the drive charges; the transit flies straight at it
     const to = jump.dest.pos.clone().sub(jump.from).normalize();

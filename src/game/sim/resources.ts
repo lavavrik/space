@@ -3,6 +3,7 @@ import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import type { Ship } from '../types';
 import { TEMP } from './thermal';
+import { battCap, grant } from './power';
 import { RADIATOR_MAX_ACC, outfitMass } from '../outfit/catalog';
 
 /** Dry mass: the hull plus whatever modules are fitted. */
@@ -29,20 +30,22 @@ export function applyThrust(g: Game, T: THREE.Vector3, dt: number) {
     warnOnce(g, 'prop', 'Propellant exhausted · refuel at a gas giant, a star, ice, or call a tanker (K)');
     return;
   }
-  if (ship.batt <= 0) {
-    // no battery: nozzles only get what the panels deliver
-    const maxAcc = Math.max(0, (power.solar - SHIP.baseLoad) / SHIP.kwPerAcc);
-    if (dv > maxAcc * dt) {
-      T.setLength(maxAcc * dt);
-      dv = T.length();
-    }
-    warnOnce(g, 'batt', 'Battery flat · thrust limited to solar power');
-  }
   // deployed radiator fins can't take hard acceleration
   if (ship.outfit.radiatorsOut > 0 && dv > RADIATOR_MAX_ACC * dt) {
     T.setLength(RADIATOR_MAX_ACC * dt);
     dv = T.length();
     warnOnce(g, 'radAcc', `Radiators out · thrust limited to ${(RADIATOR_MAX_ACC / 9.81).toFixed(0)} g (Shift+R stows them)`);
+  }
+  // the nozzles need SHIP.kwPerAcc per m/s²: the bus may not have it all (sim/power.ts)
+  if (dt > 0) {
+    const want = (dv / dt) * SHIP.kwPerAcc;
+    const kw = grant(g, want, 'thrusters');
+    if (kw < want) {
+      T.multiplyScalar(kw / want);
+      dv = T.length();
+      if (ship.batt <= 0) warnOnce(g, 'batt', 'Battery flat · thrust limited to solar power');
+    }
+    power.thrustKW += kw;
   }
   dv = Math.min(dv, deltaVLeft(ship));
   T.setLength(dv);
@@ -50,7 +53,6 @@ export function applyThrust(g: Game, T: THREE.Vector3, dt: number) {
   const dm = m * (1 - Math.exp(-dv / SHIP.ve));
   ship.prop = Math.max(0, ship.prop - dm);
   power.burn += dm;
-  power.thrustKW += (dv / dt) * SHIP.kwPerAcc;
 }
 
 /** Solar panels on the ship's top face. Output ∝ starlight flux × cos(angle), zero in a shadow. */
@@ -121,6 +123,6 @@ export function refillShip(g: Game) {
   const { ship } = g;
   ship.prop = SHIP.propCap;
   ship.exotic = SHIP.exoticCap;
-  ship.batt = SHIP.battCap;
+  ship.batt = battCap(ship);
   g.warned = {};
 }
