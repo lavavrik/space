@@ -1,4 +1,5 @@
 import { TANKER_TIME } from '../constants';
+import { changeWarp, stopWarp } from '../sim/timewarp';
 import { toggleRadiators, toggleVent } from '../sim/thermal';
 import type { Game } from '../Game';
 import { toggleCruise, toggleDecoupled, toggleFTL } from '../sim/ftl';
@@ -57,6 +58,13 @@ export function onPress(g: Game, code: string) {
       return;
     }
   }
+
+  // time warp: . faster, , slower; any thrust key drops it (the ship is on rails while it runs)
+  if (code === 'Period' || code === 'Comma') {
+    changeWarp(g, code === 'Period' ? 1 : -1);
+    return;
+  }
+  if (g.warp > 1 && ['KeyW', 'KeyS', 'KeyA', 'KeyD', 'Space', 'KeyC', 'ControlLeft', 'ControlRight', 'KeyX', 'KeyJ', 'KeyH', 'KeyR'].includes(code)) stopWarp(g, 'manual control');
 
   // thermal: R vents hydrogen, Shift+R folds the radiators out or in (R is the planner's direction key while it's open)
   if (code === 'KeyR') {

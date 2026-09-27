@@ -15,6 +15,7 @@ import { updateNav } from './navroute';
 import { refillShip, scoop, solarPower } from './resources';
 import { updateThermal } from './thermal';
 import { beginPower, grant, settleBattery } from './power';
+import { railsStep, stopWarp, warpBlocked } from './timewarp';
 
 const qa = new THREE.Quaternion();
 const AX = new THREE.Vector3(1, 0, 0),
@@ -22,9 +23,19 @@ const AX = new THREE.Vector3(1, 0, 0),
   AZ = new THREE.Vector3(0, 0, 1);
 const MOUSE_SENS = 0.0021;
 
-/** Advance the simulation by dt seconds. */
-export function update(g: Game, dt: number) {
+/**
+ * Advance the simulation by dt seconds. Under time warp dt is the warped step and realDt the frame's
+ * real time: steering, messages and flashes run on real time (sim/timewarp.ts).
+ */
+export function update(g: Game, dt: number, realDt = dt) {
   const { ship, keys, power, input } = g;
+  if (g.warp > 1) {
+    const why = warpBlocked(g);
+    if (why) {
+      stopWarp(g, why);
+      dt = realDt;
+    }
+  }
   g.simTime += dt;
   const inTunnel = !!g.jump && g.jump.phase === 'tunnel';
   // departing: the jump flies the ship (straight out along the nose), no steering or physics
@@ -50,12 +61,12 @@ export function update(g: Game, dt: number) {
       yaw = -mdx * MOUSE_SENS,
       roll = 0;
     const kr = ship.mode === 'ftl' ? 0.8 : 1.1;
-    if (keys.ArrowUp) pitch += kr * dt;
-    if (keys.ArrowDown) pitch -= kr * dt;
-    if (keys.ArrowLeft) yaw += kr * dt;
-    if (keys.ArrowRight) yaw -= kr * dt;
-    if (keys.KeyQ) roll += 1.4 * dt;
-    if (keys.KeyE) roll -= 1.4 * dt;
+    if (keys.ArrowUp) pitch += kr * realDt;
+    if (keys.ArrowDown) pitch -= kr * realDt;
+    if (keys.ArrowLeft) yaw += kr * realDt;
+    if (keys.ArrowRight) yaw -= kr * realDt;
+    if (keys.KeyQ) roll += 1.4 * realDt;
+    if (keys.KeyE) roll -= 1.4 * realDt;
     if (ship.sunTrack && (pitch || yaw || roll)) {
       ship.sunTrack = false;
       g.showMsg('Sun tracking off · manual steering');
@@ -97,7 +108,12 @@ export function update(g: Game, dt: number) {
   if (!ship.ap) g.apPanel = false;
 
   if (!inTunnel && !departing) {
-    if (ship.mode === 'normal') {
+    if (g.warp > 1) {
+      // time warp: coast on rails under the frame body's gravity
+      ship.grav = gravityAt(g.cur, ship.pos);
+      railsStep(g, dt);
+      g.curSpeed = relVel(g).length();
+    } else if (ship.mode === 'normal') {
       const grav = (ship.grav = gravityAt(g.cur, ship.pos));
       syncFrame(g, grav.body);
       maybeFtlLeg(g);
@@ -150,10 +166,10 @@ export function update(g: Game, dt: number) {
   }
 
   if (g.msg.t > 0) {
-    g.msg.t -= dt;
+    g.msg.t -= realDt;
     if (g.msg.t <= 0) g.msg.on = false;
   }
-  if (g.flash > 0) g.flash = Math.max(0, g.flash - dt * 1.4);
+  if (g.flash > 0) g.flash = Math.max(0, g.flash - realDt * 1.4);
 }
 
 function updateJump(g: Game, dt: number) {

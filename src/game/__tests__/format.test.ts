@@ -33,5 +33,7 @@ describe('formatting', () => {
     expect(fmtPower(6000)).toBe('6.00 MW');
     expect(fmtPower(40)).toBe('40 kW');
     expect(fmtClock(342.7)).toBe('05:42');
+    expect(fmtClock(3 * 3600 + 5 * 60 + 9)).toBe('3:05:09');
+    expect(fmtClock(2 * 86400 + 7 * 3600 + 30 * 60)).toBe('day 3 · 7:30');
   });
 });

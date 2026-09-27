@@ -57,6 +57,8 @@ export class Game {
   heat: HeatBudget | null = null;
 
   simTime = 0;
+  /** Time warp factor (sim/timewarp.ts): 1 = real time. */
+  warp = 1;
   curSpeed = 0;
   nearest: Body | null = null;
   nearestAlt = Infinity;
@@ -300,7 +302,7 @@ export class Game {
     perf.frameStart(now - this.last);
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
-    update(this, dt);
+    update(this, dt * this.warp, dt);
     perf.mark('sim');
     perf.gpuBegin();
     this.scene.render(this);

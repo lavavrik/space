@@ -51,10 +51,17 @@ export function fmtPower(kw: number) {
   return kw >= 1000 ? `${(kw / 1000).toFixed(kw < 1e4 ? 2 : 1)} MW` : `${kw.toFixed(kw < 10 ? 1 : 0)} kW`;
 }
 
-/** mm:ss clock for the sim time. */
+/** Mission clock: mm:ss, then h:mm:ss, then days (time warp runs it up fast). */
 export function fmtClock(seconds: number) {
   const t = Math.floor(seconds);
-  return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+  const p2 = (n: number) => String(n).padStart(2, '0');
+  const s = t % 60,
+    m = Math.floor(t / 60) % 60,
+    h = Math.floor(t / 3600) % 24,
+    d = Math.floor(t / 86400);
+  if (t < 3600) return `${p2(Math.floor(t / 60))}:${p2(s)}`;
+  if (d === 0) return `${h}:${p2(m)}:${p2(s)}`;
+  return `day ${d + 1} · ${h}:${p2(m)}`;
 }
 
 /** An area in m², e.g. "2,400 m²". */
