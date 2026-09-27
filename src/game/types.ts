@@ -127,10 +127,13 @@ export interface Gravity {
 }
 
 export type OrbitType = 'equatorial' | 'polar' | 'sync' | 'hold';
+/** What the autopilot can fly: an orbit type, or a rendezvous with a station (set by the nav computer). */
+export type ApType = OrbitType | 'rendezvous';
 
 export interface Autopilot {
   body: Body;
-  type: OrbitType;
+  type: ApType;
+  station: Station | null; // rendezvous only: the station to close on and match
   r0: number; // target orbit radius, m
   period: number;
   n: Vec3 | null; // orbit normal (null when holding position)

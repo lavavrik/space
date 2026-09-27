@@ -3,8 +3,8 @@ import { unitLabel } from '../avionics/catalog';
 import { AP_FTL_MIN, FTL_CHARGE_TIME } from '../constants';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
-import type { Autopilot, Body, OrbitType } from '../types';
-import { apInsertion, holdPoint } from './autopilot';
+import type { Autopilot, Body, OrbitType, Station } from '../types';
+import { apDistance, holdPoint } from './autopilot';
 import { ftlBlocked, massLock } from './ftl';
 import { dominantBody } from './gravity';
 import { startOrbitGuide } from './guide';
@@ -72,18 +72,28 @@ export function engageOrbit(g: Game) {
   }
   const b = planner.body;
   const u = ship.pos.clone().sub(b.pos).normalize();
-  const ap: Autopilot = {
+  engageAutopilot(g, {
     body: b,
     type: planner.type,
     r0: ev.r0,
     period: ev.period,
     n: planner.type === 'hold' ? null : orbitNormal(b, planner.type, planner.dir, u),
     point: planner.type === 'hold' ? u.clone().multiplyScalar(ev.r0) : null, // offset from the body, which moves
-    phase: 'insert',
-    settled: false,
-    t0: g.simTime,
-    prop0: ship.prop,
-  };
+    station: null,
+  });
+}
+
+/** What engageAutopilot needs: the rest of an Autopilot is runtime state. */
+export type ApSpec = Pick<Autopilot, 'body' | 'type' | 'r0' | 'period' | 'n' | 'point' | 'station'>;
+
+/**
+ * Hand the ship to the autopilot: from the orbit planner, or from the nav computer (which also uses
+ * it for refuelling holds and station rendezvous). Takes an FTL leg first when that's worthwhile.
+ */
+export function engageAutopilot(g: Game, spec: ApSpec, quiet = false) {
+  const { ship } = g;
+  const b = spec.body;
+  const ap: Autopilot = { ...spec, phase: 'insert', settled: false, t0: g.simTime, prop0: ship.prop };
   ship.ap = ap;
   g.apPanel = false;
   g.apConfirm = 0;
@@ -94,8 +104,15 @@ export function engageOrbit(g: Game) {
     ap.phase = 'charge';
     ship.ftlCharge = FTL_CHARGE_TIME;
   }
-  g.showMsg(ap.phase === 'charge' ? `Autopilot · charging FTL for transfer to ${b.name}` : `Autopilot · ${apLabel(ap)} around ${b.name}`, 'ftl');
+  if (!quiet) g.showMsg(ap.phase === 'charge' ? `Autopilot · charging FTL for transfer to ${b.name}` : `Autopilot · ${apLabel(ap)}${ap.type === 'rendezvous' ? '' : ' around ' + b.name}`, 'ftl');
   startOrbitGuide(g, ap);
+  return ap;
+}
+
+/** Rendezvous with a station: close on it on the station's own orbit and match its velocity. */
+export function engageRendezvous(g: Game, st: Station) {
+  const p = st.parent;
+  return engageAutopilot(g, { body: p, type: 'rendezvous', r0: st.a, period: (2 * Math.PI) / st.n, n: new THREE.Vector3().crossVectors(st.P, st.Q).normalize(), point: null, station: st });
 }
 
 /**
@@ -106,7 +123,7 @@ export function engageOrbit(g: Game) {
  */
 export function ftlWorthwhile(g: Game, ap: Autopilot) {
   if (!g.ship.avionics.orbit?.caps.ftlLeg) return false; // basic units fly it all on thrusters
-  return apInsertion(g.ship, ap).P.distanceTo(g.ship.pos) > AP_FTL_MIN && !massLock(g) && !ftlBlocked(g.ship);
+  return apDistance(g.ship, ap) > AP_FTL_MIN && !massLock(g) && !ftlBlocked(g.ship);
 }
 
 /**
@@ -117,7 +134,7 @@ export function maybeFtlLeg(g: Game) {
   const { ship } = g;
   const ap = ship.ap;
   if (!ap || ap.phase !== 'insert' || ap.settled || ship.mode !== 'normal' || ship.ftlCharge > 0) return;
-  if (apInsertion(ship, ap).P.distanceTo(ship.pos) < 2 * AP_FTL_MIN || !ftlWorthwhile(g, ap)) return;
+  if (apDistance(ship, ap) < 2 * AP_FTL_MIN || !ftlWorthwhile(g, ap)) return;
   ap.phase = 'charge';
   ship.ftlCharge = FTL_CHARGE_TIME;
   g.showMsg(`Autopilot · charging FTL for transfer to ${ap.body.name}`, 'ftl');

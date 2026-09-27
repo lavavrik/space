@@ -4,7 +4,7 @@ import { AP_ACC, AP_TAU, SHIP } from '../constants';
 import { fmtDist, fmtFlow, fmtMass, fmtPower, fmtSpeedText, fmtTime } from '../format';
 import type { Game } from '../Game';
 import type { Autopilot, Jump, Tanker } from '../types';
-import { apGeom, apInsertion, approachTime, holdPoint, orbitVelErr, profileOf } from './autopilot';
+import { apGeom, apInsertion, approachTime, holdPoint, orbitVelErr, profileOf, RDV_STANDOFF } from './autopilot';
 import { velRel } from './frame';
 import { orbitElements } from './gravity';
 import { deltaVLeft, shipMass } from './resources';
@@ -118,7 +118,20 @@ export function startOrbitGuide(g: Game, ap: Autopilot) {
   ftlStepsFor(g, ap, steps);
   const ins = () => ap.phase === 'insert';
   const prof = profileOf(ship); // the fitted orbit computer's approach profile
-  if (ap.type === 'hold') {
+  if (ap.type === 'rendezvous') {
+    const st = ap.station!;
+    const dist = () => Math.max(0, st.pos.distanceTo(ship.pos) - RDV_STANDOFF);
+    const dv = () => velRel(g, b).distanceTo(st.vel.clone().sub(b.vel));
+    steps.push(mkStep({
+      title: `Close in on ${st.name}`, group: 'rdv', active: ins, done: () => ins() && dist() < 1000, err: dist,
+      etaFn: () => approachTime(dist(), prof.radialCap, 1000, prof.acc),
+      detail: () => `${fmtDist(dist() + RDV_STANDOFF)} away`,
+    }));
+    steps.push(mkStep({
+      title: 'Match its velocity', group: 'rdv', active: ins, done: () => ap.settled, err: dv,
+      detail: () => `${fmtSpeedText(dv())} relative`,
+    }));
+  } else if (ap.type === 'hold') {
     const dist = () => holdPoint(ap).distanceTo(ship.pos);
     const vRel = () => velRel(g, b).length();
     steps.push(mkStep({
@@ -177,12 +190,12 @@ export function startOrbitGuide(g: Game, ap: Autopilot) {
       },
     }));
   }
-  const label = { equatorial: 'Equatorial orbit', polar: 'Polar orbit', sync: 'Stationary orbit', hold: 'Hold position' }[ap.type];
+  const label = { equatorial: 'Equatorial orbit', polar: 'Polar orbit', sync: 'Stationary orbit', hold: 'Hold position', rendezvous: 'Rendezvous' }[ap.type];
   startGuide(g, {
     title: label.toUpperCase(),
     sub: `${b.name} · ${fmtDist(ap.r0 - b.radius)}${ap.period ? ' · period ' + fmtTime(ap.period) : ''}`,
     abort: () => (ship.ap !== ap ? (ship.dead ? 'Ship destroyed' : ap.type === 'hold' && ap.settled ? { ok: 'Hold released' } : 'Autopilot disengaged') : null),
-    doneText: ap.type === 'hold' ? null : 'Orbit established · no thrust needed to stay',
+    doneText: ap.type === 'hold' ? null : ap.type === 'rendezvous' ? `Alongside ${ap.station!.name}` : 'Orbit established · no thrust needed to stay',
     steps,
   });
 }

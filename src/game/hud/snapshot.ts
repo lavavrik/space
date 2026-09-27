@@ -56,6 +56,7 @@ function flightMode(g: Game): [string, FlightView['modeClass']] {
   if (ap && ap.phase === 'transfer') return ['AUTOPILOT · FTL TRANSFER', 'ftl'];
   if (ap && ap.phase === 'insert') {
     const hold = ap.type === 'hold';
+    if (ap.type === 'rendezvous') return [ap.settled ? 'AUTOPILOT · ALONGSIDE' : 'AUTOPILOT · RENDEZVOUS', 'ftl'];
     if (ap.settled) return [hold ? 'AUTOPILOT · HOLDING' : 'AUTOPILOT · IN ORBIT', 'ftl'];
     return [hold ? 'AUTOPILOT · MOVING TO HOLD' : 'AUTOPILOT · ORBIT INSERTION', 'ftl'];
   }
@@ -170,14 +171,19 @@ function autopilotView(g: Game): AutopilotView {
   const ap = ship.ap!;
   const b = ap.body,
     R = b.radius;
-  const label = { equatorial: 'Equatorial orbit', polar: 'Polar orbit', sync: 'Stationary orbit', hold: 'Hold position' }[ap.type];
+  const label = { equatorial: 'Equatorial orbit', polar: 'Polar orbit', sync: 'Stationary orbit', hold: 'Hold position', rendezvous: 'Rendezvous' }[ap.type];
   const [mode] = flightMode(g);
   const rv = ship.pos.clone().sub(b.pos);
   const v = velRel(g, b);
   const used = Math.max(0, ap.prop0 - ship.prop);
   const dv = SHIP.ve * Math.log((SHIP.dry + ap.prop0) / (SHIP.dry + ship.prop));
   const rows: [string, string | Readout][] = [];
-  if (ap.type === 'hold') {
+  if (ap.type === 'rendezvous') {
+    const st = ap.station!;
+    rows.push(['STATION', st.name]);
+    rows.push(['DISTANCE', fmtDist(st.pos.distanceTo(ship.pos))]);
+    rows.push(['RELATIVE SPEED', fmtSpeedText(v.distanceTo(st.vel.clone().sub(b.vel)))]);
+  } else if (ap.type === 'hold') {
     const off = holdPoint(ap).distanceTo(ship.pos);
     rows.push(['TARGET', `${fmtDist(ap.r0 - R)} above ${b.name}`]);
     rows.push(['OFF THE POINT', { text: fmtDist(off), warn: ap.settled && off > 1000 }]);
@@ -203,7 +209,7 @@ function autopilotView(g: Game): AutopilotView {
   return {
     unit: ship.avionics.orbit ? unitLabel(ship.avionics.orbit).toUpperCase() : 'AUTOPILOT',
     title: label,
-    sub: `${b.name} · ${ap.type === 'hold' ? fmtDist(ap.r0 - R) + ' up' : fmtDist(ap.r0 - R) + ' · ' + fmtTime(ap.period)}`,
+    sub: ap.type === 'rendezvous' ? `${ap.station!.name} · around ${b.name}` : `${b.name} · ${ap.type === 'hold' ? fmtDist(ap.r0 - R) + ' up' : fmtDist(ap.r0 - R) + ' · ' + fmtTime(ap.period)}`,
     state: { text: mode.replace('AUTOPILOT · ', ''), warn: false },
     rows,
     confirm: g.apConfirm > 0,

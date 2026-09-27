@@ -3,9 +3,10 @@ import { fmtDist, fmtTime } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import type { ApproachProfile } from '../avionics/catalog';
-import type { Autopilot, Gravity, Ship } from '../types';
+import type { Autopilot, Body, Gravity, Ship } from '../types';
 import { velRel } from './frame';
 import { dropAlt, dropFTL, ftlSpeedLimit, ftlUpkeep } from './ftl';
+import { minOrbitAlt } from './orbits';
 import { applyThrust } from './resources';
 
 /** Ship position relative to the autopilot body, and "up" projected into the orbit plane. */
@@ -24,7 +25,22 @@ export function apGeom(ship: Ship, ap: Autopilot) {
 }
 
 /** Where the FTL leg drops out: above the body, in the target plane, at the orbit radius. */
-export function apInsertion(ship: Ship, ap: Autopilot) {
+export function apInsertion(ship: Ship, ap: Autopilot): { P: THREE.Vector3; rT: number; waypoint?: boolean } {
+  if (ap.type === 'rendezvous') {
+    // FTL at the station: 20 km short of it, or, if it orbits below the lowest altitude FTL can
+    // reach near its world, straight above it at that floor (thrusters take it from there)
+    const st = ap.station!,
+      b = ap.body;
+    const floor = b.radius + dropAlt(b) * 1.1;
+    const P =
+      st.pos.distanceTo(b.pos) >= floor
+        ? st.pos.clone().addScaledVector(ship.pos.clone().sub(st.pos).normalize(), 20e3)
+        : b.pos.clone().addScaledVector(st.pos.clone().sub(b.pos).normalize(), floor);
+    // go round the world if the line would cross the altitude where FTL cuts out (a little below
+    // the floor, so a target sitting on the floor itself doesn't count as crossing)
+    const w = aroundBody(ship.pos, P, b, b.radius + dropAlt(b) * 1.02);
+    return w ? { P: w, rT: floor, waypoint: true } : { P, rT: P.distanceTo(b.pos) };
+  }
   const { b, up } = apGeom(ship, ap);
   const rT = b.radius + Math.max(ap.r0 - b.radius, dropAlt(b) * 1.1);
   return { P: b.pos.clone().addScaledVector(up, rT), rT };
@@ -37,6 +53,8 @@ export function apInsertion(ship: Ship, ap: Autopilot) {
  * computer (see avionics/catalog.ts); DEFAULT_PROFILE is the HX-8200's.
  */
 export const APPROACH_K = 0.3; // 1/s, final linear tail
+/** A rendezvous holds this far from the station (m): close enough for its frame, clear of the hull. */
+export const RDV_STANDOFF = 2000;
 export const DEFAULT_PROFILE: ApproachProfile = { acc: 25, radialCap: 5000, planeCap: 3000 };
 
 /** The fitted orbit computer's approach profile. */
@@ -76,6 +94,43 @@ export function approachTime(d: number, cap: number, done: number, acc = DEFAULT
 }
 
 /**
+ * How far the autopilot still has to go: to the station for a rendezvous, otherwise to the orbit's
+ * entry point. (Not to apInsertion's P, which may just be the next waypoint round a world: judging
+ * FTL by that ~760 km hop left a ship hovering beside a planet until its tank ran dry.)
+ */
+export function apDistance(ship: Ship, ap: Autopilot) {
+  if (ap.type === 'rendezvous') return ap.station!.pos.distanceTo(ship.pos);
+  return apInsertion(ship, ap).P.distanceTo(ship.pos);
+}
+
+/** Closest distance from point c to the segment a→b. */
+function segmentDist(a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3) {
+  const ab = b.clone().sub(a);
+  const t = Math.max(0, Math.min(1, c.clone().sub(a).dot(ab) / Math.max(ab.lengthSq(), 1e-9)));
+  return a.clone().addScaledVector(ab, t).distanceTo(c);
+}
+
+/**
+ * If the straight line from `from` to `to` dips inside `radius` of body b, a waypoint that goes
+ * round it instead: `from`'s direction turned 5° toward `to`, at `from`'s own distance (but at least
+ * 1.1 × radius). Recomputed every frame, chasing a point just ahead traces an arc round the body
+ * that sinks by at most ~2.5° and never below 1.1 × radius. (A 45° step dived ~22° per frame of
+ * pursuit and flew ships into the planet; a waypoint at a fixed low radius let the chord from high
+ * above cut below the FTL floor.) Null when the straight line is clear.
+ */
+export function aroundBody(from: THREE.Vector3, to: THREE.Vector3, b: Body, radius: number) {
+  if (segmentDist(from, to, b.pos) >= radius) return null;
+  const u0 = from.clone().sub(b.pos).normalize(),
+    u1 = to.clone().sub(b.pos).normalize();
+  const axis = new THREE.Vector3().crossVectors(u0, u1);
+  if (axis.lengthSq() < 1e-10) axis.set(1, 0, 0).cross(u0); // exactly opposite: any way round
+  axis.normalize();
+  const step = Math.min(u0.angleTo(u1), (5 * Math.PI) / 180);
+  const rho = Math.max(radius * 1.1, from.distanceTo(b.pos));
+  return b.pos.clone().addScaledVector(u0.applyAxisAngle(axis, step), rho);
+}
+
+/**
  * How far the ship's orbital (horizontal, in-plane) speed is from circular speed at its current
  * radius. Climbing, descending and moving into the plane are left to their own steps, so this can
  * be matched straight away instead of waiting for the altitude (which is why it used to stall).
@@ -112,6 +167,40 @@ export function autopilot(g: Game, dt: number, grav: Gravity) {
     if (!ap.settled && dist < 100 && vRel.length() < 5) {
       ap.settled = true;
       g.showMsg(`Holding position ${fmtDist(ap.r0 - b.radius)} above ${b.name}`, 'ftl');
+    }
+  } else if (ap.type === 'rendezvous') {
+    // Close on a moving station and match it: aim for a point RDV_STANDOFF short of it, arriving at
+    // its velocity. We both fall toward its world, so the feed-forward is the station's own gravity
+    // minus ours (nearly equal, so rendezvous burns are small once close).
+    const st = ap.station!;
+    const toSt = st.pos.clone().sub(ship.pos),
+      dist = toSt.length();
+    const vSt = st.vel.clone().sub(b.vel); // relative to the autopilot body, like vRel
+    const close = Math.max(0, dist - RDV_STANDOFF);
+    // keep clear of the world, but never by more than half the station's own altitude (a low
+    // station would otherwise sit inside the no-go sphere and never be approached)
+    const clear = Math.min(minOrbitAlt(b) * 3, (st.pos.distanceTo(b.pos) - b.radius) * 0.5);
+    const way = aroundBody(ship.pos, st.pos, b, b.radius + clear);
+    const ftlFloor = b.radius + dropAlt(b) * 1.25; // just above where FTL can start near this world
+    if (way && dist > 2000e3 && g.ship.avionics.orbit?.caps.ftlLeg && r < ftlFloor) {
+      // far round the other side and too low for FTL: climb out first, then the FTL leg takes over
+      // (crawling round a world on thrusters took up to half an hour)
+      vDes = u.clone().multiplyScalar(approachSpeed(ftlFloor - r, prof.radialCap, prof.acc) + 50);
+      aFF = grav.vec.clone().negate();
+    } else if (way) {
+      // the station is round the far side: go round the world first
+      const toW = way.sub(ship.pos),
+        dW = toW.length();
+      vDes = toW.multiplyScalar(approachSpeed(dW, prof.radialCap, prof.acc) / Math.max(dW, 1));
+      aFF = grav.vec.clone().negate();
+    } else {
+      vDes = vSt.clone().addScaledVector(toSt, approachSpeed(close, prof.radialCap, prof.acc) / Math.max(dist, 1));
+      const rs = st.pos.clone().sub(st.parent.pos);
+      aFF = rs.multiplyScalar(-st.parent.mu / rs.length() ** 3).sub(grav.vec);
+    }
+    if (!ap.settled && close < 1000 && vRel.distanceTo(vSt) < 2) {
+      ap.settled = true;
+      g.showMsg(`Rendezvous with ${st.name} · holding ${fmtDist(dist)} off`, 'ftl');
     }
   } else {
     const n = ap.n!;
@@ -165,7 +254,7 @@ export function autopilot(g: Game, dt: number, grav: Gravity) {
 export function ftlTransfer(g: Game, dt: number) {
   const { ship } = g;
   const ap = ship.ap!;
-  const { P, rT } = apInsertion(ship, ap);
+  const { P, rT, waypoint } = apInsertion(ship, ap);
   const toP = P.clone().sub(ship.pos),
     dist = toP.length();
   const m = new THREE.Matrix4().lookAt(ship.pos, P, new THREE.Vector3(0, 1, 0).applyQuaternion(ship.q));
@@ -179,7 +268,7 @@ export function ftlTransfer(g: Game, dt: number) {
   ship.pos.addScaledVector(g.fwd, ship.ftlSpeed * dt);
   g.curSpeed = ship.ftlSpeed;
   if (!ftlUpkeep(g, dt, align)) return;
-  if (dist < Math.max(30e3, rT * 0.01)) {
+  if (!waypoint && dist < Math.max(30e3, rT * 0.01)) {
     dropFTL(g, false);
     return;
   }

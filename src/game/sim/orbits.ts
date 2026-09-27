@@ -85,5 +85,5 @@ export function orbitNormal(b: Body, type: OrbitType, dir: number, u: THREE.Vect
 }
 
 export function apLabel(ap: Autopilot) {
-  return { equatorial: 'equatorial orbit', polar: 'polar orbit', sync: 'synchronous orbit', hold: 'holding position' }[ap.type];
+  return { equatorial: 'equatorial orbit', polar: 'polar orbit', sync: 'synchronous orbit', hold: 'holding position', rendezvous: `rendezvous with ${ap.station?.name}` }[ap.type];
 }
