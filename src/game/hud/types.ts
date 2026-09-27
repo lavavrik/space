@@ -31,6 +31,10 @@ export interface FlightView {
   barFtl: boolean;
   barLabel: string;
   barValue: string;
+  /** Normal space: where the normal speed limit sits on the bar (0..1; the bar runs to the boost limit). */
+  barMark?: number;
+  /** Which caption end is the limit flight assist is holding you to right now. */
+  barHi?: 'left' | 'right';
   alt: Readout | null; // altitude and vertical speed near a body
   orbit: Readout | null; // orbit status around the body pulling on you
   pills: Pill[];

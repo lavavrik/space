@@ -21,7 +21,7 @@ export function fmtCoord(m: number) {
 export function fmtSpeed(v: number): [string, string] {
   if (v < 1000) return [v.toFixed(0), 'M/S'];
   if (v < 0.01 * C) return [(v / 1000).toFixed(v < 1e4 ? 2 : v < 1e5 ? 1 : 0), 'KM/S'];
-  return [(v / C).toFixed(v < 10 * C ? 2 : v < 100 * C ? 1 : 0), 'TIMES LIGHT SPEED (C)'];
+  return [(v / C).toFixed(v < 10 * C ? 2 : v < 100 * C ? 1 : 0), 'c']; // multiples of light speed
 }
 
 /** Speed as one lower-case string, e.g. "1.25 km/s". */

@@ -76,27 +76,33 @@ function flight(g: Game): FlightView {
   const { ship, keys, jump } = g;
   const [mode, modeClass] = flightMode(g);
   const [speed, speedUnit] = jump && jump.phase === 'tunnel' ? [transitState(jump).speed.toFixed(2), 'LY / S'] : fmtSpeed(g.curSpeed);
-  const unit = g.refFrame && ship.mode === 'normal' ? `${speedUnit} · REL. ${g.refFrame.name.toUpperCase()}` : speedUnit === 'TIMES LIGHT SPEED (C)' ? '× LIGHT SPEED' : speedUnit;
+  const unit = g.refFrame && ship.mode === 'normal' ? `${speedUnit} · REL. ${g.refFrame.name.toUpperCase()}` : speedUnit;
   // in hyperspace: just the transit, none of the local flight readouts
   if (jump && jump.phase === 'tunnel') {
     const st = transitState(jump);
     return { mode, modeClass, speed, unit, barFrac: st.u, barFtl: true, barLabel: 'TRANSIT', barValue: `${st.left.toFixed(1)} ly to go`, alt: null, orbit: null, pills: [] };
   }
-  // accelerating out of the system: the speed readout climbs through the units, km/s to × light speed
+  // accelerating out of the system: the speed readout climbs through the units, km/s to c
   if (jump && jump.phase === 'depart') {
     return { mode, modeClass, speed, unit, barFrac: 1 - jump.t / JUMP_DEPART_TIME, barFtl: true, barLabel: 'DEPARTURE', barValue: `hyperspace in ${Math.max(0, jump.t).toFixed(1)} s`, alt: null, orbit: null, pills: [] };
   }
   let barFrac: number, barLabel: string, barValue: string;
+  let barMark: number | undefined, barHi: FlightView['barHi'];
   const barFtl = ship.mode === 'ftl';
   if (barFtl) {
     barFrac = ship.throttle;
     barLabel = 'THROTTLE';
     barValue = Math.round(ship.throttle * 100) + '%';
   } else {
+    // One bar for normal space, 0 to the boost limit, with a tick at the normal limit. Flight assist
+    // won't thrust you past the limit (NORMAL_MAX, or NORMAL_BOOST while Shift is held) and bleeds
+    // speed back to it after a boost; with flight assist off there's no limit, only propellant.
     const boost = !!(keys.ShiftLeft || keys.ShiftRight);
-    barFrac = Math.min(1, g.curSpeed / (boost ? NORMAL_BOOST : NORMAL_MAX));
-    barLabel = boost ? 'BOOST' : 'SPEED LIMIT';
-    barValue = Math.round(barFrac * 100) + '%';
+    barFrac = Math.min(1, g.curSpeed / NORMAL_BOOST);
+    barMark = NORMAL_MAX / NORMAL_BOOST;
+    barLabel = ship.fa ? `LIMIT ${fmtSpeedText(NORMAL_MAX).toUpperCase()}` : 'FA OFF · NO LIMIT';
+    barValue = `SHIFT BOOST ${fmtSpeedText(NORMAL_BOOST).toUpperCase()}`;
+    barHi = !ship.fa ? undefined : boost ? 'right' : 'left';
   }
 
   // altitude, vertical speed and orbit, relative to the body pulling on you (skipped far out in a star's pull)
@@ -127,7 +133,7 @@ function flight(g: Game): FlightView {
     const gs = gr.g / 9.80665;
     pills.push({ text: `${gs < 0.01 ? gs.toExponential(1) : gs.toFixed(gs < 1 ? 2 : 1)} g`, kind: gr.g > NORMAL_ACC ? 'warn' : '' });
   }
-  return { mode, modeClass, speed, unit, barFrac, barFtl, barLabel, barValue, alt, orbit, pills };
+  return { mode, modeClass, speed, unit, barFrac, barFtl, barLabel, barValue, barMark, barHi, alt, orbit, pills };
 }
 
 function target(g: Game): TargetView {
@@ -333,7 +339,7 @@ function planner(g: Game): PlannerView | null {
     type: p.type,
     alt: fmtDist(ev.r0 - b.radius) + (p.type === 'sync' ? ' (fixed)' : ''),
     period: isFinite(ev.period) ? fmtTime(ev.period) : 'not orbiting',
-    speed: ev.speed ? fmtSpeed(ev.speed).join(' ').replace('TIMES LIGHT SPEED (C)', 'c').toLowerCase() : '0 m/s',
+    speed: ev.speed ? fmtSpeed(ev.speed).join(' ').toLowerCase() : '0 m/s',
     dir: p.type === 'hold' ? '—' : p.type === 'sync' ? 'with rotation (required)' : p.dir > 0 ? 'prograde (with rotation)' : 'retrograde',
     note: { text: ev.note || `Autopilot flies you there${far ? ', using FTL for the long leg' : ''}.`, warn: !ev.ok || !!ev.warn },
   };

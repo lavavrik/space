@@ -47,10 +47,10 @@ export function FlightCluster({ f }: { f: FlightView }) {
       </div>
       <div className="spd">{f.speed}</div>
       <div className="unit">{f.unit}</div>
-      <Bar frac={f.barFrac} variant={f.barFtl ? 'ftl' : undefined} />
+      <Bar frac={f.barFrac} variant={f.barFtl ? 'ftl' : undefined} mark={f.barMark} />
       <div className="barcap">
-        <span>{f.barLabel}</span>
-        <span>{f.barValue}</span>
+        <span className={cx(f.barHi === 'left' && 'hi')}>{f.barLabel}</span>
+        <span className={cx(f.barHi === 'right' && 'hi')}>{f.barValue}</span>
       </div>
       {f.alt && <div className={cx('fline', f.alt.warn && 'warnc')}>{f.alt.text}</div>}
       {f.orbit && <div className={cx('fline', f.orbit.warn && 'warnc')}>{f.orbit.text}</div>}

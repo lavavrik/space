@@ -47,6 +47,11 @@
 .bar.batt { background: rgba(160, 230, 140, .18); }
 .bar.batt i { background: #a8e68c; }
 .bar.low i { background: var(--red) !important; }
+/* marked bar (the speedo): the track past the mark is the boost range, hatched; the tick is the
+   normal limit; past it the fill turns bright */
+.bar s { position: absolute; top: 0; bottom: 0; right: 0; background: repeating-linear-gradient(135deg, rgba(255,165,58,.22) 0 .25rem, transparent .25rem .5rem); }
+.bar b { position: absolute; top: -.2rem; bottom: -.2rem; width: 2px; margin-left: -1px; background: var(--text); }
+.bar.over i { background: linear-gradient(90deg, var(--amber) 0 70%, var(--text)); }
 .sub { font-size: .8rem; letter-spacing: .14em; color: var(--amber-dim); display: flex; justify-content: space-between; }
 .warnc { color: var(--red) !important; }
 
@@ -67,7 +72,8 @@
 .gnote { font-size: .9rem; line-height: 1.4; color: var(--text); border-top: 1px solid var(--amber-faint); padding-top: .4rem; }
 
 /* flight cluster, bottom centre: the speedo */
-#flight { width: 22rem; max-width: 100%; text-align: center; display: flex; flex-direction: column; gap: .35rem; align-items: stretch; }
+/* 44rem wide, but it gives way on narrow windows so the gauges and target card (20rem each) fit */
+#flight { width: clamp(22rem, 100vw - 46rem, 44rem); max-width: 100%; text-align: center; display: flex; flex-direction: column; gap: .35rem; align-items: stretch; }
 #hMode {
   align-self: center; font-size: .9rem; font-weight: 700; letter-spacing: .22em;
   padding: .2rem .8rem; border: 1px solid currentColor; color: var(--amber);
@@ -77,6 +83,7 @@
 .spd { font-family: "Share Tech Mono", ui-monospace, Consolas, monospace; font-size: 4rem; line-height: 1; color: var(--text); font-variant-numeric: tabular-nums; }
 .unit { font-size: .85rem; letter-spacing: .2em; color: var(--amber-dim); margin-top: -.15rem; }
 .barcap { display: flex; justify-content: space-between; font-size: .8rem; letter-spacing: .16em; color: var(--amber-dim); }
+.barcap .hi { color: var(--amber); }
 .fline { font: 1rem "Share Tech Mono", ui-monospace, monospace; color: var(--text); letter-spacing: .03em; }
 .pills { display: flex; justify-content: center; flex-wrap: wrap; gap: .35rem; margin-top: .15rem; }
 .pill { font-size: .8rem; font-weight: 600; letter-spacing: .14em; padding: .1rem .5rem; border: 1px solid var(--amber-faint); color: var(--amber-dim); }

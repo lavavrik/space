@@ -70,11 +70,15 @@ export function Panel({ name, id, className, title, right, children }: { name: s
 }
 
 /** Horizontal fill bar. `lowWarn` turns it red below 15 %. */
-export function Bar({ frac, variant, lowWarn }: { frac: number; variant?: 'ftl' | 'batt'; lowWarn?: boolean }) {
+/** A fill bar. `mark` (0..1) draws a tick there and shades the track beyond it (e.g. the boost range). */
+export function Bar({ frac, variant, lowWarn, mark }: { frac: number; variant?: 'ftl' | 'batt'; lowWarn?: boolean; mark?: number }) {
   const f = Math.max(0, Math.min(1, frac));
+  const pct = (x: number) => (x * 100).toFixed(1) + '%';
   return (
-    <div className={cx('bar', variant, lowWarn && frac < 0.15 && 'low')}>
-      <i style={{ width: (f * 100).toFixed(1) + '%' }} />
+    <div className={cx('bar', variant, lowWarn && frac < 0.15 && 'low', mark !== undefined && f > mark && 'over')}>
+      {mark !== undefined && <s style={{ left: pct(mark) }} />}
+      <i style={{ width: pct(f) }} />
+      {mark !== undefined && <b style={{ left: pct(mark) }} />}
     </div>
   );
 }

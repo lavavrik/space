@@ -18,7 +18,7 @@ describe('formatting', () => {
   it('switches speed to km/s and multiples of c', () => {
     expect(fmtSpeed(334)).toEqual(['334', 'M/S']);
     expect(fmtSpeed(4030)).toEqual(['4.03', 'KM/S']);
-    expect(fmtSpeed(2.5 * C)).toEqual(['2.50', 'TIMES LIGHT SPEED (C)']);
+    expect(fmtSpeed(2.5 * C)).toEqual(['2.50', 'c']);
   });
 
   it('formats times, masses, flows and power', () => {
