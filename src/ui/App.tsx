@@ -1,6 +1,7 @@
 import { AutopilotPanel } from './components/AutopilotPanel';
 import { AvionicsPanel } from './components/AvionicsPanel';
 import { BodyInfo } from './components/BodyInfo';
+import { DockedPanel } from './components/DockedPanel';
 import { HelpPanel } from './components/HelpPanel';
 import { InfluencesPanel } from './components/InfluencesPanel';
 import { FlightCluster, Location, ShipGauges, TargetCard } from './components/Hud';
@@ -26,7 +27,9 @@ export function App() {
                 v={hud.outfit}
                 act={{ back: () => game!.openShipStats(), battery: (id) => game!.fitBattery(id), fit: (s, id) => game!.fitModule(s, id), remove: (s) => game!.removeModule(s), radiators: () => game!.toggleRadiators(), pump: () => game!.togglePump() }}
               />
-            ) : hud.avionics ? <AvionicsPanel slots={hud.avionics} electrical={hud.electrical} onOpen={(k) => game!.openAvionics(k)} /> : hud.helpVisible && <HelpPanel />}
+            ) : hud.avionics ? <AvionicsPanel slots={hud.avionics} electrical={hud.electrical} onOpen={(k) => game!.openAvionics(k)} /> : hud.docked ? (
+              <DockedPanel d={hud.docked} act={{ refuel: () => game!.refuelDocked(), outfit: () => game!.openAvionics('outfit'), launch: () => game!.launch() }} />
+            ) : hud.helpVisible && <HelpPanel />}
           </div>
           <div id="rightcol">
             {hud.nav && (

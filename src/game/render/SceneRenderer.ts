@@ -7,7 +7,9 @@ import { orbitPreview } from '../sim/planner';
 import { HyperspaceView } from './Hyperspace';
 import { createNoiseTexture } from './noise3d';
 import { skyColor, skyLook } from '../sim/hyperspace';
-import { ATMO_FS, BODY_VS, GLOW_FS, GLOW_VS, PLANET_FS, POINT_FS, POINT_VS, RING_FS, SKYPT_FS, SKYPT_VS, SKY_BAKE_FS, SKY_CUBE_FS, SKY_VS, STAR_FS, STATION_FS } from './shaders';
+import { hullGeometry, interiorGeometry } from './stationMesh';
+import { padLocal, stationQuat } from '../sim/stationGeom';
+import { ATMO_FS, BODY_VS, GLOW_FS, GLOW_VS, PLANET_FS, POINT_FS, POINT_VS, RING_FS, SKYPT_FS, SKYPT_VS, SKY_BAKE_FS, SKY_CUBE_FS, SKY_VS, STAR_FS, STATION_FS, STATION_INTERIOR_FS } from './shaders';
 
 type Uniforms = Record<string, THREE.IUniform>;
 
@@ -54,7 +56,10 @@ const DUST_FADE_FROM = 20e3,
 export class SceneRenderer {
   readonly gl: THREE.WebGLRenderer;
   readonly views = new Map<Body, BodyView>();
-  readonly stationViews = new Map<Station, { mesh: THREE.Mesh; uni: Uniforms; dist: number; pxR: number }>();
+  readonly stationViews = new Map<Station, { mesh: THREE.Group; uni: Uniforms; inner: THREE.Mesh; innerUni: Uniforms; dist: number; pxR: number }>();
+  /** Station hull (slot cut in the front) and interior, shared by every station (render/stationMesh.ts). */
+  private readonly stationHull = hullGeometry();
+  private readonly stationInside = interiorGeometry();
   private readonly scene = new THREE.Scene();
   private readonly skyScene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(FOV, 1, 0.5, 1e21);
@@ -308,7 +313,9 @@ export class SceneRenderer {
     this.views.clear();
     for (const v of this.stationViews.values()) {
       this.scene.remove(v.mesh);
-      (v.mesh.material as THREE.Material).dispose();
+      v.mesh.traverse((o) => {
+        if (o instanceof THREE.Mesh) (o.material as THREE.Material).dispose(); // geometry is shared
+      });
     }
     this.stationViews.clear();
   }
@@ -319,10 +326,14 @@ export class SceneRenderer {
       uLight: { value: new THREE.Vector3() }, uStarColor: { value: star.color.clone().lerp(new THREE.Color(1, 1, 1), 0.5) }, uLit: { value: 1 },
       uPlanetDir: { value: new THREE.Vector3() }, uPlanetColor: { value: p.a.clone().lerp(p.b, 0.5) }, uPlanetSize: { value: 1 }, uSeed: { value: st.seed },
     };
-    const mesh = new THREE.Mesh(this.box, new THREE.ShaderMaterial({ vertexShader: BODY_VS, fragmentShader: STATION_FS, uniforms: uni }));
-    mesh.scale.setScalar(st.size);
-    this.scene.add(mesh);
-    return { mesh, uni, dist: Infinity, pxR: 0 };
+    const group = new THREE.Group();
+    group.add(new THREE.Mesh(this.stationHull, new THREE.ShaderMaterial({ vertexShader: BODY_VS, fragmentShader: STATION_FS, uniforms: uni, side: THREE.DoubleSide })));
+    const innerUni: Uniforms = { uPad: { value: new THREE.Vector3() }, uPadOn: { value: 0 }, uTime: { value: 0 }, uSeed: { value: st.seed } };
+    const inner = new THREE.Mesh(this.stationInside, new THREE.ShaderMaterial({ vertexShader: BODY_VS, fragmentShader: STATION_INTERIOR_FS, uniforms: innerUni, side: THREE.DoubleSide }));
+    group.add(inner);
+    group.scale.setScalar(st.size);
+    this.scene.add(group);
+    return { mesh: group, uni, inner, innerUni, dist: Infinity, pxR: 0 };
   }
 
   private attachStar(b: Star): BodyView {
@@ -478,8 +489,16 @@ export class SceneRenderer {
       v.dist = d;
       v.pxR = (st.radius / d) * pxPerRad;
       v.mesh.position.copy(rel);
-      v.mesh.quaternion.setFromAxisAngle(st.spinAxis, st.spinRate * simTime);
+      stationQuat(st, simTime, v.mesh.quaternion);
       v.mesh.visible = v.pxR > 0.5;
+      // the interior only matters up close (it's seen through the slot, or from inside)
+      v.inner.visible = d < st.size * 8;
+      if (v.inner.visible) {
+        const dk = g.dock;
+        v.innerUni.uPadOn.value = dk && dk.station === st && !dk.docked ? 1 : 0;
+        if (dk && dk.station === st) (v.innerUni.uPad.value as THREE.Vector3).copy(padLocal(dk.pad).pos);
+        v.innerUni.uTime.value = performance.now() / 1000;
+      }
       const toStar = tmp2.subVectors(starPos, st.pos).normalize();
       (v.uni.uLight.value as THREE.Vector3).copy(toStar);
       // in the parent's shadow if the line to the star passes through it

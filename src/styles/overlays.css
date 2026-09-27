@@ -172,3 +172,8 @@
   background: none; border: 1px solid var(--amber-dim); color: var(--amber); font: 600 .78rem inherit; letter-spacing: .14em; padding: .2rem .5rem .2rem .35rem;
 }
 .oback:hover { background: rgba(255, 165, 58, .1); color: var(--text); }
+
+/* docked panel */
+#docked { display: flex; flex-direction: column; gap: .35rem; }
+.dkname { display: flex; align-items: center; gap: .4rem; font-size: 1.15rem; font-weight: 700; color: var(--text); }
+.dkname svg { color: var(--amber); font-size: 1.3rem; }

@@ -54,7 +54,7 @@ export const GROUPS: { id: ControlGroup; title: string; keys: [string, string][]
       ['⇧U', 'outfit'],
       ['Z', 'periscope (wheel: zoom)'],
       [', .', 'time warp'],
-      ['K', 'fuel tanker'],
+      ['K', 'dock at station / tanker'],
       ['Tab', 'hide controls'],
       ['`', 'performance'],
     ],

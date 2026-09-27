@@ -32,6 +32,7 @@ export function warpBlocked(g: Game): string | null {
   if (ship.ftlCharge > 0) return 'not while a drive charges';
   if (ship.vent) return 'not while venting hydrogen';
   if (g.route?.running) return 'not while a route is flying';
+  if (g.inStation && !g.dock?.docked) return 'not inside a station';
   if (ship.ap && (!ship.ap.settled || ship.ap.type === 'hold' || ship.ap.type === 'rendezvous')) return 'not while the autopilot is manoeuvring';
   const thrusting = keys.KeyW || keys.KeyS || keys.KeyA || keys.KeyD || keys.Space || keys.KeyC || keys.ControlLeft || keys.ControlRight || keys.KeyX;
   if (thrusting) return 'not under thrust';

@@ -1,4 +1,5 @@
 import { TANKER_TIME } from '../constants';
+import { dockKey } from '../sim/docking';
 import { togglePeriscope, wheelZoom } from '../sim/periscope';
 import { changeWarp, stopWarp } from '../sim/timewarp';
 import { toggleRadiators, toggleVent } from '../sim/thermal';
@@ -137,6 +138,8 @@ export function onPress(g: Game, code: string) {
       g.showMsg(ship.sunTrack ? 'Sun tracking on · turning panels to the star (steer to cancel)' : 'Sun tracking off');
       break;
     case 'KeyK':
+      // near a targeted station (or docked) K is docking; elsewhere it calls a tanker
+      if (dockKey(g)) break;
       if (ship.tanker) {
         ship.tanker = null;
         g.showMsg('Tanker call cancelled');

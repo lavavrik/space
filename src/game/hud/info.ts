@@ -74,7 +74,7 @@ function bodyPhysical(g: Game, b: Body): [string, string][] {
 }
 
 function stationPhysical(st: Station): [string, string][] {
-  return [['SIZE · TUMBLE', `${fmtDist(st.size)} cube · ${fmtTime((2 * Math.PI) / Math.abs(st.spinRate))} per turn`]];
+  return [['SIZE · SPIN', `${fmtDist(st.size)} cube · ${fmtTime((2 * Math.PI) / Math.abs(st.spinRate))} per turn`]];
 }
 
 /** Orbital elements of `o` around `p`, plus where the body is on that orbit right now. */

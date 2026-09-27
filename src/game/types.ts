@@ -87,7 +87,7 @@ export interface Station extends KeplerOrbit {
   radius: number; // m, half the cube's diagonal (for targeting and markers)
   seed: number;
   spinAxis: Vec3;
-  spinRate: number; // rad/s, slow tumble about spinAxis
+  spinRate: number; // rad/s about spinAxis, which runs through the docking slot (sim/stationGeom.ts)
   pos: Vec3; // m, system frame
   vel: Vec3; // m/s, system frame
 }

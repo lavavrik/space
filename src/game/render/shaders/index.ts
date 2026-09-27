@@ -10,6 +10,7 @@ import ringFrag from './ring.frag.glsl?raw';
 import pointVert from './point.vert.glsl?raw';
 import pointFrag from './point.frag.glsl?raw';
 import skyVert from './sky.vert.glsl?raw';
+import stationInteriorFrag from './stationInterior.frag.glsl?raw';
 import skyFrag from './sky.frag.glsl?raw';
 import skyCubeFrag from './skyCube.frag.glsl?raw';
 import skyPointVert from './skyPoint.vert.glsl?raw';
@@ -30,6 +31,8 @@ export const GLOW_FS = glowFrag;
 export const RING_FS = withNoise(ringFrag);
 /** Orbital stations (drawn with BODY_VS on a unit cube). */
 export const STATION_FS = withNoise(stationFrag);
+/** Station interiors: slot tunnel, hangar and pads (drawn with BODY_VS). */
+export const STATION_INTERIOR_FS = stationInteriorFrag;
 /** Point sprites: distant bodies and dust. */
 export const POINT_VS = pointVert;
 export const POINT_FS = pointFrag;

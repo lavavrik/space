@@ -210,6 +210,8 @@ export interface HudSnapshot {
   electrical: ElectricalView | null; // its electrical section
   influences: InfluencesView | null;
   outfit: OutfitView | null;
+  /** Docked at a station: its name, the pad, and what the station is doing for the ship. */
+  docked: { station: string; pad: number; notes: string[]; tanksFull: boolean } | null;
   nav: NavView | null;
   guide: GuideView | null;
 }

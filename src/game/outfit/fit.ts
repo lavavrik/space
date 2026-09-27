@@ -1,19 +1,14 @@
 /*
- * Outfitting: modules go in or come out only alongside a station, in its local frame and nearly
- * at rest relative to it (a yard crew does the work). No prices yet: every module is available.
+ * Outfitting: modules go in or come out only while docked at a station (sim/docking.ts). No prices
+ * yet: every module is available.
  */
 import type { Game } from '../Game';
-import { relVel } from '../sim/frame';
 import type { Station } from '../types';
 import { batteryById, moduleById, moduleLabel, radiatorsFitted } from './catalog';
 
-/** Slowest relative speed (m/s) at which a station will work on the ship. */
-export const OUTFIT_MAX_SPEED = 50;
-
-/** The station that can outfit the ship right now, if any. */
+/** The station that can outfit the ship right now (the one it's docked at), if any. */
 export function outfitter(g: Game): Station | null {
-  if (!g.refFrame || g.ship.mode !== 'normal') return null;
-  return relVel(g).length() <= OUTFIT_MAX_SPEED ? g.refFrame : null;
+  return g.dock?.docked ? g.dock.station : null;
 }
 
 export function fitModule(g: Game, slot: number, id: string) {

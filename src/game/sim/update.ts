@@ -16,6 +16,7 @@ import { refillShip, scoop, solarPower } from './resources';
 import { updateThermal } from './thermal';
 import { beginPower, grant, settleBattery } from './power';
 import { railsStep, stopWarp, warpBlocked } from './timewarp';
+import { SHORE_POWER, holdDocked, rotationCorrection, stationContact } from './docking';
 
 const qa = new THREE.Quaternion();
 const AX = new THREE.Vector3(1, 0, 0),
@@ -113,16 +114,24 @@ export function update(g: Game, dt: number, realDt = dt) {
     if (g.warp > 1) {
       // time warp: coast on rails under the frame body's gravity
       ship.grav = gravityAt(g.cur, ship.pos);
-      railsStep(g, dt);
+      if (g.dock?.docked) holdDocked(g);
+      else railsStep(g, dt);
       g.curSpeed = relVel(g).length();
+    } else if (g.dock?.docked) {
+      // docked: held on the pad, turning with the station
+      ship.grav = gravityAt(g.cur, ship.pos);
+      syncFrame(g, ship.grav.body);
+      holdDocked(g);
     } else if (ship.mode === 'normal') {
       const grav = (ship.grav = gravityAt(g.cur, ship.pos));
       syncFrame(g, grav.body);
       maybeFtlLeg(g);
+      rotationCorrection(g, dt);
       if (ship.ap && ship.ap.phase === 'insert') autopilot(g, dt, grav);
       else manualFlight(g, dt, grav, inp);
       ship.pos.addScaledVector(ship.vel, dt);
       collide(g, dt);
+      stationContact(g);
       g.curSpeed = relVel(g).length();
     } else if (apSteering) {
       ftlTransfer(g, dt);
@@ -143,7 +152,8 @@ export function update(g: Game, dt: number, realDt = dt) {
     const dq = new THREE.Quaternion().setFromUnitVectors(up, toS);
     ship.q.slerp(dq.multiply(ship.q), Math.min(1, 1.2 * dt)).normalize();
   }
-  power.solar = inTunnel ? 0 : solarPower(g);
+  // no sunlight inside a station; docked, the station's shore power stands in for the panels
+  power.solar = inTunnel ? 0 : g.dock?.docked ? SHORE_POWER : g.inStation ? 0 : solarPower(g);
   power.draw = SHIP.baseLoad + power.thrustKW + power.ftlKW + power.chargeKW + power.pumpKW;
   settleBattery(g, dt);
   if (ship.batt > 1) g.warned.batt = false;

@@ -8,6 +8,8 @@ import { scanProgress } from '../sim/scanner';
 import { galPos, hiddenBy, occluders, reachable } from '../sim/navigation';
 import type { Jump, StarSystem } from '../types';
 import type { SceneRenderer } from './SceneRenderer';
+import { PAD_R, SLOT_H, SLOT_W, toWorld } from '../sim/stationGeom';
+import { padWorld } from '../sim/docking';
 
 const AMB = 'rgba(255,165,58,',
   CYA = 'rgba(127,220,255,',
@@ -45,6 +47,58 @@ export class Overlay {
   }
 
   /** A canvas font at `px` design pixels, scaled like the HUD. */
+  /**
+   * Docking guidance while a pad is granted: the slot's outline on the station (it turns with the
+   * station, so you can match its roll) and a marker on your pad with its number and distance.
+   */
+  private drawDocking(g: Game) {
+    const d = g.dock;
+    if (!d || d.docked) return;
+    const { ctx } = this;
+    const st = d.station;
+    ctx.save();
+    ctx.lineWidth = 1.5 * this.ui;
+    // slot outline, a little outside the opening
+    const sx = SLOT_W / 2 + 0.01,
+      sy = SLOT_H / 2 + 0.01;
+    const pts = [
+      [-sx, -sy],
+      [sx, -sy],
+      [sx, sy],
+      [-sx, sy],
+    ].map(([x, y]) => this.toScreen(g, toWorld(st, g.simTime, new THREE.Vector3(x, y, 0.5)).sub(g.ship.pos)));
+    if (!g.inStation && pts.every((p) => !p.behind)) {
+      ctx.strokeStyle = MINT + '0.85)';
+      ctx.beginPath();
+      pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+      ctx.closePath();
+      ctx.stroke();
+      const c = pts.reduce((a, p) => ({ x: a.x + p.x / 4, y: a.y + p.y / 4 }), { x: 0, y: 0 });
+      ctx.fillStyle = MINT + '0.9)';
+      ctx.font = this.font(12, MONO);
+      ctx.textAlign = 'center';
+      ctx.fillText('SLOT', c.x, Math.min(...pts.map((p) => p.y)) - 8 * this.ui);
+    }
+    // the pad
+    const pw = padWorld(g)!;
+    const rel = pw.clone().sub(g.ship.pos);
+    const s = this.toScreen(g, rel);
+    const label = `PAD ${d.pad + 1} · ${fmtDist(rel.length())}`;
+    if (s.behind) this.edgeArrow(s.v, AMB, label);
+    else {
+      const r = Math.max(8 * this.ui, ((PAD_R * st.size) / rel.length()) * g.view.pxPerRad);
+      ctx.strokeStyle = AMB + '0.95)';
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = AMB + '0.95)';
+      ctx.font = this.font(12, MONO);
+      ctx.textAlign = 'center';
+      ctx.fillText(label, s.x, s.y - r - 6 * this.ui);
+    }
+    ctx.restore();
+  }
+
   /**
    * Periscope (Z): darken everything outside a circular field, with a graduated rim and the
    * magnification and field of view. Fades in with the zoom.
@@ -157,6 +211,7 @@ export class Overlay {
     }
 
     this.drawPeriscope(g);
+    this.drawDocking(g);
     this.drawReticle(ship.mode === 'ftl' ? CYA : AMB);
 
     // prograde marker (where you're going), or retrograde (where you came from) when it's behind

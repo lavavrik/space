@@ -20,6 +20,7 @@ import { THREE } from '../lib/three';
 import type { Body, Station } from '../types';
 import { updateBodies } from './kepler';
 import { updateStations } from './stations';
+import { stationPointVelAt } from './stationGeom';
 
 const tmpRide = new THREE.Vector3();
 
@@ -103,6 +104,12 @@ export function updateFrame(g: Game) {
 
 /** Velocity of the flight-assist frame relative to the frame body (zero unless near a station). */
 export function frameVel(g: Game, out = new THREE.Vector3()) {
+  // inside a station: its turning structure where the ship is (orbit + spin), so flight assist
+  // holds you still against the hangar (sim/docking.ts)
+  // (at the ship's offset from the station as of the end of the last step: mid-step the ship has
+  // been carried with its frame body but not yet moved, ~150 m off at orbital speeds, which put
+  // ω × r ~15 m/s wrong and kept flight assist from ever holding still)
+  if (g.inStation) return stationPointVelAt(g.inStation, g.inStationRel, out).sub(g.frameBody.vel);
   return g.refFrame ? stationVel(g, g.refFrame, out) : out.copy(ZERO);
 }
 

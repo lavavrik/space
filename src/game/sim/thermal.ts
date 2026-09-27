@@ -49,6 +49,9 @@ export const VENT = { maxW: 50e6, approach: 50, latent: 446e3, cp: 12e3, stopBel
 /** J carried off per kg of vented hydrogen with the hull at T. */
 export const ventHeatPerKg = (T: number) => VENT.latent + VENT.cp * Math.max(0, T - VENT.approach - 20);
 
+/** Docked hulls are brought to this (K) by the station. */
+const DOCKED_TEMP = 293;
+
 /** Temperatures (K) where things happen. */
 export const TEMP = {
   start: 280,
@@ -150,7 +153,7 @@ export function heatBudget(g: Game, inTunnel: boolean): HeatBudget {
   if (!inTunnel) {
     const s = cur.star;
     const toS = s.pos.clone().sub(ship.pos).normalize();
-    if (!power.shadow) {
+    if (!power.shadow && !g.inStation) {
       star = HULL.absorb * crossSection(g, toS) * power.flux * S0;
       // the fins lie in the plane of the nose and the top: their faces point along the ship's x axis
       const c = Math.abs(side.set(1, 0, 0).applyQuaternion(ship.q).dot(toS));
@@ -226,6 +229,12 @@ export function updateThermal(g: Game, dt: number, inTunnel: boolean) {
   }
 
   const h = (g.heat = heatBudget(g, inTunnel));
+  if (g.dock?.docked) {
+    // docked: the station's thermal plant takes the hull toward room temperature within minutes
+    ship.temp += (DOCKED_TEMP - ship.temp) * Math.min(1, dt / 120);
+    power.pumpKW = 0;
+    return;
+  }
   power.pumpKW = grant(g, h.pumpW / 1000, 'heat pump'); // (it asked for no more than was left)
   if (h.ventFlow > 0) {
     const used = Math.min(ship.prop, h.ventFlow * dt);

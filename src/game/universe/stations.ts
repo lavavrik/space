@@ -1,4 +1,5 @@
 import { WT } from '../constants';
+import { spinRateFor } from '../sim/stationGeom';
 import { lr, mulberry32, rr, type Rng } from '../lib/rng';
 import { THREE } from '../lib/three';
 import { maxOrbitR, minOrbitAlt, syncRadius } from '../sim/orbits';
@@ -121,7 +122,8 @@ function makeStation(b: World, moons: World[], g: Rng, used: Set<string>): Stati
     n: Math.sqrt(b.mu / a ** 3),
     M0: g() * 2 * Math.PI,
     spinAxis: new THREE.Vector3(rr(g, -0.3, 0.3), 1, rr(g, -0.3, 0.3)).normalize(),
-    spinRate: rr(g, 0.01, 0.04) * (g() < 0.5 ? -1 : 1),
+    // spins about its slot axis fast enough for ~0.5 g on the hangar wall (sim/stationGeom.ts)
+    spinRate: spinRateFor(size) * (g() < 0.5 ? -1 : 1),
     pos: new THREE.Vector3(),
     vel: new THREE.Vector3(),
   };

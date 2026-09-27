@@ -9,6 +9,7 @@ import { dropAlt } from './ftl';
 import { lookAt } from './navigation';
 import { closePlanner, disengageAP } from './planner';
 import { applyThrust, refillShip } from './resources';
+import { stationLimits } from './docking';
 import { TEMP } from './thermal';
 
 const tmp = new THREE.Vector3(),
@@ -22,9 +23,11 @@ const tmp = new THREE.Vector3(),
  *  `inp` is the thrust input in ship axes: [right, up, back]. */
 export function manualFlight(g: Game, dt: number, grav: Gravity, inp: number[]) {
   const { ship, keys } = g;
-  const boost = keys.ShiftLeft || keys.ShiftRight;
-  const acc = boost ? NORMAL_ACC * 3 : NORMAL_ACC,
-    maxV = boost ? NORMAL_BOOST : NORMAL_MAX;
+  // inside a station: docking thrusters, and a speed limit that eases you onto the pad (sim/docking.ts)
+  const inside = ship.fa ? stationLimits(g) : null;
+  const boost = !inside && (keys.ShiftLeft || keys.ShiftRight);
+  const acc = inside ? inside.acc : boost ? NORMAL_ACC * 3 : NORMAL_ACC,
+    maxV = inside ? inside.maxV : boost ? NORMAL_BOOST : NORMAL_MAX;
   ship.vel.addScaledVector(grav.vec, dt);
   // everything below works in the local frame: the station's, or the system's
   const fv = frameVel(g);
@@ -45,7 +48,7 @@ export function manualFlight(g: Game, dt: number, grav: Gravity, inp: number[]) 
   const arr = [lv.x, lv.y, lv.z];
   for (let c = 0; c < 3; c++) {
     if (stopping) {
-      arr[c] -= Math.sign(arr[c]) * Math.min(Math.abs(arr[c]), NORMAL_ACC * 3 * dt);
+      arr[c] -= Math.sign(arr[c]) * Math.min(Math.abs(arr[c]), (inside ? acc : NORMAL_ACC * 3) * dt);
       continue;
     }
     if (inp[c] !== 0) arr[c] += inp[c] * acc * dt;
@@ -55,7 +58,7 @@ export function manualFlight(g: Game, dt: number, grav: Gravity, inp: number[]) 
   lv.set(arr[0], arr[1], arr[2]);
   // after a boost, flight assist bleeds speed back down to the normal limit
   const sp = lv.length();
-  if (ship.fa && !boost && sp > maxV) lv.setLength(Math.max(maxV, sp - NORMAL_ACC * 4 * dt));
+  if (ship.fa && !boost && sp > maxV) lv.setLength(Math.max(maxV, sp - (inside ? acc * 2 : NORMAL_ACC * 4) * dt));
   // T is the velocity change the thrusters deliver this frame
   const T = lv.applyQuaternion(ship.q).sub(rest);
   // Flight assist enforces the speed limit: thrust may not add speed along the direction
@@ -122,6 +125,8 @@ export function collide(g: Game, dt: number) {
 export function destroyShip(g: Game, reason: string, body: Body) {
   const { ship } = g;
   ship.dead = { t: RESPAWN_TIME, reason, body };
+  g.dock = null;
+  g.inStation = null;
   ship.ap = null;
   ship.ftlCharge = 0;
   ship.landed = null;

@@ -16,7 +16,8 @@ import { deltaVLeft, dryMass } from '../sim/resources';
 import { battCap } from '../sim/power';
 import { TEMP, nextLimit } from '../sim/thermal';
 import { BATTERIES, MODULES, PUMP_ON_ABOVE, type BatteryModule, RADIATOR_MAX_ACC, moduleLabel, outfitMass, pumpFitted, radiatorsFitted, type Module } from '../outfit/catalog';
-import { OUTFIT_MAX_SPEED, outfitter } from '../outfit/fit';
+import { outfitter } from '../outfit/fit';
+import { SHORE_POWER } from '../sim/docking';
 import { unitLabel, type Computer } from '../avionics/catalog';
 import { buildInfluences } from './influences';
 import { buildInfo } from './info';
@@ -41,6 +42,14 @@ export function buildSnapshot(g: Game): HudSnapshot {
     electrical: g.avionicsVisible ? electricalView(g) : null,
     influences: g.influencesVisible ? buildInfluences(g) : null,
     outfit: g.outfitVisible ? outfitView(g) : null,
+    docked: g.dock?.docked
+      ? {
+          station: g.dock.station.name,
+          pad: g.dock.pad + 1,
+          notes: [`Shore power ${fmtPower(SHORE_POWER)} · battery charging`, `Hull held near room temperature (${g.ship.temp.toFixed(0)} K)`],
+          tanksFull: g.ship.prop >= SHIP.propCap - 1 && g.ship.exotic >= SHIP.exoticCap - 0.01,
+        }
+      : null,
     nav: g.navPanel || g.route?.running ? navView(g) : null,
     guide: g.guide ? guide(g.guide) : null,
   };
@@ -150,6 +159,7 @@ function flight(g: Game): FlightView {
 
   const pills: Pill[] = [{ text: ship.fa ? 'FA ON' : 'FA OFF', kind: ship.fa ? 'on' : 'warn' }];
   if (ship.decoupled) pills.push({ text: 'DECOUPLED', kind: 'warn' });
+  if (g.dock) pills.push({ text: g.dock.docked ? `DOCKED · PAD ${g.dock.pad + 1}` : `PAD ${g.dock.pad + 1} GRANTED`, kind: g.dock.docked ? 'on' : 'ftl' });
   if (g.zoom.on) pills.push({ text: `ZOOM ${g.zoom.mag}×`, kind: 'on' });
   if (g.warp > 1) pills.push({ text: `TIME ×${g.warp.toLocaleString('en-US')}`, kind: 'warn' });
   if (ship.vent) pills.push({ text: 'VENTING H₂', kind: 'ftl' });
@@ -179,7 +189,8 @@ function target(g: Game): TargetView {
   vel.add(g.frameBody.vel).sub(t.vel); // everything moves, so close on the target in its own frame
   const closing = vel.dot(dir);
   const type = sp < SCAN_STAGE.type ? 'UNKNOWN' : t.kind === 'station' ? 'ORBITAL STATION' : t.typeName.toUpperCase();
-  return { name: t.name, type, distance: fmtDist(d), eta: closing > 1 ? `ETA ${fmtTime(d / closing)}` : 'NOT CLOSING', none: false, scan, scanFrac: sp };
+  const inside = g.inStation === t;
+  return { name: t.name, type, distance: inside ? (g.dock?.docked ? 'DOCKED' : 'INSIDE') : fmtDist(d), eta: closing > 1 ? `ETA ${fmtTime(d / closing)}` : 'NOT CLOSING', none: false, scan, scanFrac: sp };
 }
 
 function systems(g: Game): SystemsView {
@@ -335,7 +346,7 @@ function outfitView(g: Game): OutfitView {
   return {
     station: st?.name ?? null,
     battery: { unit: moduleLabel(o.battery), specs: bSpecs(o.battery), options: st ? BATTERIES.map((b) => ({ id: b.id, unit: moduleLabel(b), specs: `${b.blurb} · ${bSpecs(b)}`, current: b === o.battery })) : [] },
-    hint: g.refFrame ? `Slow to under ${OUTFIT_MAX_SPEED} m/s relative to ${g.refFrame.name} to change modules` : 'Modules are fitted at a station: rendezvous with one (in its local frame, nearly at rest)',
+    hint: 'Modules are fitted while docked at a station (target one, K for a pad, land on it)',
     slots: o.slots.map((m) => (m ? { unit: moduleLabel(m), blurb: m.blurb, specs: specsOf(m), empty: false, icon: m.kind } : { unit: 'empty', blurb: '', specs: '', empty: true, icon: 'empty' as const })),
     catalogue: st ? MODULES.map((m) => ({ id: m.id, unit: moduleLabel(m), kind: { radiator: 'RADIATORS', heatpump: 'HEAT PUMP', scoop: 'FUEL SCOOP' }[m.kind], blurb: m.blurb, specs: specsOf(m) })) : [],
     radiators: {
@@ -468,7 +479,7 @@ function avionicsView(g: Game): AvionicsSlotView[] {
     {
       id: 'outfit', key: '⇧U', kind: 'OUTFIT', does: 'Battery and utility modules: fuel scoop, radiators, heat pump', unit: o.slots.filter(Boolean).map((m) => moduleLabel(m!)).join(' · ') || 'no modules fitted', model: `${o.slots.filter(Boolean).length} / ${o.slots.length} slots`, maker: '', blurb: '',
       mods: [{ icon: 'battery', title: `${moduleLabel(o.battery)} battery` }, ...o.slots.map((m) => ({ icon: (m?.kind ?? 'empty') as ModuleIcon, title: m ? moduleLabel(m) : 'empty slot' }))],
-      status: { text: outfitter(g) ? `alongside ${g.refFrame!.name} · can refit` : 'refit at a station' }, active: o.radiatorsOut > 0 || ship.vent,
+      status: { text: outfitter(g) ? `docked at ${outfitter(g)!.name} · can refit` : 'refit when docked' }, active: o.radiatorsOut > 0 || ship.vent,
       specs: [],
     },
   ];
