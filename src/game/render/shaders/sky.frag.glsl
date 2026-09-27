@@ -1,5 +1,13 @@
 varying vec3 vDir;
+// 1 for the whole-sky cube bake; the periscope's magnification when baking a zoomed patch, which
+// adds the structure the cube map can't hold (see SceneRenderer.updateSkyPatch)
+uniform float uZoom;
+// unresolved-star cells per radian in a zoomed patch (0: none)
+uniform float uCell;
 #pragma farlight_noise
+
+// cheap hash of a lattice cell (Dave Hoskins' hash13), fine for the large coordinates of a zoomed patch
+float hash13(vec3 p3){ p3=fract(p3*0.1031); p3+=dot(p3,p3.zyx+31.32); return fract((p3.x+p3.y)*p3.z); }
 
 // A nebula centred on direction c with angular radius r: domain-warped noise gives it filaments,
 // a gaussian falloff its extent, a second noise its dark dust lanes. `outer` colours the cloud,
@@ -45,6 +53,17 @@ void main(){
   float dust=smoothstep(0.48,0.72,fbm(d*7.0+7.0,5)*0.5+0.5)*exp(-b*b/0.003);
   float i=band*(0.07+0.2*n1*n2)*(1.0+3.0*pow(c,3.0))+wide*0.025*n1;
   i*=1.0-dust*0.85;
+  if(uZoom>1.5){
+    // zoomed: finer glow structure and dust lanes at the new scale
+    // broad light and dark patches, a fine texture, and thin dark dust lanes that only show up in
+    // some regions (a lattice of lanes everywhere looked like cracked glass)
+    float broad=fbm(d*(4.0*uZoom),3)*0.5+0.5;
+    float fine=fbm(d*(20.0*uZoom),4)*0.5+0.5;
+    float rid=1.0-abs(fbm(d*(10.0*uZoom)+5.0,4));
+    float region=smoothstep(0.5,0.72,fbm(d*(2.5*uZoom)+2.0,3)*0.5+0.5);
+    float fdust=pow(clamp(rid,0.0,1.0),10.0)*region*exp(-b*b/0.008);
+    i*=(0.5+1.0*broad)*(0.9+0.2*fine)*(1.0-fdust*0.5);
+  }
   vec3 col=mix(vec3(0.55,0.62,0.85),vec3(1.0,0.84,0.62),clamp(c*1.2+n2*0.3-0.2,0.0,1.0))*i;
   float neb=pow(max(fbm(d*2.4+11.0,4),0.0),2.0);
   col+=neb*vec3(0.05,0.012,0.035);
@@ -62,5 +81,18 @@ void main(){
   col+=neb3*NEB_ALPHA;
   vec3 rings=ringNebula(d,gn*0.9+vec3(-0.75,0.0,-0.45),0.035)+ringNebula(d,-gn*0.9+vec3(-0.3,0.0,-0.8),0.03);
   col+=rings*RING_ALPHA;
+  if(uCell>0.0){
+    // the band resolves into faint stars: one candidate per lattice cell, more of them where the
+    // band is bright, each a small soft dot at a random spot in its cell
+    vec3 p=d*uCell, cell=floor(p), f=fract(p)-0.5;
+    float dens=clamp(0.04+i*5.0,0.0,0.6);
+    if(hash13(cell)<dens){
+      vec3 off=vec3(hash13(cell+1.3),hash13(cell+2.7),hash13(cell+4.1))-0.5;
+      vec3 q=f-off*0.6;
+      float r2=dot(q,q)-pow(dot(q,d),2.0); // distance across the line of sight
+      float br=0.08+0.6*pow(hash13(cell+7.7),4.0);
+      col+=mix(vec3(1.0,0.85,0.7),vec3(0.75,0.85,1.0),hash13(cell+9.1))*br*exp(-r2*30.0);
+    }
+  }
   gl_FragColor=vec4(col,1.0);
 }

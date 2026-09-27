@@ -67,6 +67,13 @@ export class SceneRenderer {
   private readonly noise3d = createNoiseTexture();
   private sysStars: THREE.Points | null = null;
   private skyCube!: THREE.WebGLCubeRenderTarget;
+  /**
+   * Periscope sky patch: the procedural sky re-baked for just the zoomed view, with detail scaled
+   * to the magnification (see updateSkyPatch). Null until the periscope first zooms in.
+   */
+  private patch: { rt: THREE.WebGLRenderTarget; cam: THREE.PerspectiveCamera; scene: THREE.Scene; mat: THREE.ShaderMaterial; q: THREE.Quaternion; zoom: number; fov: number; bakedAt: number } | null = null;
+  private skyUni!: { uSky: { value: THREE.Texture }; uPatch: { value: THREE.Texture | null }; uPatchVP: { value: THREE.Matrix4 }; uPatchOn: { value: number } };
+  private skyGeo!: THREE.SphereGeometry;
   private readonly hyper = new HyperspaceView(() => this.pointsMaterial());
   /** Orbit preview (L): the planned or autopilot orbit as a ring, depth-tested so the planet hides its far side. */
   private readonly ring = new THREE.LineLoop(
@@ -144,13 +151,73 @@ export class SceneRenderer {
     // cost ~22 ms at 3840×2160; the bake takes a few ms at startup.
     const geo = new THREE.SphereGeometry(100, 64, 32);
     const bakeScene = new THREE.Scene();
-    const bakeMat = new THREE.ShaderMaterial({ vertexShader: SKY_VS, fragmentShader: SKY_BAKE_FS, side: THREE.BackSide, depthWrite: false });
+    const bakeMat = new THREE.ShaderMaterial({ vertexShader: SKY_VS, fragmentShader: SKY_BAKE_FS, uniforms: { uZoom: { value: 1 }, uCell: { value: 0 } }, side: THREE.BackSide, depthWrite: false });
     bakeScene.add(new THREE.Mesh(geo, bakeMat));
     this.skyCube = new THREE.WebGLCubeRenderTarget(SKY_CUBE_SIZE, { generateMipmaps: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
     new THREE.CubeCamera(1, 1000, this.skyCube).update(this.gl, bakeScene);
     bakeMat.dispose();
-    const sky = new THREE.Mesh(geo, new THREE.ShaderMaterial({ vertexShader: SKY_VS, fragmentShader: SKY_CUBE_FS, uniforms: { uSky: { value: this.skyCube.texture } }, side: THREE.BackSide, depthWrite: false }));
+    this.skyGeo = geo;
+    this.skyUni = { uSky: { value: this.skyCube.texture }, uPatch: { value: null }, uPatchVP: { value: new THREE.Matrix4() }, uPatchOn: { value: 0 } };
+    const sky = new THREE.Mesh(geo, new THREE.ShaderMaterial({ vertexShader: SKY_VS, fragmentShader: SKY_CUBE_FS, uniforms: this.skyUni, side: THREE.BackSide, depthWrite: false }));
     this.skyScene.add(sky);
+  }
+
+  /**
+   * Through the periscope the 1024² cube map is far too coarse (at 100× a cube texel spans ~7 screen
+   * pixels), so the procedural sky is re-baked for just the view: a patch 30% wider than the screen
+   * at 65% of its resolution, with finer glow, dust and unresolved stars at the zoomed scale. It's
+   * only re-baked when the view turns by more than a tenth of the field or the zoom changes by 1.4×,
+   * so a steady view costs nothing extra and a re-bake is a few milliseconds.
+   */
+  private updateSkyPatch(g: Game) {
+    const z = g.zoom.cur;
+    const u = this.skyUni;
+    if (z < 3) {
+      u.uPatchOn.value = 0;
+      return;
+    }
+    const size = this.gl.getDrawingBufferSize(new THREE.Vector2());
+    const w = Math.max(64, Math.round(size.x * 0.65)),
+      h = Math.max(64, Math.round(size.y * 0.65));
+    let p = this.patch;
+    if (!p) {
+      const mat = new THREE.ShaderMaterial({ vertexShader: SKY_VS, fragmentShader: SKY_BAKE_FS, uniforms: { uZoom: { value: 1 }, uCell: { value: 0 } }, side: THREE.BackSide, depthWrite: false });
+      const scene = new THREE.Scene();
+      scene.add(new THREE.Mesh(this.skyGeo, mat));
+      const rt = new THREE.WebGLRenderTarget(w, h, { generateMipmaps: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false });
+      p = this.patch = { rt, cam: new THREE.PerspectiveCamera(), scene, mat, q: new THREE.Quaternion(), zoom: 0, fov: 0, bakedAt: 0 };
+    }
+    if (p.rt.width !== w || p.rt.height !== h) {
+      p.rt.setSize(w, h);
+      p.zoom = 0; // force a re-bake
+    }
+    const fovRad = (g.fov * Math.PI) / 180;
+    const stale = !p.zoom || z / p.zoom > 1.4 || p.zoom / z > 1.4 || p.q.angleTo(g.ship.q) > fovRad * 0.1;
+    // while the zoom eases in it crosses the 1.4× threshold many times: at most one bake per 150 ms
+    const now = performance.now();
+    if (stale && (!p.zoom || now - p.bakedAt > 150)) {
+      p.bakedAt = now;
+      const cam = p.cam;
+      cam.fov = g.fov * 1.3;
+      cam.aspect = w / h;
+      cam.near = 0.1;
+      cam.far = 1000;
+      cam.quaternion.copy(g.ship.q);
+      cam.updateProjectionMatrix();
+      cam.updateMatrixWorld();
+      p.mat.uniforms.uZoom.value = z;
+      // one star candidate per ~2.5 patch pixels
+      p.mat.uniforms.uCell.value = h / 2 / Math.tan(((cam.fov / 2) * Math.PI) / 180) / 2.5;
+      this.gl.setRenderTarget(p.rt);
+      this.gl.clear();
+      this.gl.render(p.scene, cam);
+      this.gl.setRenderTarget(null);
+      p.q.copy(g.ship.q);
+      p.zoom = z;
+      u.uPatchVP.value.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+      u.uPatch.value = p.rt.texture;
+    }
+    u.uPatchOn.value = 1;
   }
 
   /** Every other system within SKY_RADIUS as a sky point, brightness and size by flux from here. */
@@ -311,6 +378,7 @@ export class SceneRenderer {
     camera.updateMatrixWorld();
     skyCam.quaternion.copy(ship.q);
     skyCam.updateMatrixWorld();
+    this.updateSkyPatch(g);
 
     const dPos = dotGeo.attributes.position.array as Float32Array,
       dCol = dotGeo.attributes.aColor.array as Float32Array,
@@ -503,6 +571,11 @@ export class SceneRenderer {
     this.scene.traverse(dispose);
     this.skyScene.traverse(dispose);
     this.skyCube.dispose();
+    if (this.patch) {
+      this.patch.rt.dispose();
+      this.patch.mat.dispose();
+      this.patch = null;
+    }
     this.noise3d.dispose();
     for (const geo of [this.geoHi, this.geoMid, this.geoLo, this.plane, this.box]) geo.dispose();
     this.gl.dispose();
