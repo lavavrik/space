@@ -15,8 +15,8 @@ uniform float uTime;
 // it, so they read the same in sunlight and in shadow (render/exposure.ts).
 uniform float uExp;    // exposure
 uniform float uSkyK;   // the sky's level against sunlight (SKY_K)
-uniform float uHeadK;  // headlight: candela → scene units (HEAD_CD × LUX)
-uniform float uFloodK; // the station's floodlights (FLOOD_LUX × LUX)
+uniform float uHeadK;  // headlight: candela → scene units (HEAD_K)
+uniform float uFloodK; // the station's floodlights (FLOOD_K)
 uniform float uWinK;   // lit windows (WINDOW_K)
 varying vec3 vObj; varying vec3 vWN; varying vec3 vWP;
 #pragma farlight_noise

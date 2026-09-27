@@ -8,7 +8,7 @@ import { HyperspaceView } from './Hyperspace';
 import { createNoiseTexture } from './noise3d';
 import { skyColor, skyLook } from '../sim/hyperspace';
 import { CORRIDOR_LEN, corridorGeometry, hullGeometry, interiorGeometry } from './stationMesh';
-import { AutoExposure, FLOOD_LUX, HANGAR_LUX, HEAD_CD, LUX, SKY_K, WINDOW_K } from './exposure';
+import { AutoExposure, FLOOD_K, HEAD_K, INT_K, SKY_K, WINDOW_K } from './exposure';
 import { HdrTarget } from './hdr';
 import { padLocal, stationQuat } from '../sim/stationGeom';
 import { ATMO_FS, BODY_VS, GLOW_FS, GLOW_VS, PLANET_FS, POINT_FS, POINT_VS, RING_FS, SKYPT_FS, SKYPT_VS, SKY_BAKE_FS, SKY_CUBE_FS, SKY_VS, STAR_FS, STATION_FS, STATION_INTERIOR_FS, CORRIDOR_FS } from './shaders';
@@ -65,8 +65,8 @@ export class SceneRenderer {
   /** Station lights in scene units (render/exposure.ts). */
   private readonly headUni = {
     uHeadDir: { value: new THREE.Vector3(0, 0, -1) }, uHeadOn: { value: 1 },
-    uHeadK: { value: HEAD_CD * LUX }, uFloodK: { value: FLOOD_LUX * LUX }, uHeadKi: { value: HEAD_CD / HANGAR_LUX },
-    uIntK: { value: HANGAR_LUX * LUX }, uWinK: { value: WINDOW_K }, uSkyK: { value: SKY_K },
+    uHeadK: { value: HEAD_K }, uFloodK: { value: FLOOD_K }, uHeadKi: { value: HEAD_K / INT_K },
+    uIntK: { value: INT_K }, uWinK: { value: WINDOW_K }, uSkyK: { value: SKY_K },
     ...this.expUni,
   };
   /** HDR frame, metering and tone mapping (render/hdr.ts), and the eye's adaptation. */

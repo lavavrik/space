@@ -82,8 +82,8 @@ void main(){
   vec3 R=reflect(-L,N);
   float s=pow(max(dot(R,V),0.0),60.0)*0.7*spec*diff;
   // the night side is lit only by starlight: sky level (SKY_K), so it goes black against the stars
-  col=col*(diff+0.008e-4)+vec3(1.0,0.95,0.85)*s;
-  col=mix(col,vec3(1.0)*(diff*0.97+0.006e-4),cloud);
+  col=col*(diff+0.0002)+vec3(1.0,0.95,0.85)*s;
+  col=mix(col,vec3(1.0)*(diff*0.97+0.00015),cloud);
   float rim=pow(1.0-max(dot(N,V),0.0),3.0);
   col+=uAtmo*uAtmoK*rim*clamp(ndl+0.25,0.0,1.0)*1.1;
   col=mix(col,uAtmo*diff,uAtmoK*0.08);

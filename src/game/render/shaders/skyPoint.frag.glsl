@@ -6,7 +6,7 @@ uniform float uSkyExp; // SKY_K × exposure (render/exposure.ts)
 void main(){
   float r = length(gl_PointCoord - 0.5) * 2.0;
   float a = exp(-r * r * 4.0) * (1.0 - smoothstep(0.85, 1.0, r));
-  vec3 c = vC * a;
+  vec3 c = vC * a * 1.6; // stars shine brighter than the Milky Way behind them
   float m = max(c.r, max(c.g, c.b));
   c += vec3(max(0.0, m - 0.75) * 0.8);
   gl_FragColor = vec4(c * uSkyExp, 1.0);

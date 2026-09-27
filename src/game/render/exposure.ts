@@ -1,16 +1,16 @@
 /*
  * Auto-exposure: the "eye" adapts to whatever you're looking at, like a camera or a pupil.
  *
- * Scene units. Every shader works in one physical scale ("scene luminance"): a sunlit surface reads
- * ~SUNLIT (0.55) whatever the star, so 1 lux of illumination is LUX = SUNLIT / SUN_LUX. Everything
- * else is placed on that scale:
- *   - the ship's headlight, HEAD_CD candela (a 5 kW LED floodlight, ~500,000 lm in a ~20° cone);
- *   - station floodlights, FLOOD_LUX on the hull; hangar lamps, HANGAR_LUX; lit windows, WINDOW;
- *   - the Milky Way and the stars at SKY_K of their old display level: the real ratio between the
- *     night sky and a sunlit surface is ~1e-8, compressed here to 1e-4 so the eye can still reach
- *     it (fully dark-adapted, MAX_EXP = 1/SKY_K, the sky looks exactly as it did before);
- *   - a star's disc STAR_K times brighter than a sunlit surface (really ~1e5×), so looking at it
- *     dazzles; its glow (the eye's scatter) at GLOW_K.
+ * Scene units. Every shader works in one scale ("scene luminance"): a sunlit surface reads ~SUNLIT
+ * (0.55) whatever the star. Real light levels span far more than is pleasant to watch the eye
+ * chase (night sky ~1e-8 of sunlight, a star's disc ~1e5×), so each source's level relative to
+ * sunlight is squashed as level^GAMMA (0.4): the order stays the same, the range shrinks.
+ *   - the Milky Way and the stars: SKY_K (0.025, from ~1e-4); fully dark-adapted, MAX_EXP =
+ *     1/SKY_K, the sky looks as it always did, and in sunlight the brightest stars still show;
+ *   - station floodlights (30 lux), hangar lamps (500 lux), lit windows, and the ship's
+ *     headlight (a 5 kW LED floodlight, 1.3 million cd, inverse-square; squashed at 100 m);
+ *   - a star's disc STAR_K times a sunlit surface, so looking at it dims the view; its glow (the
+ *     eye's scatter) at GLOW_K.
  * Signal lights (nav, approach, slot rim, pads, the approach corridor, the orbit ring, dust and
  * station beacons) are display-referred instead: they're added after exposure, so they look the
  * same in sunlight and in the dark, like a well-designed beacon does to the eye.
@@ -19,8 +19,8 @@
  * physical shader multiplied by the current exposure (uExp, "pre-exposure", which keeps the
  * values in half-float's range). The frame is shrunk 64× and read back asynchronously; the meter
  * turns that into scene luminance and picks a target exposure (see meter), and the exposure eases
- * toward it in log space: quickly when the view gets brighter, slowly into the dark, as eyes do. A final pass rolls the highlights off
- * with a soft shoulder (linear below 0.8), so a sunlit scene looks as before (exposure ≈ 1).
+ * toward it in log space: quicker when the view gets brighter than into the dark, as eyes do. A
+ * final pass rolls the highlights off with a soft shoulder (linear below 0.8), so a sunlit scene looks as before (exposure ≈ 1).
  *
  * The effects: stars fade next to a sunlit planet and vanish when the sun is in view; in a world's
  * shadow they come back, and a station's floodlights and your headlights become plainly visible.
@@ -28,22 +28,26 @@
 import { THREE } from '../lib/three';
 
 export const SUNLIT = 0.55;
-export const SUN_LUX = 1e5;
-/** Scene units per lux of illumination (times albedo). */
-export const LUX = SUNLIT / SUN_LUX;
-export const HEAD_CD = 1.3e6;
-export const FLOOD_LUX = 30;
-export const HANGAR_LUX = 500;
-/** Lit windows, relative to the old display level (~200 cd/m²). */
-export const WINDOW_K = 8e-3;
+const SUN_LUX = 1e5;
+/** How much the real range of light levels is squashed (see above). */
+const GAMMA = 0.4;
+/** Scene brightness of a white surface lit by `lux`, squashed. */
+const lit = (lux: number) => SUNLIT * (lux / SUN_LUX) ** GAMMA;
+/** Floodlights on the hull, and the hangar (its lamps ≙ 1.0 in the interior shader). */
+export const FLOOD_K = lit(30),
+  INT_K = lit(500);
+/** Headlight: K / d² in the shaders, matching lit() at 100 m (1.3 million cd). */
+export const HEAD_K = lit(1.3e6 / 100 ** 2) * 100 ** 2;
+/** Lit windows (~200 cd/m²) against their old display level. */
+export const WINDOW_K = 0.18;
 /** The sky (Milky Way, stars, distant worlds as dots) against sunlit surfaces. */
-export const SKY_K = 1e-4;
+export const SKY_K = 0.025;
 /** A star's disc and its glow against a sunlit surface. */
-export const STAR_K = 1000,
+export const STAR_K = 16,
   GLOW_K = 2;
 
 /** Exposure limits: fully dark-adapted shows the sky as it used to be. */
-const MIN_EXP = 0.02,
+const MIN_EXP = 0.25,
   MAX_EXP = 1 / SKY_K;
 /** The centre-weighted log-average lands here… */
 const KEY = 0.18;
@@ -55,10 +59,10 @@ const WHITE = 0.9;
  */
 const SUNNY = 0.05;
 /** Even a small patch can't go above this: a star's glare dims the view (a sunlit moon barely does). */
-const GLARE = 30;
+const GLARE = 4;
 /** Adaptation rates (1/s, in log exposure): toward a brighter view, and into the dark. */
-const ADAPT_BRIGHT = 3,
-  ADAPT_DARK = 0.8;
+const ADAPT_BRIGHT = 2,
+  ADAPT_DARK = 1;
 
 /**
  * Asynchronous readback of a small float render target: readPixels into a pixel-pack buffer,

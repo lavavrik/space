@@ -9,11 +9,11 @@ uniform float uPadOn;    // 1 if a pad is granted at this station
 uniform float uTime;
 uniform float uSeed;
 varying vec3 vObj; varying vec3 vWN; varying vec3 vWP;
-// Lamp light is physical (the lamps ≙ 1.0 here, HANGAR_LUX), scaled to scene units by uIntK and
+// Lamp light is physical (the lamps ≙ 1.0 here, 500 lux), scaled to scene units by uIntK and
 // then by the exposure; pad markers and the tunnel guide lights are display-referred signals,
 // added after it (render/exposure.ts).
 uniform float uHeadKi; // headlight: candela → brightness against the hangar lamps
-uniform float uIntK;   // HANGAR_LUX × LUX
+uniform float uIntK;   // INT_K
 uniform float uExp;    // exposure
 #pragma farlight_headlight
 
