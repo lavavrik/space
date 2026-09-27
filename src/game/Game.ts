@@ -4,6 +4,7 @@ import { HudStore } from './hud/HudStore';
 import { onPress, onRepeat, onWheel } from './input/controls';
 import { Input } from './input/Input';
 import { THREE } from './lib/three';
+import { fmtDist } from './format';
 import { Overlay } from './render/Overlay';
 import { defaultAvionics, type ComputerKind } from './avionics/catalog';
 import { PerfMonitor } from './debug/Perf';
@@ -23,7 +24,7 @@ import { TEMP, toggleRadiators, type HeatBudget } from './sim/thermal';
 import { STOCK_BATTERY, emptyOutfit } from './outfit/catalog';
 import { ZOOM_START, updatePeriscope } from './sim/periscope';
 import { startPivot } from './sim/pivot';
-import { launch, refuelDocked, type Dock } from './sim/docking';
+import { dockKey, launch, refuelDocked, type Dock } from './sim/docking';
 import type { AutoPhase } from './sim/autodock';
 import { fitBattery, fitModule, removeModule } from './outfit/fit';
 
@@ -233,7 +234,13 @@ export class Game {
     if (kind === 'outfit') {
       this.avionicsVisible = false;
       this.outfitVisible = true;
-    } else onPress(this, { orbit: 'KeyO', scanner: 'KeyY', nav: 'KeyM', dock: 'KeyK' }[kind]);
+    } else if (kind === 'dock') {
+      // the docking tile: dock (or launch), never K's other job of calling a tanker
+      if (!dockKey(this)) {
+        const unit = this.ship.avionics.dock;
+        this.showMsg(`Target a station to dock at (within ${unit?.caps.clearance ? fmtDist(unit.caps.range) : '10 km'})`, 'warn');
+      }
+    } else onPress(this, { orbit: 'KeyO', scanner: 'KeyY', nav: 'KeyM' }[kind]);
     this.invalidateHud();
   }
 
