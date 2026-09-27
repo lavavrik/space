@@ -50,14 +50,16 @@ void main(){
   col+=neb*vec3(0.05,0.012,0.035);
   float neb2=pow(max(fbm(d*1.8+31.0,4),0.0),2.0);
   col+=neb2*vec3(0.008,0.02,0.04);
-  // Three nebulae, all well off the galactic belt (latitudes ~35–55°) so the Milky Way stays clean:
-  // an emission cloud (H-alpha red, O III teal core), a blue reflection nebula and a small
-  // planetary ring. Kept faint (NEB_ALPHA) so they tint the sky rather than dominate it.
-  const float NEB_ALPHA=0.5;
-  vec3 ha=vec3(0.62,0.1,0.2), oiii=vec3(0.1,0.42,0.4), refl=vec3(0.16,0.26,0.6);
-  vec3 neb3=nebula(d,gn*0.75+vec3(0.6,0.0,-0.5),0.18,1.0,ha,oiii*0.8);
-  neb3+=nebula(d,-gn*0.65+vec3(-0.5,0.0,0.65),0.12,23.0,refl,vec3(0.35,0.45,0.8));
-  neb3+=ringNebula(d,gn*0.9+vec3(-0.75,0.0,-0.45),0.035);
+  // Nebulae, all well off the galactic belt (latitudes ~35–55°) so the Milky Way stays clean:
+  // three blue reflection nebulae (dust lit by hot stars, each a slightly different hue) and two
+  // small planetary rings. Kept faint (NEB_ALPHA, RING_ALPHA) so they tint the sky rather than
+  // dominate it.
+  const float NEB_ALPHA=0.5, RING_ALPHA=0.3;
+  vec3 neb3=nebula(d,-gn*0.65+vec3(-0.5,0.0,0.65),0.12,23.0,vec3(0.16,0.26,0.6),vec3(0.35,0.45,0.8));
+  neb3+=nebula(d,gn*0.8+vec3(0.5,0.0,0.55),0.1,41.0,vec3(0.22,0.22,0.62),vec3(0.45,0.42,0.85));
+  neb3+=nebula(d,-gn*0.7+vec3(0.7,0.0,-0.4),0.14,57.0,vec3(0.12,0.32,0.58),vec3(0.3,0.55,0.8));
   col+=neb3*NEB_ALPHA;
+  vec3 rings=ringNebula(d,gn*0.9+vec3(-0.75,0.0,-0.45),0.035)+ringNebula(d,-gn*0.9+vec3(-0.3,0.0,-0.8),0.03);
+  col+=rings*RING_ALPHA;
   gl_FragColor=vec4(col,1.0);
 }
