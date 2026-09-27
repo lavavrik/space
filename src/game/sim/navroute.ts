@@ -14,7 +14,8 @@
  * needed), an autopilot hold skimming a star's corona to refuel, and finally the autopilot's orbit
  * or station rendezvous. Disengaging the autopilot during a leg cancels the route.
  */
-import { JUMP_CHARGE_TIME, JUMP_RANGE, JUMP_TUNNEL_BASE, JUMP_TUNNEL_PER_LY, SHIP, jumpCost } from '../constants';
+import { JUMP_CHARGE_TIME, JUMP_RANGE, JUMP_TUNNEL_BASE, JUMP_TUNNEL_PER_LY, LY, SHIP, jumpCost } from '../constants';
+import { fmtDist } from '../format';
 import type { Game } from '../Game';
 import type { StarSystem, Target } from '../types';
 import { systemsNear } from '../universe/galaxy';
@@ -244,15 +245,9 @@ export interface NavResult {
   dist: number; // ly from the sort origin (bodies in this system: their distance in ly, ~0)
 }
 
-/** Planets, moons and stations of a system, generated on demand (cheap: ~0.05 ms) and cached. */
 const contents = new Map<string, { bodies: { name: string; kind: 'planet' | 'moon'; type: string }[]; stations: string[] }>();
-function systemContents(g: Game, sys: StarSystem) {
-  if (sys.id === g.cur.sys.id) {
-    return {
-      bodies: g.cur.bodies.filter((b) => b.kind !== 'star').map((b) => ({ name: b.name, kind: b.kind as 'planet' | 'moon', type: b.typeName })),
-      stations: g.cur.stations.map((s) => s.name),
-    };
-  }
+/** Planets, moons and stations of another system, generated on demand (cheap: ~0.05 ms) and cached (this system's come from the live scene). */
+function systemContents(sys: StarSystem) {
   let c = contents.get(sys.id);
   if (!c) {
     if (contents.size > 400) contents.clear();
@@ -266,31 +261,58 @@ function systemContents(g: Game, sys: StarSystem) {
   return c;
 }
 
+/** Distance to something in this system, for the dropdown: under 1 km it just says so. */
+function fmtNear(m: number) {
+  if (m < 1000) return '<1 km';
+  if (m < 1e4) return `${(m / 1000).toFixed(1)} km`;
+  return fmtDist(m);
+}
+
 /**
  * Nav search: stars in the sky whose names contain the query, plus planets, moons and stations in
  * this system, in systems within jump range, and in any system whose name the query names (so
  * "sylios 2" finds Sylios 2 and its moons). Nearest first, from the ship or the last waypoint.
+ * With no query it lists what's nearest: this system's bodies and stations, then the closest stars.
+ * Things in this system show their actual distance from the ship (to the surface, or the hull).
  */
-export function searchNav(g: Game, query: string, from: 'ship' | 'last', limit = 10): NavResult[] {
+export function searchNav(g: Game, query: string, from: 'ship' | 'last', limit = 12): NavResult[] {
   const q = query.trim().toLowerCase();
-  if (!q) return [];
+  const match = (name: string) => !q || name.toLowerCase().includes(q);
   const last = g.navPoints[g.navPoints.length - 1];
-  const origin = from === 'last' && last ? last.pos : g.cur.sys.pos;
+  const fromLast = from === 'last' && !!last;
+  const origin = fromLast ? last.pos : g.cur.sys.pos;
   const out: NavResult[] = [];
   const ly = (s: StarSystem) => s.pos.distanceTo(origin);
-  for (const s of g.sky) {
-    if (s.id !== g.cur.sys.id && s.id !== last?.id && s.name.toLowerCase().includes(q))
-      out.push({ key: `star:${s.id}`, kind: 'star', name: s.name, detail: `${s.star.spec} star · ${ly(s).toFixed(1)} ly`, sys: s, dist: ly(s) });
+
+  // this system: live positions, real distances
+  const here = g.cur.sys;
+  const hereDetail = (m: number) => (fromLast ? `here · ${ly(here).toFixed(1)} ly from ${last.name}` : fmtNear(m));
+  const hereKey = (m: number) => (fromLast ? ly(here) : m / LY);
+  for (const b of g.cur.bodies) {
+    if (b.kind === 'star' || !match(b.name)) continue;
+    const m = Math.max(0, b.pos.distanceTo(g.ship.pos) - b.radius);
+    out.push({ key: `${b.kind}:${here.id}:${b.name}`, kind: b.kind, name: b.name, detail: `${b.typeName} · ${hereDetail(m)}`, sys: here, dist: hereKey(m) });
   }
-  // systems whose bodies and stations are searched too
-  const near = g.sky.filter((s) => s.id === g.cur.sys.id || s.pos.distanceTo(g.cur.sys.pos) <= JUMP_RANGE || (last && s.id === last.id) || q.startsWith(s.name.toLowerCase()) || s.name.toLowerCase().startsWith(q));
-  if (!near.includes(g.cur.sys)) near.push(g.cur.sys);
-  for (const s of near) {
-    const c = systemContents(g, s);
-    const here = s.id === g.cur.sys.id;
-    const where = here ? 'here' : `${s.name} · ${ly(s).toFixed(1)} ly`;
-    for (const b of c.bodies) if (b.name.toLowerCase().includes(q)) out.push({ key: `${b.kind}:${s.id}:${b.name}`, kind: b.kind, name: b.name, detail: `${b.type} · ${where}`, sys: s, dist: here ? -1 : ly(s) });
-    for (const n of c.stations) if (n.toLowerCase().includes(q)) out.push({ key: `station:${s.id}:${n}`, kind: 'station', name: n, detail: `station · ${where}`, sys: s, dist: here ? -1 : ly(s) });
+  for (const st of g.cur.stations) {
+    if (!match(st.name)) continue;
+    const m = Math.max(0, st.pos.distanceTo(g.ship.pos) - st.size / 2);
+    out.push({ key: `station:${here.id}:${st.name}`, kind: 'station', name: st.name, detail: `station · ${st.parent.name} · ${hereDetail(m)}`, sys: here, dist: hereKey(m) });
+  }
+
+  // stars
+  for (const s of g.sky) {
+    if (s.id !== here.id && s.id !== last?.id && match(s.name)) out.push({ key: `star:${s.id}`, kind: 'star', name: s.name, detail: `${s.star.spec} star · ${ly(s).toFixed(1)} ly`, sys: s, dist: ly(s) });
+  }
+
+  // bodies and stations of other systems: those within jump range, the last stop, and any the query names
+  if (q) {
+    const others = g.sky.filter((s) => s.id !== here.id && (s.pos.distanceTo(here.pos) <= JUMP_RANGE || s.id === last?.id || q.startsWith(s.name.toLowerCase()) || s.name.toLowerCase().startsWith(q)));
+    for (const s of others) {
+      const c = systemContents(s);
+      const where = `${s.name} · ${ly(s).toFixed(1)} ly`;
+      for (const b of c.bodies) if (match(b.name)) out.push({ key: `${b.kind}:${s.id}:${b.name}`, kind: b.kind, name: b.name, detail: `${b.type} · ${where}`, sys: s, dist: ly(s) });
+      for (const n of c.stations) if (match(n)) out.push({ key: `station:${s.id}:${n}`, kind: 'station', name: n, detail: `station · ${where}`, sys: s, dist: ly(s) });
+    }
   }
   return out.sort((a, b) => a.dist - b.dist || a.name.localeCompare(b.name)).slice(0, limit);
 }

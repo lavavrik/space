@@ -79,7 +79,7 @@ const KIND_ICON = { star: '★', planet: '◯', moon: '◦', station: '▢' } as
 
 /**
  * Search with a dropdown: stars, planets, moons and stations. The dropdown opens under the field
- * while it has focus and a query; ↑ / ↓ move the highlight, Enter adds it, Esc closes. Sorting
+ * as soon as it has focus (listing what's nearest until you type); ↑ / ↓ move the highlight, Enter adds it, Esc closes. Sorting
  * (from the ship or the last stop) sits in the dropdown's header.
  */
 function SearchBox({ n, a }: { n: NavView; a: NavActions }) {
@@ -116,7 +116,7 @@ function SearchBox({ n, a }: { n: NavView; a: NavActions }) {
           e.preventDefault();
         }}
       />
-      {open && n.query && (
+      {open && (
         <div className="navdrop">
           <div className="navsort">
             nearest to
@@ -140,7 +140,7 @@ function SearchBox({ n, a }: { n: NavView; a: NavActions }) {
               ))}
             </ul>
           ) : (
-            <div className="okeys">Nothing matching "{n.query}" nearby</div>
+            <div className="okeys">{n.query ? `Nothing matching "${n.query}" nearby` : 'Nothing nearby'}</div>
           )}
         </div>
       )}

@@ -307,6 +307,7 @@ function navView(g: Game): NavView {
     points: [...g.navPoints.map((p) => p.name), ...(g.navFinal ? [`${g.navFinal.kind === 'station' ? '▢' : '◯'} ${g.navFinal.name}`] : [])],
     query: g.navQuery,
     sortFrom: g.navSortFrom,
+    // computed while the panel is open (not only with a query): the dropdown lists what's nearest on focus
     results: searchNav(g, g.navQuery, g.navSortFrom).map(({ key, kind, name, detail }) => ({ key, kind, name, detail })),
   };
 }
