@@ -381,12 +381,14 @@ export class SceneRenderer {
   private attachStar(b: Star): BodyView {
     const group = new THREE.Group();
     this.scene.add(group);
-    const mesh = new THREE.Mesh(this.geoMid, new THREE.ShaderMaterial({ vertexShader: BODY_VS, fragmentShader: STAR_FS, uniforms: { uColor: { value: b.color }, uTime: { value: 0 }, uSeed: { value: b.seed }, uExp: this.expUni.uExp } }));
+    const mesh = new THREE.Mesh(this.geoMid, new THREE.ShaderMaterial({ vertexShader: BODY_VS, fragmentShader: STAR_FS, uniforms: { uColor: { value: b.color }, uTime: { value: 0 }, uSeed: { value: b.seed } } }));
     mesh.scale.setScalar(b.radius);
     group.add(mesh);
     const glow = new THREE.Mesh(
       this.plane,
-      new THREE.ShaderMaterial({ vertexShader: GLOW_VS, fragmentShader: GLOW_FS, uniforms: { uColor: { value: b.color.clone().lerp(new THREE.Color(1, 1, 1), 0.2) }, uI: { value: 1 }, uExp: this.expUni.uExp }, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }),
+      new THREE.ShaderMaterial({ vertexShader: GLOW_VS, fragmentShader: GLOW_FS, uniforms: { uColor: { value: b.color.clone().lerp(new THREE.Color(1, 1, 1), 0.2) }, uI: { value: 1 } }, transparent: true, depthWrite: false,
+        // colour adds; alpha (0) masks it out of the exposure meter (render/hdr.ts)
+        blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.SrcAlphaFactor }),
     );
     glow.frustumCulled = false;
     this.scene.add(glow);

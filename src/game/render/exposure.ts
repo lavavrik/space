@@ -9,10 +9,8 @@
  *     1/SKY_K, the sky looks as it always did, and in sunlight the brightest stars still show;
  *   - station floodlights (30 lux), hangar lamps (500 lux), lit windows, and the ship's
  *     headlight (a 5 kW LED floodlight, 1.3 million cd, inverse-square; squashed at 100 m);
- *   - a star's disc STAR_K times a sunlit surface, so looking at it dims the view; its glow (the
- *     eye's scatter) at GLOW_K.
- * Signal lights (nav, approach, slot rim, pads, the approach corridor, the orbit ring, dust and
- * station beacons) are display-referred instead: they're added after exposure, so they look the
+ * Stars' discs and glow, and signal lights (nav, approach, slot rim, pads, the approach corridor,
+ * the orbit ring, dust and station beacons) are display-referred instead: they're added after exposure, so they look the
  * same in sunlight and in the dark, like a well-designed beacon does to the eye.
  *
  * Pipeline (render/SceneRenderer.ts): the frame is drawn into a half-float target, with every
@@ -22,7 +20,7 @@
  * toward it in log space: quicker when the view gets brighter than into the dark, as eyes do. A
  * final pass rolls the highlights off with a soft shoulder (linear below 0.8), so a sunlit scene looks as before (exposure ≈ 1).
  *
- * The effects: stars fade next to a sunlit planet and vanish when the sun is in view; in a world's
+ * The effects: stars fade next to a sunlit planet (the system's star in view doesn't dim them); in a world's
  * shadow they come back, and a station's floodlights and your headlights become plainly visible.
  */
 import { THREE } from '../lib/three';
@@ -42,9 +40,6 @@ export const HEAD_K = lit(1.3e6 / 100 ** 2) * 100 ** 2;
 export const WINDOW_K = 0.18;
 /** The sky (Milky Way, stars, distant worlds as dots) against sunlit surfaces. */
 export const SKY_K = 0.025;
-/** A star's disc and its glow against a sunlit surface. */
-export const STAR_K = 16,
-  GLOW_K = 2;
 
 /** Exposure limits: fully dark-adapted shows the sky as it used to be. */
 const MIN_EXP = 0.25,
@@ -58,8 +53,6 @@ const WHITE = 0.9;
  * as a photographer's does; the cap lifts steeply as they shrink ((SUNNY / highlights)⁴ below it).
  */
 const SUNNY = 0.05;
-/** Even a small patch can't go above this: a star's glare dims the view (a sunlit moon barely does). */
-const GLARE = 4;
 /** Adaptation rates (1/s, in log exposure): toward a brighter view, and into the dark. */
 const ADAPT_BRIGHT = 2,
   ADAPT_DARK = 1;
@@ -169,8 +162,7 @@ const scratch: number[] = [];
  *     bright moon doesn't drag a starry view dark, and black sky doesn't wash out a planet);
  *   - but the brightest HIGHLIGHT_SHARE of the frame is held at WHITE, so a sunlit world or a
  *     star's glare that fills a real part of the view pulls the exposure down;
- *   - and while sunlit things fill that share, it stays at 1 (SUNNY);
- *   - and the single brightest patch stays under GLARE, so looking at a star dims everything.
+ *   - and while sunlit things fill that share, it stays at 1 (SUNNY).
  */
 export function meter(
   data: Float32Array,
@@ -208,7 +200,6 @@ export function meter(
     mean > 0 ? KEY / mean : MAX_EXP,
     high > 0 ? WHITE / high : MAX_EXP,
     high > 0 ? Math.max(1, (SUNNY / high) ** 4) : MAX_EXP,
-    scratch[0] > 0 ? GLARE / scratch[0] : MAX_EXP,
   );
   return Math.min(MAX_EXP, Math.max(MIN_EXP, t));
 }
