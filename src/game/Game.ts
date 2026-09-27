@@ -15,14 +15,10 @@ import { closePlanner, openPlanner, requestDisengage } from './sim/planner';
 import { update } from './sim/update';
 import type { Body, CurrentSystem, Jump, Message, MsgKind, Planner, Power, Ship, StarSystem, Station, Target } from './types';
 import { systemsNear } from './universe/galaxy';
-import { advanceBodies } from './sim/frame';
 import { updateBodies } from './sim/kepler';
 import { updateStations } from './sim/stations';
 import { buildStations } from './universe/stations';
 import { buildSystem } from './universe/system';
-
-const qa = new THREE.Quaternion();
-const AY = new THREE.Vector3(0, 1, 0);
 
 function newShip(): Ship {
   return {
@@ -63,8 +59,7 @@ export class Game {
   warned: Record<string, boolean> = {};
   msg: Message = { text: '', kind: '', on: false, t: 0 };
 
-  started = false;
-  helpVisible = false; // Tab opens the controls; the start screen lists the keys
+  helpVisible = false; // Tab opens the controls (the hint under the system name says so)
   /** Body info panel (I), shown in place of the controls list while open. */
   infoVisible = false;
   /** Avionics panel (U): the fitted computers; shares the left column with info and controls. */
@@ -134,7 +129,7 @@ export class Game {
         if (!hit && !locked) this.input.requestLock();
         this.invalidateHud();
       },
-      isActive: () => this.started,
+      isActive: () => true,
       onPointerLockChange: (locked) => {
         this.pointerLocked = locked;
         this.invalidateHud();
@@ -144,6 +139,8 @@ export class Game {
 
     this.resize();
     placeAtHome(this);
+    // no title card: you're in the pilot's seat from the first frame (click to capture the mouse)
+    this.showMsg('Engines online · hold W to thrust, J for FTL');
     this.publishHud();
     this.raf = requestAnimationFrame((t) => {
       this.last = t;
@@ -153,16 +150,6 @@ export class Game {
 
   get keys() {
     return this.input.keys;
-  }
-
-  /** Leave the start screen and take control. */
-  begin() {
-    if (this.started) return;
-    this.started = true;
-    this.input.requestLock();
-    this.pointerLocked = this.input.isLocked();
-    this.showMsg('Engines online · hold W to thrust, J for FTL');
-    this.publishHud();
   }
 
   showMsg(text: string, kind: MsgKind = '') {
@@ -267,14 +254,7 @@ export class Game {
     perf.frameStart(now - this.last);
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
-    if (this.started) update(this, dt);
-    else {
-      // idle drift behind the start screen
-      this.simTime += dt;
-      advanceBodies(this);
-      this.qInv.copy(this.ship.q).invert();
-      this.ship.q.multiply(qa.setFromAxisAngle(AY, -0.012 * dt));
-    }
+    update(this, dt);
     perf.mark('sim');
     perf.gpuBegin();
     this.scene.render(this);

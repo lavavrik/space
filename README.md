@@ -18,11 +18,11 @@ The build is a static site with relative paths, so `dist/` can be hosted anywher
 ## Code layout
 ```
 src/
-  main.tsx, ui/            React: mounts the game and renders the HUD panels, start screen and toasts
+  main.tsx, ui/            React: mounts the game and renders the HUD panels and toasts
     hooks/useGame.ts       creates the Game and subscribes to its HUD snapshots
     components/            Hud (location, gauges, flight cluster, target card), BodyInfo, ManeuverGuide,
                            OrbitPlanner, HelpPanel, StartScreen, Toast
-  styles/                  global CSS (theme, HUD, panels, start screen)
+  styles/                  global CSS (theme, HUD, panels)
   game/                    framework-free game engine
     Game.ts                owns all state and runs the frame loop (simulate → render → overlay → HUD)
     constants.ts, types.ts units, ship specs, drive costs; typed bodies, ship, autopilot…

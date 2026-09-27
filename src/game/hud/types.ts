@@ -156,7 +156,6 @@ export interface GuideView {
 }
 
 export interface HudSnapshot {
-  started: boolean;
   helpVisible: boolean;
   info: InfoView | null;
   showRelock: boolean;

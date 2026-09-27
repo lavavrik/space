@@ -12,7 +12,6 @@ import { adjustAlt, closePlanner, engageOrbit, openPlanner, requestDisengage, re
 export function onPress(g: Game, code: string) {
   const { ship, keys } = g;
   if (code === 'Backquote') g.perf.toggle(); // performance overlay, available any time
-  if (!g.started) return;
   g.invalidateHud();
   if (code === 'Tab') g.helpVisible = !g.helpVisible;
   // info (I), avionics (U) and influences (B) share the left column: opening one closes the others
@@ -184,5 +183,5 @@ export function onRepeat(g: Game, code: string) {
 }
 
 export function onWheel(g: Game, deltaY: number) {
-  if (g.planner && g.started) adjustAlt(g, deltaY < 0 ? 1.1 : 1 / 1.1);
+  if (g.planner) adjustAlt(g, deltaY < 0 ? 1.1 : 1 / 1.1);
 }

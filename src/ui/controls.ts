@@ -81,18 +81,3 @@ export const KEYBOARD: Keycap[][] = [
   [['Shift', 2.25, 'flight'], ['Z', 1, 'flight'], ['X', 1, 'flight'], ['C', 1, 'flight'], ['V', 1, 'flight'], ['B', 1, 'target'], ['N', 1, 'ftl'], ['M', 1, 'ftl'], ['↑', 1, 'flight']],
   [['Ctrl', 1.5, 'flight'], ['Space', 5.5, 'flight'], ['', 1.25], ['←', 1, 'flight'], ['↓', 1, 'flight'], ['→', 1, 'flight']],
 ];
-
-/** Condensed bindings for the start screen. */
-export const START_KEYS: [string, string][] = [
-  ['W / S', 'forward / back'],
-  ['A / D', 'strafe'],
-  ['Space / Ctrl or C', 'up / down'],
-  ['Mouse · Q / E', 'steer · roll'],
-  ['J · F', 'FTL drive · cruise'],
-  ['T · G · click', 'target'],
-  ['N · H', 'choose star · jump'],
-  ['Shift · X', 'boost · stop'],
-  ['O', 'orbit planner'],
-  ['Z · V', 'flight assist · decouple'],
-  ['P · K', 'sun-track · tanker'],
-];

@@ -7,7 +7,6 @@ import { FlightCluster, Location, ShipGauges, TargetCard } from './components/Hu
 import { ManeuverGuide } from './components/ManeuverGuide';
 import { NavPanel } from './components/NavPanel';
 import { OrbitPlanner } from './components/OrbitPlanner';
-import { StartScreen } from './components/StartScreen';
 import { Toast } from './components/Toast';
 import { useGame, useHud } from './hooks/useGame';
 
@@ -50,7 +49,6 @@ export function App() {
             </div>
             <TargetCard t={hud.target} />
           </div>
-          {!hud.started && <StartScreen onStart={() => game!.begin()} />}
         </>
       )}
     </>

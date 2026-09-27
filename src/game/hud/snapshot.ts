@@ -23,10 +23,9 @@ const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 
 export function buildSnapshot(g: Game): HudSnapshot {
   return {
-    started: g.started,
     helpVisible: g.helpVisible,
     info: g.infoVisible && g.target ? buildInfo(g, g.target) : null,
-    showRelock: g.started && !g.pointerLocked,
+    showRelock: !g.pointerLocked,
     toast: { text: g.msg.text, kind: g.msg.kind, visible: g.msg.on },
     location: location(g),
     flight: flight(g),
