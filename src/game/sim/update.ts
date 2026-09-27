@@ -192,7 +192,7 @@ function updateJump(g: Game, dt: number) {
     }
   } else if (jump.phase === 'tunnel') {
     if (jump.t <= 0) {
-      arriveAt(g, jump.dest);
+      arriveAt(g, jump.dest, jump.dest.pos.clone().sub(jump.from));
       g.flash = 1;
       const s = g.cur.sys.star;
       g.showMsg(`Arrived at ${g.cur.sys.name} · ${s.spec} · throttle up with W`, 'ftl');

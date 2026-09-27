@@ -267,17 +267,21 @@ export function startJump(g: Game) {
 }
 
 /** Load the destination system and drop the ship in, in FTL, facing the star. */
-export function arriveAt(g: Game, sys: StarSystem) {
+export function arriveAt(g: Game, sys: StarSystem, travel?: THREE.Vector3) {
   const { ship } = g;
   g.loadSystem(sys);
+  // Come out on the near side of the star, on the line you flew in along, and keep the ship's
+  // attitude: the transit flew nose-first at the star, so you're still facing it and the sky (the
+  // Milky Way is fixed in galactic space) doesn't jump. Without a travel direction (debug), a
+  // seeded side and a turn to face the star.
   const r = mulberry32(sys.seed + 5);
-  const dir = new THREE.Vector3(rr(r, -1, 1), rr(r, 0.15, 0.5), rr(r, -1, 1)).normalize();
+  const dir = travel ? travel.clone().normalize().negate() : new THREE.Vector3(rr(r, -1, 1), rr(r, 0.15, 0.5), rr(r, -1, 1)).normalize();
   // drop in where the starlight is ARRIVE_FLUX × Earth's: close enough to see the star as a disc
   // (~2.4° for a Sun-like star) and just outside the corona scoop, far enough that the hull only
   // warms slowly (it would settle around 470 K side-on, over hours; see docs/thermal.md)
   const s = g.cur.star;
   ship.pos.copy(s.pos).addScaledVector(dir, fluxDist(s.L, ARRIVE_FLUX, s.radius));
-  lookAt(ship, g.cur.star.pos);
+  if (!travel) lookAt(ship, g.cur.star.pos);
   ship.vel.set(0, 0, 0);
   resetFrame(g, dominantBody(g.cur, ship.pos));
   ship.mode = 'ftl';
