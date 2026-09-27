@@ -103,6 +103,9 @@ export interface InfluencesView {
   heat: [string, string | Readout][];
 }
 
+/** Icon per kind of module (see ui/components/icons.ts). */
+export type ModuleIcon = 'battery' | 'scoop' | 'radiator' | 'heatpump' | 'empty';
+
 /** One fitted computer in the avionics panel (U). */
 export interface AvionicsSlotView {
   id: ComputerKind | 'outfit'; // what opening this entry does (see Game.openAvionics)
@@ -112,6 +115,9 @@ export interface AvionicsSlotView {
   active: boolean; // busy (flying, scanning, routing)
   kind: string; // ORBIT COMPUTER, SCANNER, NAVIGATION
   unit: string; // HX-9100 Periastron, or 'none fitted'
+  model: string; // HX-9100 (the tile's short label)
+  /** Outfit tile: the battery and each fitted module, as icons. */
+  mods?: { icon: ModuleIcon; title: string }[];
   maker: string;
   blurb: string;
   specs: [string, string][];
@@ -131,7 +137,7 @@ export interface OutfitView {
   station: string | null; // the station that can fit modules right now
   battery: { unit: string; specs: string; options: { id: string; unit: string; specs: string; current: boolean }[] };
   hint: string; // how to get to one, when not alongside
-  slots: { unit: string; blurb: string; specs: string; empty: boolean }[];
+  slots: { unit: string; blurb: string; specs: string; empty: boolean; icon: ModuleIcon }[];
   catalogue: { id: string; unit: string; kind: string; blurb: string; specs: string }[];
   radiators: { fitted: boolean; out: number; deploying: boolean; status: string };
   pump: { fitted: boolean; auto: boolean; status: string };

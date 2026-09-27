@@ -1,32 +1,53 @@
 import type { ComputerKind } from '../../game/avionics/catalog';
 import type { AvionicsSlotView, ElectricalView } from '../../game/hud/types';
 import { ElectricalSchematic } from './ElectricalSchematic';
+import { AVIONICS_ICONS, MODULE_ICONS } from './icons';
 import { Panel, Row, cx } from './primitives';
 
 /**
- * Ship stats (U). Avionics: a table of contents for the ship's computers (and the outfit). Each entry shows its key, unit, what
- * it's for and what it's doing now; clicking it (with the mouse free) opens its tool, like the key.
- * Its specs follow on one line.
+ * Ship stats (U). Avionics as a 2 × 2 grid of tiles, one per computer (and the outfit): icon, key,
+ * kind, model and what it's doing now; the full unit name, what it's for and its specs are in the
+ * tile's tooltip. Clicking a tile (or pressing its key) opens its tool. Below: the electrical
+ * schematic, which gets the room the tiles save.
  */
 export function AvionicsPanel({ slots, electrical, onOpen }: { slots: AvionicsSlotView[]; electrical: ElectricalView | null; onOpen: (kind: ComputerKind | 'outfit') => void }) {
   return (
     <Panel name="avionics" id="avionics" className="pan" title="SHIP" right="U HIDES">
       <div className="isec first">AVIONICS</div>
-      {slots.map((s) => (
-        <div key={s.kind} className={cx('avslot', s.active && 'busy')}>
-          <button type="button" className="aventry" onClick={() => onOpen(s.id)} disabled={s.unit === 'none fitted'}>
-            <kbd>{s.key}</kbd>
-            <span className="avtext">
-              <span className="avkind">{s.kind}</span>
-              <span className="avunit">{s.unit}</span>
-              <span className="avdoes">{s.does}</span>
-              <span className={cx('avstatus', s.status.warn && 'warnc')}>{s.status.text}</span>
-            </span>
-          </button>
-          {s.specs.length > 0 && <div className="avspecs">{s.specs.map(([, v]) => v).join(' · ')}</div>}
-        </div>
-      ))}
-      <div className="okeys">Click an entry or press its key</div>
+      <div className="avgrid">
+        {slots.map((s) => {
+          const I = AVIONICS_ICONS[s.id];
+          const tip = [s.unit, s.maker, s.does, s.blurb, ...s.specs.map(([, v]) => v)].filter(Boolean).join('\n');
+          return (
+            <button key={s.kind} type="button" className={cx('avtile', s.active && 'busy')} title={tip} onClick={() => onOpen(s.id)} disabled={s.unit === 'none fitted'}>
+              <span className="avicon">
+                <I weight="duotone" />
+              </span>
+              <span className="avtext">
+                <span className="avkind">
+                  {s.kind}
+                  <kbd>{s.key}</kbd>
+                </span>
+                <span className="avunit">{s.model}</span>
+                {s.mods ? (
+                  <span className="avmods">
+                    {s.mods.map((m, i) => {
+                      const M = MODULE_ICONS[m.icon];
+                      return (
+                        <span key={i} className={cx('avmod', m.icon === 'empty' && 'empty')} title={m.title}>
+                          <M weight="bold" />
+                        </span>
+                      );
+                    })}
+                  </span>
+                ) : (
+                  <span className={cx('avstatus', s.status.warn && 'warnc')}>{s.status.text}</span>
+                )}
+              </span>
+            </button>
+          );
+        })}
+      </div>
       {electrical && (
         <>
           <div className="isec">ELECTRICAL</div>

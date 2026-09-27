@@ -1,5 +1,13 @@
 import type { OutfitView } from '../../game/hud/types';
+import { BatteryFull } from '@phosphor-icons/react';
+import type { ModuleIcon } from '../../game/hud/types';
+import { MODULE_ICONS } from './icons';
 import { Panel, cx } from './primitives';
+
+function SlotIcon({ icon }: { icon: ModuleIcon }) {
+  const I = MODULE_ICONS[icon];
+  return <I weight="bold" />;
+}
 
 interface Actions {
   battery: (id: string) => void;
@@ -20,7 +28,9 @@ export function OutfitPanel({ v, act }: { v: OutfitView; act: Actions }) {
       <div className="ohint">{v.station ? `Alongside ${v.station} · pick a module for a slot` : v.hint}</div>
       <div className="oslot">
         <div className="gtop">
-          <span>BATTERY</span>
+          <span className="oicon">
+            <BatteryFull weight="bold" /> BATTERY
+          </span>
           <b>{v.battery.unit}</b>
         </div>
         <div className="avspecs">{v.battery.specs}</div>
@@ -37,7 +47,9 @@ export function OutfitPanel({ v, act }: { v: OutfitView; act: Actions }) {
       {v.slots.map((s, i) => (
         <div key={i} className={cx('oslot', s.empty && 'empty')}>
           <div className="gtop">
-            <span>SLOT {i + 1}</span>
+            <span className="oicon">
+              <SlotIcon icon={s.icon} /> SLOT {i + 1}
+            </span>
             <b>{s.unit}</b>
           </div>
           {!s.empty && <div className="avdoes">{s.blurb}</div>}

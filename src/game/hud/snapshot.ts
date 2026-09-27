@@ -20,7 +20,7 @@ import { OUTFIT_MAX_SPEED, outfitter } from '../outfit/fit';
 import { unitLabel, type Computer } from '../avionics/catalog';
 import { buildInfluences } from './influences';
 import { buildInfo } from './info';
-import type { AutopilotView, AvionicsSlotView, ElectricalView, OutfitView, FlightView, GaugeBadge, GaugeView, NavView, GuideView, HudSnapshot, LocationView, Pill, PlannerView, Readout, SystemsView, TargetView } from './types';
+import type { AutopilotView, AvionicsSlotView, ElectricalView, ModuleIcon, OutfitView, FlightView, GaugeBadge, GaugeView, NavView, GuideView, HudSnapshot, LocationView, Pill, PlannerView, Readout, SystemsView, TargetView } from './types';
 
 const tmp = new THREE.Vector3();
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
@@ -335,7 +335,7 @@ function outfitView(g: Game): OutfitView {
     station: st?.name ?? null,
     battery: { unit: moduleLabel(o.battery), specs: bSpecs(o.battery), options: st ? BATTERIES.map((b) => ({ id: b.id, unit: moduleLabel(b), specs: `${b.blurb} · ${bSpecs(b)}`, current: b === o.battery })) : [] },
     hint: g.refFrame ? `Slow to under ${OUTFIT_MAX_SPEED} m/s relative to ${g.refFrame.name} to change modules` : 'Modules are fitted at a station: rendezvous with one (in its local frame, nearly at rest)',
-    slots: o.slots.map((m) => (m ? { unit: moduleLabel(m), blurb: m.blurb, specs: specsOf(m), empty: false } : { unit: 'empty', blurb: '', specs: '', empty: true })),
+    slots: o.slots.map((m) => (m ? { unit: moduleLabel(m), blurb: m.blurb, specs: specsOf(m), empty: false, icon: m.kind } : { unit: 'empty', blurb: '', specs: '', empty: true, icon: 'empty' as const })),
     catalogue: st ? MODULES.map((m) => ({ id: m.id, unit: moduleLabel(m), kind: { radiator: 'RADIATORS', heatpump: 'HEAT PUMP', scoop: 'FUEL SCOOP' }[m.kind], blurb: m.blurb, specs: specsOf(m) })) : [],
     radiators: {
       fitted: rads.length > 0,
@@ -415,7 +415,7 @@ function avionicsView(g: Game): AvionicsSlotView[] {
   const { orbit, scanner, nav } = ship.avionics;
   const o = ship.outfit;
   const list = (...xs: (string | false)[]) => xs.filter(Boolean).join(' · ') || '—';
-  const base = (c: Computer | null) => (c ? { unit: unitLabel(c), maker: c.maker, blurb: c.blurb } : { unit: 'none fitted', maker: '', blurb: '' });
+  const base = (c: Computer | null) => (c ? { unit: unitLabel(c), model: c.model, maker: c.maker, blurb: c.blurb } : { unit: 'none fitted', model: 'none', maker: '', blurb: '' });
 
   // orbit computer: flying / planning / idle
   const ap = ship.ap;
@@ -446,7 +446,7 @@ function avionicsView(g: Game): AvionicsSlotView[] {
 
   return [
     {
-      id: 'orbit', key: 'O', kind: 'ORBIT COMPUTER', does: 'Plan an orbit and let the autopilot fly it', ...base(orbit), status: orbitStatus, active: !!ap,
+      id: 'orbit', key: 'O', kind: 'ORBIT', does: 'Plan an orbit and let the autopilot fly it', ...base(orbit), status: orbitStatus, active: !!ap,
       specs: orbit ? [
         ['ORBITS', list(...orbit.caps.types.map((x) => ({ equatorial: 'equatorial', polar: 'polar', sync: 'stationary', hold: 'hold' })[x]))],
         ['INSERTION', `${orbit.caps.profile.acc} m/s² braking · ${fmtSpeedText(orbit.caps.profile.radialCap)} climb`],
@@ -458,14 +458,15 @@ function avionicsView(g: Game): AvionicsSlotView[] {
       specs: scanner ? [['RESOLUTION', fmtArcsec(scanner.caps.resolution)], ['SCAN SPEED', `${scanner.caps.rate}×`]] : [],
     },
     {
-      id: 'nav', key: 'M', kind: 'NAVIGATION', does: 'Plot a route to a star or target and fly it', ...base(nav), status: navStatus, active: !!r?.running,
+      id: 'nav', key: 'M', kind: 'NAV', does: 'Plot a route to a star or target and fly it', ...base(nav), status: navStatus, active: !!r?.running,
       specs: nav ? [
         ['ROUTES', nav.caps.crossSystem ? (isFinite(nav.caps.maxHops) ? `up to ${nav.caps.maxHops} jumps` : 'unlimited jumps') : 'in-system only'],
         ['FEATURES', list(nav.caps.refuelStops && 'refuel stops', nav.caps.optimise && 'route modes 1–3')],
       ] : [],
     },
     {
-      id: 'outfit', key: '⇧U', kind: 'OUTFIT', does: 'Battery and utility modules: fuel scoop, radiators, heat pump', unit: o.slots.filter(Boolean).map((m) => moduleLabel(m!)).join(' · ') || 'no modules fitted', maker: '', blurb: '',
+      id: 'outfit', key: '⇧U', kind: 'OUTFIT', does: 'Battery and utility modules: fuel scoop, radiators, heat pump', unit: o.slots.filter(Boolean).map((m) => moduleLabel(m!)).join(' · ') || 'no modules fitted', model: `${o.slots.filter(Boolean).length} / ${o.slots.length} slots`, maker: '', blurb: '',
+      mods: [{ icon: 'battery', title: `${moduleLabel(o.battery)} battery` }, ...o.slots.map((m) => ({ icon: (m?.kind ?? 'empty') as ModuleIcon, title: m ? moduleLabel(m) : 'empty slot' }))],
       status: { text: outfitter(g) ? `alongside ${g.refFrame!.name} · can refit` : 'refit at a station' }, active: o.radiatorsOut > 0 || ship.vent,
       specs: [],
     },
