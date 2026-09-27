@@ -1,4 +1,5 @@
 import { TANKER_TIME } from '../constants';
+import { toggleRadiators, toggleVent } from '../sim/thermal';
 import type { Game } from '../Game';
 import { toggleCruise, toggleDecoupled, toggleFTL } from '../sim/ftl';
 import { toggleScan } from '../sim/scanner';
@@ -14,11 +15,13 @@ export function onPress(g: Game, code: string) {
   if (code === 'Backquote') g.perf.toggle(); // performance overlay, available any time
   g.invalidateHud();
   if (code === 'Tab') g.helpVisible = !g.helpVisible;
-  // info (I), avionics (U) and influences (B) share the left column: opening one closes the others
+  // info (I), avionics (U), outfit (Shift+U) and influences (B) share the left column: opening one closes the others
   if (code === 'KeyU' || code === 'KeyI' || code === 'KeyB') {
-    const was = { KeyU: g.avionicsVisible, KeyI: g.infoVisible, KeyB: g.influencesVisible }[code];
-    g.avionicsVisible = g.infoVisible = g.influencesVisible = false;
-    if (code === 'KeyU') g.avionicsVisible = !was;
+    const outfit = code === 'KeyU' && !!(keys.ShiftLeft || keys.ShiftRight);
+    const was = outfit ? g.outfitVisible : { KeyU: g.avionicsVisible, KeyI: g.infoVisible, KeyB: g.influencesVisible }[code];
+    g.avionicsVisible = g.infoVisible = g.influencesVisible = g.outfitVisible = false;
+    if (outfit) g.outfitVisible = !was;
+    else if (code === 'KeyU') g.avionicsVisible = !was;
     if (code === 'KeyB') g.influencesVisible = !was;
     if (code === 'KeyI') {
       g.infoVisible = !was;
@@ -50,6 +53,13 @@ export function onPress(g: Game, code: string) {
       engageOrbit(g);
       return;
     }
+  }
+
+  // thermal: R vents hydrogen, Shift+R folds the radiators out or in (R is the planner's direction key while it's open)
+  if (code === 'KeyR') {
+    if (keys.ShiftLeft || keys.ShiftRight) toggleRadiators(g);
+    else toggleVent(g);
+    return;
   }
 
   // navigation panel: 1–3 route mode, Enter engages, Backspace clears the destination or

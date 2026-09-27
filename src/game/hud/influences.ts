@@ -105,7 +105,10 @@ export function buildInfluences(g: Game): InfluencesView {
     heat.push(['STARLIGHT ABSORBED', power.shadow ? 'none · in shadow' : `${mw(h.star)} · ${Math.round(((h.star / Math.max(power.flux * S0 * HULL.absorb, 1e-9)) / HULL.sideArea) * 100)}% of side-on`]);
     if (h.planets > 1000) heat.push(['NEARBY WORLDS', mw(h.planets)]);
     heat.push(['SHIP SYSTEMS', mw(h.internal)]);
-    heat.push(['RADIATED', mw(h.out)]);
+    heat.push(['RADIATED BY THE HULL', mw(h.out)]);
+    if (ship.outfit.radiatorsOut > 0) heat.push(['RADIATORS', `${mw(h.radiators)} shed · ${mw(h.radAbsorbed)} absorbed on the fins`]);
+    if (h.pumpW > 0) heat.push(['HEAT PUMP', `${mw(h.pumpW)} drawn · loop at ${h.radTemp.toFixed(0)} K`]);
+    if (h.vent > 0) heat.push(['HYDROGEN VENT', `${mw(h.vent)} · ${h.ventFlow.toFixed(1)} kg/s`]);
     if (h.star > 0.3 * h.out && !power.shadow) heat.push(['TIP', 'nose-on to the star cuts starlight heating ~6×']);
   }
   return { gravity, frame, ftl, light, heat };

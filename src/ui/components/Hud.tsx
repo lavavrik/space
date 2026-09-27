@@ -1,4 +1,5 @@
-import type { FlightView, LocationView, SystemsView, TargetView } from '../../game/hud/types';
+import { Fan, SolarPanel, Snowflake, Wind, type Icon } from '@phosphor-icons/react';
+import type { FlightView, GaugeBadge as GaugeBadgeView, LocationView, SystemsView, TargetView } from '../../game/hud/types';
 import { Bar, Panel, cx } from './primitives';
 
 /**
@@ -19,15 +20,16 @@ export function Location({ loc }: { loc: LocationView }) {
   );
 }
 
-/** Small status icon beside a gauge label. `panels-off`: a solar panel with a slash through it. */
-function GaugeBadge({ title }: { icon: 'panels-off'; title: string }) {
+/** Phosphor icons (MIT) for the gauge badges. */
+const BADGE_ICONS: Record<GaugeBadgeView['icon'], Icon> = { 'panels-off': SolarPanel, vent: Wind, radiators: Snowflake, pump: Fan };
+
+/** Small status icon beside a gauge label, with its explanation as a tooltip. */
+function GaugeBadge({ icon, title, warn }: GaugeBadgeView) {
+  const I = BADGE_ICONS[icon];
   return (
-    <svg className="gbadge" viewBox="0 0 16 16" role="img" aria-label={title}>
-      <title>{title}</title>
-      <rect x="2" y="4" width="12" height="8" fill="none" stroke="currentColor" strokeWidth="1.3" />
-      <path d="M6 4v8M10 4v8M2 8h12" stroke="currentColor" strokeWidth="0.9" />
-      <path d="M1.5 14.5L14.5 1.5" stroke="currentColor" strokeWidth="1.8" />
-    </svg>
+    <span className={cx('gbadge', warn && 'warnc')} title={title}>
+      <I weight="bold" aria-label={title} />
+    </span>
   );
 }
 
@@ -40,7 +42,7 @@ export function ShipGauges({ s }: { s: SystemsView }) {
           <div className="gtop">
             <span>
               {gv.label}
-              {gv.badge && <GaugeBadge {...gv.badge} />}
+              {gv.badges?.map((b) => <GaugeBadge key={b.icon} {...b} />)}
             </span>
             <b>{gv.value}</b>
           </div>

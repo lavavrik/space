@@ -3,10 +3,13 @@ import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import type { Ship } from '../types';
 import { TEMP } from './thermal';
+import { RADIATOR_MAX_ACC, outfitMass } from '../outfit/catalog';
 
-export const shipMass = (ship: Ship) => SHIP.dry + ship.prop;
+/** Dry mass: the hull plus whatever modules are fitted. */
+export const dryMass = (ship: Ship) => SHIP.dry + outfitMass(ship.outfit);
+export const shipMass = (ship: Ship) => dryMass(ship) + ship.prop;
 /** Rocket equation: Δv the remaining propellant can deliver. */
-export const deltaVLeft = (ship: Ship) => SHIP.ve * Math.log((SHIP.dry + ship.prop) / SHIP.dry);
+export const deltaVLeft = (ship: Ship) => SHIP.ve * Math.log((dryMass(ship) + ship.prop) / dryMass(ship));
 
 export function warnOnce(g: Game, key: string, text: string) {
   if (!g.warned[key]) {
@@ -34,6 +37,12 @@ export function applyThrust(g: Game, T: THREE.Vector3, dt: number) {
       dv = T.length();
     }
     warnOnce(g, 'batt', 'Battery flat · thrust limited to solar power');
+  }
+  // deployed radiator fins can't take hard acceleration
+  if (ship.outfit.radiatorsOut > 0 && dv > RADIATOR_MAX_ACC * dt) {
+    T.setLength(RADIATOR_MAX_ACC * dt);
+    dv = T.length();
+    warnOnce(g, 'radAcc', `Radiators out · thrust limited to ${(RADIATOR_MAX_ACC / 9.81).toFixed(0)} g (Shift+R stows them)`);
   }
   dv = Math.min(dv, deltaVLeft(ship));
   T.setLength(dv);

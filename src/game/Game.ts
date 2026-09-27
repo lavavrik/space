@@ -19,7 +19,9 @@ import { updateBodies } from './sim/kepler';
 import { updateStations } from './sim/stations';
 import { buildStations } from './universe/stations';
 import { buildSystem } from './universe/system';
-import { TEMP, type HeatBudget } from './sim/thermal';
+import { TEMP, toggleRadiators, type HeatBudget } from './sim/thermal';
+import { emptyOutfit } from './outfit/catalog';
+import { fitModule, removeModule } from './outfit/fit';
 
 function newShip(): Ship {
   return {
@@ -27,7 +29,7 @@ function newShip(): Ship {
     mode: 'normal', throttle: 0, cruise: false, ftlSpooled: false, ftlSpeed: 0, ftlCharge: 0, vmax: 0,
     fa: true, decoupled: false, travelDir: new THREE.Vector3(0, 0, -1), ap: null, landed: null, dead: null, grav: null,
     prop: SHIP.propCap, exotic: SHIP.exoticCap, batt: SHIP.battCap,
-    burnRate: 0, sunTrack: false, tanker: null, scoop: '', scoopRate: { prop: 0, exotic: 0 }, avionics: defaultAvionics(), temp: TEMP.start,
+    burnRate: 0, sunTrack: false, tanker: null, scoop: '', scoopRate: { prop: 0, exotic: 0 }, avionics: defaultAvionics(), temp: TEMP.start, vent: false, outfit: emptyOutfit(),
   };
 }
 
@@ -41,7 +43,7 @@ export class Game {
   /** Systems around the current one that a jump could reach (with a margin for moving within it). */
   nearby: StarSystem[] = [];
   readonly ship = newShip();
-  readonly power: Power = { solar: 0, cos: 0, shadow: null, draw: 0, net: 0, thrustKW: 0, ftlKW: 0, chargeKW: 0, burn: 0, flux: 0 };
+  readonly power: Power = { solar: 0, cos: 0, shadow: null, draw: 0, net: 0, thrustKW: 0, ftlKW: 0, chargeKW: 0, pumpKW: 0, burn: 0, flux: 0 };
   target: Target | null = null;
   /** Station whose frame flight assist works in, or null for the system frame (see sim/frame.ts). */
   refFrame: Station | null = null;
@@ -69,6 +71,8 @@ export class Game {
   avionicsVisible = false;
   /** Influences panel (B): gravity, frames, mass lock, light; same column as info and avionics. */
   influencesVisible = false;
+  /** Outfit panel (Shift+U, or from the avionics panel): utility slots, and fitting at a station. */
+  outfitVisible = false;
   /** Scan progress (0…1) per object key (see sim/scanner.ts), and whether the target is being scanned. */
   /** Navigation computer (M): the panel, its planned or running route, destination star and mode. */
   navPanel = false;
@@ -193,8 +197,32 @@ export class Game {
    * Avionics table of contents (U): open a computer's tool, as its key would: the orbit planner
    * (or the autopilot's status while it flies), a scan of the target, or the nav panel.
    */
-  openAvionics(kind: ComputerKind) {
-    onPress(this, { orbit: 'KeyO', scanner: 'KeyY', nav: 'KeyM' }[kind]);
+  openAvionics(kind: ComputerKind | 'outfit') {
+    if (kind === 'outfit') {
+      this.avionicsVisible = false;
+      this.outfitVisible = true;
+    } else onPress(this, { orbit: 'KeyO', scanner: 'KeyY', nav: 'KeyM' }[kind]);
+    this.invalidateHud();
+  }
+
+  /** Outfit panel buttons (only work alongside a station; see outfit/fit.ts). */
+  fitModule(slot: number, id: string) {
+    fitModule(this, slot, id);
+    this.invalidateHud();
+  }
+
+  removeModule(slot: number) {
+    removeModule(this, slot);
+    this.invalidateHud();
+  }
+
+  toggleRadiators() {
+    toggleRadiators(this);
+    this.invalidateHud();
+  }
+
+  togglePump() {
+    this.ship.outfit.pumpAuto = !this.ship.outfit.pumpAuto;
     this.invalidateHud();
   }
 

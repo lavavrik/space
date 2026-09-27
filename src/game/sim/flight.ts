@@ -144,6 +144,9 @@ export function respawn(g: Game) {
   ship.tanker = null;
   refillShip(g);
   ship.temp = TEMP.start;
+  ship.vent = false; // the replacement comes with the same modules, stowed
+  ship.outfit.deploy = false;
+  ship.outfit.radiatorsOut = 0;
   lookAt(ship, b.pos);
   ship.dead = null;
   g.showMsg(`Replacement ship delivered ${fmtDist(alt)} above ${b.name} · tanks full`);

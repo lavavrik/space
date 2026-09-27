@@ -7,7 +7,7 @@ import { Panel, cx } from './primitives';
  * it's for and what it's doing now; clicking it (with the mouse free) opens its tool, like the key.
  * Its specs follow on one line.
  */
-export function AvionicsPanel({ slots, onOpen }: { slots: AvionicsSlotView[]; onOpen: (kind: ComputerKind) => void }) {
+export function AvionicsPanel({ slots, onOpen }: { slots: AvionicsSlotView[]; onOpen: (kind: ComputerKind | 'outfit') => void }) {
   return (
     <Panel name="avionics" id="avionics" className="pan" title="AVIONICS" right="U HIDES">
       {slots.map((s) => (

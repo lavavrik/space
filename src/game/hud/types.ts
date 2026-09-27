@@ -51,6 +51,12 @@ export interface TargetView {
   scanFrac: number; // 0…1, for the card's scan bar
 }
 
+export interface GaugeBadge {
+  icon: 'panels-off' | 'vent' | 'radiators' | 'pump';
+  title: string;
+  warn?: boolean;
+}
+
 /** One ship gauge: label, value, fill, and a one-line detail. */
 export interface GaugeView {
   label: string;
@@ -58,8 +64,8 @@ export interface GaugeView {
   frac: number;
   variant?: 'ftl' | 'batt' | 'heat';
   sub: Readout;
-  /** A status icon beside the label, e.g. the solar panels feathered by heat. */
-  badge?: { icon: 'panels-off'; title: string };
+  /** Status icons beside the label, e.g. the solar panels feathered by heat, the hydrogen vent running. */
+  badges?: GaugeBadge[];
 }
 
 /** Body info panel (I): the target's physical data, its own orbit, and the ship relative to it. */
@@ -99,7 +105,7 @@ export interface InfluencesView {
 
 /** One fitted computer in the avionics panel (U). */
 export interface AvionicsSlotView {
-  id: ComputerKind; // what opening this entry does (see Game.openAvionics)
+  id: ComputerKind | 'outfit'; // what opening this entry does (see Game.openAvionics)
   key: string; // the key that opens it
   does: string; // what it's for, in a few words
   status: Readout; // what it's doing right now
@@ -109,6 +115,17 @@ export interface AvionicsSlotView {
   maker: string;
   blurb: string;
   specs: [string, string][];
+}
+
+/** Outfit panel (Shift+U): the utility slots, the thermal hardware's state, and fitting at a station. */
+export interface OutfitView {
+  station: string | null; // the station that can fit modules right now
+  hint: string; // how to get to one, when not alongside
+  slots: { unit: string; blurb: string; specs: string; empty: boolean }[];
+  catalogue: { id: string; unit: string; kind: string; blurb: string; specs: string }[];
+  radiators: { fitted: boolean; out: number; deploying: boolean; status: string };
+  pump: { fitted: boolean; auto: boolean; status: string };
+  mass: string;
 }
 
 /** Navigation computer panel (M): the route to the destination, planned or being flown. */
@@ -175,6 +192,7 @@ export interface HudSnapshot {
   autopilot: AutopilotView | null;
   avionics: AvionicsSlotView[] | null; // the avionics panel, when open
   influences: InfluencesView | null;
+  outfit: OutfitView | null;
   nav: NavView | null;
   guide: GuideView | null;
 }

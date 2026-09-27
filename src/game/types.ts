@@ -1,4 +1,5 @@
 import type { Avionics } from './avionics/catalog';
+import type { Outfit } from './outfit/catalog';
 import type { THREE } from './lib/three';
 
 type Vec3 = THREE.Vector3;
@@ -181,6 +182,8 @@ export interface Ship {
   scoopRate: { prop: number; exotic: number }; // kg/s being scooped this frame
   avionics: Avionics; // fitted computers (see avionics/catalog.ts)
   temp: number; // K, hull temperature (see sim/thermal.ts)
+  vent: boolean; // venting hydrogen to cool the hull (R)
+  outfit: Outfit; // modules in the utility slots (see outfit/catalog.ts)
 }
 
 /** Per-frame power bookkeeping. */
@@ -193,6 +196,7 @@ export interface Power {
   thrustKW: number;
   ftlKW: number;
   chargeKW: number;
+  pumpKW: number; // heat pump (set by sim/thermal.ts for the next frame)
   burn: number;
   flux: number;
 }

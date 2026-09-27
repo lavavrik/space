@@ -1,6 +1,6 @@
 /* Turns game state into the display strings and flags the HUD shows. */
 import { FTL_CHARGE_TIME, JUMP_CHARGE_TIME, JUMP_DEPART_TIME, NORMAL_ACC, NORMAL_BOOST, NORMAL_MAX, SHIP, ftlBurn, jumpCost } from '../constants';
-import { fmtClock, fmtDist, fmtFlow, fmtMass, fmtPower, fmtSpeed, fmtSpeedText, fmtTime } from '../format';
+import { fmtArea, fmtClock, fmtDist, fmtFlow, fmtMass, fmtPower, fmtSpeed, fmtSpeedText, fmtTime } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import { holdPoint, orbitVelErr } from '../sim/autopilot';
@@ -12,12 +12,14 @@ import { NAV_MODES, searchNav } from '../sim/navroute';
 import { resolvable, SCAN_STAGE, scanProgress } from '../sim/scanner';
 import { galPos } from '../sim/navigation';
 import { apLabel, evalPlan } from '../sim/orbits';
-import { deltaVLeft } from '../sim/resources';
+import { deltaVLeft, dryMass } from '../sim/resources';
 import { TEMP, nextLimit } from '../sim/thermal';
+import { MODULES, PUMP_ON_ABOVE, RADIATOR_MAX_ACC, moduleLabel, outfitMass, pumpFitted, radiatorsFitted, type Module } from '../outfit/catalog';
+import { OUTFIT_MAX_SPEED, outfitter } from '../outfit/fit';
 import { unitLabel, type Computer } from '../avionics/catalog';
 import { buildInfluences } from './influences';
 import { buildInfo } from './info';
-import type { AutopilotView, AvionicsSlotView, FlightView, GaugeView, NavView, GuideView, HudSnapshot, LocationView, Pill, PlannerView, Readout, SystemsView, TargetView } from './types';
+import type { AutopilotView, AvionicsSlotView, OutfitView, FlightView, GaugeBadge, GaugeView, NavView, GuideView, HudSnapshot, LocationView, Pill, PlannerView, Readout, SystemsView, TargetView } from './types';
 
 const tmp = new THREE.Vector3();
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
@@ -36,6 +38,7 @@ export function buildSnapshot(g: Game): HudSnapshot {
     autopilot: g.apPanel && g.ship.ap ? autopilotView(g) : null,
     avionics: g.avionicsVisible ? avionicsView(g) : null,
     influences: g.influencesVisible ? buildInfluences(g) : null,
+    outfit: g.outfitVisible ? outfitView(g) : null,
     nav: g.navPanel || g.route?.running ? navView(g) : null,
     guide: g.guide ? guide(g.guide) : null,
   };
@@ -135,6 +138,8 @@ function flight(g: Game): FlightView {
 
   const pills: Pill[] = [{ text: ship.fa ? 'FA ON' : 'FA OFF', kind: ship.fa ? 'on' : 'warn' }];
   if (ship.decoupled) pills.push({ text: 'DECOUPLED', kind: 'warn' });
+  if (ship.vent) pills.push({ text: 'VENTING H₂', kind: 'ftl' });
+  if (ship.outfit.radiatorsOut > 0) pills.push({ text: ship.outfit.radiatorsOut < 1 ? `RADIATORS ${Math.round(ship.outfit.radiatorsOut * 100)}%` : 'RADIATORS OUT', kind: 'ftl' });
   if (ship.mode === 'ftl') pills.push({ text: ship.cruise ? 'CRUISE' : 'HOLD W', kind: ship.cruise ? 'ftl' : '' });
   if (gr && ship.mode === 'normal' && !ship.dead) {
     const gs = gr.g / 9.80665;
@@ -205,7 +210,7 @@ function systems(g: Game): SystemsView {
         frac: ship.batt / SHIP.battCap,
         variant: 'batt',
         sub: { text: `${netText}${battTime}`, warn: net < -0.5 },
-        badge: ship.temp >= TEMP.panels ? { icon: 'panels-off', title: `Solar panels feathered: hull over ${TEMP.panels} K` } : undefined,
+        badges: ship.temp >= TEMP.panels ? [{ icon: 'panels-off', title: `Solar panels feathered: hull over ${TEMP.panels} K`, warn: true }] : undefined,
       },
       hullGauge(g),
     ],
@@ -220,6 +225,7 @@ function systems(g: Game): SystemsView {
 function hullGauge(g: Game): GaugeView {
   const T = g.ship.temp,
     h = g.heat;
+  // (with the vent running, the equilibrium ignores it: say where it's heading while it runs)
   let text = 'steady';
   if (h) {
     const next = nextLimit(T);
@@ -228,7 +234,15 @@ function hullGauge(g: Game): GaugeView {
     text =
       next && h.rate > 0 && h.eq >= next.at ? `${trend} · ${next.what} (${next.at} K) in ${fmtTime((next.at - T) / h.rate)}` : `${trend} · settles at ${h.eq.toFixed(0)} K`;
   }
-  return { label: 'HULL', value: `${T.toFixed(0)} K`, frac: (T - 200) / (TEMP.fail - 200), variant: 'heat', sub: { text, warn: T >= TEMP.warn } };
+  const o = g.ship.outfit;
+  const badges: GaugeBadge[] = [];
+  if (h && h.ventFlow > 0) {
+    badges.push({ icon: 'vent', title: `Venting hydrogen: ${h.ventFlow.toFixed(1)} kg/s` });
+    text = `venting ${h.ventFlow.toFixed(1)} kg/s H₂ · ${text}`;
+  }
+  if (o.radiatorsOut > 0) badges.push({ icon: 'radiators', title: o.radiatorsOut < 1 ? `Radiators ${o.deploy ? 'deploying' : 'stowing'} (${Math.round(o.radiatorsOut * 100)} %)` : 'Radiators out' });
+  if (h && h.pumpW > 0) badges.push({ icon: 'pump', title: `Heat pump: ${fmtPower(h.pumpW / 1000)}, loop at ${h.radTemp.toFixed(0)} K` });
+  return { label: 'HULL', value: `${T.toFixed(0)} K`, frac: (T - 200) / (TEMP.fail - 200), variant: 'heat', sub: { text, warn: T >= TEMP.warn }, badges };
 }
 
 function autopilotView(g: Game): AutopilotView {
@@ -241,7 +255,7 @@ function autopilotView(g: Game): AutopilotView {
   const rv = ship.pos.clone().sub(b.pos);
   const v = velRel(g, b);
   const used = Math.max(0, ap.prop0 - ship.prop);
-  const dv = SHIP.ve * Math.log((SHIP.dry + ap.prop0) / (SHIP.dry + ship.prop));
+  const dv = SHIP.ve * Math.log((dryMass(ship) + ap.prop0) / (dryMass(ship) + ship.prop));
   const rows: [string, string | Readout][] = [];
   if (ap.type === 'rendezvous') {
     const st = ap.station!;
@@ -287,9 +301,56 @@ const fmtArcsec = (rad: number) => `${((rad * 180 * 3600) / Math.PI).toFixed(rad
  * Avionics (U): a table of contents for the ship's computers. Each entry: its key, unit, what it's
  * for, what it's doing now, and its specs; clicking it (or its key) opens its tool.
  */
+/** Outfit panel (Shift+U): slots, thermal hardware, and the station catalogue when alongside one. */
+function outfitView(g: Game): OutfitView {
+  const { ship } = g;
+  const o = ship.outfit;
+  const st = outfitter(g);
+  const specsOf = (m: Module) =>
+    m.kind === 'radiator'
+      ? `${fmtArea(2 * m.caps.area)} radiating · ${m.caps.deployTime} s to deploy · ${fmtMass(m.mass)}`
+      : `lift ${m.caps.lift} K · up to ${fmtPower(m.caps.maxKW)} · ${fmtMass(m.mass)}`;
+  const h = g.heat;
+  const rads = radiatorsFitted(o);
+  const pump = pumpFitted(o);
+  return {
+    station: st?.name ?? null,
+    hint: g.refFrame ? `Slow to under ${OUTFIT_MAX_SPEED} m/s relative to ${g.refFrame.name} to change modules` : 'Modules are fitted at a station: rendezvous with one (in its local frame, nearly at rest)',
+    slots: o.slots.map((m) => (m ? { unit: moduleLabel(m), blurb: m.blurb, specs: specsOf(m), empty: false } : { unit: 'empty', blurb: '', specs: '', empty: true })),
+    catalogue: st ? MODULES.map((m) => ({ id: m.id, unit: moduleLabel(m), kind: m.kind === 'radiator' ? 'RADIATORS' : 'HEAT PUMP', blurb: m.blurb, specs: specsOf(m) })) : [],
+    radiators: {
+      fitted: rads.length > 0,
+      out: o.radiatorsOut,
+      deploying: o.deploy,
+      status: !rads.length
+        ? 'none fitted'
+        : o.radiatorsOut === 0
+          ? 'stowed · Shift+R deploys'
+          : o.radiatorsOut < 1
+            ? `${o.deploy ? 'deploying' : 'stowing'} · ${Math.round(o.radiatorsOut * 100)} %`
+            : `out · shedding ${fmtPower((h?.radiators ?? 0) / 1000)} · thrust limited to ${(RADIATOR_MAX_ACC / 9.81).toFixed(0)} g`,
+    },
+    pump: {
+      fitted: !!pump,
+      auto: o.pumpAuto,
+      status: !pump
+        ? 'none fitted'
+        : !o.pumpAuto
+          ? 'off'
+          : h && h.pumpW > 0
+            ? `running · ${fmtPower(h.pumpW / 1000)} · loop at ${h.radTemp.toFixed(0)} K`
+            : o.radiatorsOut > 0
+              ? `standing by · runs above ${PUMP_ON_ABOVE} K`
+              : 'standing by · needs the radiators out',
+    },
+    mass: fmtMass(outfitMass(o)),
+  };
+}
+
 function avionicsView(g: Game): AvionicsSlotView[] {
   const { ship } = g;
   const { orbit, scanner, nav } = ship.avionics;
+  const o = ship.outfit;
   const list = (...xs: (string | false)[]) => xs.filter(Boolean).join(' · ') || '—';
   const base = (c: Computer | null) => (c ? { unit: unitLabel(c), maker: c.maker, blurb: c.blurb } : { unit: 'none fitted', maker: '', blurb: '' });
 
@@ -339,6 +400,11 @@ function avionicsView(g: Game): AvionicsSlotView[] {
         ['ROUTES', nav.caps.crossSystem ? (isFinite(nav.caps.maxHops) ? `up to ${nav.caps.maxHops} jumps` : 'unlimited jumps') : 'in-system only'],
         ['FEATURES', list(nav.caps.refuelStops && 'refuel stops', nav.caps.optimise && 'route modes 1–3')],
       ] : [],
+    },
+    {
+      id: 'outfit', key: '⇧U', kind: 'OUTFIT', does: 'Utility modules: radiators, heat pump', unit: o.slots.filter(Boolean).map((m) => moduleLabel(m!)).join(' · ') || 'no modules fitted', maker: '', blurb: '',
+      status: { text: outfitter(g) ? `alongside ${g.refFrame!.name} · can refit` : 'refit at a station' }, active: o.radiatorsOut > 0 || ship.vent,
+      specs: [],
     },
   ];
 }

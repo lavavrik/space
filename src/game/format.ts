@@ -56,3 +56,6 @@ export function fmtClock(seconds: number) {
   const t = Math.floor(seconds);
   return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
 }
+
+/** An area in m², e.g. "2,400 m²". */
+export const fmtArea = (m2: number) => `${nf0.format(Math.round(m2))} m²`;

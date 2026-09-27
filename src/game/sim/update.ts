@@ -126,7 +126,7 @@ export function update(g: Game, dt: number) {
   if (g.jump && g.jump.phase === 'charge') power.chargeKW = SHIP.jumpChargeKW;
   else if (ship.ftlCharge > 0) power.chargeKW = SHIP.ftlChargeKW;
   power.solar = inTunnel ? 0 : solarPower(g);
-  power.draw = SHIP.baseLoad + power.thrustKW + power.ftlKW + power.chargeKW;
+  power.draw = SHIP.baseLoad + power.thrustKW + power.ftlKW + power.chargeKW + power.pumpKW;
   power.net = power.solar - power.draw;
   ship.batt = Math.min(SHIP.battCap, Math.max(0, ship.batt + (power.net * dt) / 3600));
   if (ship.batt > 1) g.warned.batt = false;

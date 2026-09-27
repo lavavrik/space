@@ -93,3 +93,18 @@
 .infl.applied .gtop span { color: var(--amber); }
 .infl em { font-style: normal; font-size: .75rem; letter-spacing: .12em; color: var(--cyan); text-transform: uppercase; }
 .infl .bar { height: .3rem; }
+
+/* outfit panel (Shift+U): slots, refit buttons (clickable with the mouse free), thermal hardware */
+#outfit { display: flex; flex-direction: column; gap: .3rem; }
+#outfit .row b { text-align: right; min-width: 0; white-space: normal; }
+.ohint { font-size: .85rem; color: var(--amber-dim); line-height: 1.4; }
+.oslot { border-top: 1px solid var(--amber-faint); padding-top: .4rem; display: flex; flex-direction: column; gap: .15rem; }
+.oslot.empty .gtop b { color: var(--amber-dim); }
+.oslot .avspecs { padding-left: 0; }
+.obtns { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .2rem; }
+.obtn {
+  pointer-events: auto; cursor: pointer; font: .8rem "Share Tech Mono", ui-monospace, monospace; color: var(--text);
+  background: none; border: 1px solid var(--amber-dim); padding: .15rem .45rem; align-self: flex-start;
+}
+.obtn:hover { background: rgba(255, 165, 58, .1); }
+.obtn.rm { border-color: var(--red); color: var(--red); }

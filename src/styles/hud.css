@@ -70,7 +70,8 @@
 .gauge { display: flex; flex-direction: column; gap: .2rem; margin-bottom: .35rem; }
 .gtop { display: flex; justify-content: space-between; align-items: baseline; font-size: .95rem; letter-spacing: .12em; }
 .gtop span { color: var(--amber); display: inline-flex; align-items: center; gap: .4rem; }
-.gbadge { width: 1.05rem; height: 1.05rem; color: var(--red); }
+.gbadge { display: inline-flex; font-size: 1.1rem; color: var(--cyan); pointer-events: auto; }
+.gbadge.warnc { color: var(--red); }
 .gtop b { font: 400 1.05rem "Share Tech Mono", ui-monospace, monospace; color: var(--text); letter-spacing: 0; }
 .gsubl { font-size: .85rem; color: var(--amber-dim); }
 .gnote { font-size: .9rem; line-height: 1.4; color: var(--text); border-top: 1px solid var(--amber-faint); padding-top: .4rem; }

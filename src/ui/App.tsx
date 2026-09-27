@@ -6,6 +6,7 @@ import { InfluencesPanel } from './components/InfluencesPanel';
 import { FlightCluster, Location, ShipGauges, TargetCard } from './components/Hud';
 import { ManeuverGuide } from './components/ManeuverGuide';
 import { NavPanel } from './components/NavPanel';
+import { OutfitPanel } from './components/OutfitPanel';
 import { OrbitPlanner } from './components/OrbitPlanner';
 import { Toast } from './components/Toast';
 import { useGame, useHud } from './hooks/useGame';
@@ -20,7 +21,12 @@ export function App() {
         <>
           <div id="leftcol">
             <Location loc={hud.location} />
-            {hud.info ? <BodyInfo info={hud.info} /> : hud.influences ? <InfluencesPanel v={hud.influences} /> : hud.avionics ? <AvionicsPanel slots={hud.avionics} onOpen={(k) => game!.openAvionics(k)} /> : hud.helpVisible && <HelpPanel />}
+            {hud.info ? <BodyInfo info={hud.info} /> : hud.influences ? <InfluencesPanel v={hud.influences} /> : hud.outfit ? (
+              <OutfitPanel
+                v={hud.outfit}
+                act={{ fit: (s, id) => game!.fitModule(s, id), remove: (s) => game!.removeModule(s), radiators: () => game!.toggleRadiators(), pump: () => game!.togglePump() }}
+              />
+            ) : hud.avionics ? <AvionicsPanel slots={hud.avionics} onOpen={(k) => game!.openAvionics(k)} /> : hud.helpVisible && <HelpPanel />}
           </div>
           <div id="rightcol">
             {hud.nav && (
