@@ -168,7 +168,7 @@ export function disengageAP(g: Game, reason?: string) {
   const wasOrbit = ship.ap.type !== 'hold';
   ship.ap = null;
   if (ship.ftlCharge > 0) ship.ftlCharge = 0;
-  if (reason) g.showMsg(reason + (wasOrbit && ship.fa ? ' · press Z (flight assist off) to coast in orbit' : ''));
+  if (reason) g.showMsg(reason + (wasOrbit && ship.fa ? ' · Shift+Z (flight assist off) to coast in orbit' : ''));
 }
 
 /** What the orbit preview ring (L) should show: an orbit (centre, radius, plane) or a hold point. */

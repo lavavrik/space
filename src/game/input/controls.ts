@@ -1,4 +1,5 @@
 import { TANKER_TIME } from '../constants';
+import { togglePeriscope, wheelZoom } from '../sim/periscope';
 import { changeWarp, stopWarp } from '../sim/timewarp';
 import { toggleRadiators, toggleVent } from '../sim/thermal';
 import type { Game } from '../Game';
@@ -174,8 +175,11 @@ export function onPress(g: Game, code: string) {
       toggleDecoupled(g);
       break;
     case 'KeyZ':
-      ship.fa = !ship.fa;
-      g.showMsg(ship.fa ? 'Flight assist on' : 'Flight assist off · pure Newtonian flight');
+      // Z: periscope; Shift+Z: flight assist
+      if (keys.ShiftLeft || keys.ShiftRight) {
+        ship.fa = !ship.fa;
+        g.showMsg(ship.fa ? 'Flight assist on' : 'Flight assist off · pure Newtonian flight');
+      } else togglePeriscope(g);
       break;
     case 'KeyJ':
       if (ship.ap) {
@@ -206,4 +210,5 @@ export function onRepeat(g: Game, code: string) {
 
 export function onWheel(g: Game, deltaY: number) {
   if (g.planner) adjustAlt(g, deltaY < 0 ? 1.1 : 1 / 1.1);
+  else if (g.zoom.on) wheelZoom(g, deltaY);
 }

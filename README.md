@@ -60,10 +60,11 @@ The simulation never touches the DOM. Each frame it steps the physics, draws the
 | B | Influences: each body's gravitational pull (strongest first; the applied one marked; click a name to target it), whose gravity you're in and the next one ahead, what flight assist is matching, mass lock (and how far to climb), what caps FTL speed, starlight and solar power, shadow, distance to the corona and gas-giant scoop zones, and the heat budget (absorbed, radiated, where the hull settles) |
 | U | Ship stats. Avionics: a 2 × 2 grid of tiles (orbit computer, scanner, navigation, outfit) with an icon, key, model and what it's doing (full name, purpose and specs in the tooltip); click a tile or press its key to open it. Electrical: a live schematic (panels and battery feeding the bus, the bus feeding each load; wires thicken and animate with the power flowing, limited loads in red), plus battery flow, charge times at the current bus and what's power-limited |
 | Shift+U | Outfit: the utility slots (radiators, heat pump), and refitting when alongside a station |
+| Z · wheel | Periscope: a narrow-field view from 2× to 1,000× (100× to start; the wheel sets it while it's up). Steering slows by the magnification; markers, picking and planet detail follow the zoom |
 | , . | Time warp: 1× up to 100,000× (moons orbit in a minute or two, planets visibly spin). The ship coasts on rails while it runs; it won't start (and drops back to 1×) in FTL, while charging, jumping, venting or flying a route, during an autopilot manoeuvre, on any thrust key, or within a minute of an impact |
 | R · Shift+R | Vent hydrogen to cool the hull · deploy or stow the radiators (R is the orbit planner's direction key while it's open) |
 | I | Target info: size, mass, gravity, climate, its orbit, and your speed and orbit relative to it (shown in place of the controls list) |
-| Z | Flight assist on / off |
+| Shift+Z | Flight assist on / off |
 | V | Decoupled: turn without changing course (normal space and FTL) |
 | J | FTL drive |
 | F | FTL cruise control: the throttle holds. Off, it spools down when you release W and the drive drops out |

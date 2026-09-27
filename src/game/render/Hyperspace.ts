@@ -27,7 +27,7 @@ export class HyperspaceView {
   constructor(private readonly pointsMaterial: () => THREE.ShaderMaterial) {}
 
   /** Draw the transit for `j` from the ship's orientation `q`. Builds the star set on first use. */
-  render(gl: THREE.WebGLRenderer, j: Jump, q: THREE.Quaternion, aspect: number) {
+  render(gl: THREE.WebGLRenderer, j: Jump, q: THREE.Quaternion, aspect: number, fov = FOV) {
     if (this.jump !== j) this.build(j);
     const st = (this.st = transitState(j, this.st));
     const hp = this.heads!.geometry.attributes.position.array as Float32Array,
@@ -66,6 +66,7 @@ export class HyperspaceView {
     for (const geo of [this.heads!.geometry, this.trails!.geometry]) for (const k in geo.attributes) geo.attributes[k].needsUpdate = true;
     this.camera.quaternion.copy(q);
     this.camera.aspect = aspect;
+    this.camera.fov = fov;
     this.camera.updateProjectionMatrix();
     this.camera.updateMatrixWorld();
     gl.render(this.scene, this.camera);

@@ -45,6 +45,46 @@ export class Overlay {
   }
 
   /** A canvas font at `px` design pixels, scaled like the HUD. */
+  /**
+   * Periscope (Z): darken everything outside a circular field, with a graduated rim and the
+   * magnification and field of view. Fades in with the zoom.
+   */
+  private drawPeriscope(g: Game) {
+    const z = g.zoom.cur;
+    if (z < 1.05) return;
+    const { ctx, W, H } = this;
+    const a = Math.min(1, Math.log(z) / Math.log(4)); // fully in by 4×
+    const cx = W / 2,
+      cy = H / 2,
+      R = Math.min(W, H) * 0.46;
+    ctx.save();
+    ctx.fillStyle = `rgba(0,0,0,${0.78 * a})`;
+    ctx.beginPath();
+    ctx.rect(0, 0, W, H);
+    ctx.arc(cx, cy, R, 0, Math.PI * 2, true);
+    ctx.fill();
+    ctx.strokeStyle = AMB + 0.55 * a + ')';
+    ctx.lineWidth = 1.5 * this.ui;
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    ctx.stroke();
+    // rim ticks every 10°, longer every 30°
+    for (let d = 0; d < 360; d += 10) {
+      const t = (d * Math.PI) / 180,
+        L = (d % 30 === 0 ? 10 : 5) * this.ui;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(t) * R, cy + Math.sin(t) * R);
+      ctx.lineTo(cx + Math.cos(t) * (R - L), cy + Math.sin(t) * (R - L));
+      ctx.stroke();
+    }
+    ctx.fillStyle = AMB + 0.9 * a + ')';
+    ctx.font = this.font(13, MONO);
+    ctx.textAlign = 'center';
+    const fov = g.fov;
+    ctx.fillText(`PERISCOPE ${Math.round(z)}×  ·  FIELD ${fov < 1 ? (fov * 60).toFixed(1) + '′' : fov.toFixed(1) + '°'}`, cx, Math.max(14 * this.ui, cy - R - 10 * this.ui)); // above the field, clear of the flight panel
+    ctx.restore();
+  }
+
   private font(px: number, family: string, bold = false) {
     return `${bold ? '700 ' : ''}${Math.round(px * this.ui)}px ${family}`;
   }
@@ -116,6 +156,7 @@ export class Overlay {
       ctx.fillRect(0, 0, W, H);
     }
 
+    this.drawPeriscope(g);
     this.drawReticle(ship.mode === 'ftl' ? CYA : AMB);
 
     // prograde marker (where you're going), or retrograde (where you came from) when it's behind

@@ -150,6 +150,7 @@ function flight(g: Game): FlightView {
 
   const pills: Pill[] = [{ text: ship.fa ? 'FA ON' : 'FA OFF', kind: ship.fa ? 'on' : 'warn' }];
   if (ship.decoupled) pills.push({ text: 'DECOUPLED', kind: 'warn' });
+  if (g.zoom.on) pills.push({ text: `ZOOM ${g.zoom.mag}×`, kind: 'on' });
   if (g.warp > 1) pills.push({ text: `TIME ×${g.warp.toLocaleString('en-US')}`, kind: 'warn' });
   if (ship.vent) pills.push({ text: 'VENTING H₂', kind: 'ftl' });
   if (ship.outfit.radiatorsOut > 0) pills.push({ text: ship.outfit.radiatorsOut < 1 ? `RADIATORS ${Math.round(ship.outfit.radiatorsOut * 100)}%` : 'RADIATORS OUT', kind: 'ftl' });

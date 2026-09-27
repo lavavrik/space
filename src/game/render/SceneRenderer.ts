@@ -288,13 +288,19 @@ export class SceneRenderer {
     const { ship, cur, simTime } = g;
     // in hyperspace: only the Milky Way and the real stars streaming past, no system scene
     const inTunnel = !!g.jump && g.jump.phase === 'tunnel';
+    // periscope: narrow the field of view (sim/periscope.ts)
+    if (this.camera.fov !== g.fov) {
+      this.camera.fov = this.skyCam.fov = g.fov;
+      this.camera.updateProjectionMatrix();
+      this.skyCam.updateProjectionMatrix();
+    }
     if (this.sysStars) this.sysStars.visible = !inTunnel;
     if (inTunnel) {
       this.skyCam.quaternion.copy(ship.q);
       this.skyCam.updateMatrixWorld();
       this.gl.clear();
       this.gl.render(this.skyScene, this.skyCam);
-      this.hyper.render(this.gl, g.jump!, ship.q, this.camera.aspect);
+      this.hyper.render(this.gl, g.jump!, ship.q, this.camera.aspect, g.fov);
       return;
     }
     this.hyper.dispose();

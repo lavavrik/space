@@ -57,10 +57,12 @@ export function update(g: Game, dt: number, realDt = dt) {
   // --- rotation
   const [mdx, mdy] = input.consumeMouse();
   if (!inTunnel && !departing && !apSteering) {
-    let pitch = -mdy * MOUSE_SENS,
-      yaw = -mdx * MOUSE_SENS,
+    // through the periscope, steering slows by the magnification so a target can be held
+    const zs = 1 / g.zoom.cur;
+    let pitch = -mdy * MOUSE_SENS * zs,
+      yaw = -mdx * MOUSE_SENS * zs,
       roll = 0;
-    const kr = ship.mode === 'ftl' ? 0.8 : 1.1;
+    const kr = (ship.mode === 'ftl' ? 0.8 : 1.1) * zs;
     if (keys.ArrowUp) pitch += kr * realDt;
     if (keys.ArrowDown) pitch -= kr * realDt;
     if (keys.ArrowLeft) yaw += kr * realDt;

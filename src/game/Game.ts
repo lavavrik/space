@@ -21,6 +21,7 @@ import { buildStations } from './universe/stations';
 import { buildSystem } from './universe/system';
 import { TEMP, toggleRadiators, type HeatBudget } from './sim/thermal';
 import { STOCK_BATTERY, emptyOutfit } from './outfit/catalog';
+import { ZOOM_START, updatePeriscope } from './sim/periscope';
 import { fitBattery, fitModule, removeModule } from './outfit/fit';
 
 function newShip(): Ship {
@@ -59,6 +60,10 @@ export class Game {
   simTime = 0;
   /** Time warp factor (sim/timewarp.ts): 1 = real time. */
   warp = 1;
+  /** Periscope (sim/periscope.ts): up or not, the magnification set, and the current (eased) one. */
+  zoom = { on: false, mag: ZOOM_START, cur: 1 };
+  /** Vertical field of view (degrees) right now: FOV narrowed by the periscope. */
+  fov = FOV;
   curSpeed = 0;
   nearest: Body | null = null;
   nearestAlt = Infinity;
@@ -299,7 +304,7 @@ export class Game {
   private resize = () => {
     const W = innerWidth,
       H = innerHeight;
-    this.view = { W, H, pxPerRad: H / 2 / Math.tan((FOV * Math.PI) / 360) };
+    this.view = { W, H, pxPerRad: H / 2 / Math.tan((this.fov * Math.PI) / 360) };
     this.scene.resize(W, H);
     this.overlay.resize(W, H);
   };
@@ -309,6 +314,7 @@ export class Game {
     perf.frameStart(now - this.last);
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
+    updatePeriscope(this, dt);
     update(this, dt * this.warp, dt);
     perf.mark('sim');
     perf.gpuBegin();
