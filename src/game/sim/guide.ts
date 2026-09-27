@@ -208,8 +208,12 @@ export function startJumpGuide(g: Game, j: Jump, ly: number) {
     doneText: `Arrived at ${j.dest.name}`,
     steps: [
       mkStep({
-        title: 'Charge hyperdrive', kind: 'ftl', active: () => g.jump === j && j.phase === 'charge', done: () => g.jump !== j || j.phase === 'tunnel',
+        title: 'Charge hyperdrive', kind: 'ftl', active: () => g.jump === j && j.phase === 'charge', done: () => g.jump !== j || j.phase !== 'charge',
         err: () => j.t, etaFn: () => j.t, detail: () => `${fmtPower(SHIP.jumpChargeKW)} from the battery · ${j.cost.toFixed(1)} kg exotic matter`,
+      }),
+      mkStep({
+        title: 'Accelerate out', kind: 'ftl', active: () => g.jump === j && j.phase === 'depart', done: () => g.jump !== j || j.phase === 'tunnel',
+        err: () => j.t, etaFn: () => j.t, detail: () => 'leaving the system at an exponentially rising speed',
       }),
       mkStep({
         title: 'Hyperspace transit', kind: 'ftl', active: () => g.jump === j && j.phase === 'tunnel', done: () => g.jump !== j,

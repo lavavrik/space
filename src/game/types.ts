@@ -196,7 +196,8 @@ export interface Power {
 }
 
 export interface Jump {
-  phase: 'charge' | 'tunnel';
+  /** charge the drive, then depart (accelerate out through the system), then the tunnel (hyperspace) */
+  phase: 'charge' | 'depart' | 'tunnel';
   t: number;
   dest: StarSystem;
   cost: number;

@@ -23,7 +23,7 @@ import { buildStations } from '../universe/stations';
 import { buildSystem } from '../universe/system';
 import { transitTime } from './hyperspace';
 import { dropAlt, dropFTL, massLock } from './ftl';
-import { startJump } from './navigation';
+import { galPos, jumpBlocker, startJump } from './navigation';
 import { defaultOrbitAlt, evalPlan } from './orbits';
 import { disengageAP, engageAutopilot, engageRendezvous } from './planner';
 
@@ -395,6 +395,21 @@ export function updateNav(g: Game, dt: number) {
           engageAutopilot(g, { body: lock, type: 'hold', r0, period: NaN, n: null, point: u.multiplyScalar(r0), station: null }, true);
         }
         r.status = `climbing clear of ${lock.name} to jump`;
+        return;
+      }
+      // the destination is behind a body (often the star, after refuelling): move round to a side
+      // where the straight departure line is clear, at the same distance from it
+      const block = jumpBlocker(g, leg.to);
+      if (block) {
+        if (ship.ap?.body !== block || ship.ap.type !== 'hold') {
+          const dir = leg.to.pos.clone().sub(galPos(g)).normalize();
+          const off = ship.pos.clone().sub(block.pos);
+          const r0 = Math.max(off.length(), block.radius * 1.3);
+          const side = off.addScaledVector(dir, -off.dot(dir));
+          if (side.lengthSq() < 1) side.set(dir.y, -dir.x, 0); // dead behind: any perpendicular
+          engageAutopilot(g, { body: block, type: 'hold', r0, period: NaN, n: null, point: side.normalize().multiplyScalar(r0), station: null }, true);
+        }
+        r.status = `moving clear of ${block.name} to jump`;
         return;
       }
       ship.sunTrack = true; // between jumps, keep the panels on the star so the battery recharges

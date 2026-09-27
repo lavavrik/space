@@ -1,5 +1,5 @@
 /* Turns game state into the display strings and flags the HUD shows. */
-import { NORMAL_ACC, NORMAL_BOOST, NORMAL_MAX, SHIP, ftlBurn, jumpCost } from '../constants';
+import { JUMP_DEPART_TIME, NORMAL_ACC, NORMAL_BOOST, NORMAL_MAX, SHIP, ftlBurn, jumpCost } from '../constants';
 import { fmtClock, fmtDist, fmtFlow, fmtMass, fmtPower, fmtSpeed, fmtSpeedText, fmtTime } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
@@ -65,6 +65,7 @@ function flightMode(g: Game): [string, FlightView['modeClass']] {
     return [hold ? 'AUTOPILOT · MOVING TO HOLD' : 'AUTOPILOT · ORBIT INSERTION', 'ftl'];
   }
   if (jump && jump.phase === 'tunnel') return ['HYPERSPACE', 'ftl'];
+  if (jump && jump.phase === 'depart') return ['HYPERDRIVE ENGAGED', 'ftl'];
   if (jump) return [`HYPERDRIVE ${jump.t.toFixed(1)}`, 'ftl'];
   if (ship.ftlCharge > 0) return [`FTL CHARGING ${ship.ftlCharge.toFixed(1)}`, 'ftl'];
   if (ship.mode === 'ftl') return ['FTL', 'ftl'];
@@ -81,6 +82,10 @@ function flight(g: Game): FlightView {
   if (jump && jump.phase === 'tunnel') {
     const st = transitState(jump);
     return { mode, modeClass, speed, unit, barFrac: st.u, barFtl: true, barLabel: 'TRANSIT', barValue: `${st.left.toFixed(1)} ly to go`, alt: null, orbit: null, pills: [] };
+  }
+  // accelerating out of the system: the speed readout climbs through the units, km/s to × light speed
+  if (jump && jump.phase === 'depart') {
+    return { mode, modeClass, speed, unit, barFrac: 1 - jump.t / JUMP_DEPART_TIME, barFtl: true, barLabel: 'DEPARTURE', barValue: `hyperspace in ${Math.max(0, jump.t).toFixed(1)} s`, alt: null, orbit: null, pills: [] };
   }
   let barFrac: number, barLabel: string, barValue: string;
   const barFtl = ship.mode === 'ftl';

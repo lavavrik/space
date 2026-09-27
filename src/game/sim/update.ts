@@ -1,4 +1,4 @@
-import { SHIP } from '../constants';
+import { JUMP_DEPART_TIME, SHIP } from '../constants';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import { autopilot, ftlTransfer } from './autopilot';
@@ -7,6 +7,7 @@ import { chargeFTL, ftlCruise } from './ftl';
 import { gravityAt } from './gravity';
 import { updateGuide } from './guide';
 import { arriveAt, galPos } from './navigation';
+import { departDist, departSpeed } from './hyperspace';
 import { advanceBodies, relVel, syncFrame, updateFrame } from './frame';
 import { maybeFtlLeg } from './planner';
 import { updateScan } from './scanner';
@@ -24,6 +25,8 @@ export function update(g: Game, dt: number) {
   const { ship, keys, power, input } = g;
   g.simTime += dt;
   const inTunnel = !!g.jump && g.jump.phase === 'tunnel';
+  // departing: the jump flies the ship (straight out along the nose), no steering or physics
+  const departing = !!g.jump && g.jump.phase === 'depart';
 
   if (ship.dead) {
     advanceBodies(g);
@@ -39,7 +42,7 @@ export function update(g: Game, dt: number) {
 
   // --- rotation
   const [mdx, mdy] = input.consumeMouse();
-  if (!inTunnel && !apSteering) {
+  if (!inTunnel && !departing && !apSteering) {
     let pitch = -mdy * MOUSE_SENS,
       yaw = -mdx * MOUSE_SENS,
       roll = 0;
@@ -90,7 +93,7 @@ export function update(g: Game, dt: number) {
   }
   if (!ship.ap) g.apPanel = false;
 
-  if (!inTunnel) {
+  if (!inTunnel && !departing) {
     if (ship.mode === 'normal') {
       const grav = (ship.grav = gravityAt(g.cur, ship.pos));
       syncFrame(g, grav.body);
@@ -107,13 +110,13 @@ export function update(g: Game, dt: number) {
     }
   }
 
-  if (ship.mode === 'ftl') {
+  if (ship.mode === 'ftl' && !departing) {
     ship.grav = gravityAt(g.cur, ship.pos);
     syncFrame(g, ship.grav.body);
   }
 
   // --- power, fuel, refuelling
-  if (ship.sunTrack && !apSteering && !inTunnel) {
+  if (ship.sunTrack && !apSteering && !inTunnel && !departing) {
     const up = new THREE.Vector3(0, 1, 0).applyQuaternion(ship.q);
     const toS = g.cur.star.pos.clone().sub(ship.pos).normalize();
     const dq = new THREE.Quaternion().setFromUnitVectors(up, toS);
@@ -164,11 +167,24 @@ function updateJump(g: Game, dt: number) {
     ship.q.slerp(new THREE.Quaternion().setFromRotationMatrix(m), Math.min(1, (jump.t <= 0 ? 1 : 1.6 * dt)));
   }
   if (jump.phase === 'charge' && jump.t <= 0) {
-    jump.phase = 'tunnel';
-    jump.t = jump.dur;
-    jump.from = galPos(g); // wherever the charge left us
+    // drive engaged: accelerate straight out along the nose (now on the destination)
+    jump.phase = 'depart';
+    jump.t = JUMP_DEPART_TIME;
     ship.exotic = Math.max(0, ship.exotic - jump.cost);
-    g.showMsg(`Hyperspace · ${jump.dest.name} · ${jump.cost.toFixed(1)} kg exotic matter used`, 'ftl');
+    ship.ap = null;
+    g.refFrame = null;
+    g.showMsg(`Hyperdrive engaged · ${jump.dest.name} · ${jump.cost.toFixed(1)} kg exotic matter used`, 'ftl');
+  } else if (jump.phase === 'depart') {
+    const t1 = JUMP_DEPART_TIME - Math.max(0, jump.t);
+    const t0 = Math.max(0, t1 - dt);
+    ship.pos.addScaledVector(g.fwd, departDist(t1) - departDist(t0));
+    g.curSpeed = departSpeed(t1);
+    if (jump.t <= 0) {
+      jump.phase = 'tunnel';
+      jump.t = jump.dur;
+      jump.from = galPos(g); // wherever the departure left us, a few hundred AU out
+      g.showMsg(`Hyperspace · ${jump.dest.name}`, 'ftl');
+    }
   } else if (jump.phase === 'tunnel') {
     if (jump.t <= 0) {
       arriveAt(g, jump.dest);

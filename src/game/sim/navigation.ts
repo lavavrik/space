@@ -210,6 +210,14 @@ export function pickDest(g: Game) {
   g.showMsg(`Jump destination · ${g.jumpDest.name} · ${g.jumpDest.pos.distanceTo(gp).toFixed(2)} ly`, 'ftl');
 }
 
+/**
+ * The body in the way of a jump to `dest`, if any: the departure flies straight out towards the
+ * destination star (see sim/hyperspace.ts), so the destination mustn't be behind a planet or the star.
+ */
+export function jumpBlocker(g: Game, dest: StarSystem) {
+  return hiddenBy(occluders(g), dest.pos.clone().sub(galPos(g)).normalize());
+}
+
 export function startJump(g: Game) {
   const { ship } = g;
   if (g.jump) return;
@@ -226,6 +234,11 @@ export function startJump(g: Game) {
   const lock = massLock(g);
   if (lock) {
     g.showMsg(`Mass-locked by ${lock.name}`, 'warn');
+    return;
+  }
+  const block = jumpBlocker(g, dest);
+  if (block) {
+    g.showMsg(`${block.name} is in the way · move so the destination isn't behind it`, 'warn');
     return;
   }
   const cost = jumpCost(d);
