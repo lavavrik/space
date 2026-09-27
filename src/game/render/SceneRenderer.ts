@@ -6,7 +6,7 @@ import type { Body, CurrentSystem, Star, StarSystem, Station, World } from '../t
 import { orbitPreview } from '../sim/planner';
 import { HyperspaceView } from './Hyperspace';
 import { createNoiseTexture } from './noise3d';
-import { skyLook } from '../sim/hyperspace';
+import { skyColor, skyLook } from '../sim/hyperspace';
 import { ATMO_FS, BODY_VS, GLOW_FS, GLOW_VS, PLANET_FS, POINT_FS, POINT_VS, RING_FS, SKYPT_FS, SKYPT_VS, SKY_BAKE_FS, SKY_CUBE_FS, SKY_VS, STAR_FS, STATION_FS } from './shaders';
 
 type Uniforms = Record<string, THREE.IUniform>;
@@ -165,13 +165,12 @@ export class SceneRenderer {
       pos = new Float32Array(N * 3),
       col = new Float32Array(N * 3),
       size = new Float32Array(N);
-    const white = new THREE.Color(1, 1, 1);
     others.forEach((s, i) => {
       const d = s.pos.clone().sub(cur.pos);
-      const { a, size: sz, fade } = skyLook(s.star.L, d.length());
+      const { size: sz, k } = skyLook(s.star.L, d.length());
       d.normalize().multiplyScalar(80);
       pos.set([d.x, d.y, d.z], i * 3);
-      const c = s.star.color.clone().lerp(white, 0.25).multiplyScalar((0.14 + 1.2 * a ** 1.4) * fade);
+      const c = skyColor(s.star.color, k);
       col.set([c.r, c.g, c.b], i * 3);
       size[i] = sz;
     });

@@ -1,12 +1,11 @@
 import { FOV, SKY_RADIUS } from '../constants';
 import { THREE } from '../lib/three';
-import { skyLook, transitState, type TransitState } from '../sim/hyperspace';
+import { skyColor, skyLook, transitState, type TransitState } from '../sim/hyperspace';
 import type { Jump, StarSystem } from '../types';
 import { systemsNear } from '../universe/galaxy';
 
 /** How long (s) a streak "exposes": its length is the distance travelled in this time. */
 const STREAK_S = 0.22;
-const white = new THREE.Color(1, 1, 1);
 
 /**
  * The star field during a hyperspace transit, in light-years. Every real system within SKY_RADIUS
@@ -42,8 +41,8 @@ export class HyperspaceView {
       const rel = this.rel.subVectors(s.pos, st.pos);
       const d = Math.max(rel.length(), 1e-4);
       // same look as the normal sky (skyLook), so nothing pops at the start or the end
-      const { a, size, fade } = skyLook(s.star.L, d);
-      const c = this.c.copy(s.star.color).lerp(white, 0.25).multiplyScalar((0.14 + 1.2 * a ** 1.4) * fade);
+      const { size, k } = skyLook(s.star.L, d);
+      const c = skyColor(s.star.color, k, this.c);
       hp[i * 3] = lp[i * 6] = rel.x;
       hp[i * 3 + 1] = lp[i * 6 + 1] = rel.y;
       hp[i * 3 + 2] = lp[i * 6 + 2] = rel.z;

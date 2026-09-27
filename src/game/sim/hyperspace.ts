@@ -26,8 +26,9 @@ export const transitTime = (ly: number) => JUMP_TUNNEL_BASE + JUMP_TUNNEL_PER_LY
 /**
  * How a star system looks in the sky from `ly` light-years away: `a` (0..1) is the log-flux
  * brightness, `size` the point size in px (it keeps swelling past the brightest, so a star you fly
- * close to blooms into a disc of glare), and `fade` (0..1) dims stars near SKY_RADIUS so they fade
- * in and out at the edge of the visible set instead of popping. The system sky and the hyperspace
+ * close to blooms into a disc of glare), `fade` (0..1) dims stars near SKY_RADIUS so they fade
+ * in and out at the edge of the visible set instead of popping, and `k` is the intensity to scale
+ * the star's colour by (see skyColor). The system sky and the hyperspace
  * view both use this, so the sky doesn't change when hyperspace begins or ends.
  */
 export function skyLook(L: number, ly: number) {
@@ -37,8 +38,31 @@ export function skyLook(L: number, ly: number) {
   const a = Math.max(0, Math.min(1, (lf + 6) / 5.5));
   const size = Math.min(56, 1.5 + 6.5 * a * a + 7 * Math.max(0, lf + 0.5));
   const fade = 1 - Math.max(0, Math.min(1, (d - SKY_RADIUS * 0.85) / (SKY_RADIUS * 0.15)));
-  return { a, size, fade };
+  return { a, size, fade, k: (0.14 + 1.2 * a ** 1.4) * fade };
 }
+
+/**
+ * A star's point colour in the sky: its black-body hue, saturated, times intensity `k` (from
+ * skyLook). Red dwarfs read orange-red, K stars pale orange, G yellow-white, F white, A and B blue-white (hues boosted, see SKY_SATURATION),
+ * all at the same perceived brightness for the same flux. Values above 1 are fine: the point
+ * shader (skyPoint.frag) turns the overflow into a white core, so a bright star shows a white
+ * centre in a coloured halo, as stars do in photographs, rather than clipping to a flat hue.
+ */
+export function skyColor(color: THREE.Color, k: number, out = new THREE.Color()) {
+  const m = Math.max(color.r, color.g, color.b, 1e-3);
+  // true black-body hues are pale (a 5,000 K star is (1, .89, .8)) and read as grey on a few-pixel
+  // point; stretch them away from white like an astrophoto's saturation boost: 3,000 K becomes
+  // red-orange (1, .4, 0), 4,500 K orange (1, .7, .45), 5,800 K pale yellow, 20,000 K clear blue
+  const sat = (v: number) => Math.max(0, 1 - (1 - v / m) * SKY_SATURATION);
+  out.setRGB(sat(color.r), sat(color.g), sat(color.b));
+  // same perceived brightness whatever the hue: scale to the luminance of white, else a red-orange
+  // dwarf (luma ~0.5) would look half as bright as a white star of the same flux
+  const luma = 0.2126 * out.r + 0.7152 * out.g + 0.0722 * out.b;
+  return out.multiplyScalar(k / Math.max(luma, 0.4));
+}
+
+/** How far skyColor stretches star hues away from white (1 = true black-body colour). */
+const SKY_SATURATION = 2;
 
 /** Speed at the start of the departure, m/s. */
 const DEPART_V0 = 5;
