@@ -109,7 +109,7 @@ function youRows(g: Game, t: Target): [string, string | Readout][] {
     ['SPEED · VERTICAL', ship.mode === 'ftl' ? 'in FTL' : `${fmtSpeedText(v.length())} · ${vr >= 0 ? '+' : '−'}${fmtSpeedText(Math.abs(vr))}`],
   ];
   if (t.kind === 'station') {
-    rows.push(['FRAME', g.refFrame === t ? 'matched · flight assist holds you here' : 'not matched (within 30 km to match)']);
+    rows.push(['FRAME', g.refFrame === t ? 'matched · flight assist holds you here' : 'not matched · matches within 5,000 km while targeted']);
     return rows;
   }
   if (ship.landed === t) {

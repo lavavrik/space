@@ -18,7 +18,8 @@
   display: flex; flex-direction: column; gap: 0.833rem; pointer-events: none;
 }
 #info { display: flex; flex-direction: column; gap: 2px; }
-#info .row b { text-align: right; max-width: 62%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* long values ("not matched · matches within…") wrap rather than get cut off */
+#info .row b, #influences .row b { text-align: right; min-width: 0; white-space: normal; }
 .itype { font-size: 0.917rem; letter-spacing: .14em; color: var(--amber-dim); margin: -2px 0 0.333rem; }
 .isec { font-size: 0.917rem; letter-spacing: .14em; color: var(--amber); margin: 0.667rem 0 2px; border-top: 1px solid var(--amber-faint); padding-top: 0.5rem; }
 #help {
@@ -86,10 +87,7 @@
 
 /* influences panel (B) */
 #influences { display: flex; flex-direction: column; gap: .15rem; }
-/* values like "Venydes 5 · edge 0.011 AU away" are long: wrap them rather than cut them off */
-#influences .row { align-items: baseline; gap: .6rem; }
-#influences .row span { flex: none; }
-#influences .row b { text-align: right; min-width: 0; white-space: normal; }
+#influences .row { gap: .6rem; }
 .infl { display: flex; flex-direction: column; gap: .15rem; margin-bottom: .3rem; }
 .infl .gtop span { color: var(--amber-dim); }
 .infl.applied .gtop span { color: var(--amber); }

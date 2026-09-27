@@ -9,7 +9,8 @@
  *    reads `ship.vel` as "velocity relative to the body I'm near" stays right. Crossing an SOI
  *    boundary re-expresses the velocity in the new body's frame, so nothing physically jumps.
  *
- * 2. The station frame (`Game.refFrame`): within FRAME_ENTER of a station, flight assist, the
+ * 2. The station frame (`Game.refFrame`): within FRAME_ENTER of a station (TARGET_FRAME_ENTER if it's
+ *    your target), flight assist, the
  *    speed readout and the speed limit work relative to the station's velocity, and "all stop"
  *    means station-keeping. The ship and the station fall together, so gravity cancels out apart
  *    from tiny tidal effects.
@@ -59,6 +60,15 @@ export function stationVel(g: Game, st: Station, out = new THREE.Vector3()) {
 /** Enter a station's frame within this distance; leave it beyond FRAME_EXIT (hysteresis). */
 export const FRAME_ENTER = 30e3; // m
 export const FRAME_EXIT = 40e3;
+/**
+ * A targeted station is the frame from much further out. Stations round big worlds orbit faster
+ * than the speed limit (Hopper Station circles a gas giant at 28 km/s, the boost limit is 15 km/s),
+ * so in the planet's frame you could never catch one, and at that closing speed you'd cross the
+ * 30 km FRAME_ENTER bubble in a second. From here on flight assist works relative to the station
+ * instead: it bleeds off the difference (paid for in propellant) and you fly in as if it were still.
+ */
+export const TARGET_FRAME_ENTER = 5000e3;
+export const TARGET_FRAME_EXIT = 6000e3;
 
 const ZERO = new THREE.Vector3();
 
@@ -80,7 +90,12 @@ export function stationWithin(g: Game, range: number): Station | null {
 export function updateFrame(g: Game) {
   const prev = g.refFrame;
   if (g.ship.mode !== 'normal' || g.ship.dead) g.refFrame = null;
-  else if (!prev || prev.pos.distanceTo(g.ship.pos) > FRAME_EXIT) g.refFrame = stationWithin(g, FRAME_ENTER);
+  else {
+    const t = g.target?.kind === 'station' ? g.target : null;
+    const dt = t ? t.pos.distanceTo(g.ship.pos) : Infinity;
+    if (t && dt < (prev === t ? TARGET_FRAME_EXIT : TARGET_FRAME_ENTER)) g.refFrame = t;
+    else if (!prev || prev === t || prev.pos.distanceTo(g.ship.pos) > FRAME_EXIT) g.refFrame = stationWithin(g, FRAME_ENTER);
+  }
   if (g.refFrame === prev || g.ship.mode !== 'normal') return;
   if (g.refFrame) g.showMsg(`Local frame · ${g.refFrame.name} · flight assist matches its orbit`);
   else if (prev) g.showMsg(`Left ${prev.name}'s frame`);
