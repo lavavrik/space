@@ -24,7 +24,7 @@ import { TEMP, toggleRadiators, type HeatBudget } from './sim/thermal';
 import { STOCK_BATTERY, emptyOutfit } from './outfit/catalog';
 import { ZOOM_START, updatePeriscope } from './sim/periscope';
 import { startPivot } from './sim/pivot';
-import { contactLabel, toggleRadar, type Contact } from './sim/radar';
+import { contactLabel, radarContacts, radarSweep } from './sim/radar';
 import { toggleScan } from './sim/scanner';
 import { dockKey, launch, refuelDocked, type Dock } from './sim/docking';
 import type { AutoPhase } from './sim/autodock';
@@ -78,9 +78,9 @@ export class Game {
   autodockStation: Station | null = null;
   autodockPad = 0;
   dockRel = new THREE.Vector3();
-  /** Radar (sim/radar.ts): on or off, the current contacts, sweep timer, and every object it has
-   *  ever detected (scan keys, so per system). */
-  radar: { on: boolean; contacts: Contact[]; t: number; seen: Set<string> } = { on: true, contacts: [], t: 0, seen: new Set() };
+  /** Radar (sim/radar.ts): seconds left of the sweep in progress (0 = idle), and every object it
+   *  has found (scan keys, so per system). */
+  radar: { sweep: number; seen: Set<string> } = { sweep: 0, seen: new Set() };
   /** Radar window (Shift+Y), in the left column. */
   radarVisible = false;
   /** Turning to face the target (middle mouse button; sim/pivot.ts). */
@@ -273,14 +273,14 @@ export class Game {
   }
 
   /** Radar window buttons. */
-  toggleRadar() {
-    toggleRadar(this);
+  radarSweep() {
+    radarSweep(this);
     this.invalidateHud();
   }
 
   /** Radar row: target this contact, and with `scan` start the scanner on it. */
   radarPick(key: string, scan: boolean) {
-    const c = this.radar.contacts.find((x) => x.key === key);
+    const c = radarContacts(this).find((x) => x.key === key);
     if (!c) return;
     this.target = c.target;
     if (scan) toggleScan(this);

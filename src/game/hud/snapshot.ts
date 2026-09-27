@@ -18,7 +18,7 @@ import { TEMP, nextLimit } from '../sim/thermal';
 import { BATTERIES, MODULES, PUMP_ON_ABOVE, type BatteryModule, RADIATOR_MAX_ACC, moduleLabel, outfitMass, pumpFitted, radiatorsFitted, type Module } from '../outfit/catalog';
 import { outfitter } from '../outfit/fit';
 import { SHORE_POWER } from '../sim/docking';
-import { RADAR_RANGE, contactLabel, radarClass } from '../sim/radar';
+import { RADAR_RANGE, SWEEP, contactLabel, radarClass, radarContacts } from '../sim/radar';
 import { unitLabel, type Computer } from '../avionics/catalog';
 import { buildInfluences } from './influences';
 import { buildInfo } from './info';
@@ -342,16 +342,16 @@ function radarView(g: Game): RadarView {
   const scale = (d: number) => Math.min(1, Math.max(0, (Math.log10(Math.max(d, 1e6)) - lo) / (hi - lo)));
   const v = new THREE.Vector3();
   return {
-    on: r.on,
+    sweeping: r.sweep > 0 ? 1 - r.sweep / SWEEP : 0,
     range: `${RADAR_RANGE / AU} AU`,
-    power: r.on ? fmtPower(g.power.radarKW) : 'off',
+    power: r.sweep > 0 ? fmtPower(g.power.radarKW) : 'idle',
     rings: [
       { r: scale(1e7), label: '10,000 km' },
       { r: scale(1e9), label: '1 million km' },
       { r: scale(AU), label: '1 AU' },
       { r: 1, label: `${RADAR_RANGE / AU} AU` },
     ],
-    contacts: r.contacts.map((c) => {
+    contacts: radarContacts(g).map((c) => {
       v.subVectors(c.target.pos, g.ship.pos).applyQuaternion(g.qInv);
       const h = Math.hypot(v.x, v.z) || 1;
       const k = scale(v.length()) / h;

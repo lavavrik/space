@@ -24,7 +24,7 @@ export function App() {
           <div id="leftcol">
             <Location loc={hud.location} />
             {hud.info ? <BodyInfo info={hud.info} /> : hud.influences ? <InfluencesPanel v={hud.influences} onTarget={(n) => game!.targetByName(n)} /> : hud.radar ? (
-              <RadarPanel v={hud.radar} act={{ toggle: () => game!.toggleRadar(), pick: (k, scan) => game!.radarPick(k, scan) }} />
+              <RadarPanel v={hud.radar} act={{ sweep: () => game!.radarSweep(), pick: (k, scan) => game!.radarPick(k, scan) }} />
             ) : hud.outfit ? (
               <OutfitPanel
                 v={hud.outfit}

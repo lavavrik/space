@@ -245,7 +245,9 @@ export function removeNavPoint(g: Game) {
 export interface NavResult {
   key: string;
   kind: 'star' | 'planet' | 'moon' | 'station';
-  name: string;
+  name: string; // as shown (may be "Unidentified …" until scanned)
+  /** The object's real name, for routing (system ids contain colons, so it can't come from the key). */
+  real?: string;
   detail: string;
   sys: StarSystem;
   dist: number; // ly from the sort origin (bodies in this system: their distance in ly, ~0)
@@ -301,14 +303,14 @@ export function searchNav(g: Game, query: string, from: 'ship' | 'last', limit =
       known = label === b.name;
     if (!match(label)) continue;
     const m = Math.max(0, b.pos.distanceTo(g.ship.pos) - b.radius);
-    out.push({ key: `${b.kind}:${here.id}:${b.name}`, kind: b.kind, name: label, detail: `${known ? b.typeName : 'radar contact'} · ${hereDetail(m)}`, sys: here, dist: hereKey(m) });
+    out.push({ key: `${b.kind}:${here.id}:${b.name}`, kind: b.kind, name: label, real: b.name, detail: `${known ? b.typeName : 'radar contact'} · ${hereDetail(m)}`, sys: here, dist: hereKey(m) });
   }
   for (const st of g.cur.stations) {
     if (!radarSeen(g, st)) continue;
     const label = contactLabel(g, st);
     if (!match(label)) continue;
     const m = Math.max(0, st.pos.distanceTo(g.ship.pos) - st.size / 2);
-    out.push({ key: `station:${here.id}:${st.name}`, kind: 'station', name: label, detail: `${label === st.name ? `station · ${st.parent.name}` : 'radar contact'} · ${hereDetail(m)}`, sys: here, dist: hereKey(m) });
+    out.push({ key: `station:${here.id}:${st.name}`, kind: 'station', name: label, real: st.name, detail: `${label === st.name ? `station · ${st.parent.name}` : 'radar contact'} · ${hereDetail(m)}`, sys: here, dist: hereKey(m) });
   }
 
   // stars
@@ -334,8 +336,8 @@ export function addNavResult(g: Game, key: string) {
   const r = searchNav(g, g.navQuery, g.navSortFrom, 200).find((x) => x.key === key);
   if (!r) return;
   if (r.kind === 'star') addNavPoint(g, r.sys);
-  // the real name is in the key (the shown one may be "Unidentified …" until it's scanned)
-  else addNavFinal(g, r.sys, r.kind === 'station' ? 'station' : 'body', key.split(':').slice(2).join(':'));
+  // route by the real name (the shown one may be "Unidentified …" until it's scanned)
+  else addNavFinal(g, r.sys, r.kind === 'station' ? 'station' : 'body', r.real ?? r.name);
 }
 
 /* ---------- flying ---------- */

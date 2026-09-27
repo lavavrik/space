@@ -136,7 +136,7 @@ export interface ElectricalView {
 
 /** Radar window (Shift+Y): the scope and the contact list. */
 export interface RadarView {
-  on: boolean;
+  sweeping: number; // 0…1 progress of the sweep in progress, or 0
   range: string;
   power: string;
   /** Scope rings: radius (0…1 of the scope) and label. */

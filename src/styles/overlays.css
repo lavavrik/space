@@ -179,7 +179,8 @@
 .dkname svg { color: var(--amber); font-size: 1.3rem; }
 
 /* radar window (Shift+Y) */
-#radar { display: flex; flex-direction: column; gap: .35rem; }
+/* the scope stays put; only the contact list scrolls */
+#leftcol > #radar { display: flex; flex-direction: column; gap: .35rem; overflow: hidden; }
 .rdhead { display: flex; justify-content: space-between; align-items: center; font: .85rem "Share Tech Mono", ui-monospace, monospace; color: var(--amber-dim); }
 .rdhead .obtn { display: inline-flex; align-items: center; gap: .3rem; }
 .rdscope { width: 70%; align-self: center; aspect-ratio: 1; flex: none; height: auto; }
@@ -196,7 +197,8 @@
 .rddot.rocky-world, .rdkind.rocky-world { fill: #c9b7a4; background: #c9b7a4; }
 .rddot.moon, .rdkind.moon { fill: #9a9a9a; background: #9a9a9a; }
 .rddot.station, .rdkind.station { fill: #73ffb2; background: #73ffb2; }
-.rdlist { display: flex; flex-direction: column; gap: .15rem; }
+.rdlist { display: flex; flex-direction: column; gap: .15rem; overflow-y: auto; min-height: 0; flex: 1 1 auto; scrollbar-width: thin; scrollbar-color: var(--amber-faint) transparent; }
+.rdbeam { stroke: #73ffb2; stroke-width: 1.2; stroke-opacity: .7; }
 .rdrow { display: grid; grid-template-columns: 1fr auto auto; gap: .5rem; align-items: center; font-size: .9rem; }
 .rdrow.tgt .rdname span { color: var(--amber); }
 .rdname { pointer-events: auto; cursor: pointer; background: none; border: 0; padding: 0; font: inherit; color: var(--text); display: flex; align-items: center; gap: .4rem; text-align: left; min-width: 0; }
@@ -206,3 +208,5 @@
 .rddist { font: .82rem "Share Tech Mono", ui-monospace, monospace; color: var(--amber-dim); }
 .rdok { color: var(--amber); text-align: center; width: 1.5rem; }
 .rdrow .obtn { display: inline-flex; align-items: center; gap: .25rem; }
+#radar > * { flex-shrink: 0; }
+#radar > .rdlist { flex-shrink: 1; }

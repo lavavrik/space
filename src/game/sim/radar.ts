@@ -1,11 +1,13 @@
 /*
- * Radar: a built-in sensor every ship has. While it's on it draws RADAR_KW and sweeps everything
- * within RADAR_RANGE every SWEEP seconds. It only tells you what's there: how far, and what kind of
- * thing (a star, a gas or ice giant, a rocky world, a moon, a station). Names and details still take
- * the scanner (Y), which the radar window can start on any contact.
+ * Radar: a built-in sensor every ship has. It works in sweeps: "scan" (radar window, Shift+Y)
+ * runs a SWEEP-second sweep that draws RADAR_KW, and picks up everything within RADAR_RANGE. What
+ * it finds is remembered (per system, as scan keys); between sweeps it draws nothing, and the
+ * window shows the remembered objects at their current, predicted positions (their orbits are
+ * known once they're tracked).
  *
- * Anything it has ever picked up in a system stays known ("seen"), and that's what the navigation
- * search offers in this system: you can't plot a course to something you haven't detected.
+ * It only tells you what's there: how far, and what kind of thing (a star, a gas or ice giant, a
+ * rocky world, a moon, a station). Names and details still take the scanner (Y; "identify" in the
+ * window). The navigation search only offers what the radar has found in this system.
  */
 import { AU, WT } from '../constants';
 import type { Game } from '../Game';
@@ -14,9 +16,9 @@ import { grant } from './power';
 import { SCAN_STAGE, scanKey, scanProgress } from './scanner';
 
 export const RADAR_RANGE = 10 * AU;
-export const RADAR_KW = 150;
-/** Seconds between sweeps. */
-const SWEEP = 2;
+export const RADAR_KW = 400;
+/** Seconds a sweep takes (at full power). */
+export const SWEEP = 4;
 
 export interface Contact {
   target: Target;
@@ -43,43 +45,44 @@ export function contactLabel(g: Game, t: Target) {
 /** Has the radar ever picked this up (in the current system)? */
 export const radarSeen = (g: Game, t: Target) => g.radar.seen.has(scanKey(g.cur.sys, t));
 
-/** Each frame: draw power while on, and sweep every SWEEP seconds. Call after beginPower. */
+/** Everything the radar has found in this system, nearest first (live distances). */
+export function radarContacts(g: Game): Contact[] {
+  const out: Contact[] = [];
+  for (const t of [...g.cur.bodies, ...g.cur.stations]) {
+    const key = scanKey(g.cur.sys, t);
+    if (!g.radar.seen.has(key)) continue;
+    const d = t.pos.distanceTo(g.ship.pos) - (t.kind === 'station' ? t.size / 2 : t.radius);
+    out.push({ target: t, key, dist: Math.max(0, d) });
+  }
+  return out.sort((a, b) => a.dist - b.dist);
+}
+
+/** Each frame: run the sweep in progress (drawing power) and log what it finds when it completes. Call after beginPower. */
 export function updateRadar(g: Game, dt: number) {
   const r = g.radar;
   g.power.radarKW = 0;
-  if (!r.on) {
-    r.contacts = [];
-    return;
-  }
+  if (r.sweep <= 0) return;
   const kw = grant(g, RADAR_KW, 'radar');
   g.power.radarKW = kw;
-  if (kw < RADAR_KW * 0.5) {
-    r.on = false;
-    r.contacts = [];
-    g.showMsg('Radar off · not enough power', 'warn');
-    return;
-  }
-  r.t -= dt;
-  if (r.t > 0) return;
-  r.t = SWEEP;
-  const { ship } = g;
-  const found: Contact[] = [];
+  r.sweep -= (dt * kw) / RADAR_KW; // a weak bus makes the sweep slower
+  if (r.sweep > 0) return;
+  r.sweep = 0;
+  let n = 0;
   for (const t of [...g.cur.bodies, ...g.cur.stations]) {
-    const d = t.pos.distanceTo(ship.pos) - (t.kind === 'station' ? t.size / 2 : t.radius);
+    const d = t.pos.distanceTo(g.ship.pos) - (t.kind === 'station' ? t.size / 2 : t.radius);
     if (d > RADAR_RANGE) continue;
     const key = scanKey(g.cur.sys, t);
-    found.push({ target: t, key, dist: Math.max(0, d) });
+    if (!r.seen.has(key)) n++;
     r.seen.add(key);
   }
-  r.contacts = found.sort((a, b) => a.dist - b.dist);
+  g.showMsg(`Radar sweep complete · ${n ? `${n} new contact${n > 1 ? 's' : ''}` : 'nothing new'} within ${RADAR_RANGE / AU} AU`);
   g.invalidateHud();
 }
 
-/** Switch the radar on or off. */
-export function toggleRadar(g: Game) {
+/** Start a sweep. */
+export function radarSweep(g: Game) {
   const r = g.radar;
-  r.on = !r.on;
-  r.t = 0; // sweep straight away
-  if (!r.on) r.contacts = [];
-  g.showMsg(r.on ? `Radar on · ${RADAR_RANGE / AU} AU · ${RADAR_KW} kW` : 'Radar off');
+  if (r.sweep > 0) return;
+  r.sweep = SWEEP;
+  g.showMsg(`Radar sweeping · ${RADAR_RANGE / AU} AU · ${RADAR_KW} kW for ${SWEEP} s`);
 }
