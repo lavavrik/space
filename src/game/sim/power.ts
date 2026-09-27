@@ -1,6 +1,6 @@
 /*
- * The power bus. Each frame the ship can spend what the solar panels deliver plus what the battery
- * can give (its discharge limit, and only while it holds charge). Loads are granted in the order
+ * The power bus. Each frame the ship can spend what the solar panels deliver, external (shore)
+ * power while docked at a station, plus what the battery can give (its discharge limit, and only while it holds charge). Loads are granted in the order
  * they ask, after the always-on base load:
  *
  *   base (life support, avionics) → drive charging → FTL drive → thrusters → heat pump
@@ -9,7 +9,7 @@
  * stretches (the energy is fixed: 5 kWh for the FTL drive, ~35 kWh for a hyperjump), thrust is
  * capped. The FTL drive is the exception: it needs its full 600 kW or it drops out.
  *
- * Surplus solar charges the battery up to its charge acceptance; the rest is curtailed.
+ * Surplus (solar and shore) charges the battery up to its charge acceptance; the rest is curtailed.
  */
 import { SHIP } from '../constants';
 import type { Game } from '../Game';
@@ -20,7 +20,7 @@ export const battCap = (ship: Ship) => ship.outfit.battery.caps.capacity;
 /** What the bus can supply this frame (kW): the panels plus the battery's discharge limit. */
 export function busCapacity(g: Game) {
   const { ship, power } = g;
-  return power.solar + (ship.batt > 0 ? ship.outfit.battery.caps.maxKW : 0);
+  return power.solar + power.shore + (ship.batt > 0 ? ship.outfit.battery.caps.maxKW : 0);
 }
 
 /** Start the frame's budget. Uses the panels' output from the previous frame. */
@@ -49,7 +49,7 @@ export function grant(g: Game, kw: number, what: string) {
 export function settleBattery(g: Game, dt: number) {
   const { ship, power } = g;
   const b = ship.outfit.battery.caps;
-  const surplus = power.solar - power.draw;
+  const surplus = power.solar + power.shore - power.draw;
   power.net = surplus >= 0 ? Math.min(surplus, ship.batt < b.capacity ? b.chargeKW : 0) : Math.max(surplus, -b.maxKW);
   power.curtailed = surplus > 0 ? surplus - power.net : 0;
   ship.batt = Math.min(b.capacity, Math.max(0, ship.batt + (power.net * dt) / 3600));

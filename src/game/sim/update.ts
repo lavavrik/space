@@ -153,7 +153,8 @@ export function update(g: Game, dt: number, realDt = dt) {
     ship.q.slerp(dq.multiply(ship.q), Math.min(1, 1.2 * dt)).normalize();
   }
   // no sunlight inside a station; docked, the station's shore power stands in for the panels
-  power.solar = inTunnel ? 0 : g.dock?.docked ? SHORE_POWER : g.inStation ? 0 : solarPower(g);
+  power.solar = inTunnel || g.inStation ? 0 : solarPower(g);
+  power.shore = g.dock?.docked ? SHORE_POWER : 0;
   power.draw = SHIP.baseLoad + power.thrustKW + power.ftlKW + power.chargeKW + power.pumpKW;
   settleBattery(g, dt);
   if (ship.batt > 1) g.warned.batt = false;

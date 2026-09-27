@@ -32,7 +32,7 @@ and the mesh in `render/stationMesh.ts`.
 
    You're then docked and held on the pad as the station turns.
 5. **Docked:**
-   - shore power (2 MW) charges the battery;
+   - external (shore) power (2 MW, its own input on the bus and in the schematic) charges the battery;
    - the station brings the hull to about 293 K;
    - "refuel" fills the tanks (free for now);
    - outfitting (Shift+U) works only while docked;

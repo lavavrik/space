@@ -46,7 +46,7 @@ export function buildSnapshot(g: Game): HudSnapshot {
       ? {
           station: g.dock.station.name,
           pad: g.dock.pad + 1,
-          notes: [`Shore power ${fmtPower(SHORE_POWER)} · battery charging`, `Hull held near room temperature (${g.ship.temp.toFixed(0)} K)`],
+          notes: [`External power ${fmtPower(SHORE_POWER)} · battery charging`, `Hull held near room temperature (${g.ship.temp.toFixed(0)} K)`],
           tanksFull: g.ship.prop >= SHIP.propCap - 1 && g.ship.exotic >= SHIP.exoticCap - 0.01,
         }
       : null,
@@ -406,9 +406,10 @@ function electricalView(g: Game): ElectricalView {
     solar: {
       kw: power.solar,
       max: SHIP.solarMax,
-      state: power.shadow ? 'shadow' : ship.temp >= TEMP.panels ? 'feathered' : power.solar < 1 ? 'dark' : 'ok',
+      state: g.inStation ? 'inside' : power.shadow ? 'shadow' : ship.temp >= TEMP.panels ? 'feathered' : power.solar < 1 ? 'dark' : 'ok',
       curtailed: power.curtailed,
     },
+    shore: { kw: power.shore, source: g.dock?.docked ? g.dock.station.name : null },
     battery: { unit: moduleLabel(b), kwh: ship.batt, cap, flowKW: net, maxKW: b.caps.maxKW, chargeKW: b.caps.chargeKW },
     bus: { capKW: power.cap, drawKW: power.draw },
     loads: [

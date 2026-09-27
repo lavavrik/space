@@ -125,7 +125,9 @@ export interface AvionicsSlotView {
 
 /** Ship stats (U), electrical section: drawn as a schematic (sources → bus → loads), plus a few rows. */
 export interface ElectricalView {
-  solar: { kw: number; max: number; state: 'ok' | 'shadow' | 'feathered' | 'dark'; curtailed: number };
+  solar: { kw: number; max: number; state: 'ok' | 'shadow' | 'feathered' | 'dark' | 'inside'; curtailed: number };
+  /** External power: the station's supply while docked (null source name when not connected). */
+  shore: { kw: number; source: string | null };
   battery: { unit: string; kwh: number; cap: number; flowKW: number; maxKW: number; chargeKW: number };
   bus: { capKW: number; drawKW: number };
   loads: { id: string; name: string; kw: number; limited: number | null }[];

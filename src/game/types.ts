@@ -189,6 +189,7 @@ export interface Ship {
 /** Per-frame power bookkeeping. */
 export interface Power {
   solar: number;
+  shore: number; // kW of external (station) power while docked
   cos: number;
   shadow: Body | null;
   draw: number;

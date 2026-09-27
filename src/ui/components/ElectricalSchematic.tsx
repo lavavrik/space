@@ -3,8 +3,8 @@ import { fmtEnergy, fmtPower } from '../../game/format';
 import { cx } from './primitives';
 
 /*
- * The power bus as a schematic: the solar panels and the battery on the left feed a vertical bus
- * bar, which feeds every load on the right. A wire carrying power is drawn solid and thicker with
+ * The power bus as a schematic: the solar panels, external (station) power and the battery on the
+ * left feed a vertical bus bar, which feeds every load on the right. A wire carrying power is drawn solid and thicker with
  * more power, with dashes marching the way the power flows (into the battery when it's charging);
  * an idle wire is faint. A load getting less than it asks for is red, with its share.
  */
@@ -29,23 +29,26 @@ function Wire({ d, kw, rev, lim }: { d: string; kw: number; rev?: boolean; lim?:
 }
 
 export function ElectricalSchematic({ e }: { e: ElectricalView }) {
-  const { solar, battery, bus, loads } = e;
+  const { solar, shore, battery, bus, loads } = e;
   const busTop = LOAD_Y0 + LOAD_H / 2,
     busBot = LOAD_Y0 + (loads.length - 1) * LOAD_GAP + LOAD_H / 2;
-  const solarY = 18,
-    battY = 150;
+  const solarY = 12,
+    shoreY = 88,
+    battY = 156;
   const solarMid = solarY + 28,
+    shoreMid = shoreY + 22,
     battMid = battY + 40;
   const charging = battery.flowKW > 0.5,
     discharging = battery.flowKW < -0.5;
   const battFrac = Math.max(0, Math.min(1, battery.kwh / battery.cap));
-  const solarNote = { ok: `max ${fmtPower(solar.max)}`, dark: 'panels off the star', shadow: 'in shadow', feathered: 'feathered · too hot' }[solar.state];
+  const solarNote = { ok: `max ${fmtPower(solar.max)}`, dark: 'panels off the star', shadow: 'in shadow', feathered: 'feathered · too hot', inside: 'inside the station' }[solar.state];
   return (
     <svg className="esch" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Power schematic">
       {/* bus bar */}
       <line x1={BUS_X} y1={Math.min(busTop, solarMid)} x2={BUS_X} y2={Math.max(busBot, battMid)} className="ebus" />
       <text x={BUS_X} y={H - 4} className="elab mid">
         BUS {fmtPower(bus.drawKW)} / {fmtPower(bus.capKW)}
+        {solar.curtailed > 1 && ` · ${fmtPower(solar.curtailed)} unused`}
       </text>
 
       {/* sources */}
@@ -62,11 +65,18 @@ export function ElectricalSchematic({ e }: { e: ElectricalView }) {
           {solarNote}
         </text>
       </g>
-      {solar.curtailed > 1 && (
-        <text x={(4 + SRC_R) / 2} y={solarY + 70} className="esub mid">
-          {fmtPower(solar.curtailed)} unused
+
+      {/* external power: the station's supply while docked */}
+      <Wire d={`M${SRC_R} ${shoreMid} H${BUS_X}`} kw={shore.kw} />
+      <g className={cx('ebox', !shore.source && 'off')}>
+        <rect x={4} y={shoreY} width={SRC_R - 4} height={44} />
+        <text x={12} y={shoreY + 15} className="etitle">
+          EXTERNAL POWER
         </text>
-      )}
+        <text x={12} y={shoreY + 33} className="eval">
+          {shore.source ? fmtPower(shore.kw) : 'not connected'}
+        </text>
+      </g>
 
       <Wire d={`M${SRC_R} ${battMid} H${BUS_X}`} kw={Math.abs(battery.flowKW)} rev={charging} />
       <g className={cx('ebox', battFrac < 0.15 && 'warn')}>
