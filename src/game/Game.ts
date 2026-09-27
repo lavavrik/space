@@ -5,6 +5,7 @@ import { onPress, onRepeat, onWheel } from './input/controls';
 import { Input } from './input/Input';
 import { THREE } from './lib/three';
 import { Overlay } from './render/Overlay';
+import { defaultAvionics } from './avionics/catalog';
 import { PerfMonitor } from './debug/Perf';
 import { SceneRenderer } from './render/SceneRenderer';
 import type { Guide } from './sim/guide';
@@ -28,7 +29,7 @@ function newShip(): Ship {
     mode: 'normal', throttle: 0, cruise: false, ftlSpooled: false, ftlSpeed: 0, ftlCharge: 0, vmax: 0,
     fa: true, decoupled: false, travelDir: new THREE.Vector3(0, 0, -1), ap: null, landed: null, dead: null, grav: null,
     prop: SHIP.propCap, exotic: SHIP.exoticCap, batt: SHIP.battCap,
-    burnRate: 0, sunTrack: false, tanker: null, scoop: '',
+    burnRate: 0, sunTrack: false, tanker: null, scoop: '', avionics: defaultAvionics(),
   };
 }
 
@@ -65,6 +66,8 @@ export class Game {
   helpVisible = false; // Tab opens the controls; the start screen lists the keys
   /** Body info panel (I), shown in place of the controls list while open. */
   infoVisible = false;
+  /** Avionics panel (U): the fitted computers; shares the left column with info and controls. */
+  avionicsVisible = false;
   /** Draw the planned / autopilot orbit as a ring (L). */
   orbitPreview = true;
   /** Autopilot status panel (O while the autopilot flies). */

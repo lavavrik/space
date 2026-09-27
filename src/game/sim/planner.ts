@@ -1,4 +1,5 @@
 /* Orbit planner (O): pick an orbit around a body and hand it to the autopilot. */
+import { unitLabel } from '../avionics/catalog';
 import { AP_FTL_MIN, FTL_CHARGE_TIME } from '../constants';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
@@ -9,13 +10,20 @@ import { dominantBody } from './gravity';
 import { startOrbitGuide } from './guide';
 import { apLabel, defaultOrbitAlt, evalPlan, maxOrbitR, minOrbitAlt, orbitNormal } from './orbits';
 
+const ORBIT_TYPE_NAMES: Record<OrbitType, string> = { equatorial: 'equatorial', polar: 'polar', sync: 'stationary', hold: 'hold-position' };
+
 export function openPlanner(g: Game) {
   const { ship } = g;
+  const oc = ship.avionics.orbit;
+  if (!oc) {
+    g.showMsg('No orbit computer fitted · see avionics (U)', 'warn');
+    return;
+  }
   // a targeted station plans an orbit around the world it circles
   const t = g.target && g.target.kind === 'station' ? g.target.parent : g.target;
   const b = t || (ship.grav && ship.grav.body) || dominantBody(g.cur, ship.pos);
   const curAlt = ship.pos.distanceTo(b.pos) - b.radius;
-  g.planner = { body: b, type: 'equatorial', alt: defaultOrbitAlt(b), dir: 1, curAlt };
+  g.planner = { body: b, type: oc.caps.types[0], alt: defaultOrbitAlt(b), dir: 1, curAlt };
   g.invalidateHud();
 }
 
@@ -37,6 +45,11 @@ export function adjustAlt(g: Game, f: number) {
 export function selectOrbitType(g: Game, t: OrbitType) {
   const p = g.planner;
   if (!p) return;
+  const oc = g.ship.avionics.orbit;
+  if (oc && !oc.caps.types.includes(t)) {
+    g.showMsg(`${unitLabel(oc)} can't fly ${ORBIT_TYPE_NAMES[t]} orbits`, 'warn');
+    return;
+  }
   p.type = t;
   if (t === 'hold') p.alt = Math.max(minOrbitAlt(p.body), p.curAlt);
   else if (p.alt + p.body.radius > maxOrbitR(p.body)) p.alt = defaultOrbitAlt(p.body);
@@ -92,6 +105,7 @@ export function engageOrbit(g: Game) {
  * alone left a 2,300 km plane change to thrusters (a 13-minute ETA).
  */
 export function ftlWorthwhile(g: Game, ap: Autopilot) {
+  if (!g.ship.avionics.orbit?.caps.ftlLeg) return false; // basic units fly it all on thrusters
   return apInsertion(g.ship, ap).P.distanceTo(g.ship.pos) > AP_FTL_MIN && !massLock(g) && !ftlBlocked(g.ship);
 }
 
@@ -155,7 +169,7 @@ export interface OrbitPreview {
  * or the preview is switched off.
  */
 export function orbitPreview(g: Game): OrbitPreview | null {
-  if (!g.orbitPreview) return null;
+  if (!g.orbitPreview || !g.ship.avionics.orbit?.caps.preview) return null;
   const { ship } = g;
   const ap = ship.ap;
   if (ap) return { body: ap.body, r: ap.r0, n: ap.n, point: ap.type === 'hold' ? holdPoint(ap) : null, engaged: true };
@@ -169,6 +183,11 @@ export function orbitPreview(g: Game): OrbitPreview | null {
 }
 
 export function toggleOrbitPreview(g: Game) {
+  const oc = g.ship.avionics.orbit;
+  if (!oc?.caps.preview) {
+    g.showMsg(oc ? `${unitLabel(oc)} has no orbit preview` : 'No orbit computer fitted', 'warn');
+    return;
+  }
   g.orbitPreview = !g.orbitPreview;
   g.showMsg(g.orbitPreview ? 'Orbit preview on' : 'Orbit preview off');
 }

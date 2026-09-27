@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { approachSpeed, approachTime, PLANE_CAP, RADIAL_CAP } from '../sim/autopilot';
+import { approachSpeed, approachTime, DEFAULT_PROFILE } from '../sim/autopilot';
+
+const RADIAL_CAP = DEFAULT_PROFILE.radialCap,
+  PLANE_CAP = DEFAULT_PROFILE.planeCap;
 
 /** Integrate the approach profile numerically: how long until the distance drops below `done`. */
 function simulate(d: number, cap: number, done: number) {

@@ -71,6 +71,7 @@ export interface SystemsView {
 
 /** Autopilot status (O while it flies): what it's flying, how far off you are, and disengage. */
 export interface AutopilotView {
+  unit: string; // the orbit computer flying it
   title: string; // e.g. EQUATORIAL ORBIT
   sub: string; // body · target altitude · period
   state: Readout;
@@ -78,7 +79,18 @@ export interface AutopilotView {
   confirm: boolean; // disengage armed, waiting for the second press
 }
 
+/** One fitted computer in the avionics panel (U). */
+export interface AvionicsSlotView {
+  kind: string; // ORBIT COMPUTER, SCANNER, NAVIGATION
+  unit: string; // HX-9100 Periastron, or 'none fitted'
+  maker: string;
+  blurb: string;
+  specs: [string, string][];
+}
+
 export interface PlannerView {
+  unit: string; // the orbit computer planning it, e.g. HX-9100 PERIASTRON
+  types: OrbitType[]; // the orbit types that unit can fly
   body: string;
   type: OrbitType;
   alt: string;
@@ -121,5 +133,6 @@ export interface HudSnapshot {
   systems: SystemsView;
   planner: PlannerView | null;
   autopilot: AutopilotView | null;
+  avionics: AvionicsSlotView[] | null; // the avionics panel, when open
   guide: GuideView | null;
 }

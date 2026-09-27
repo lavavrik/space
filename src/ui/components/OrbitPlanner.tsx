@@ -13,10 +13,11 @@ const TYPES: [OrbitType, string][] = [
 export function OrbitPlanner({ p }: { p: PlannerView }) {
   return (
     <Panel name="orbit" id="orbit" className="pan" title="ORBIT PLANNER" right="O CLOSES">
+      <div className="apstate">{p.unit}</div>
       <Row label="BODY" value={p.body} />
       <div className="otypes">
         {TYPES.map(([t, label], i) => (
-          <div key={t} className={cx(p.type === t && 'on')}>
+          <div key={t} className={cx(p.type === t && 'on', !p.types.includes(t) && 'na')} title={p.types.includes(t) ? undefined : `${p.unit} can't fly this`}>
             <kbd>{i + 1}</kbd>
             {label}
           </div>

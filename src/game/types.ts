@@ -1,3 +1,4 @@
+import type { Avionics } from './avionics/catalog';
 import type { THREE } from './lib/three';
 
 type Vec3 = THREE.Vector3;
@@ -174,6 +175,7 @@ export interface Ship {
   sunTrack: boolean; // keep the solar panels (ship's top) facing the star
   tanker: Tanker | null;
   scoop: string; // what we are refuelling from this frame
+  avionics: Avionics; // fitted computers (see avionics/catalog.ts)
 }
 
 /** Per-frame power bookkeeping. */

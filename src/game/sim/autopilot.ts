@@ -2,6 +2,7 @@ import { AP_ACC, AP_TAU } from '../constants';
 import { fmtDist, fmtTime } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
+import type { ApproachProfile } from '../avionics/catalog';
 import type { Autopilot, Gravity, Ship } from '../types';
 import { velRel } from './frame';
 import { dropAlt, dropFTL, ftlSpeedLimit, ftlUpkeep } from './ftl';
@@ -31,14 +32,15 @@ export function apInsertion(ship: Ship, ap: Autopilot) {
 
 /*
  * Approach profile for closing a distance (altitude, distance out of the orbit plane, distance to a
- * hold point): cruise at up to `cap`, brake at APPROACH_ACC so you arrive at rest, and finish with a
- * short linear tail (time constant 1/APPROACH_K). Replaces a pure proportional law whose 17 s
- * exponential tail and 2.5 m/s² braking made insertions take a quarter of an hour.
+ * hold point): cruise at up to a cap, brake at `acc` so you arrive at rest, and finish with a short
+ * linear tail (time constant 1/APPROACH_K). The braking and caps come from the fitted orbit
+ * computer (see avionics/catalog.ts); DEFAULT_PROFILE is the HX-8200's.
  */
-export const APPROACH_ACC = 25; // m/s², braking
 export const APPROACH_K = 0.3; // 1/s, final linear tail
-export const RADIAL_CAP = 5000; // m/s, climb / descent
-export const PLANE_CAP = 3000; // m/s, sideways into the orbit plane (these cost Δv both ways)
+export const DEFAULT_PROFILE: ApproachProfile = { acc: 25, radialCap: 5000, planeCap: 3000 };
+
+/** The fitted orbit computer's approach profile. */
+export const profileOf = (ship: Ship) => ship.avionics.orbit?.caps.profile ?? DEFAULT_PROFILE;
 
 /** Settling an orbit: trim to within this before announcing it (m, m/s)... */
 export const ORBIT_TRIM = { alt: 100, vel: 1 };
@@ -51,15 +53,15 @@ export const ORBIT_BAND = { alt: 1000, vel: 3 };
 export const orbitBandAlt = (r: number, v: number) => Math.max(ORBIT_BAND.alt, (3 * r * ORBIT_TRIM.vel) / v);
 
 /** Speed to close a remaining distance d (m). */
-export function approachSpeed(d: number, cap: number) {
-  return Math.min(cap, Math.sqrt(2 * APPROACH_ACC * d), APPROACH_K * d);
+export function approachSpeed(d: number, cap: number, acc = DEFAULT_PROFILE.acc) {
+  return Math.min(cap, Math.sqrt(2 * acc * d), APPROACH_K * d);
 }
 
 /** Time (s) the approach profile takes to bring d down to `done`: cruise, braking, then the tail. */
-export function approachTime(d: number, cap: number, done: number) {
+export function approachTime(d: number, cap: number, done: number, acc = DEFAULT_PROFILE.acc) {
   if (d <= done) return 0;
-  const x1 = (2 * APPROACH_ACC) / (APPROACH_K * APPROACH_K); // below this, the linear tail
-  const x2 = (cap * cap) / (2 * APPROACH_ACC); // above this, cruising at the cap
+  const x1 = (2 * acc) / (APPROACH_K * APPROACH_K); // below this, the linear tail
+  const x2 = (cap * cap) / (2 * acc); // above this, cruising at the cap
   let t = 0;
   if (d > x2) {
     t += (d - x2) / cap;
@@ -67,7 +69,7 @@ export function approachTime(d: number, cap: number, done: number) {
   }
   const lo = Math.max(x1, done); // the braking phase ends at the tail, or at the finish if that's sooner
   if (d > lo) {
-    t += Math.sqrt(2 / APPROACH_ACC) * (Math.sqrt(d) - Math.sqrt(lo));
+    t += Math.sqrt(2 / acc) * (Math.sqrt(d) - Math.sqrt(lo));
     d = lo;
   }
   return t + Math.log(Math.max(1, d / done)) / APPROACH_K;
@@ -95,6 +97,7 @@ export function autopilot(g: Game, dt: number, grav: Gravity) {
   const ship = g.ship;
   const ap = ship.ap!,
     b = ap.body;
+  const prof = profileOf(ship);
   const rv = ship.pos.clone().sub(b.pos),
     r = rv.length(),
     u = rv.clone().divideScalar(r);
@@ -104,7 +107,7 @@ export function autopilot(g: Game, dt: number, grav: Gravity) {
   if (ap.type === 'hold') {
     const e = holdPoint(ap).sub(ship.pos),
       dist = e.length();
-    vDes = e.multiplyScalar(approachSpeed(dist, RADIAL_CAP) / Math.max(dist, 1));
+    vDes = e.multiplyScalar(approachSpeed(dist, prof.radialCap, prof.acc) / Math.max(dist, 1));
     aFF = grav.vec.clone().negate();
     if (!ap.settled && dist < 100 && vRel.length() < 5) {
       ap.settled = true;
@@ -121,8 +124,8 @@ export function autopilot(g: Game, dt: number, grav: Gravity) {
     // hence the caps; the braking profile makes them arrive at rest instead of creeping in
     const er = ap.r0 - r,
       dn = -rv.dot(n);
-    const vr = Math.sign(er) * approachSpeed(Math.abs(er), RADIAL_CAP);
-    const vn = Math.sign(dn) * approachSpeed(Math.abs(dn), PLANE_CAP);
+    const vr = Math.sign(er) * approachSpeed(Math.abs(er), prof.radialCap, prof.acc);
+    const vn = Math.sign(dn) * approachSpeed(Math.abs(dn), prof.planeCap, prof.acc);
     const vCirc = tang.clone().multiplyScalar(vt); // circular velocity here (before tang is reused below)
     vDes = tang.multiplyScalar(vt).addScaledVector(up, vr).addScaledVector(n, vn);
     aFF = up

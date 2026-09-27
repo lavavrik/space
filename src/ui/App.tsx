@@ -1,4 +1,5 @@
 import { AutopilotPanel } from './components/AutopilotPanel';
+import { AvionicsPanel } from './components/AvionicsPanel';
 import { BodyInfo } from './components/BodyInfo';
 import { HelpPanel } from './components/HelpPanel';
 import { FlightCluster, Location, ShipGauges, TargetCard } from './components/Hud';
@@ -18,7 +19,7 @@ export function App() {
         <>
           <div id="leftcol">
             <Location loc={hud.location} />
-            {hud.info ? <BodyInfo info={hud.info} /> : hud.helpVisible && <HelpPanel />}
+            {hud.info ? <BodyInfo info={hud.info} /> : hud.avionics ? <AvionicsPanel slots={hud.avionics} /> : hud.helpVisible && <HelpPanel />}
           </div>
           <div id="rightcol">
             {hud.autopilot && <AutopilotPanel a={hud.autopilot} onDisengage={() => game!.requestDisengage()} onChange={() => game!.changeOrbit()} />}

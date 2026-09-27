@@ -9,6 +9,7 @@ import { Panel, Row, cx } from './primitives';
 export function AutopilotPanel({ a, onDisengage, onChange }: { a: AutopilotView; onDisengage: () => void; onChange: () => void }) {
   return (
     <Panel name="autopilot" id="apstat" className="pan" title="AUTOPILOT" right="O CLOSES">
+      <div className="apstate">{a.unit}</div>
       <div className="apsub">
         {a.title} · {a.sub}
       </div>

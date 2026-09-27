@@ -55,6 +55,7 @@ The simulation never touches the DOM. Each frame it steps the physics, draws the
 | Space / Ctrl or C | Thrust up / down (Ctrl+W closes the tab, so use C when also pressing W) |
 | Mouse, arrows · Q / E | Pitch and yaw · roll |
 | Shift · X | Boost · all stop |
+| U | Avionics: the fitted computers (orbit computer, scanner, navigation) with their specs |
 | I | Target info: size, mass, gravity, climate, its orbit, and your speed and orbit relative to it (shown in place of the controls list) |
 | Z | Flight assist on / off |
 | V | Decoupled: turn without changing course (normal space and FTL) |
@@ -71,6 +72,15 @@ The simulation never touches the DOM. Each frame it steps the physics, draws the
 | ` | Performance overlay: FPS, frame-time graph, per-stage timings (see docs/perf.md) |
 | Tab | Hide the controls panel (a colour-coded keyboard schema with a legend by group) |
 | Click a panel heading | Collapse / expand that panel (all but the speed readout; remembered per browser). Release the mouse (Esc) first if it's captured |
+
+## Avionics
+The ship's automation comes from fitted computers, commercial units with a maker, model and name. Features are switched by each unit's capabilities (`src/game/avionics/catalog.ts`). The default ship carries the best of each:
+
+| Kind | Line-up (basic → best) | Default |
+|---|---|---|
+| Orbit computer (Hesperus Avionics) | HX-6100 *Plumbline* (equatorial and hold, thrusters only, no preview) · HX-8200 *Apsis* (all orbits, preview ring, FTL leg) · HX-9100 *Periastron* (plus faster insertion and deviation readouts) | HX-9100 |
+| Scanner (Argus Optics) | AS-300 *Glance* (60″) · AS-700 *Watchman* (5″) · AS-1200 *Panoptes* (0.2″) | AS-1200 |
+| Navigation (Meridian Systems) | MNV-3000 *Pathfinder* (in-system) · MNV-5000 *Wayfarer* (≤ 5 jumps) · MNV-7000 *Longitude* (unlimited, refuel stops, optimisation) | MNV-7000 |
 
 ## Physics
 - **Orbits:** planets orbit their star and moons orbit their planets on near-circular Kepler orbits (e ≤ 0.06), computed exactly from the sim clock, so a moon around a giant may lap it in hours while an Earth-like world takes a year.

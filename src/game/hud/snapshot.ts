@@ -11,8 +11,9 @@ import { transitState } from '../sim/hyperspace';
 import { galPos } from '../sim/navigation';
 import { evalPlan } from '../sim/orbits';
 import { deltaVLeft } from '../sim/resources';
+import { unitLabel, type Computer } from '../avionics/catalog';
 import { buildInfo } from './info';
-import type { AutopilotView, FlightView, GuideView, HudSnapshot, LocationView, Pill, PlannerView, Readout, SystemsView, TargetView } from './types';
+import type { AutopilotView, AvionicsSlotView, FlightView, GuideView, HudSnapshot, LocationView, Pill, PlannerView, Readout, SystemsView, TargetView } from './types';
 
 const tmp = new THREE.Vector3();
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
@@ -30,6 +31,7 @@ export function buildSnapshot(g: Game): HudSnapshot {
     systems: systems(g),
     planner: planner(g),
     autopilot: g.apPanel && g.ship.ap ? autopilotView(g) : null,
+    avionics: g.avionicsVisible ? avionicsView(g) : null,
     guide: g.guide ? guide(g.guide) : null,
   };
 }
@@ -181,18 +183,46 @@ function autopilotView(g: Game): AutopilotView {
     const dPlane = Math.abs(rv.dot(ap.n!));
     const dVel = orbitVelErr(g, ap);
     const big = (x: number, lim: number) => ap.settled && x > lim;
-    rows.push(['ALTITUDE OFF', { text: `${dAlt >= 0 ? '+' : '−'}${fmtDist(Math.abs(dAlt))}`, warn: big(Math.abs(dAlt), Math.max(2000, ap.r0 * 0.004)) }]);
-    rows.push(['PLANE OFF', { text: fmtDist(dPlane), warn: big(dPlane, 5000) }]);
-    rows.push(['SPEED OFF', { text: fmtSpeedText(dVel), warn: big(dVel, 20) }]);
+    // live deviation readouts are an HX-9100 feature
+    if (ship.avionics.orbit?.caps.readouts) rows.push(['ALTITUDE OFF', { text: `${dAlt >= 0 ? '+' : '−'}${fmtDist(Math.abs(dAlt))}`, warn: big(Math.abs(dAlt), Math.max(2000, ap.r0 * 0.004)) }]);
+    if (ship.avionics.orbit?.caps.readouts) {
+      rows.push(['PLANE OFF', { text: fmtDist(dPlane), warn: big(dPlane, 5000) }]);
+      rows.push(['SPEED OFF', { text: fmtSpeedText(dVel), warn: big(dVel, 20) }]);
+    }
   }
   rows.push(['ENGAGED', `${fmtTime(g.simTime - ap.t0)} · Δv ${fmtSpeedText(dv)} · ${fmtMass(used)} H₂`]);
   return {
+    unit: ship.avionics.orbit ? unitLabel(ship.avionics.orbit).toUpperCase() : 'AUTOPILOT',
     title: label,
     sub: `${b.name} · ${ap.type === 'hold' ? fmtDist(ap.r0 - R) + ' up' : fmtDist(ap.r0 - R) + ' · ' + fmtTime(ap.period)}`,
     state: { text: mode.replace('AUTOPILOT · ', ''), warn: false },
     rows,
     confirm: g.apConfirm > 0,
   };
+}
+
+const fmtArcsec = (rad: number) => `${((rad * 180 * 3600) / Math.PI).toFixed(rad < 1e-5 ? 1 : 0)}″`;
+
+function avionicsView(g: Game): AvionicsSlotView[] {
+  const { orbit, scanner, nav } = g.ship.avionics;
+  const unit = (kind: string, c: Computer | null, specs: [string, string][]): AvionicsSlotView =>
+    c ? { kind, unit: unitLabel(c), maker: c.maker, blurb: c.blurb, specs } : { kind, unit: 'none fitted', maker: '', blurb: '', specs: [] };
+  const list = (...xs: (string | false)[]) => xs.filter(Boolean).join(' · ') || '—';
+  return [
+    unit('ORBIT COMPUTER', orbit, orbit ? [
+      ['ORBITS', list(...orbit.caps.types.map((t) => ({ equatorial: 'equatorial', polar: 'polar', sync: 'stationary', hold: 'hold' })[t]))],
+      ['INSERTION', `${orbit.caps.profile.acc} m/s² braking · ${fmtSpeedText(orbit.caps.profile.radialCap)} climb`],
+      ['FEATURES', list(orbit.caps.preview && 'preview ring', orbit.caps.ftlLeg && 'FTL leg', orbit.caps.readouts && 'deviation readouts')],
+    ] : []),
+    unit('SCANNER', scanner, scanner ? [
+      ['RESOLUTION', fmtArcsec(scanner.caps.resolution)],
+      ['SCAN SPEED', `${scanner.caps.rate}×`],
+    ] : []),
+    unit('NAVIGATION', nav, nav ? [
+      ['ROUTES', nav.caps.crossSystem ? (isFinite(nav.caps.maxHops) ? `up to ${nav.caps.maxHops} jumps` : 'unlimited jumps') : 'in-system only'],
+      ['FEATURES', list(nav.caps.refuelStops && 'refuel stops', nav.caps.optimise && 'route optimisation')],
+    ] : []),
+  ];
 }
 
 function planner(g: Game): PlannerView | null {
@@ -202,7 +232,10 @@ function planner(g: Game): PlannerView | null {
   const b = p.body,
     ev = evalPlan(p, ship);
   const far = Math.abs(ship.pos.distanceTo(b.pos) - ev.r0) > 3e6;
+  const oc = ship.avionics.orbit;
   return {
+    unit: oc ? unitLabel(oc).toUpperCase() : '',
+    types: oc ? oc.caps.types : [],
     body: `${b.name} · ${b.typeName}`,
     type: p.type,
     alt: fmtDist(ev.r0 - b.radius) + (p.type === 'sync' ? ' (fixed)' : ''),
