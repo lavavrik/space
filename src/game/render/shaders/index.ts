@@ -1,4 +1,5 @@
 import noise from './noise.glsl?raw';
+import noise3d from './noise3d.glsl?raw';
 import bodyVert from './body.vert.glsl?raw';
 import planetFrag from './planet.frag.glsl?raw';
 import atmosphereFrag from './atmosphere.frag.glsl?raw';
@@ -20,7 +21,8 @@ const withNoise = (src: string) => src.replace('#pragma farlight_noise', noise);
 
 /** Planets, moons, atmospheres, rings and stars share one vertex shader. */
 export const BODY_VS = bodyVert;
-export const PLANET_FS = withNoise(planetFrag);
+/** Planets: exact simplex noise for coarse octaves, the 3D noise texture (uNoise3D) for fine ones. */
+export const PLANET_FS = withNoise(planetFrag).replace('#pragma farlight_noise3d', noise3d);
 export const ATMO_FS = atmosphereFrag;
 export const STAR_FS = withNoise(starFrag);
 export const GLOW_VS = glowVert;

@@ -32,9 +32,26 @@ The 2D overlay costs about 0.04 ms of CPU per frame. Its compositing cost, and t
 3. **2D overlay canvas** capped at ≈ 8.3 MP (it was 5120×2880 on a 2560×1440 DPR-2 window).
 4. **No `backdrop-filter` on HUD panels.** Blurring the live 3D view behind 7+ panels is re-done every frame. The panels are slightly more opaque instead.
 
+## Planet shaders (2026-09-27)
+
+A planet filling the screen was the next bottleneck: the Earth-like shader ran about 40 simplex-noise evaluations per pixel (terrain up to 13 octaves, a second terrain layer, and domain-warped clouds up to 16), on the night side too. Measured at 2981×1677 with the planet filling the view, best of several batches:
+
+| View | Before | After |
+|---|---|---|
+| Earth-like, day side | 15–18 ms | 7.3 ms |
+| Earth-like, terminator | 15–18 ms | 5.7 ms |
+| Earth-like, night side | 15–16 ms | 2.7 ms |
+| Earth-like, close (0.02 R) | 13–14 ms | 6.7 ms |
+| Gas giant | 9.4 ms | 4.1 ms |
+| Rocky world | 12.4 ms | 4.2 ms |
+
+What changed (`shaders/planet.frag.glsl`, `shaders/noise3d.glsl`, `render/noise3d.ts`):
+1. **Fine octaves from a texture.** The first 3 octaves stay exact simplex noise (they set the continents and cloud patterns); finer ones read a tileable 64³ gradient-noise texture, one trilinear fetch instead of a simplex evaluation. This was the single biggest win (about 2×). Very small islands and cloud wisps differ slightly from before.
+2. **Octaves per pixel:** stop once an octave is finer than the pixel's footprint on the surface (`fwidth`), cap terrain at 10 octaves (finer adds under 0.1 % contrast), the second terrain layer at 5, and cloud detail at 6. The 4-octave cloud warp is kept, since it sets the cloud pattern.
+3. **Night side:** where a pixel is fully unlit (0.8 % ambient), skip the detail layers; volcanic worlds, which glow at night, are exempt.
+
 ## Further ideas, roughly by expected gain
 
-- **Planet shader:** now the biggest cost (≈ 4 ms when a planet fills the screen). Cap octaves by pixel footprint more aggressively (it goes up to 13), and skip ocean specular and cloud layers on the night side.
 - **Dynamic resolution:** scale the pixel ratio from the measured frame time (for example, a 60 fps target between 0.6 and the cap), so weaker GPUs stay smooth.
 - **MSAA:** `antialias: true` at ~5 MP is costly in bandwidth. Consider it off when the pixel ratio is at least 1.25, or FXAA.
 - **Logarithmic depth buffer:** writing `gl_FragDepth` disables early-z, so hidden fragments are still shaded. The camera-relative scene could instead use a reversed-Z float depth buffer (WebGL2 + `EXT_clip_control`) or per-object depth ranges.

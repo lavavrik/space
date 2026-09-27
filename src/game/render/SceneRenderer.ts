@@ -5,6 +5,7 @@ import { THREE } from '../lib/three';
 import type { Body, CurrentSystem, Star, StarSystem, Station, World } from '../types';
 import { orbitPreview } from '../sim/planner';
 import { HyperspaceView } from './Hyperspace';
+import { createNoiseTexture } from './noise3d';
 import { ATMO_FS, BODY_VS, GLOW_FS, GLOW_VS, PLANET_FS, POINT_FS, POINT_VS, RING_FS, SKYPT_FS, SKYPT_VS, SKY_BAKE_FS, SKY_CUBE_FS, SKY_VS, STAR_FS, STATION_FS } from './shaders';
 
 type Uniforms = Record<string, THREE.IUniform>;
@@ -58,6 +59,8 @@ export class SceneRenderer {
   private readonly geoLo = new THREE.SphereGeometry(1, 32, 16);
   private readonly plane = new THREE.PlaneGeometry(2, 2);
   private readonly box = new THREE.BoxGeometry(1, 1, 1);
+  /** Fine-octave noise for the planet shaders (see noise3d.ts). */
+  private readonly noise3d = createNoiseTexture();
   private sysStars: THREE.Points | null = null;
   private skyCube!: THREE.WebGLCubeRenderTarget;
   private readonly hyper = new HyperspaceView(() => this.pointsMaterial());
@@ -251,7 +254,7 @@ export class SceneRenderer {
       uType: { value: b.type }, uOct: { value: 5 },
       uA: { value: b.pal.a }, uB: { value: b.pal.b }, uC: { value: b.pal.c }, uD: { value: b.pal.d },
       uAtmo: { value: atmo ? atmo.c : new THREE.Color(0, 0, 0) }, uAtmoK: { value: atmo ? atmo.k * 0.6 : 0 },
-      uSea: { value: b.pal.sea }, uSeed: { value: b.seed }, uTime: { value: 0 }, uLight: { value: light },
+      uSea: { value: b.pal.sea }, uSeed: { value: b.seed }, uTime: { value: 0 }, uLight: { value: light }, uNoise3D: { value: this.noise3d },
     };
     const mesh = new THREE.Mesh(this.geoMid, new THREE.ShaderMaterial({ vertexShader: BODY_VS, fragmentShader: PLANET_FS, uniforms: uni }));
     mesh.scale.setScalar(b.radius);
@@ -487,6 +490,7 @@ export class SceneRenderer {
     this.scene.traverse(dispose);
     this.skyScene.traverse(dispose);
     this.skyCube.dispose();
+    this.noise3d.dispose();
     for (const geo of [this.geoHi, this.geoMid, this.geoLo, this.plane, this.box]) geo.dispose();
     this.gl.dispose();
   }
