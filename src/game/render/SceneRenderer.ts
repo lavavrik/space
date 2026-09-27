@@ -30,6 +30,8 @@ const MAXDOTS = 256;
 const SKY_CUBE_SIZE = 1024;
 /** ms a new periscope sky patch takes to fade in over the last one (also the least time between bakes). */
 const CROSSFADE = 150;
+/** Periscope sky patch resolution relative to the drawing buffer (it's re-baked every frame while zooming). */
+const PATCH_SCALE = 0.5;
 /** Most pixels the 3D view renders per frame (≈ 2980×1680); see setPixelRatio. */
 const MAX_RENDER_PIXELS = 5e6;
 /** Vertices in the orbit preview ring (spaced densely near the ship; see updateRing). */
@@ -183,9 +185,9 @@ export class SceneRenderer {
   /**
    * Through the periscope the 1024² cube map is far too coarse (at 100× a cube texel spans ~7 screen
    * pixels), so the procedural sky is re-baked for just the view: a patch 30% wider than the screen
-   * at 65% of its resolution, with finer glow and dust in the band and the nebulae (no new stars). It's
-   * only re-baked when the view turns by more than a tenth of the field or the zoom changes by 1.4×,
-   * so a steady view costs nothing extra and a re-bake is a few milliseconds.
+   * at half its resolution, with finer glow and dust in the band and the nebulae (no new stars). It's
+   * re-baked every frame while the zoom moves (so detail grows smoothly), then only when the view
+   * turns by more than a tenth of the field, so a steady view costs nothing extra.
    */
   private updateSkyPatch(g: Game) {
     const z = g.zoom.cur;
@@ -197,8 +199,8 @@ export class SceneRenderer {
       return;
     }
     const size = this.gl.getDrawingBufferSize(new THREE.Vector2());
-    const w = Math.max(64, Math.round(size.x * 0.65)),
-      h = Math.max(64, Math.round(size.y * 0.65));
+    const w = Math.max(64, Math.round(size.x * PATCH_SCALE)),
+      h = Math.max(64, Math.round(size.y * PATCH_SCALE));
     let p = this.patch;
     if (!p) {
       const mat = new THREE.ShaderMaterial({ vertexShader: SKY_VS, fragmentShader: SKY_BAKE_FS, uniforms: { uPxPerRad: { value: 1 } }, side: THREE.BackSide, depthWrite: false });
@@ -214,10 +216,12 @@ export class SceneRenderer {
     const now = performance.now();
     const fovRad = (g.fov * Math.PI) / 180;
     const first = !p.zoom;
-    const stale = first || z / p.zoom > 1.4 || p.zoom / z > 1.4 || p.q.angleTo(g.ship.q) > fovRad * 0.1;
-    // while the zoom eases it crosses the threshold often: at most one bake per CROSSFADE, and each
-    // new patch fades in over the last one
-    if (stale && (first || now - p.bakedAt > CROSSFADE)) {
+    // While the zoom is moving, re-bake every frame: each layer's detail strength is set at bake
+    // time, so baking in steps made detail pop in at each step. Once it settles, re-bake only when
+    // the view turns by a tenth of the field (at most once per CROSSFADE, fading from the last patch).
+    const moving = Math.abs(z / (g.zoom.on ? g.zoom.mag : 1) - 1) > 0.002;
+    const stale = first || moving || z !== p.zoom || p.q.angleTo(g.ship.q) > fovRad * 0.1;
+    if (stale && (first || moving || now - p.bakedAt > CROSSFADE)) {
       const cam = p.cam;
       // zooming out, the view is about to widen: bake a wider margin so the edges stay covered
       cam.fov = g.fov * (z < p.zoom ? 2 : 1.3);
@@ -241,7 +245,7 @@ export class SceneRenderer {
       p.cur = next;
       p.q.copy(g.ship.q);
       p.zoom = z;
-      p.bakedAt = now;
+      p.bakedAt = moving ? now - CROSSFADE : now; // per-frame bakes don't crossfade
     }
     u.uMix.value = Math.min(1, (now - p.bakedAt) / CROSSFADE);
     u.uPatchOn.value = THREE.MathUtils.smoothstep(z, 2, 4);
