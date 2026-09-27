@@ -111,7 +111,7 @@ export interface NavView {
   points: string[]; // waypoints, in order
   query: string;
   sortFrom: 'ship' | 'last';
-  results: { id: string; name: string; spec: string; dist: string }[];
+  results: { key: string; kind: 'star' | 'planet' | 'moon' | 'station'; name: string; detail: string }[];
 }
 
 export interface PlannerView {

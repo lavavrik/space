@@ -18,8 +18,10 @@ import { JUMP_CHARGE_TIME, JUMP_RANGE, JUMP_TUNNEL_BASE, JUMP_TUNNEL_PER_LY, SHI
 import type { Game } from '../Game';
 import type { StarSystem, Target } from '../types';
 import { systemsNear } from '../universe/galaxy';
+import { buildStations } from '../universe/stations';
+import { buildSystem } from '../universe/system';
 import { transitTime } from './hyperspace';
-import { dropFTL } from './ftl';
+import { dropAlt, dropFTL, massLock } from './ftl';
 import { startJump } from './navigation';
 import { defaultOrbitAlt, evalPlan } from './orbits';
 import { disengageAP, engageAutopilot, engageRendezvous } from './planner';
@@ -118,8 +120,13 @@ export function planRoute(g: Game, mode: NavMode): Route | string {
     destName: string;
   const points = g.navPoints;
   const destSys = points[points.length - 1] ?? null;
-  const target: Target | null = destSys ? null : g.target;
-  if (destSys) {
+  const fin = g.navFinal;
+  const target: Target | null = destSys || fin ? null : g.target;
+  if (!destSys && fin) {
+    // a body or station in this system: just the final leg
+    legs.push(finalLeg(fin));
+    destName = `${fin.name} · ${g.cur.sys.name}`;
+  } else if (destSys) {
     if (!nav.caps.crossSystem) return `${nav.model} plots in-system routes only`;
     // chain the stretches between waypoints; over the unit's hop limit, fewest jumps is the best it can do
     const chain = (m: NavMode) => {
@@ -154,7 +161,13 @@ export function planRoute(g: Game, mode: NavMode): Route | string {
       ex -= cost;
       at = to;
     }
-    destName = `${destSys.name} · ${destSys.star.spec} · ${destSys.pos.distanceTo(g.cur.sys.pos).toFixed(1)} ly${points.length > 1 ? ` · via ${points.length - 1} waypoint${points.length > 2 ? 's' : ''}` : ''}`;
+    const via = points.length > 1 ? ` · via ${points.length - 1} waypoint${points.length > 2 ? 's' : ''}` : '';
+    destName = `${destSys.name} · ${destSys.star.spec} · ${destSys.pos.distanceTo(g.cur.sys.pos).toFixed(1)} ly${via}`;
+    // ending at a body or station there: orbit it or rendezvous with it after the last jump
+    if (fin && fin.sysId === destSys.id) {
+      legs.push(finalLeg(fin));
+      destName = `${fin.name} · ${destSys.name} · ${destSys.pos.distanceTo(g.cur.sys.pos).toFixed(1)} ly${via}`;
+    }
   } else if (target && target.kind === 'station') {
     legs.push({ kind: 'rendezvous', station: target.name, time: 150 });
     destName = `${target.name} · ${target.parent.name}`;
@@ -176,38 +189,118 @@ export function replan(g: Game) {
   g.invalidateHud();
 }
 
+/** Where a route may end besides a star: a body (orbit it) or a station (rendezvous), by name. */
+export interface NavFinal {
+  kind: 'body' | 'station';
+  name: string;
+  sysId: string;
+}
+
+const finalLeg = (f: NavFinal): Leg => (f.kind === 'station' ? { kind: 'rendezvous', station: f.name, time: 150 } : { kind: 'orbit', body: f.name, time: 180 });
+
 /** Add a star as the next waypoint (not the current system, nor a repeat of the last). */
 export function addNavPoint(g: Game, s: StarSystem) {
   if (g.route?.running) return;
   const last = g.navPoints[g.navPoints.length - 1];
   if (s.id === g.cur.sys.id || s.id === last?.id) return;
   g.navPoints.push(s);
+  g.navFinal = null; // a body can only be the last stop
   replan(g);
   g.showMsg(`Waypoint ${g.navPoints.length} · ${s.name} · ${s.pos.distanceTo((last ?? g.cur.sys).pos).toFixed(1)} ly from ${last ? last.name : 'here'}`, 'ftl');
 }
 
-/** Remove the last waypoint (Backspace or the button in the nav panel). */
+/** End the route at a body or station (in its system; that system becomes the last waypoint). */
+export function addNavFinal(g: Game, sys: StarSystem, kind: NavFinal['kind'], name: string) {
+  if (g.route?.running) return;
+  const last = g.navPoints[g.navPoints.length - 1];
+  if (sys.id !== g.cur.sys.id && sys.id !== last?.id) g.navPoints.push(sys);
+  else if (sys.id === g.cur.sys.id && last) g.navPoints = []; // back here: just the in-system leg
+  g.navFinal = { kind, name, sysId: sys.id };
+  replan(g);
+  g.showMsg(`Route ends at ${name} · ${sys.name}`, 'ftl');
+}
+
+/** Remove the last stop (Backspace or the button): the final body first, then waypoints. */
 export function removeNavPoint(g: Game) {
   if (g.route?.running) return;
+  if (g.navFinal) {
+    const f = g.navFinal;
+    g.navFinal = null;
+    replan(g);
+    return g.showMsg(`Removed ${f.name}`);
+  }
   const p = g.navPoints.pop();
   replan(g);
   if (p) g.showMsg(`Removed waypoint · ${p.name}`);
 }
 
+/** A nav search hit: a star, or a planet, moon or station (in this system or a nearby one). */
+export interface NavResult {
+  key: string;
+  kind: 'star' | 'planet' | 'moon' | 'station';
+  name: string;
+  detail: string;
+  sys: StarSystem;
+  dist: number; // ly from the sort origin (bodies in this system: their distance in ly, ~0)
+}
+
+/** Planets, moons and stations of a system, generated on demand (cheap: ~0.05 ms) and cached. */
+const contents = new Map<string, { bodies: { name: string; kind: 'planet' | 'moon'; type: string }[]; stations: string[] }>();
+function systemContents(g: Game, sys: StarSystem) {
+  if (sys.id === g.cur.sys.id) {
+    return {
+      bodies: g.cur.bodies.filter((b) => b.kind !== 'star').map((b) => ({ name: b.name, kind: b.kind as 'planet' | 'moon', type: b.typeName })),
+      stations: g.cur.stations.map((s) => s.name),
+    };
+  }
+  let c = contents.get(sys.id);
+  if (!c) {
+    if (contents.size > 400) contents.clear();
+    const bodies = buildSystem(sys);
+    c = {
+      bodies: bodies.filter((b) => b.kind !== 'star').map((b) => ({ name: b.name, kind: b.kind as 'planet' | 'moon', type: b.typeName })),
+      stations: buildStations(sys, bodies).map((s) => s.name),
+    };
+    contents.set(sys.id, c);
+  }
+  return c;
+}
+
 /**
- * Star search for the nav panel: systems in the sky whose names contain `query`, nearest first,
- * measured from the ship or from the last waypoint.
+ * Nav search: stars in the sky whose names contain the query, plus planets, moons and stations in
+ * this system, in systems within jump range, and in any system whose name the query names (so
+ * "sylios 2" finds Sylios 2 and its moons). Nearest first, from the ship or the last waypoint.
  */
-export function searchStars(g: Game, query: string, from: 'ship' | 'last', limit = 8) {
+export function searchNav(g: Game, query: string, from: 'ship' | 'last', limit = 10): NavResult[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
   const last = g.navPoints[g.navPoints.length - 1];
   const origin = from === 'last' && last ? last.pos : g.cur.sys.pos;
-  return g.sky
-    .filter((s) => s.id !== g.cur.sys.id && s.id !== last?.id && s.name.toLowerCase().includes(q))
-    .map((s) => ({ s, d: s.pos.distanceTo(origin) }))
-    .sort((a, b) => a.d - b.d)
-    .slice(0, limit);
+  const out: NavResult[] = [];
+  const ly = (s: StarSystem) => s.pos.distanceTo(origin);
+  for (const s of g.sky) {
+    if (s.id !== g.cur.sys.id && s.id !== last?.id && s.name.toLowerCase().includes(q))
+      out.push({ key: `star:${s.id}`, kind: 'star', name: s.name, detail: `${s.star.spec} star · ${ly(s).toFixed(1)} ly`, sys: s, dist: ly(s) });
+  }
+  // systems whose bodies and stations are searched too
+  const near = g.sky.filter((s) => s.id === g.cur.sys.id || s.pos.distanceTo(g.cur.sys.pos) <= JUMP_RANGE || (last && s.id === last.id) || q.startsWith(s.name.toLowerCase()) || s.name.toLowerCase().startsWith(q));
+  if (!near.includes(g.cur.sys)) near.push(g.cur.sys);
+  for (const s of near) {
+    const c = systemContents(g, s);
+    const here = s.id === g.cur.sys.id;
+    const where = here ? 'here' : `${s.name} · ${ly(s).toFixed(1)} ly`;
+    for (const b of c.bodies) if (b.name.toLowerCase().includes(q)) out.push({ key: `${b.kind}:${s.id}:${b.name}`, kind: b.kind, name: b.name, detail: `${b.type} · ${where}`, sys: s, dist: here ? -1 : ly(s) });
+    for (const n of c.stations) if (n.toLowerCase().includes(q)) out.push({ key: `station:${s.id}:${n}`, kind: 'station', name: n, detail: `station · ${where}`, sys: s, dist: here ? -1 : ly(s) });
+  }
+  return out.sort((a, b) => a.dist - b.dist || a.name.localeCompare(b.name)).slice(0, limit);
+}
+
+/** Add a search hit to the route: a star as a waypoint, a body or station as the final stop. */
+export function addNavResult(g: Game, key: string) {
+  const r = searchNav(g, g.navQuery, g.navSortFrom, 200).find((x) => x.key === key);
+  if (!r) return;
+  if (r.kind === 'star') addNavPoint(g, r.sys);
+  else addNavFinal(g, r.sys, r.kind === 'station' ? 'station' : 'body', r.name);
 }
 
 /* ---------- flying ---------- */
@@ -240,6 +333,7 @@ function endRoute(g: Game, msg: string, kind: '' | 'ftl' | 'warn' = '') {
   g.route = null;
   g.navConfirm = 0;
   g.navPoints = [];
+  g.navFinal = null;
   g.showMsg(msg, kind);
   g.invalidateHud();
 }
@@ -268,6 +362,17 @@ export function updateNav(g: Game, dt: number) {
       }
       if (g.jump) {
         r.status = g.jump.phase === 'charge' ? 'charging hyperdrive' : 'in hyperspace';
+        return;
+      }
+      // too close to a world to jump (e.g. alongside a station): climb clear of its mass lock first
+      const lock = massLock(g);
+      if (lock) {
+        if (ship.ap?.body !== lock || ship.ap.type !== 'hold') {
+          const r0 = lock.radius + dropAlt(lock) * 1.35;
+          const u = ship.pos.clone().sub(lock.pos).normalize();
+          engageAutopilot(g, { body: lock, type: 'hold', r0, period: NaN, n: null, point: u.multiplyScalar(r0), station: null }, true);
+        }
+        r.status = `climbing clear of ${lock.name} to jump`;
         return;
       }
       ship.sunTrack = true; // between jumps, keep the panels on the star so the battery recharges

@@ -1,4 +1,5 @@
 import type { NavView } from '../../game/hud/types';
+import { useState } from 'react';
 import { Panel, cx } from './primitives';
 
 export interface NavActions {
@@ -6,7 +7,7 @@ export interface NavActions {
   onCancel: () => void;
   onQuery: (q: string) => void;
   onSort: (from: 'ship' | 'last') => void;
-  onAdd: (id: string) => void;
+  onAdd: (key: string) => void;
   onRemoveLast: () => void;
 }
 
@@ -34,45 +35,7 @@ export function NavPanel({ n, a }: { n: NavView; a: NavActions }) {
               </button>
             </div>
           )}
-          <div className="navsearch">
-            <input
-              id="navsearch"
-              type="search"
-              placeholder="Search stars… ( / )"
-              value={n.query}
-              autoComplete="off"
-              spellCheck={false}
-              onChange={(e) => a.onQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && n.results[0]) a.onAdd(n.results[0].id);
-                if (e.key === 'Escape') (e.target as HTMLInputElement).blur();
-              }}
-            />
-            <div className="navsort">
-              sorted from
-              <button type="button" className={cx(n.sortFrom === 'ship' && 'on')} onClick={() => a.onSort('ship')}>
-                ship
-              </button>
-              <button type="button" className={cx(n.sortFrom === 'last' && 'on')} onClick={() => a.onSort('last')} disabled={!n.points.length}>
-                last point
-              </button>
-            </div>
-            {n.results.length > 0 && (
-              <ul className="navres">
-                {n.results.map((r) => (
-                  <li key={r.id}>
-                    <button type="button" onClick={() => a.onAdd(r.id)}>
-                      <span>{r.name}</span>
-                      <span className="d">
-                        {r.spec} · {r.dist}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {n.query && !n.results.length && <div className="okeys">No stars matching "{n.query}" within 100 ly</div>}
-          </div>
+          <SearchBox n={n} a={a} />
         </>
       )}
       {n.modes && !n.running && (
@@ -109,5 +72,78 @@ export function NavPanel({ n, a }: { n: NavView; a: NavActions }) {
         )}
       </div>
     </Panel>
+  );
+}
+
+const KIND_ICON = { star: '★', planet: '◯', moon: '◦', station: '▢' } as const;
+
+/**
+ * Search with a dropdown: stars, planets, moons and stations. The dropdown opens under the field
+ * while it has focus and a query; ↑ / ↓ move the highlight, Enter adds it, Esc closes. Sorting
+ * (from the ship or the last stop) sits in the dropdown's header.
+ */
+function SearchBox({ n, a }: { n: NavView; a: NavActions }) {
+  const [open, setOpen] = useState(false);
+  const [hi, setHi] = useState(0);
+  const sel = Math.min(hi, Math.max(0, n.results.length - 1));
+  const pick = (key: string) => {
+    a.onAdd(key);
+    a.onQuery('');
+    setHi(0);
+  };
+  return (
+    <div className="navsearch">
+      <input
+        id="navsearch"
+        type="search"
+        placeholder="Search stars, planets, stations… ( / )"
+        value={n.query}
+        autoComplete="off"
+        spellCheck={false}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onChange={(e) => {
+          a.onQuery(e.target.value);
+          setHi(0);
+          setOpen(true);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowDown') setHi(Math.min(sel + 1, n.results.length - 1));
+          else if (e.key === 'ArrowUp') setHi(Math.max(sel - 1, 0));
+          else if (e.key === 'Enter' && n.results[sel]) pick(n.results[sel].key);
+          else if (e.key === 'Escape') (e.target as HTMLInputElement).blur();
+          else return;
+          e.preventDefault();
+        }}
+      />
+      {open && n.query && (
+        <div className="navdrop">
+          <div className="navsort">
+            nearest to
+            <button type="button" className={cx(n.sortFrom === 'ship' && 'on')} onMouseDown={(e) => e.preventDefault()} onClick={() => a.onSort('ship')}>
+              ship
+            </button>
+            <button type="button" className={cx(n.sortFrom === 'last' && 'on')} onMouseDown={(e) => e.preventDefault()} onClick={() => a.onSort('last')} disabled={!n.points.length}>
+              last stop
+            </button>
+          </div>
+          {n.results.length ? (
+            <ul className="navres">
+              {n.results.map((r, i) => (
+                <li key={r.key}>
+                  <button type="button" className={cx(i === sel && 'hi')} onMouseDown={(e) => e.preventDefault()} onMouseEnter={() => setHi(i)} onClick={() => pick(r.key)}>
+                    <i className={cx('ico', r.kind)}>{KIND_ICON[r.kind]}</i>
+                    <span className="nm">{r.name}</span>
+                    <span className="d">{r.detail}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="okeys">Nothing matching "{n.query}" nearby</div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

@@ -7,7 +7,7 @@ import { THREE } from './lib/three';
 import { Overlay } from './render/Overlay';
 import { defaultAvionics, type ComputerKind } from './avionics/catalog';
 import { PerfMonitor } from './debug/Perf';
-import { addNavPoint, engageRoute, removeNavPoint, requestCancelRoute, type NavMode, type Route } from './sim/navroute';
+import { addNavResult, engageRoute, removeNavPoint, requestCancelRoute, type NavFinal, type NavMode, type Route } from './sim/navroute';
 import { SceneRenderer } from './render/SceneRenderer';
 import type { Guide } from './sim/guide';
 import { pickAt, placeAtHome } from './sim/navigation';
@@ -75,6 +75,8 @@ export class Game {
   route: Route | null = null;
   /** Route waypoints (stars), in order; the route passes through each. */
   navPoints: StarSystem[] = [];
+  /** Optional final stop after the last waypoint: a body to orbit or a station to meet. */
+  navFinal: NavFinal | null = null;
   /** Nav panel star search: the query, and whether results sort by distance from the ship or the last waypoint. */
   navQuery = '';
   navSortFrom: 'ship' | 'last' = 'ship';
@@ -215,9 +217,8 @@ export class Game {
     this.invalidateHud();
   }
 
-  addNavPointById(id: string) {
-    const s = this.sky.find((x) => x.id === id);
-    if (s) addNavPoint(this, s);
+  addNavResult(key: string) {
+    addNavResult(this, key);
     this.invalidateHud();
   }
 

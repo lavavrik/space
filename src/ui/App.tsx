@@ -31,7 +31,7 @@ export function App() {
                   onCancel: () => game!.cancelRoute(),
                   onQuery: (q) => game!.setNavQuery(q),
                   onSort: (f) => game!.setNavSort(f),
-                  onAdd: (id) => game!.addNavPointById(id),
+                  onAdd: (key) => game!.addNavResult(key),
                   onRemoveLast: () => game!.removeNavPoint(),
                 }}
               />
