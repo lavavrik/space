@@ -11,6 +11,7 @@ import { addNavPoint, pickNavStar } from './navroute';
 import { massLock } from './ftl';
 import { heatBlocked } from './thermal';
 import { scanKey } from './scanner';
+import { contactLabel, known } from './radar';
 import { dominantBody } from './gravity';
 import { startJumpGuide } from './guide';
 import { transitTime } from './hyperspace';
@@ -65,6 +66,7 @@ export function targetAhead(g: Game) {
   let best: Target | null = null,
     bestA = 0.35;
   for (const b of [...g.cur.bodies, ...g.cur.stations]) {
+    if (!known(g, b)) continue; // T aims at things the HUD knows about
     const d = b.pos.clone().sub(ship.pos);
     const dist = d.length();
     const ang = Math.acos(Math.min(1, d.dot(fwd) / dist));
@@ -77,7 +79,7 @@ export function targetAhead(g: Game) {
   }
   if (best) {
     g.target = best;
-    g.showMsg(`Target · ${best.name}`);
+    g.showMsg(`Target · ${contactLabel(g, best)}`);
   } else g.showMsg('Nothing ahead · aim closer or press G');
 }
 
@@ -112,6 +114,7 @@ export function pickAt(g: Game, sx: number, sy: number) {
     const pxR = (t.radius / dist) * pxPerRad;
     const off = Math.hypot(p.x - sx, p.y - sy);
     if (pxR < CLICK_PX) {
+      if (!known(g, t)) continue; // no marker to click on until the radar has found it
       if (off < markerMiss) {
         marker = t;
         markerMiss = off;
@@ -124,7 +127,7 @@ export function pickAt(g: Game, sx: number, sy: number) {
   const best = marker ?? disc;
   if (best) {
     g.target = best;
-    g.showMsg(`Target · ${best.name}`);
+    g.showMsg(`Target · ${contactLabel(g, best)}`);
     return true;
   }
   const gp = galPos(g);
@@ -163,10 +166,11 @@ export function pickAt(g: Game, sx: number, sy: number) {
 /** Cycle targets by distance. */
 export function cycleTarget(g: Game) {
   const { ship } = g;
-  const sorted = [...g.cur.bodies, ...g.cur.stations].sort((a, b) => a.pos.distanceTo(ship.pos) - b.pos.distanceTo(ship.pos));
+  // only what the HUD knows about: the star and anything the radar has found
+  const sorted = [...g.cur.bodies, ...g.cur.stations].filter((t) => known(g, t)).sort((a, b) => a.pos.distanceTo(ship.pos) - b.pos.distanceTo(ship.pos));
   const i = g.target ? sorted.indexOf(g.target) : -1;
   g.target = sorted[(i + 1) % sorted.length];
-  g.showMsg(`Target · ${g.target.name}`);
+  g.showMsg(`Target · ${contactLabel(g, g.target)}`);
 }
 
 /* ---------- hyperjumps ---------- */

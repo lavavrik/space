@@ -10,6 +10,7 @@ import { fmtDist } from '../format';
 import type { Game } from '../Game';
 import type { StarSystem, Target } from '../types';
 import { HOME_ID } from '../universe/galaxy';
+import { contactLabel } from './radar';
 
 export const SCAN_STAGE = { type: 0.25, physical: 0.5, orbit: 0.75, full: 1 } as const;
 /** Seconds for a baseline (1×) scanner to scan something comfortably above its resolution. */
@@ -50,9 +51,10 @@ export function toggleScan(g: Game) {
   }
   if (scanProgress(g, t) >= 1) return g.showMsg(`${t.name} is already scanned · I for details`);
   const r = resolvable(g, t);
-  if (!r.ok) return g.showMsg(`${sc.model} can't resolve ${t.name} from here · close to ${fmtDist(r.needDist)}`, 'warn');
+  const label = contactLabel(g, t);
+  if (!r.ok) return g.showMsg(`${sc.model} can't resolve ${label} from here · close to ${fmtDist(r.needDist)}`, 'warn');
   g.scanning = t;
-  g.showMsg(`Scanning ${t.name}…`);
+  g.showMsg(`Scanning ${label}…`);
 }
 
 /** Advance the scan of the current target; pauses (with a message) if it drops out of resolution. */
@@ -65,7 +67,7 @@ export function updateScan(g: Game, dt: number) {
   const r = resolvable(g, t);
   if (!r.ok) {
     g.scanning = null;
-    g.showMsg(`Lost resolution on ${t.name} · close to ${fmtDist(r.needDist)}`, 'warn');
+    g.showMsg(`Lost resolution on ${contactLabel(g, t)} · close to ${fmtDist(r.needDist)}`, 'warn');
     return;
   }
   // near the resolution limit the scan takes up to 3× longer

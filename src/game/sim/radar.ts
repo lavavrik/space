@@ -39,8 +39,13 @@ export function radarClass(t: Target) {
  * system's star is always known by name (it's on the star map).
  */
 export function contactLabel(g: Game, t: Target) {
-  return t.kind === 'star' || scanProgress(g, t) >= SCAN_STAGE.type ? t.name : `Unidentified ${radarClass(t)}`;
+  if (t.kind === 'star' || scanProgress(g, t) >= SCAN_STAGE.type) return t.name;
+  // before the radar has it, all we know is that something's there (e.g. a disc we clicked)
+  return radarSeen(g, t) ? `Unidentified ${radarClass(t)}` : 'Unknown object';
 }
+
+/** Does the HUD know about this object (the system's star, or anything the radar has found)? */
+export const known = (g: Game, t: Target) => t.kind === 'star' || radarSeen(g, t);
 
 /** Has the radar ever picked this up (in the current system)? */
 export const radarSeen = (g: Game, t: Target) => g.radar.seen.has(scanKey(g.cur.sys, t));

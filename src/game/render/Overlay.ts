@@ -10,7 +10,7 @@ import type { Jump, StarSystem } from '../types';
 import type { SceneRenderer } from './SceneRenderer';
 import { PAD_R, SLOT_H, SLOT_W, toWorld } from '../sim/stationGeom';
 import { padWorld } from '../sim/docking';
-import { contactLabel } from '../sim/radar';
+import { contactLabel, known } from '../sim/radar';
 
 const AMB = 'rgba(255,165,58,',
   CYA = 'rgba(127,220,255,',
@@ -337,6 +337,8 @@ export class Overlay {
       const view = this.scene.views.get(b)!;
       const rel = this.tmp.subVectors(b.pos, ship.pos);
       const isT = b === g.target;
+      // nothing to mark until the radar has found it (the target is always marked)
+      if (!isT && !known(g, b)) continue;
       const s = this.toScreen(g, rel);
       const name = contactLabel(g, b);
       const label = () => `${name} · ${fmtDist(view.dist - b.radius)}`;
@@ -397,6 +399,7 @@ export class Overlay {
       const view = this.scene.stationViews.get(st);
       if (!view) continue;
       const isT = st === g.target;
+      if (!isT && !known(g, st)) continue;
       const d = view.dist;
       const stName = contactLabel(g, st);
       const label = `${stName} · ${fmtDist(Math.max(0, d - st.size / 2))}`;
