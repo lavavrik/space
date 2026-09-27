@@ -43,14 +43,19 @@ export function ftlBlocked(ship: Ship) {
   return heatBlocked(ship.temp);
 }
 
+/** Seconds the FTL drive can run short of power before it drops out. */
+const FTL_BROWNOUT = 0.5;
+
 /** Exotic matter and power while the FTL drive runs. Returns false if the drive fails. */
 export function ftlUpkeep(g: Game, dt: number, load: number) {
   const { ship, power } = g;
   ship.exotic = Math.max(0, ship.exotic - ftlBurn(load) * dt);
   power.ftlKW = grant(g, SHIP.ftlCruiseKW, 'FTL drive');
+  // the drive rides out a brief brownout on its own field; short for longer than this, it fails
+  power.ftlShort = power.ftlKW < SHIP.ftlCruiseKW * 0.999 ? power.ftlShort + dt : 0;
   let why: string | null = null;
   if (ship.exotic <= 0) why = 'Exotic matter exhausted';
-  else if (power.ftlKW < SHIP.ftlCruiseKW) why = 'Power failure';
+  else if (power.ftlShort > FTL_BROWNOUT) why = 'Power failure';
   if (!why) return true;
   ship.ap = null;
   dropFTL(g, false);
@@ -156,6 +161,11 @@ export function chargeFTL(g: Game, dt: number) {
   ship.ftlCharge -= (dt * kw) / SHIP.ftlChargeKW;
   if (ship.ftlCharge <= 0) {
     ship.ftlCharge = 0;
+    // charged: hand this frame's charging power back so the drive can run on it straight away
+    // (without this the drive started with nothing left this frame and failed at once)
+    g.power.left += kw;
+    g.power.chargeKW = 0;
+    g.power.ftlShort = 0;
     if (!massLock(g)) engageFTL(g);
     else if (ship.ap) ship.ap.phase = 'insert';
     else g.showMsg('FTL aborted · mass-locked', 'warn');

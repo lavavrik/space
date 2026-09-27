@@ -43,7 +43,7 @@ export class Game {
   /** Systems around the current one that a jump could reach (with a margin for moving within it). */
   nearby: StarSystem[] = [];
   readonly ship = newShip();
-  readonly power: Power = { solar: 0, cos: 0, shadow: null, draw: 0, net: 0, thrustKW: 0, ftlKW: 0, chargeKW: 0, pumpKW: 0, burn: 0, flux: 0, cap: 0, left: 0, limited: null, curtailed: 0 };
+  readonly power: Power = { solar: 0, cos: 0, shadow: null, draw: 0, net: 0, thrustKW: 0, ftlKW: 0, chargeKW: 0, pumpKW: 0, burn: 0, flux: 0, cap: 0, left: 0, limited: null, curtailed: 0, ftlShort: 0 };
   target: Target | null = null;
   /** Station whose frame flight assist works in, or null for the system frame (see sim/frame.ts). */
   refFrame: Station | null = null;

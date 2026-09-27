@@ -202,6 +202,7 @@ export interface Power {
   left: number; // kW not yet granted this frame
   limited: { what: string; frac: number } | null; // the first load that got less than it asked for
   curtailed: number; // kW of solar the battery couldn't take
+  ftlShort: number; // s the FTL drive has been short of power (it fails past a brief brownout)
   flux: number;
 }
 
