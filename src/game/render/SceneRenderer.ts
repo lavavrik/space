@@ -8,7 +8,7 @@ import { HyperspaceView } from './Hyperspace';
 import { createNoiseTexture } from './noise3d';
 import { skyColor, skyLook } from '../sim/hyperspace';
 import { CORRIDOR_LEN, corridorGeometry, hullGeometry, interiorGeometry } from './stationMesh';
-import { AutoExposure, FLOOD_K, HEAD_K, INT_K, SKY_K, WINDOW_K } from './exposure';
+import { AutoExposure, FLOOD_K, HEAD_K, INT_K, MAX_EXP, SKY_K, STAR_EXP_P, WINDOW_K } from './exposure';
 import { HdrTarget } from './hdr';
 import { padLocal, stationQuat } from '../sim/stationGeom';
 import { ATMO_FS, BODY_VS, GLOW_FS, GLOW_VS, PLANET_FS, POINT_FS, POINT_VS, RING_FS, SKYPT_FS, SKYPT_VS, SKY_BAKE_FS, SKY_CUBE_FS, SKY_VS, STAR_FS, STATION_FS, STATION_INTERIOR_FS, CORRIDOR_FS } from './shaders';
@@ -60,8 +60,8 @@ export class SceneRenderer {
   readonly views = new Map<Body, BodyView>();
   readonly stationViews = new Map<Station, { mesh: THREE.Group; uni: Uniforms; inner: THREE.Mesh; innerUni: Uniforms; corridor: THREE.Mesh; corridorUni: Uniforms; dist: number; pxR: number }>();
   /** Headlights, shared by every station material: the ship's nose (world axes) and on/off. */
-  /** Exposure, shared by every physically lit material (render/exposure.ts): uExp, and uSkyExp = SKY_K × uExp for the sky. */
-  private readonly expUni = { uExp: { value: 1 }, uSkyExp: { value: SKY_K } };
+  /** Exposure, shared by every physically lit material (render/exposure.ts): uExp, uSkyExp = SKY_K × uExp for the Milky Way, uStarExp for stars (see STAR_EXP_P). */
+  private readonly expUni = { uExp: { value: 1 }, uSkyExp: { value: SKY_K }, uStarExp: { value: 1 } };
   /** Station lights in scene units (render/exposure.ts). */
   private readonly headUni = {
     uHeadDir: { value: new THREE.Vector3(0, 0, -1) }, uHeadOn: { value: 1 },
@@ -107,7 +107,7 @@ export class SceneRenderer {
     uMix: { value: number };
   };
   private skyGeo!: THREE.SphereGeometry;
-  private readonly hyper = new HyperspaceView(() => this.pointsMaterial(), this.expUni.uSkyExp);
+  private readonly hyper = new HyperspaceView(() => this.pointsMaterial(), this.expUni.uStarExp);
   /** Orbit preview (L): the planned or autopilot orbit as a ring, depth-tested so the planet hides its far side. */
   private readonly ring = new THREE.LineLoop(
     new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(RING_N * 3), 3)),
@@ -174,7 +174,7 @@ export class SceneRenderer {
   }
 
   private pointsMaterial() {
-    return new THREE.ShaderMaterial({ vertexShader: SKYPT_VS, fragmentShader: SKYPT_FS, uniforms: { uPR: this.uPR, uSkyExp: this.expUni.uSkyExp }, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
+    return new THREE.ShaderMaterial({ vertexShader: SKYPT_VS, fragmentShader: SKYPT_FS, uniforms: { uPR: this.uPR, uStarExp: this.expUni.uStarExp }, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
   }
 
   /**
@@ -446,6 +446,7 @@ export class SceneRenderer {
     const e = this.exposure.value;
     this.expUni.uExp.value = e;
     this.expUni.uSkyExp.value = SKY_K * e;
+    this.expUni.uStarExp.value = (e / MAX_EXP) ** STAR_EXP_P;
     this.gl.setRenderTarget(this.hdr.target);
     this.renderScene(g);
     this.hdr.finish(this.exposure);
@@ -507,7 +508,7 @@ export class SceneRenderer {
         (v.mesh.material as THREE.ShaderMaterial).uniforms.uTime.value = simTime;
         const flux = b.L * (AU / d) * (AU / d);
         const I = Math.min(1.5, Math.max(0.35, 0.95 + 0.2 * Math.log10(flux)));
-        const minPx = 16 + 22 * I;
+        const minPx = (16 + 22 * I) * 1.6; // the system's star: a big, bright mark
         const s = Math.max(b.radius * 5, (d / pxPerRad) * minPx);
         const glow = v.glow!;
         glow.position.copy(rel);
@@ -534,7 +535,7 @@ export class SceneRenderer {
           dPos[nd * 3] = rel.x;
           dPos[nd * 3 + 1] = rel.y;
           dPos[nd * 3 + 2] = rel.z;
-          const k = a * this.expUni.uSkyExp.value; // at sky level, like the stars
+          const k = a * this.expUni.uStarExp.value; // like the stars
           dCol[nd * 3] = c.r * k;
           dCol[nd * 3 + 1] = c.g * k;
           dCol[nd * 3 + 2] = c.b * k;

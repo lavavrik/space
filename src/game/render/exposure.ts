@@ -6,7 +6,7 @@
  * chase (night sky ~1e-8 of sunlight, a star's disc ~1e5×), so each source's level relative to
  * sunlight is squashed as level^GAMMA (0.4): the order stays the same, the range shrinks.
  *   - the Milky Way and the stars: SKY_K (0.025, from ~1e-4); fully dark-adapted, MAX_EXP =
- *     1/SKY_K, the sky looks as it always did, and in sunlight the brightest stars still show;
+ *     1/SKY_K, the sky looks as it always did (stars follow only part of it, see STAR_EXP_P);
  *   - station floodlights (30 lux), hangar lamps (500 lux), lit windows, and the ship's
  *     headlight (a 5 kW LED floodlight, 1.3 million cd, inverse-square; squashed at 100 m);
  * Stars' discs and glow, and signal lights (nav, approach, slot rim, pads, the approach corridor,
@@ -42,8 +42,15 @@ export const WINDOW_K = 0.18;
 export const SKY_K = 0.025;
 
 /** Exposure limits: fully dark-adapted shows the sky as it used to be. */
-const MIN_EXP = 0.25,
-  MAX_EXP = 1 / SKY_K;
+const MIN_EXP = 0.25;
+export const MAX_EXP = 1 / SKY_K;
+/**
+ * Stars (points) follow only part of the exposure: (exposure / MAX_EXP)^STAR_EXP_P, so fully
+ * dark-adapted they're as always, and next to a sunlit world (exposure ~1) they keep ~30%
+ * instead of 2.5% (really they'd vanish, but a black sky around a planet isn't fun to fly in).
+ * The Milky Way's glow follows the full exposure.
+ */
+export const STAR_EXP_P = 0.33;
 /** The centre-weighted log-average lands here… */
 const KEY = 0.18;
 /** …unless that would push the brightest HIGHLIGHT_SHARE of the frame above this. */

@@ -8,11 +8,11 @@ import { systemsNear } from '../universe/galaxy';
 const STREAK_S = 0.22;
 
 /**
- * Streaks: vertex colours at sky level (uSkyExp = SKY_K × exposure, render/exposure.ts), written
+ * Streaks: vertex colours at sky level (uStarExp, render/exposure.ts), written
  * sRGB-encoded as the stock line material used to on screen (the HDR target isn't encoded).
  */
 const TRAIL_VS = 'attribute vec3 color; varying vec3 vC; void main(){ vC = color; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }';
-const TRAIL_FS = 'uniform float uSkyExp; varying vec3 vC; void main(){ gl_FragColor = vec4(pow(max(vC, 0.0), vec3(1.0 / 2.2)) * uSkyExp, 1.0); }';
+const TRAIL_FS = 'uniform float uStarExp; varying vec3 vC; void main(){ gl_FragColor = vec4(pow(max(vC, 0.0), vec3(1.0 / 2.2)) * uStarExp, 1.0); }';
 
 /**
  * The star field during a hyperspace transit, in light-years. Every real system within SKY_RADIUS
@@ -97,7 +97,7 @@ export class HyperspaceView {
     const trails = new THREE.BufferGeometry();
     trails.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 6), 3));
     trails.setAttribute('color', new THREE.BufferAttribute(new Float32Array(N * 6), 3));
-    this.trails = new THREE.LineSegments(trails, new THREE.ShaderMaterial({ vertexShader: TRAIL_VS, fragmentShader: TRAIL_FS, uniforms: { uSkyExp: this.skyExp }, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
+    this.trails = new THREE.LineSegments(trails, new THREE.ShaderMaterial({ vertexShader: TRAIL_VS, fragmentShader: TRAIL_FS, uniforms: { uStarExp: this.skyExp }, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
     for (const o of [this.heads, this.trails]) {
       o.frustumCulled = false;
       this.scene.add(o);
