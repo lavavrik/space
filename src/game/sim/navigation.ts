@@ -4,7 +4,7 @@ import { mulberry32, rr } from '../lib/rng';
 import { THREE } from '../lib/three';
 import { homeSystem } from '../universe/galaxy';
 import { findHome } from '../universe/system';
-import type { Ship, StarSystem, Target } from '../types';
+import type { Body, Ship, StarSystem, Target } from '../types';
 import { resetFrame } from './frame';
 import { addNavPoint, pickNavStar } from './navroute';
 import { massLock } from './ftl';
@@ -24,6 +24,36 @@ export function galPos(g: Game) {
 }
 
 /* ---------- targeting ---------- */
+
+/** A body as seen from the ship: which way it is, how far, and how wide (cos of its angular radius). */
+export interface Occluder {
+  body: Body;
+  dir: THREE.Vector3;
+  dist: number;
+  cosR: number;
+}
+
+/**
+ * Every body's disc in the sky from the ship right now (atmospheres count as part of the disc).
+ * Build it once per pick or frame, then test many directions against it with `hiddenBy`.
+ */
+export function occluders(g: Game): Occluder[] {
+  return g.cur.bodies.map((b) => {
+    const rel = b.pos.clone().sub(g.ship.pos);
+    const dist = rel.length();
+    const r = b.radius * (b.kind !== 'star' && b.pal.atmo ? 1.025 : 1);
+    return { body: b, dir: rel.divideScalar(dist), dist, cosR: Math.cos(Math.asin(Math.min(1, r / dist))) };
+  });
+}
+
+/**
+ * The body hiding whatever lies along unit direction `dir` at distance `dist` (Infinity for stars),
+ * if any: a disc nearer than it that covers that direction. `self` never hides itself.
+ */
+export function hiddenBy(occ: Occluder[], dir: THREE.Vector3, dist = Infinity, self?: Target) {
+  for (const o of occ) if (o.body !== self && o.dist < dist && dir.dot(o.dir) > o.cosR) return o.body;
+  return null;
+}
 
 /** Target the body closest to the centre of view. */
 export function targetAhead(g: Game) {
@@ -65,6 +95,8 @@ export function pickAt(g: Game, sx: number, sy: number) {
     v.copy(rel).applyQuaternion(g.qInv);
     return v.z < 0 ? { x: W / 2 + (v.x / -v.z) * pxPerRad, y: H / 2 - (v.y / -v.z) * pxPerRad } : null;
   };
+  // nothing behind a planet or moon can be picked through it: bodies, stations or stars
+  const occ = occluders(g);
   let marker: Target | null = null,
     markerMiss = CLICK_PX,
     disc: Target | null = null,
@@ -73,7 +105,7 @@ export function pickAt(g: Game, sx: number, sy: number) {
     const rel = t.pos.clone().sub(ship.pos);
     const dist = rel.length();
     const p = project(rel);
-    if (!p) continue;
+    if (!p || hiddenBy(occ, rel.clone().divideScalar(dist), dist - t.radius, t)) continue;
     const pxR = (t.radius / dist) * pxPerRad;
     const off = Math.hypot(p.x - sx, p.y - sy);
     if (pxR < CLICK_PX) {
@@ -96,8 +128,9 @@ export function pickAt(g: Game, sx: number, sy: number) {
   if (g.navPanel && !g.route?.running) {
     // nav panel open: any star in the sky (within SKY_RADIUS) can be the route's destination
     const s = pickNavStar(g, (s) => {
-      const p = project(s.pos.clone().sub(gp).normalize().multiplyScalar(1e6));
-      return p ? Math.hypot(p.x - sx, p.y - sy) : Infinity;
+      const d = s.pos.clone().sub(gp).normalize();
+      const p = project(d.clone().multiplyScalar(1e6));
+      return p && !hiddenBy(occ, d) ? Math.hypot(p.x - sx, p.y - sy) : Infinity;
     });
     if (s) {
       addNavPoint(g, s);
@@ -107,8 +140,9 @@ export function pickAt(g: Game, sx: number, sy: number) {
   let star: StarSystem | null = null,
     starMiss = CLICK_PX;
   for (const s of reachable(g)) {
-    const p = project(s.pos.clone().sub(gp).normalize().multiplyScalar(1e6));
-    if (!p) continue;
+    const d = s.pos.clone().sub(gp).normalize();
+    const p = project(d.clone().multiplyScalar(1e6));
+    if (!p || hiddenBy(occ, d)) continue;
     const miss = Math.hypot(p.x - sx, p.y - sy);
     if (miss < starMiss) {
       starMiss = miss;
@@ -158,8 +192,11 @@ export function pickDest(g: Game) {
   const dir = new THREE.Vector3();
   let aimed: StarSystem | null = null,
     bestA = AIM_CONE;
+  const occ = occluders(g);
   for (const s of list) {
-    const a = dir.subVectors(s.pos, gp).normalize().angleTo(fwd);
+    dir.subVectors(s.pos, gp).normalize();
+    if (hiddenBy(occ, dir)) continue; // can't aim at a star through a planet
+    const a = dir.angleTo(fwd);
     if (a < bestA) {
       bestA = a;
       aimed = s;

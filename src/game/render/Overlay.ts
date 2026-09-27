@@ -5,7 +5,7 @@ import { THREE } from '../lib/three';
 import { relVel } from '../sim/frame';
 import { transitState, type TransitState } from '../sim/hyperspace';
 import { scanProgress } from '../sim/scanner';
-import { galPos, reachable } from '../sim/navigation';
+import { galPos, hiddenBy, occluders, reachable } from '../sim/navigation';
 import type { Jump, StarSystem } from '../types';
 import type { SceneRenderer } from './SceneRenderer';
 
@@ -362,11 +362,13 @@ export class Overlay {
     const dir = this.tmp;
     ctx.font = this.font(10, MONO);
     ctx.textAlign = 'center';
+    const occ = occluders(g);
     for (const s of reachable(g)) {
       if (s.id === g.jumpDest?.id) continue;
       dir.subVectors(s.pos, gp);
       const ly = dir.length();
-      const p = this.toScreen(g, dir.normalize().multiplyScalar(1e6));
+      if (hiddenBy(occ, dir.normalize())) continue; // behind a planet or moon: not shown, not pickable
+      const p = this.toScreen(g, dir.multiplyScalar(1e6));
       if (p.behind) continue;
       const off = Math.hypot(p.v.x, p.v.y) / -p.v.z; // tan of angle from the crosshair
       if (off > 0.16) continue;
@@ -430,11 +432,13 @@ export class Overlay {
       bestD = 14,
       bx = 0,
       by = 0;
+    const occ = occluders(g);
     for (const s of g.sky) {
       if (s.id === g.cur.sys.id) continue;
       const p = this.toScreen(g, this.tmp.subVectors(s.pos, gp).normalize().multiplyScalar(1e6));
       if (p.behind) continue;
       const d = Math.hypot(p.x - m.x, p.y - m.y);
+      if (d < bestD && hiddenBy(occ, this.tmp.normalize())) continue; // hidden behind a body
       if (d < bestD) {
         bestD = d;
         best = s;
