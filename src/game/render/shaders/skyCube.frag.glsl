@@ -7,7 +7,7 @@ uniform samplerCube uSky;
 uniform sampler2D uPatch, uPatchPrev;
 uniform mat4 uPatchVP, uPatchPrevVP;
 uniform float uPatchOn, uMix;
-uniform float uSkyExp; // SKY_K × exposure (render/exposure.ts)
+uniform float uSkyExp; // the Milky Way's share of the exposure (SKY_EXP_P, render/exposure.ts)
 varying vec3 vDir;
 vec3 patchOr(sampler2D t, mat4 vp, vec3 d, vec3 base){
   vec4 q=vp*vec4(d,1.0);

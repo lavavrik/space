@@ -8,7 +8,7 @@ import { HyperspaceView } from './Hyperspace';
 import { createNoiseTexture } from './noise3d';
 import { skyColor, skyLook } from '../sim/hyperspace';
 import { CORRIDOR_LEN, corridorGeometry, hullGeometry, interiorGeometry } from './stationMesh';
-import { AutoExposure, FLOOD_K, HEAD_K, INT_K, MAX_EXP, SKY_K, STAR_EXP_P, WINDOW_K } from './exposure';
+import { AutoExposure, FLOOD_K, HEAD_K, INT_K, MAX_EXP, SKY_EXP_P, SKY_K, STAR_EXP_P, WINDOW_K } from './exposure';
 import { HdrTarget } from './hdr';
 import { padLocal, stationQuat } from '../sim/stationGeom';
 import { ATMO_FS, BODY_VS, GLOW_FS, GLOW_VS, PLANET_FS, POINT_FS, POINT_VS, RING_FS, SKYPT_FS, SKYPT_VS, SKY_BAKE_FS, SKY_CUBE_FS, SKY_VS, STAR_FS, STATION_FS, STATION_INTERIOR_FS, CORRIDOR_FS } from './shaders';
@@ -60,7 +60,7 @@ export class SceneRenderer {
   readonly views = new Map<Body, BodyView>();
   readonly stationViews = new Map<Station, { mesh: THREE.Group; uni: Uniforms; inner: THREE.Mesh; innerUni: Uniforms; corridor: THREE.Mesh; corridorUni: Uniforms; dist: number; pxR: number }>();
   /** Headlights, shared by every station material: the ship's nose (world axes) and on/off. */
-  /** Exposure, shared by every physically lit material (render/exposure.ts): uExp, uSkyExp = SKY_K × uExp for the Milky Way, uStarExp for stars (see STAR_EXP_P). */
+  /** Exposure, shared by every physically lit material (render/exposure.ts): uExp, uSkyExp for the Milky Way and uStarExp for stars (see STAR_EXP_P). */
   private readonly expUni = { uExp: { value: 1 }, uSkyExp: { value: SKY_K }, uStarExp: { value: 1 } };
   /** Station lights in scene units (render/exposure.ts). */
   private readonly headUni = {
@@ -445,7 +445,7 @@ export class SceneRenderer {
   render(g: Game) {
     const e = this.exposure.value;
     this.expUni.uExp.value = e;
-    this.expUni.uSkyExp.value = SKY_K * e;
+    this.expUni.uSkyExp.value = (e / MAX_EXP) ** SKY_EXP_P;
     this.expUni.uStarExp.value = (e / MAX_EXP) ** STAR_EXP_P;
     this.gl.setRenderTarget(this.hdr.target);
     this.renderScene(g);

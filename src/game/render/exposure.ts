@@ -48,9 +48,10 @@ export const MAX_EXP = 1 / SKY_K;
  * Stars (points) follow only part of the exposure: (exposure / MAX_EXP)^STAR_EXP_P, so fully
  * dark-adapted they're as always, and next to a sunlit world (exposure ~1) they keep ~30%
  * instead of 2.5% (really they'd vanish, but a black sky around a planet isn't fun to fly in).
- * The Milky Way's glow follows the full exposure.
+ * The Milky Way's glow does the same with SKY_EXP_P: ~10% next to a sunlit world, barely visible.
  */
-export const STAR_EXP_P = 0.33;
+export const STAR_EXP_P = 0.33,
+  SKY_EXP_P = 0.6;
 /** The centre-weighted log-average lands here… */
 const KEY = 0.18;
 /** …unless that would push the brightest HIGHLIGHT_SHARE of the frame above this. */
