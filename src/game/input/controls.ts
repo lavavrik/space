@@ -2,6 +2,7 @@ import { TANKER_TIME } from '../constants';
 import type { Game } from '../Game';
 import { toggleCruise, toggleDecoupled, toggleFTL } from '../sim/ftl';
 import { toggleScan } from '../sim/scanner';
+import { engageRoute, NAV_MODES, replan, requestCancelRoute } from '../sim/navroute';
 import { startTankerGuide } from '../sim/guide';
 import { pickDest, cycleTarget, startJump, targetAhead } from '../sim/navigation';
 import { ORBIT_TYPES } from '../sim/orbits';
@@ -50,6 +51,36 @@ export function onPress(g: Game, code: string) {
     }
   }
 
+  // navigation panel: 1–3 route mode, Enter engages, Backspace clears the destination or
+  // (twice) cancels a running route
+  if (g.navPanel && !g.planner) {
+    const r = g.route;
+    if (code.startsWith('Digit') && !r?.running) {
+      const m = NAV_MODES[+code.slice(5) - 1];
+      if (m) {
+        if (!ship.avionics.nav?.caps.optimise) g.showMsg(`${ship.avionics.nav?.model ?? 'This unit'} plans for least exotic matter only`, 'warn');
+        else {
+          g.navMode = m.id;
+          replan(g);
+        }
+      }
+      return;
+    }
+    if (code === 'Enter' || code === 'NumpadEnter') {
+      if (r && !r.running) engageRoute(g);
+      else if (!r) g.showMsg(g.navError ?? 'No route', 'warn');
+      return;
+    }
+    if (code === 'Backspace') {
+      if (r?.running) requestCancelRoute(g);
+      else {
+        g.navDest = null;
+        replan(g);
+      }
+      return;
+    }
+  }
+
   // autopilot status panel: Backspace (twice) disengages, Enter plans a different orbit
   if (ship.ap && g.apPanel && !g.planner) {
     if (code === 'Backspace') {
@@ -67,6 +98,7 @@ export function onPress(g: Game, code: string) {
   switch (code) {
     case 'KeyO':
       // while the autopilot flies, O shows its status instead of switching it off
+      g.navPanel = false;
       if (g.planner) closePlanner(g);
       else if (ship.ap) {
         g.apPanel = !g.apPanel;
@@ -92,6 +124,19 @@ export function onPress(g: Game, code: string) {
       break;
     case 'KeyF':
       toggleCruise(g);
+      break;
+    case 'KeyM':
+      g.navPanel = !g.navPanel;
+      if (g.navPanel) {
+        if (!ship.avionics.nav) {
+          g.navPanel = false;
+          g.showMsg('No navigation computer fitted · see avionics (U)', 'warn');
+          break;
+        }
+        closePlanner(g);
+        g.apPanel = false;
+        replan(g);
+      }
       break;
     case 'KeyY':
       toggleScan(g);

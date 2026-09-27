@@ -6,6 +6,7 @@ import { homeSystem } from '../universe/galaxy';
 import { findHome } from '../universe/system';
 import type { Ship, StarSystem, Target } from '../types';
 import { resetFrame } from './frame';
+import { pickNavStar, replan } from './navroute';
 import { massLock } from './ftl';
 import { dominantBody } from './gravity';
 import { startJumpGuide } from './guide';
@@ -92,6 +93,19 @@ export function pickAt(g: Game, sx: number, sy: number) {
     return true;
   }
   const gp = galPos(g);
+  if (g.navPanel && !g.route?.running) {
+    // nav panel open: any star in the sky (within SKY_RADIUS) can be the route's destination
+    const s = pickNavStar(g, (s) => {
+      const p = project(s.pos.clone().sub(gp).normalize().multiplyScalar(1e6));
+      return p ? Math.hypot(p.x - sx, p.y - sy) : Infinity;
+    });
+    if (s) {
+      g.navDest = s;
+      replan(g);
+      g.showMsg(`Route destination · ${s.name} · ${s.pos.distanceTo(gp).toFixed(1)} ly`, 'ftl');
+      return true;
+    }
+  }
   let star: StarSystem | null = null,
     starMiss = CLICK_PX;
   for (const s of reachable(g)) {

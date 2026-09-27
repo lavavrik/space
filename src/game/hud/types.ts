@@ -90,6 +90,20 @@ export interface AvionicsSlotView {
   specs: [string, string][];
 }
 
+/** Navigation computer panel (M): the route to the destination, planned or being flown. */
+export interface NavView {
+  unit: string;
+  dest: string;
+  modes: { label: string; on: boolean }[] | null; // null: the unit has one fixed mode
+  legs: { text: string; detail: string; state: 'done' | 'active' | 'pending' }[];
+  totals: string;
+  warning: Readout | null;
+  running: boolean;
+  status: string;
+  confirm: boolean;
+  hint: string;
+}
+
 export interface PlannerView {
   unit: string; // the orbit computer planning it, e.g. HX-9100 PERIASTRON
   types: OrbitType[]; // the orbit types that unit can fly
@@ -136,5 +150,6 @@ export interface HudSnapshot {
   planner: PlannerView | null;
   autopilot: AutopilotView | null;
   avionics: AvionicsSlotView[] | null; // the avionics panel, when open
+  nav: NavView | null;
   guide: GuideView | null;
 }

@@ -10,6 +10,7 @@ import { arriveAt, galPos } from './navigation';
 import { advanceBodies, relVel, syncFrame, updateFrame } from './frame';
 import { maybeFtlLeg } from './planner';
 import { updateScan } from './scanner';
+import { updateNav } from './navroute';
 import { refillShip, scoop, solarPower } from './resources';
 
 const qa = new THREE.Quaternion();
@@ -132,6 +133,7 @@ export function update(g: Game, dt: number) {
   updateTanker(g, dt);
   updateGuide(g, dt);
   updateScan(g, dt);
+  updateNav(g, dt);
 
   // --- nearest body
   g.nearest = null;

@@ -67,3 +67,16 @@
 .apbtn.danger:hover { background: rgba(255, 91, 70, .16); }
 .apbtn.armed { background: rgba(255, 91, 70, .3); color: #fff; border-color: var(--red); }
 .otypes div.na { opacity: .35; text-decoration: line-through; }
+
+/* navigation panel (M) */
+#navpanel { display: flex; flex-direction: column; gap: .2rem; }
+.navlegs { list-style: none; margin: .3rem 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; max-height: 16rem; overflow: hidden; }
+.navlegs li { display: flex; flex-direction: column; border-left: 2px solid var(--amber-faint); padding-left: .5rem; }
+.navlegs .t { font-size: .95rem; color: var(--text); }
+.navlegs .d { font: .8rem "Share Tech Mono", ui-monospace, monospace; color: var(--amber-dim); }
+.navlegs li.active { border-color: var(--cyan); }
+.navlegs li.active .t { color: var(--cyan); }
+.navlegs li.done { opacity: .45; }
+.navtot { font: .85rem "Share Tech Mono", ui-monospace, monospace; color: var(--amber); }
+.navstat { font-size: .85rem; letter-spacing: .1em; color: var(--cyan); }
+.apbtn:disabled { opacity: .4; cursor: default; }

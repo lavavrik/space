@@ -8,13 +8,14 @@ import { velRel } from '../sim/frame';
 import { orbitElements, orbitElementsRel } from '../sim/gravity';
 import { guideEta, type Guide } from '../sim/guide';
 import { transitState } from '../sim/hyperspace';
+import { NAV_MODES } from '../sim/navroute';
 import { resolvable, SCAN_STAGE, scanProgress } from '../sim/scanner';
 import { galPos } from '../sim/navigation';
 import { evalPlan } from '../sim/orbits';
 import { deltaVLeft } from '../sim/resources';
 import { unitLabel, type Computer } from '../avionics/catalog';
 import { buildInfo } from './info';
-import type { AutopilotView, AvionicsSlotView, FlightView, GuideView, HudSnapshot, LocationView, Pill, PlannerView, Readout, SystemsView, TargetView } from './types';
+import type { AutopilotView, AvionicsSlotView, FlightView, NavView, GuideView, HudSnapshot, LocationView, Pill, PlannerView, Readout, SystemsView, TargetView } from './types';
 
 const tmp = new THREE.Vector3();
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
@@ -33,6 +34,7 @@ export function buildSnapshot(g: Game): HudSnapshot {
     planner: planner(g),
     autopilot: g.apPanel && g.ship.ap ? autopilotView(g) : null,
     avionics: g.avionicsVisible ? avionicsView(g) : null,
+    nav: g.navPanel || g.route?.running ? navView(g) : null,
     guide: g.guide ? guide(g.guide) : null,
   };
 }
@@ -238,6 +240,33 @@ function avionicsView(g: Game): AvionicsSlotView[] {
       ['FEATURES', list(nav.caps.refuelStops && 'refuel stops', nav.caps.optimise && 'route optimisation')],
     ] : []),
   ];
+}
+
+function navView(g: Game): NavView {
+  const nav = g.ship.avionics.nav;
+  const r = g.route;
+  const legs = (r?.legs ?? []).map((l, i) => {
+    const state: 'done' | 'active' | 'pending' = !r?.running ? 'pending' : i < r.i ? 'done' : i === r.i ? 'active' : 'pending';
+    if (l.kind === 'jump') return { text: `Jump → ${l.to.name}`, detail: `${l.ly.toFixed(1)} ly · ${l.cost.toFixed(1)} kg exotic · ${fmtTime(l.time)}`, state };
+    if (l.kind === 'refuel') return { text: `Refuel at ${l.at.name}`, detail: `skim the star's corona · ~${fmtTime(l.time)}`, state };
+    if (l.kind === 'orbit') return { text: `Orbit ${l.body}`, detail: 'equatorial, default altitude', state };
+    return { text: `Rendezvous · ${l.station}`, detail: 'match its orbit, hold 2 km off', state };
+  });
+  const jumps = r?.legs.filter((l) => l.kind === 'jump') ?? [];
+  const time = r?.legs.reduce((t, l) => t + l.time, 0) ?? 0;
+  const ly = jumps.reduce((t, l) => t + (l.kind === 'jump' ? l.ly : 0), 0);
+  return {
+    unit: nav ? unitLabel(nav).toUpperCase() : 'NO NAVIGATION COMPUTER',
+    dest: r?.destName ?? '—',
+    modes: nav?.caps.optimise ? NAV_MODES.map((m) => ({ label: m.label, on: g.navMode === m.id })) : null,
+    legs,
+    totals: r ? (jumps.length ? `${jumps.length} jumps · ${ly.toFixed(1)} ly · ${r.exoticNeeded.toFixed(1)} kg exotic (have ${g.ship.exotic.toFixed(0)}) · ~${fmtTime(time)}` : `~${fmtTime(time)}`) : '',
+    warning: g.navError ? { text: g.navError, warn: true } : r?.warning ? { text: r.warning, warn: true } : null,
+    running: !!r?.running,
+    status: r?.running ? r.status : '',
+    confirm: g.navConfirm > 0,
+    hint: r?.running ? '' : 'Click a star to route there, or target a body or station · Backspace clears',
+  };
 }
 
 function planner(g: Game): PlannerView | null {

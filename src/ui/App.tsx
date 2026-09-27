@@ -4,6 +4,7 @@ import { BodyInfo } from './components/BodyInfo';
 import { HelpPanel } from './components/HelpPanel';
 import { FlightCluster, Location, ShipGauges, TargetCard } from './components/Hud';
 import { ManeuverGuide } from './components/ManeuverGuide';
+import { NavPanel } from './components/NavPanel';
 import { OrbitPlanner } from './components/OrbitPlanner';
 import { StartScreen } from './components/StartScreen';
 import { Toast } from './components/Toast';
@@ -22,6 +23,7 @@ export function App() {
             {hud.info ? <BodyInfo info={hud.info} /> : hud.avionics ? <AvionicsPanel slots={hud.avionics} /> : hud.helpVisible && <HelpPanel />}
           </div>
           <div id="rightcol">
+            {hud.nav && <NavPanel n={hud.nav} onEngage={() => game!.engageRoute()} onCancel={() => game!.cancelRoute()} />}
             {hud.autopilot && <AutopilotPanel a={hud.autopilot} onDisengage={() => game!.requestDisengage()} onChange={() => game!.changeOrbit()} />}
             {hud.guide && <ManeuverGuide guide={hud.guide} />}
             {hud.planner && <OrbitPlanner p={hud.planner} />}

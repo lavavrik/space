@@ -7,6 +7,7 @@ import { THREE } from './lib/three';
 import { Overlay } from './render/Overlay';
 import { defaultAvionics } from './avionics/catalog';
 import { PerfMonitor } from './debug/Perf';
+import { engageRoute, requestCancelRoute, type NavMode, type Route } from './sim/navroute';
 import { SceneRenderer } from './render/SceneRenderer';
 import type { Guide } from './sim/guide';
 import { pickAt, placeAtHome } from './sim/navigation';
@@ -69,6 +70,13 @@ export class Game {
   /** Avionics panel (U): the fitted computers; shares the left column with info and controls. */
   avionicsVisible = false;
   /** Scan progress (0…1) per object key (see sim/scanner.ts), and whether the target is being scanned. */
+  /** Navigation computer (M): the panel, its planned or running route, destination star and mode. */
+  navPanel = false;
+  route: Route | null = null;
+  navDest: StarSystem | null = null;
+  navMode: NavMode = 'exotic';
+  navError: string | null = null;
+  navConfirm = 0; // seconds left to confirm cancelling a running route
   readonly scans = new Map<string, number>();
   scanning: Target | null = null;
   /** Draw the planned / autopilot orbit as a ring (L). */
@@ -177,6 +185,17 @@ export class Game {
   /** Autopilot panel button: first click arms, second disengages (see requestDisengage). */
   requestDisengage() {
     requestDisengage(this);
+    this.invalidateHud();
+  }
+
+  /** Nav panel buttons. */
+  engageRoute() {
+    engageRoute(this);
+    this.invalidateHud();
+  }
+
+  cancelRoute() {
+    requestCancelRoute(this);
     this.invalidateHud();
   }
 

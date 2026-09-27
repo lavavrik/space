@@ -132,6 +132,7 @@ export class Overlay {
     this.drawStations(g);
     this.drawReachable(g);
     this.drawJumpDest(g);
+    this.drawNavDest(g);
 
     if (g.flash > 0) {
       ctx.fillStyle = `rgba(220,240,255,${g.flash})`;
@@ -379,6 +380,33 @@ export class Overlay {
         ctx.fillText(`${s.name} · ${ly.toFixed(1)} ly`, p.x, p.y - 11);
       }
     }
+  }
+
+  /** Route destination (nav computer): a double diamond on its star, or an arrow when off-screen. */
+  private drawNavDest(g: Game) {
+    const dest = g.navDest;
+    if (!dest || dest.id === g.cur.sys.id) return;
+    const { ctx, W, H } = this;
+    const dir = dest.pos.clone().sub(galPos(g));
+    const ly = dir.length();
+    const s = this.toScreen(g, dir.normalize().multiplyScalar(1e6));
+    const label = `ROUTE → ${dest.name} · ${ly.toFixed(1)} ly`;
+    if (s.behind || s.x < 0 || s.x > W || s.y < 0 || s.y > H) return this.edgeArrow(s.v, CYA, label);
+    ctx.strokeStyle = CYA + '0.9)';
+    ctx.lineWidth = 1.2;
+    for (const k of [10, 16]) {
+      ctx.beginPath();
+      ctx.moveTo(s.x, s.y - k);
+      ctx.lineTo(s.x + k, s.y);
+      ctx.lineTo(s.x, s.y + k);
+      ctx.lineTo(s.x - k, s.y);
+      ctx.closePath();
+      ctx.stroke();
+    }
+    ctx.fillStyle = CYA + '0.95)';
+    ctx.font = this.font(11, MONO);
+    ctx.textAlign = 'center';
+    ctx.fillText(label, s.x, s.y + 30);
   }
 
   /** Diamond on the hyperjump destination star. */
