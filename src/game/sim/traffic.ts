@@ -16,11 +16,14 @@
 import type { Game } from '../Game';
 import { mulberry32, rr } from '../lib/rng';
 import { THREE } from '../lib/three';
-import type { CurrentSystem, Target } from '../types';
+import type { Body, CurrentSystem, Npc, Station } from '../types';
+
+export type { Npc };
+/** Where ships go. */
+type Dest = Body | Station;
 import { dropAlt } from './ftl';
 import { minOrbitAlt } from './orbits';
 
-export type TrafficPhase = 'linger' | 'depart' | 'ftl' | 'arrive';
 
 /**
  * FTL trail: as long as TRAIL_S seconds of travel at the ship's current speed, up to TRAIL_MAX (m).
@@ -31,38 +34,18 @@ export const TRAIL_S = 30,
   TRAIL_EASE = 1.5;
 /** How long an FTL flash lasts (s). */
 export const FLASH_S = 0.8;
+/** A ship's size for the radar, scanner and clicks (m): half its ~60 m length. */
+const SHIP_R = 30;
 /** Seconds departing and arriving, and the acceleration then (m/s²). */
 const MANEUVER_S = 12,
   MANEUVER_ACC = 150;
 
-export interface Npc {
-  name: string;
-  kind: string; // "Freighter", "Courier", …
-  seed: number;
-  at: Target; // where it is or last was
-  to: Target | null; // where it's going (depart, ftl, arrive)
-  phase: TrafficPhase;
-  t: number; // seconds into the phase
-  dur: number; // the phase's length (s)
-  /** Linger offset from the body (m, world axes) and the circling rate (rad/s), for linger. */
-  off: THREE.Vector3;
-  spin: number;
-  /** Start of the current leg (world, m): where depart / ftl / arrive began. */
-  p0: THREE.Vector3;
-  pos: THREE.Vector3; // world, m
-  vel: THREE.Vector3; // m/s, system frame
-  /** The trail streaming behind it: length (m) and direction (world, unit). */
-  trailL: number;
-  trailDir: THREE.Vector3;
-  /** Sim time of its last FTL entry or exit (the flash), or −∞. */
-  flashAt: number;
-}
 
 const KINDS = ['Freighter', 'Courier', 'Tanker', 'Survey ship', 'Hauler', 'Liner'];
 const NAMES = ['Kestrel', 'Meridian', 'Halcyon', 'Ostrava', 'Tamsin', 'Blue Heron', 'Corvid', 'Anselm', 'Petrel', 'Lodestar', 'Varuna', 'Ilse', 'Marrow', 'Sable', 'Quillon', 'Juniper'];
 
 /** Places ships go: stations and worlds with a surface to orbit (not stars). */
-const destinations = (cur: CurrentSystem): Target[] => [...cur.stations, ...cur.bodies.filter((b) => b.kind !== 'star')];
+const destinations = (cur: CurrentSystem): Dest[] => [...cur.stations, ...cur.bodies.filter((b) => b.kind !== 'star')];
 
 /** The ships in a system: a few, more with more stations. Deterministic per system. */
 export function spawnTraffic(cur: CurrentSystem): Npc[] {
@@ -75,8 +58,10 @@ export function spawnTraffic(cur: CurrentSystem): Npc[] {
   for (let i = 0; i < n; i++) {
     const at = dests[Math.floor(g() * dests.length)];
     const npc: Npc = {
+      kind: 'ship',
+      radius: SHIP_R,
       name: names.splice(Math.floor(g() * names.length), 1)[0], // each name once per system
-      kind: KINDS[Math.floor(g() * KINDS.length)],
+      cls: KINDS[Math.floor(g() * KINDS.length)],
       seed: g() * 1000,
       at,
       to: null,
@@ -99,7 +84,7 @@ export function spawnTraffic(cur: CurrentSystem): Npc[] {
 }
 
 /** A linger spot at `b`: a few km off a station, or a low circular orbit round a world. */
-function lingerAt(npc: Npc, b: Target, g: () => number) {
+function lingerAt(npc: Npc, b: Dest, g: () => number) {
   const dir = new THREE.Vector3(g() - 0.5, (g() - 0.5) * 0.4, g() - 0.5).normalize();
   if (b.kind === 'station') {
     npc.off.copy(dir).multiplyScalar(rr(g, 2e3, 6e3));
@@ -115,7 +100,7 @@ function lingerAt(npc: Npc, b: Target, g: () => number) {
 const ftlTime = (dist: number) => 20 + 25 * Math.log10(1 + dist / 1e7);
 
 /** Where a ship drops out of FTL near `b`: outside its FTL limit, on the side it's coming from. */
-function dropPoint(b: Target, from: THREE.Vector3, out: THREE.Vector3) {
+function dropPoint(b: Dest, from: THREE.Vector3, out: THREE.Vector3) {
   const r = b.kind === 'station' ? 60e3 : b.radius + dropAlt(b) * 1.3;
   return out.subVectors(from, b.pos).normalize().multiplyScalar(r).add(b.pos);
 }
@@ -125,7 +110,7 @@ const tmp = new THREE.Vector3(),
   AXIS = new THREE.Vector3(0, 1, 0);
 
 /** The linger spot's current world position (it circles a world at orbital rate). */
-function lingerPos(npc: Npc, b: Target, time: number, out: THREE.Vector3) {
+function lingerPos(npc: Npc, b: Dest, time: number, out: THREE.Vector3) {
   return out.copy(npc.off).applyAxisAngle(AXIS, npc.spin * time).add(b.pos);
 }
 
@@ -175,7 +160,7 @@ export function easeTrail(L: number, speed: number, dt: number) {
   return L + (want - L) * Math.min(1, TRAIL_EASE * dt);
 }
 
-function nextPhase(npc: Npc, dests: Target[], time: number) {
+function nextPhase(npc: Npc, dests: Dest[], time: number) {
   const g = mulberry32(Math.floor(npc.seed * 1e3 + time));
   npc.t = 0;
   npc.p0.copy(npc.pos);

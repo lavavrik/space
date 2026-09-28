@@ -65,7 +65,7 @@ export function targetAhead(g: Game) {
   const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(ship.q);
   let best: Target | null = null,
     bestA = 0.35;
-  for (const b of [...g.cur.bodies, ...g.cur.stations]) {
+  for (const b of [...g.cur.bodies, ...g.cur.stations, ...g.traffic]) {
     if (!known(g, b)) continue; // T aims at things the HUD knows about
     const d = b.pos.clone().sub(ship.pos);
     const dist = d.length();
@@ -106,7 +106,7 @@ export function pickAt(g: Game, sx: number, sy: number) {
     markerMiss = CLICK_PX,
     disc: Target | null = null,
     discDist = Infinity;
-  for (const t of [...g.cur.bodies, ...g.cur.stations]) {
+  for (const t of [...g.cur.bodies, ...g.cur.stations, ...g.traffic]) {
     const rel = t.pos.clone().sub(ship.pos);
     const dist = rel.length();
     const p = project(rel);
@@ -167,7 +167,7 @@ export function pickAt(g: Game, sx: number, sy: number) {
 export function cycleTarget(g: Game) {
   const { ship } = g;
   // only what the HUD knows about: the star and anything the radar has found
-  const sorted = [...g.cur.bodies, ...g.cur.stations].filter((t) => known(g, t)).sort((a, b) => a.pos.distanceTo(ship.pos) - b.pos.distanceTo(ship.pos));
+  const sorted = [...g.cur.bodies, ...g.cur.stations, ...g.traffic].filter((t) => known(g, t)).sort((a, b) => a.pos.distanceTo(ship.pos) - b.pos.distanceTo(ship.pos));
   const i = g.target ? sorted.indexOf(g.target) : -1;
   g.target = sorted[(i + 1) % sorted.length];
   g.showMsg(`Target · ${contactLabel(g, g.target)}`);

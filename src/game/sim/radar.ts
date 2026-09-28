@@ -6,7 +6,8 @@
  * known once they're tracked).
  *
  * It only tells you what's there: how far, and what kind of thing (a star, a gas or ice giant, a
- * rocky world, a moon, a station). Names and details still take the scanner (Y; "identify" in the
+ * rocky world, a moon, a station, a ship). Ships are tracked from then on as they move. Names and
+ * details still take the scanner (Y; "identify" in the
  * window). The navigation search only offers what the radar has found in this system.
  */
 import { AU, WT } from '../constants';
@@ -29,6 +30,7 @@ export interface Contact {
 /** The broad class the radar can tell from a return: size and whether it shines. */
 export function radarClass(t: Target) {
   if (t.kind === 'station') return 'station';
+  if (t.kind === 'ship') return 'ship';
   if (t.kind === 'star') return 'star';
   if (t.kind === 'moon') return 'moon';
   return t.type === WT.GasGiant ? 'gas giant' : t.type === WT.IceGiant ? 'ice giant' : 'rocky world';
@@ -39,6 +41,7 @@ export function radarClass(t: Target) {
  * system's star is always known by name (it's on the star map).
  */
 export function contactLabel(g: Game, t: Target) {
+  if (t.kind === 'ship') return scanProgress(g, t) >= SCAN_STAGE.type ? `${t.cls} ${t.name}` : radarSeen(g, t) ? 'Unidentified ship' : 'Unknown object';
   if (t.kind === 'star' || scanProgress(g, t) >= SCAN_STAGE.type) return t.name;
   // before the radar has it, all we know is that something's there (e.g. a disc we clicked)
   return radarSeen(g, t) ? `Unidentified ${radarClass(t)}` : 'Unknown object';
@@ -53,7 +56,7 @@ export const radarSeen = (g: Game, t: Target) => g.radar.seen.has(scanKey(g.cur.
 /** Everything the radar has found in this system, nearest first (live distances). */
 export function radarContacts(g: Game): Contact[] {
   const out: Contact[] = [];
-  for (const t of [...g.cur.bodies, ...g.cur.stations]) {
+  for (const t of [...g.cur.bodies, ...g.cur.stations, ...g.traffic]) {
     const key = scanKey(g.cur.sys, t);
     if (!g.radar.seen.has(key)) continue;
     const d = t.pos.distanceTo(g.ship.pos) - (t.kind === 'station' ? t.size / 2 : t.radius);
@@ -73,7 +76,7 @@ export function updateRadar(g: Game, dt: number) {
   if (r.sweep > 0) return;
   r.sweep = 0;
   let n = 0;
-  for (const t of [...g.cur.bodies, ...g.cur.stations]) {
+  for (const t of [...g.cur.bodies, ...g.cur.stations, ...g.traffic]) {
     const d = t.pos.distanceTo(g.ship.pos) - (t.kind === 'station' ? t.size / 2 : t.radius);
     if (d > RADAR_RANGE) continue;
     const key = scanKey(g.cur.sys, t);

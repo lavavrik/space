@@ -7,7 +7,7 @@ import { THREE } from '../lib/three';
 import { velRel } from '../sim/frame';
 import { orbitElementsRel } from '../sim/gravity';
 import { resolvable, SCAN_STAGE, scanProgress } from '../sim/scanner';
-import type { Body, KeplerOrbit, Station, Target } from '../types';
+import type { Body, KeplerOrbit, Npc, Station, Target } from '../types';
 import type { InfoView, Readout } from './types';
 
 const MEARTH = 5.972e24;
@@ -23,6 +23,7 @@ const fmtOrbitDist = (m: number, aroundStar: boolean) => (aroundStar ? `${(m / A
 export function buildInfo(g: Game, t: Target): InfoView {
   // what the scanner has revealed so far (see sim/scanner.ts); your own position and speed
   // relative to it come from the ship's instruments and are always shown
+  if (t.kind === 'ship') return shipInfo(g, t);
   const p = scanProgress(g, t);
   const unknown: [string, string] = ['SCAN', scanHint(g, t, p)];
   let physical: [string, string][] = t.kind === 'station' ? stationPhysical(t) : bodyPhysical(g, t);
@@ -38,6 +39,28 @@ export function buildInfo(g: Game, t: Target): InfoView {
   }
   const type = p < SCAN_STAGE.type ? 'UNKNOWN · UNSCANNED' : t.kind === 'station' ? 'ORBITAL STATION' : t.typeName.toUpperCase();
   return { title: t.name, type, physical, orbitHead, orbit, you: youRows(g, t) };
+}
+
+/**
+ * Another ship: its class and size once scanned to 25 %, what it's doing at 50 %, where it's going
+ * at 75 % (sim/traffic.ts), and its distance and speed relative to you always.
+ */
+function shipInfo(g: Game, t: Npc): InfoView {
+  const p = scanProgress(g, t);
+  const hint: [string, string] = ['SCAN', scanHint(g, t, p)];
+  const physical: [string, string][] = p >= SCAN_STAGE.type ? [['CLASS', t.cls], ['LENGTH', '≈ 60 m']] : [hint];
+  const doing = { linger: `holding near ${t.at.name}`, depart: `leaving ${t.at.name}`, ftl: 'in FTL', arrive: `arriving at ${t.to?.name ?? t.at.name}` }[t.phase];
+  const orbit: [string, string][] = [];
+  if (p >= SCAN_STAGE.physical) orbit.push(['STATUS', doing]);
+  if (p >= SCAN_STAGE.orbit) orbit.push(['BOUND FOR', t.to ? t.to.name : `${t.at.name} (staying)`]);
+  if (p < SCAN_STAGE.orbit) orbit.push(hint);
+  const rv = g.ship.pos.clone().sub(t.pos);
+  const v = g.ship.vel.clone().add(g.frameBody.vel).sub(t.vel);
+  const you: [string, string | Readout][] = [
+    ['DISTANCE', fmtDist(rv.length())],
+    ['RELATIVE SPEED', g.ship.mode === 'ftl' ? 'in FTL' : fmtSpeedText(v.length())],
+  ];
+  return { title: p >= SCAN_STAGE.type ? `${t.cls} ${t.name}` : 'Unidentified ship', type: p >= SCAN_STAGE.type ? t.cls.toUpperCase() : 'SHIP · UNSCANNED', physical, orbitHead: 'ACTIVITY', orbit, you };
 }
 
 /** What to say where scan data is missing. */
@@ -99,7 +122,7 @@ function orbitRows(o: KeplerOrbit, t: Target, p: Body): [string, string][] {
 }
 
 /** The ship relative to the target: distance, speeds, and its own orbit around it if any. */
-function youRows(g: Game, t: Target): [string, string | Readout][] {
+function youRows(g: Game, t: Body | Station): [string, string | Readout][] {
   const { ship } = g;
   const rv = ship.pos.clone().sub(t.pos);
   const r = rv.length();

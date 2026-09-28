@@ -18,12 +18,12 @@ const SCAN_BASE_TIME = 5;
 
 /** Stable key for an object: system id plus name (names are unique within a system). */
 export function scanKey(sys: StarSystem, t: Target) {
-  return `${sys.id}/${t.kind === 'station' ? 'st:' : ''}${t.name}`;
+  return `${sys.id}/${t.kind === 'station' ? 'st:' : t.kind === 'ship' ? 'sh:' : ''}${t.name}`;
 }
 
 /** How much of `t` has been scanned, 0…1. */
 export function scanProgress(g: Game, t: Target) {
-  if (g.cur.sys.id === HOME_ID) return 1; // you know your home system
+  if (g.cur.sys.id === HOME_ID && t.kind !== 'ship') return 1; // you know your home system (not who's passing through)
   return g.scans.get(scanKey(g.cur.sys, t)) ?? 0;
 }
 
@@ -77,7 +77,7 @@ export function updateScan(g: Game, dt: number) {
   g.scans.set(key, p);
   if (p >= 1) {
     g.scanning = null;
-    g.showMsg(`Scan complete · ${t.name} · I for details`);
+    g.showMsg(`Scan complete · ${contactLabel(g, t)} · I for details`);
     g.invalidateHud();
   }
 }

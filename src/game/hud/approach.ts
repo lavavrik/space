@@ -50,6 +50,7 @@ function milestones(g: Game, t: Target): Raw[] {
     add(HOLD_OUT, 'HOLD POINT', 'Approach hold point on the slot axis', 'info');
     return out;
   }
+  if (t.kind === 'ship') return out; // another ship: nothing to mark on the way
   const b = t;
   if (b.kind !== 'star') add(b.soi - b.radius, 'GRAVITY', `Sphere of influence: ${b.name}'s gravity dominates, its frame and orbits from here`, 'info');
   add(dropAlt(b) * 1.15, 'MASS LOCK', "Mass lock: FTL can't be engaged closer", 'warn');

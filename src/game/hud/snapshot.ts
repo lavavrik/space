@@ -238,12 +238,12 @@ function target(g: Game): TargetView {
     const r = resolvable(g, t);
     scan = !g.ship.avionics.scanner ? { text: 'UNSCANNED · NO SCANNER' } : r.ok ? { text: sp > 0 ? `${Math.floor(sp * 100)} % SCANNED · Y` : 'UNSCANNED · Y TO SCAN' } : { text: `OUT OF RESOLUTION · ${fmtDist(r.needDist)}`, warn: true };
   }
-  const d = t.kind === 'station' ? t.pos.distanceTo(ship.pos) - t.size / 2 : surfaceDist(t, ship.pos); // to the ground under you up close
+  const d = t.kind === 'station' ? t.pos.distanceTo(ship.pos) - t.size / 2 : t.kind === 'ship' ? t.pos.distanceTo(ship.pos) : surfaceDist(t, ship.pos); // to the ground under you up close
   const dir = tmp.subVectors(t.pos, ship.pos).normalize();
   const vel = ship.mode === 'ftl' ? ship.travelDir.clone().multiplyScalar(ship.ftlSpeed) : ship.vel.clone();
   vel.add(g.frameBody.vel).sub(t.vel); // everything moves, so close on the target in its own frame
   const closing = vel.dot(dir);
-  const type = sp < SCAN_STAGE.type ? 'UNKNOWN' : t.kind === 'station' ? 'ORBITAL STATION' : t.typeName.toUpperCase();
+  const type = sp < SCAN_STAGE.type ? (t.kind === 'ship' ? 'SHIP' : 'UNKNOWN') : t.kind === 'station' ? 'ORBITAL STATION' : t.kind === 'ship' ? t.cls.toUpperCase() : t.typeName.toUpperCase();
   const inside = g.inStation === t;
   return { name: contactLabel(g, t), type, distance: inside ? (g.dock?.docked ? 'DOCKED' : 'INSIDE') : fmtDist(d), eta: closing > 1 ? `ETA ${fmtTime(d / closing)}` : 'NOT CLOSING', none: false, scan, scanFrac: sp, approach: inside ? null : approachView(g, t, d) };
 }

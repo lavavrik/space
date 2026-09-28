@@ -440,20 +440,48 @@ export class Overlay {
     }
   }
 
-  /** Other ships (sim/traffic.ts): a small label by each one within TRAFFIC_LABEL of you. */
+  /**
+   * Other ships (sim/traffic.ts) the radar has found: a small label by each within TRAFFIC_LABEL,
+   * and the targeted one in a triangle (bodies get circles, stations squares) with its name, or an
+   * edge arrow when it's off screen.
+   */
   private drawTraffic(g: Game) {
     const { ctx, W, H } = this;
     ctx.font = this.font(10, MONO);
-    ctx.textAlign = 'left';
     for (const npc of g.traffic) {
+      const isT = npc === g.target;
+      if (!isT && !known(g, npc)) continue;
       const rel = this.tmp.subVectors(npc.pos, g.ship.pos);
       const d = rel.length();
-      if (d > TRAFFIC_LABEL) continue;
       const s = this.toScreen(g, rel);
-      if (s.behind || s.x < 0 || s.x > W || s.y < 0 || s.y > H) continue;
+      const onScreen = !s.behind && s.x > 0 && s.x < W && s.y > 0 && s.y < H;
+      const name = contactLabel(g, npc);
       const ftl = npc.phase === 'ftl';
+      const text = `${name} · ${ftl ? 'FTL' : fmtDist(d)}`;
+      if (!onScreen) {
+        if (isT) this.edgeArrow(s.v, CYA, text);
+        continue;
+      }
+      if (isT) {
+        const r = 11;
+        ctx.strokeStyle = CYA + '0.95)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(s.x, s.y - r);
+        ctx.lineTo(s.x + r * 0.87, s.y + r * 0.5);
+        ctx.lineTo(s.x - r * 0.87, s.y + r * 0.5);
+        ctx.closePath();
+        ctx.stroke();
+        this.drawScanArc(g, s.x, s.y, r + 8);
+        ctx.fillStyle = CYA + '0.95)';
+        ctx.textAlign = 'center';
+        ctx.fillText(text.toUpperCase(), s.x, s.y - r - 8);
+        continue;
+      }
+      if (d > TRAFFIC_LABEL) continue;
       ctx.fillStyle = ftl ? 'rgba(127,220,255,0.85)' : 'rgba(255,230,199,0.7)';
-      ctx.fillText(`${npc.kind} ${npc.name} · ${ftl ? 'FTL' : fmtDist(d)}`, s.x + 8, s.y - 6);
+      ctx.textAlign = 'left';
+      ctx.fillText(text, s.x + 8, s.y - 6);
     }
   }
 

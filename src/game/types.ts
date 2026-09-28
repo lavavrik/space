@@ -93,7 +93,34 @@ export interface Station extends KeplerOrbit {
 }
 
 /** Anything the ship can target. */
-export type Target = Body | Station;
+export type Target = Body | Station | Npc;
+
+/** Another ship (sim/traffic.ts): a target like a body or a station, but tiny and without gravity. */
+export interface Npc {
+  kind: 'ship';
+  radius: number; // m, for the radar, scanner and clicks
+  name: string;
+  cls: string; // "Freighter", "Courier", …
+  seed: number;
+  at: Body | Station; // where it is or last was
+  to: Body | Station | null; // where it's going (depart, ftl, arrive)
+  phase: 'linger' | 'depart' | 'ftl' | 'arrive';
+  t: number; // seconds into the phase
+  dur: number; // the phase's length (s)
+  /** Linger offset from the body (m, world axes) and the circling rate (rad/s), for linger. */
+  off: Vec3;
+  spin: number;
+  /** Start of the current leg (world, m): where depart / ftl / arrive began. */
+  p0: Vec3;
+  pos: Vec3; // world, m
+  vel: Vec3; // m/s, system frame
+  /** The trail streaming behind it: length (m) and direction (world, unit). */
+  trailL: number;
+  trailDir: Vec3;
+  /** Sim time of its last FTL entry or exit (the flash), or −∞. */
+  flashAt: number;
+}
+
 
 export interface StarInfo {
   cls: string;
