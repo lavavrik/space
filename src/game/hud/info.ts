@@ -49,7 +49,7 @@ function shipInfo(g: Game, t: Npc): InfoView {
   const p = scanProgress(g, t);
   const hint: [string, string] = ['SCAN', scanHint(g, t, p)];
   const physical: [string, string][] = p >= SCAN_STAGE.type ? [['CLASS', t.cls], ['LENGTH', '≈ 60 m']] : [hint];
-  const doing = { linger: `holding near ${t.at.name}`, depart: `leaving ${t.at.name}`, ftl: 'in FTL', arrive: `arriving at ${t.to?.name ?? t.at.name}` }[t.phase];
+  const doing = { linger: `holding near ${t.at.name}`, turn: `turning to leave ${t.at.name}`, depart: `leaving ${t.at.name}`, ftl: 'in FTL', arrive: `arriving at ${t.to?.name ?? t.at.name}` }[t.phase];
   const orbit: [string, string][] = [];
   if (p >= SCAN_STAGE.physical) orbit.push(['STATUS', doing]);
   if (p >= SCAN_STAGE.orbit) orbit.push(['BOUND FOR', t.to ? t.to.name : `${t.at.name} (staying)`]);

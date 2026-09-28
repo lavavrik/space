@@ -3,6 +3,7 @@ import type { Outfit } from './outfit/catalog';
 import type { THREE } from './lib/three';
 
 type Vec3 = THREE.Vector3;
+type Quat = THREE.Quaternion;
 type Color = THREE.Color;
 
 /** Surface / composition type of a planet or moon (see WT in constants). Indexes TYPES, DENSITY and ALBEDO. */
@@ -104,7 +105,7 @@ export interface Npc {
   seed: number;
   at: Body | Station; // where it is or last was
   to: Body | Station | null; // where it's going (depart, ftl, arrive)
-  phase: 'linger' | 'depart' | 'ftl' | 'arrive';
+  phase: 'linger' | 'turn' | 'depart' | 'ftl' | 'arrive';
   t: number; // seconds into the phase
   dur: number; // the phase's length (s)
   /** Linger offset from the body (m, world axes) and the circling rate (rad/s), for linger. */
@@ -119,6 +120,19 @@ export interface Npc {
   trailDir: Vec3;
   /** Sim time of its last FTL entry or exit (the flash), or −∞. */
   flashAt: number;
+  /** Attitude (nose along +z), and how it's thrusting now: +1 main engine, −1 braking, 0 coasting. */
+  q: Quat;
+  thrust: number;
+  /** Departing: direction (world), speed and distance so far, relative to where it lingered. */
+  dir: Vec3;
+  sv: number;
+  ss: number;
+  /** Arriving: its offset from the destination and velocity against it at drop-out, and the spot it
+   * settles into (all relative to the destination; see sim/traffic.ts arrive). */
+  rel0: Vec3;
+  relV0: Vec3;
+  rel1: Vec3;
+  relV1: Vec3; // its velocity against the destination once parked (a world's orbit)
 }
 
 

@@ -3,7 +3,8 @@
  *   - a small procedural model (hull, nose, cockpit, twin engine pods, a fin), ~60 m long, pointing
  *     where it's going and lit by the star, drawn within 200 km;
  *   - a marker dot a few pixels across from any distance (cyan in FTL);
- *   - an engine glow behind it while it manoeuvres (orange) or in FTL (blue);
+ *   - its engines: a glow at the tail while it thrusts (orange; blue in FTL), a smaller one at the
+ *     nose while it brakes;
  *   - in FTL a trail streaming behind it: a line along its motion, as long as TRAIL_S seconds of
  *     travel at its speed (up to 0.5 AU), bright at the ship and fading to nothing, which pulls in
  *     after drop-out; your ship gets one too;
@@ -181,23 +182,23 @@ export class TrafficView {
     npcs.forEach((npc, i) => {
       const v = this.view(i);
       const rel = this.tmp.subVectors(npc.pos, ship.pos);
-      // hull: nose along its motion (or toward where it's going)
+      // hull: its own attitude (sim/traffic.ts turns it like a pilot would)
       v.hull.visible = rel.length() < 200e3;
       if (v.hull.visible) {
         v.hull.position.copy(rel);
-        const dir = npc.vel.lengthSq() > 1 ? npc.vel : npc.to ? npc.to.pos.clone().sub(npc.pos) : null;
-        if (dir) v.hull.lookAt(rel.clone().add(dir.clone().normalize()));
+        v.hull.quaternion.copy(npc.q);
       }
-      // marker, and an engine glow behind it while manoeuvring or in FTL
+      // marker, and the engines: main at the tail while thrusting, retro at the nose while braking
       const ftl = npc.phase === 'ftl';
       dp.set([rel.x, rel.y, rel.z], nd * 3);
       dc.set(ftl ? [0.5, 0.9, 1.0] : [0.85, 0.85, 0.8], nd * 3);
       ds[nd++] = (ftl ? 5 : 3.5) * pxScale;
-      if (npc.phase !== 'linger' && npc.vel.lengthSq() > 1) {
-        const back = rel.clone().addScaledVector(npc.vel.clone().normalize(), -35);
-        dp.set([back.x, back.y, back.z], nd * 3);
-        dc.set(ftl ? [0.6, 0.95, 1.4] : [1.4, 0.8, 0.4], nd * 3);
-        ds[nd++] = (ftl ? 9 : 6) * pxScale;
+      if (npc.thrust !== 0) {
+        const nose = this.tmp2.set(0, 0, 1).applyQuaternion(npc.q);
+        const at = rel.clone().addScaledVector(nose, npc.thrust > 0 ? -36 : 34);
+        dp.set([at.x, at.y, at.z], nd * 3);
+        dc.set(ftl ? [0.6, 0.95, 1.4] : npc.thrust > 0 ? [1.4, 0.8, 0.4] : [1.0, 0.7, 0.45], nd * 3);
+        ds[nd++] = (ftl ? 9 : npc.thrust > 0 ? 6 : 4) * pxScale;
       }
       // the flash of entering or leaving FTL: a burst that swells and fades
       const fu = (simTime - npc.flashAt) / FLASH_S;

@@ -1,28 +1,32 @@
 /*
  * Traffic (docs/traffic.md): other ships going about their business in the system. They don't use
- * the physics the player does; each follows a scripted, kinematic cycle between destinations
- * (stations and worlds):
+ * the physics the player does, but they move like piloted ships, between destinations (stations
+ * and worlds):
  *
- *   linger — hang off a station or circle a world in a low orbit for a while
- *   depart — pull away toward the next destination, speeding up (normal space)
- *   ftl    — cross to it in FTL: speed eases up and back down over the leg, a trail streaming behind
- *            the ship (TRAIL_S seconds of travel at its current speed, up to TRAIL_MAX), with a flash
- *            as it enters and leaves FTL
- *   arrive — slow from the drop point into the linger spot at the destination
+ *   linger — parked a few km off a station (holding its heading) or in a low orbit round a world
+ *            (nose along the orbit), for a while
+ *   turn   — swings its nose toward the next destination at TURN_RATE, still parked
+ *   depart — main engine: thrust builds up over a couple of seconds and the ship speeds up along its
+ *            nose, still carried along with the station or orbit it left, to DEPART_V
+ *   ftl    — a flash, then the FTL leg: speed eases up and back down, a trail streaming behind
+ *            (TRAIL_S seconds of travel at its current speed, up to TRAIL_MAX)
+ *   arrive — a flash at drop-out, still moving fast toward the destination; it brakes along a smooth
+ *            curve (Hermite, in the destination's own frame) into its parking spot there, nose along
+ *            its motion until it's nearly stopped
  *
- * Everything is worked out from the sim clock and the bodies' current positions, so time warp just
- * runs it faster. Ships don't collide, dock or interact yet.
+ * Everything follows the sim clock and the bodies' current positions, so time warp just runs it
+ * faster. Ships don't collide, dock or answer yet.
  */
 import type { Game } from '../Game';
 import { mulberry32, rr } from '../lib/rng';
 import { THREE } from '../lib/three';
 import type { Body, CurrentSystem, Npc, Station } from '../types';
+import { dropAlt } from './ftl';
+import { minOrbitAlt } from './orbits';
 
 export type { Npc };
 /** Where ships go. */
 type Dest = Body | Station;
-import { dropAlt } from './ftl';
-import { minOrbitAlt } from './orbits';
 
 
 /**
@@ -36,10 +40,14 @@ export const TRAIL_S = 30,
 export const FLASH_S = 0.8;
 /** A ship's size for the radar, scanner and clicks (m): half its ~60 m length. */
 const SHIP_R = 30;
-/** Seconds departing and arriving, and the acceleration then (m/s²). */
-const MANEUVER_S = 12,
-  MANEUVER_ACC = 150;
-
+/** Turning rate (rad/s), main-engine acceleration (m/s²) and the time it takes to build up (s), and
+ * the speed a ship leaves at before it goes to FTL (m/s). */
+const TURN_RATE = 0.15,
+  DEPART_ACC = 30,
+  THRUST_RAMP = 2.5,
+  DEPART_V = 450;
+/** Drop-out speed (m/s) needed to arrive over `dist` metres in `T` seconds without overshooting. */
+const arriveTime = (dist: number) => Math.min(180, 30 + dist / 5000);
 
 const KINDS = ['Freighter', 'Courier', 'Tanker', 'Survey ship', 'Hauler', 'Liner'];
 const NAMES = ['Kestrel', 'Meridian', 'Halcyon', 'Ostrava', 'Tamsin', 'Blue Heron', 'Corvid', 'Anselm', 'Petrel', 'Lodestar', 'Varuna', 'Ilse', 'Marrow', 'Sable', 'Quillon', 'Juniper'];
@@ -76,6 +84,15 @@ export function spawnTraffic(cur: CurrentSystem): Npc[] {
       trailL: 0,
       trailDir: new THREE.Vector3(0, 0, 1),
       flashAt: -Infinity,
+      q: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(g() - 0.5, g() - 0.5, g() - 0.5).normalize(), g() * 6.28),
+      thrust: 0,
+      dir: new THREE.Vector3(),
+      sv: 0,
+      ss: 0,
+      rel0: new THREE.Vector3(),
+      relV0: new THREE.Vector3(),
+      rel1: new THREE.Vector3(),
+      relV1: new THREE.Vector3(),
     };
     lingerAt(npc, at, g);
     out.push(npc);
@@ -83,9 +100,13 @@ export function spawnTraffic(cur: CurrentSystem): Npc[] {
   return out;
 }
 
-/** A linger spot at `b`: a few km off a station, or a low circular orbit round a world. */
-function lingerAt(npc: Npc, b: Dest, g: () => number) {
+/**
+ * A linger spot at `b`: a few km off a station, or a low circular orbit round a world. With `side`
+ * (world, from b), on that side: an arriving ship parks on the side it comes in from, never the far one.
+ */
+function lingerAt(npc: Npc, b: Dest, g: () => number, side?: THREE.Vector3) {
   const dir = new THREE.Vector3(g() - 0.5, (g() - 0.5) * 0.4, g() - 0.5).normalize();
+  if (side) dir.multiplyScalar(0.35).add(tmp2.copy(side).normalize()).normalize();
   if (b.kind === 'station') {
     npc.off.copy(dir).multiplyScalar(rr(g, 2e3, 6e3));
     npc.spin = 0;
@@ -106,12 +127,31 @@ function dropPoint(b: Dest, from: THREE.Vector3, out: THREE.Vector3) {
 }
 
 const tmp = new THREE.Vector3(),
+  tmp2 = new THREE.Vector3(),
   prev = new THREE.Vector3(),
+  want = new THREE.Quaternion(),
+  m4 = new THREE.Matrix4(),
+  ZERO = new THREE.Vector3(),
+  UP = new THREE.Vector3(0, 1, 0),
   AXIS = new THREE.Vector3(0, 1, 0);
 
 /** The linger spot's current world position (it circles a world at orbital rate). */
 function lingerPos(npc: Npc, b: Dest, time: number, out: THREE.Vector3) {
   return out.copy(npc.off).applyAxisAngle(AXIS, npc.spin * time).add(b.pos);
+}
+
+/** Its velocity against the body there (the orbit's, round a world). */
+function lingerVel(npc: Npc, time: number, out: THREE.Vector3) {
+  return out.copy(npc.off).applyAxisAngle(AXIS, npc.spin * time).applyAxisAngle(AXIS, Math.PI / 2).multiplyScalar(npc.spin).setY(0);
+}
+
+/** Turn the nose toward `fwd` (world, unit) at up to `rate` rad/s. Returns the angle left. */
+function turnToward(npc: Npc, fwd: THREE.Vector3, rate: number, dt: number) {
+  if (fwd.lengthSq() < 1e-12) return 0;
+  m4.lookAt(fwd, ZERO, Math.abs(fwd.y) > 0.99 ? tmp2.set(1, 0, 0) : UP); // +z along fwd (Object3D.lookAt's convention)
+  want.setFromRotationMatrix(m4);
+  npc.q.rotateTowards(want, rate * dt);
+  return npc.q.angleTo(want);
 }
 
 /** Advance every ship to the current sim time (dt: this step, s). */
@@ -121,30 +161,63 @@ export function updateTraffic(g: Game, dt: number) {
   for (const npc of g.traffic) {
     prev.copy(npc.pos);
     npc.t += dt;
-    if (npc.t >= npc.dur) nextPhase(npc, dests, time);
-    const u = Math.min(1, npc.t / npc.dur);
+    npc.thrust = 0;
     switch (npc.phase) {
-      case 'linger':
+      case 'linger': {
         lingerPos(npc, npc.at, time, npc.pos);
+        // round a world: nose along the orbit; off a station: holds its heading
+        if (npc.spin) turnToward(npc, lingerVel(npc, time, tmp).normalize(), TURN_RATE, dt);
+        if (npc.t >= npc.dur) nextPhase(npc, dests, time);
         break;
+      }
+      case 'turn': {
+        lingerPos(npc, npc.at, time, npc.pos);
+        const left = turnToward(npc, tmp.subVectors(npc.to!.pos, npc.pos).normalize(), TURN_RATE, dt);
+        if (left < 0.02 || npc.t > 40) nextPhase(npc, dests, time);
+        break;
+      }
       case 'depart': {
-        // speeding up away from the linger spot toward the destination
-        const dir = tmp.subVectors(npc.to!.pos, npc.p0).normalize();
-        npc.pos.copy(npc.p0).addScaledVector(dir, 0.5 * MANEUVER_ACC * npc.t * npc.t);
+        // thrust builds up, then a steady push along the nose
+        const a = DEPART_ACC * Math.min(1, npc.t / THRUST_RAMP);
+        npc.sv += a * dt;
+        npc.ss += npc.sv * dt;
+        npc.thrust = 1;
+        turnToward(npc, npc.dir, TURN_RATE, dt);
+        lingerPos(npc, npc.at, time, npc.pos).addScaledVector(npc.dir, npc.ss);
+        if (npc.sv >= DEPART_V) nextPhase(npc, dests, time);
         break;
       }
       case 'ftl': {
-        // eased along the line from where FTL began to the (moving) drop point
+        const u = Math.min(1, npc.t / npc.dur);
         const end = dropPoint(npc.to!, npc.p0, tmp);
         const s = u * u * u * (u * (u * 6 - 15) + 10); // smootherstep: speed eases in and out
         npc.pos.copy(npc.p0).lerp(end, s);
+        npc.thrust = 1;
+        turnToward(npc, tmp2.subVectors(end, npc.p0).normalize(), TURN_RATE * 4, dt);
+        if (npc.t >= npc.dur) nextPhase(npc, dests, time);
         break;
       }
       case 'arrive': {
-        // slowing from the drop point into the linger spot
-        const end = lingerPos(npc, npc.to!, time, tmp);
-        const s = 1 - (1 - u) * (1 - u);
-        npc.pos.copy(npc.p0).lerp(end, s);
+        // a Hermite curve in the destination's frame: from the drop-out point at its speed to the
+        // parking spot at rest, so it brakes smoothly without overshooting
+        const T = npc.dur,
+          u = Math.min(1, npc.t / T);
+        const u2 = u * u,
+          u3 = u2 * u;
+        const h00 = 2 * u3 - 3 * u2 + 1,
+          h10 = u3 - 2 * u2 + u,
+          h01 = -2 * u3 + 3 * u2,
+          h11 = u3 - u2;
+        npc.pos.copy(npc.rel0).multiplyScalar(h00).addScaledVector(npc.relV0, h10 * T).addScaledVector(npc.rel1, h01).addScaledVector(npc.relV1, h11 * T).add(npc.to!.pos);
+        // velocity against the destination: nose along it while it's still moving, braking
+        const d00 = 6 * u2 - 6 * u,
+          d10 = 3 * u2 - 4 * u + 1,
+          d01 = -6 * u2 + 6 * u,
+          d11 = 3 * u2 - 2 * u;
+        const rv = tmp.copy(npc.rel0).multiplyScalar(d00 / T).addScaledVector(npc.relV0, d10).addScaledVector(npc.rel1, d01 / T).addScaledVector(npc.relV1, d11);
+        if (rv.lengthSq() > 25) turnToward(npc, rv.normalize(), TURN_RATE, dt);
+        npc.thrust = u < 0.85 ? -1 : 0;
+        if (npc.t >= npc.dur) nextPhase(npc, dests, time);
         break;
       }
     }
@@ -166,25 +239,40 @@ function nextPhase(npc: Npc, dests: Dest[], time: number) {
   npc.p0.copy(npc.pos);
   switch (npc.phase) {
     case 'linger': {
-      // somewhere else: not where it is
+      // somewhere else: not where it is; first turn toward it
       const others = dests.filter((d) => d !== npc.at);
       npc.to = others[Math.floor(g() * others.length)];
-      npc.phase = 'depart';
-      npc.dur = MANEUVER_S;
+      npc.phase = 'turn';
       break;
     }
-    case 'depart': {
+    case 'turn':
+      npc.phase = 'depart';
+      npc.dir.set(0, 0, 1).applyQuaternion(npc.q); // along the nose
+      npc.sv = npc.ss = 0;
+      break;
+    case 'depart':
       npc.phase = 'ftl';
       npc.dur = ftlTime(npc.pos.distanceTo(npc.to!.pos));
       npc.flashAt = time;
       break;
-    }
-    case 'ftl':
+    case 'ftl': {
       npc.flashAt = time;
       npc.phase = 'arrive';
-      npc.dur = MANEUVER_S;
-      lingerAt(npc, npc.to!, g);
+      // relative to the destination: where it dropped out, how fast it's going in, where it'll park
+      const b = npc.to!;
+      npc.rel0.subVectors(npc.pos, b.pos);
+      // park on the near side; round a world the spot circles (off is its t = 0 position), so set
+      // it back by the orbit's turn until the ship gets there
+      lingerAt(npc, b, g, npc.rel0);
+      npc.dur = arriveTime(npc.rel0.distanceTo(npc.off));
+      npc.off.applyAxisAngle(AXIS, -npc.spin * (time + npc.dur));
+      // the spot where it'll be when it gets there (it circles a world), and its orbital velocity then
+      npc.rel1.copy(npc.off).applyAxisAngle(AXIS, npc.spin * (time + npc.dur));
+      lingerVel(npc, time + npc.dur, npc.relV1);
+      // coming in toward the spot at 1.5× the average speed: it brakes all the way without overshooting
+      npc.relV0.subVectors(npc.rel1, npc.rel0).multiplyScalar(1.5 / npc.dur);
       break;
+    }
     case 'arrive':
       npc.at = npc.to!;
       npc.to = null;
