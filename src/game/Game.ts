@@ -1,3 +1,4 @@
+import { spawnTraffic, type Npc } from './sim/traffic';
 import { noAero, type AeroState } from './sim/atmosphere';
 import { FOV, HUD_INTERVAL, JUMP_RANGE, MSG_TIME, SHIP, SKY_RADIUS } from './constants';
 import { buildSnapshot } from './hud/snapshot';
@@ -84,6 +85,8 @@ export class Game {
   guide: Guide | null = null;
   /** This frame's heat budget (see sim/thermal.ts). */
   heat: HeatBudget | null = null;
+  /** Other ships in the system (sim/traffic.ts). */
+  traffic: Npc[] = [];
   /** The air around the ship this frame: drag and entry heating (sim/atmosphere.ts). */
   aero: AeroState = noAero();
 
@@ -238,6 +241,7 @@ export class Game {
     updateBodies(bodies, this.simTime);
     updateStations(stations, this.simTime);
     this.cur = { sys, bodies, star: bodies[0] as CurrentSystem['star'], stations };
+    this.traffic = spawnTraffic(this.cur, this.simTime);
     this.frameBody = this.cur.star; // callers place the ship and then pick its frame
     this.dock = null;
     this.dockRequest = null;

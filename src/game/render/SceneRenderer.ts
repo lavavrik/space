@@ -11,6 +11,7 @@ import { CORRIDOR_GROW, CORRIDOR_M, corridorGeometry, corridorLights, hullGeomet
 import { AUTO_EXPOSURE, AutoExposure, FLOOD_K, HEAD_K, INT_K, MAX_EXP, SKY_EXP_P, SKY_K, STAR_EXP_P, WINDOW_K } from './exposure';
 import { HdrTarget } from './hdr';
 import { TerrainView } from './Terrain';
+import { TrafficView } from './Traffic';
 import { hasCraters, reliefAmp, terrainOffsets, worldQuat } from '../sim/terrain';
 import { atmoOf } from '../sim/atmosphere';
 import { padLocal, stationQuat } from '../sim/stationGeom';
@@ -134,6 +135,8 @@ export class SceneRenderer {
     uMix: { value: number };
   };
   private skyGeo!: THREE.SphereGeometry;
+  /** Other ships (render/Traffic.ts). */
+  private readonly trafficView = new TrafficView();
   private readonly hyper = new HyperspaceView(() => this.pointsMaterial(), this.expUni.uStarExp);
   /** Orbit preview (L): the planned or autopilot orbit as a ring, depth-tested so the planet hides its far side. */
   private readonly ring = new THREE.LineLoop(
@@ -167,6 +170,7 @@ export class SceneRenderer {
     this.ring.frustumCulled = false;
     this.ring.visible = false;
     this.scene.add(this.ring);
+    this.scene.add(this.trafficView.group);
 
     // dust around the ship, so you can feel your speed in normal space
     const g = mulberry32(99);
@@ -691,6 +695,7 @@ export class SceneRenderer {
     dotGeo.attributes.position.needsUpdate = dotGeo.attributes.aColor.needsUpdate = dotGeo.attributes.aSize.needsUpdate = true;
 
     this.updateDust(g);
+    this.trafficView.update(g, this.PR);
     this.updateRing(g);
 
     const gl = this.gl;
@@ -797,6 +802,7 @@ export class SceneRenderer {
       this.patch = null;
     }
     this.noise3d.dispose();
+    this.trafficView.dispose();
     this.hdr.dispose();
     this.exposure.dispose();
     for (const geo of [this.geoHi, this.geoMid, this.geoLo, this.plane, this.box]) geo.dispose();

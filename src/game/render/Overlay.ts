@@ -20,6 +20,9 @@ const MONO = '"Share Tech Mono", monospace';
 const SANS = '"Chakra Petch", system-ui, sans-serif';
 
 /** 2D canvas drawn over the 3D view: reticle, markers, labels, and full-screen effects. */
+/** Other ships get a label within this distance (m). */
+const TRAFFIC_LABEL = 5e8;
+
 export class Overlay {
   private readonly ctx: CanvasRenderingContext2D;
   private W = 1;
@@ -228,6 +231,7 @@ export class Overlay {
 
     this.drawBodies(g);
     this.drawStations(g);
+    this.drawTraffic(g);
     this.drawReachable(g);
     this.drawJumpDest(g);
     this.drawNavDest(g);
@@ -433,6 +437,23 @@ export class Overlay {
           ctx.fillText(isT ? label.toUpperCase() : stName, s.x, s.y - r - 7);
         }
       }
+    }
+  }
+
+  /** Other ships (sim/traffic.ts): a small label by each one within TRAFFIC_LABEL of you. */
+  private drawTraffic(g: Game) {
+    const { ctx, W, H } = this;
+    ctx.font = this.font(10, MONO);
+    ctx.textAlign = 'left';
+    for (const npc of g.traffic) {
+      const rel = this.tmp.subVectors(npc.pos, g.ship.pos);
+      const d = rel.length();
+      if (d > TRAFFIC_LABEL) continue;
+      const s = this.toScreen(g, rel);
+      if (s.behind || s.x < 0 || s.x > W || s.y < 0 || s.y > H) continue;
+      const ftl = npc.phase === 'ftl';
+      ctx.fillStyle = ftl ? 'rgba(127,220,255,0.85)' : 'rgba(255,230,199,0.7)';
+      ctx.fillText(`${npc.kind} ${npc.name} · ${ftl ? 'FTL' : fmtDist(d)}`, s.x + 8, s.y - 6);
     }
   }
 
