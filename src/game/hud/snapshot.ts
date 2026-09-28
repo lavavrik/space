@@ -138,7 +138,7 @@ function lamps(g: Game): Lamp[] {
     // warnings and modes
     L('charge', charging, g.jump ? 'Hyperdrive charging' : 'FTL drive charging', g.jump ? 'H' : 'J', charging ? `${Math.max(0, g.jump?.t ?? ship.ftlCharge).toFixed(1)} s at full power` : undefined, 'ftl', true, charging ? chargeDone : undefined),
     L('entry', g.aero.heatW > 1e6, 'Entry heating', undefined, g.aero.heatW > 1e6 ? `${fmtPower(g.aero.heatW / 1000)} into the hull at ${Math.round(g.aero.speed)} m/s · slow down, nose first` : 'Not in air at speed', 'warn', g.aero.heatW > 1e8),
-    L('masslock', lock, 'Mass lock', undefined, lock ? `${lock.name} is too close for FTL · ${Math.round(lockOut * 100)}% of the way out (${fmtDist(dropAlt(lock) * MASS_LOCK_K)} up)` : 'Clear for FTL', 'warn', false, lock ? 1 - lockOut : undefined),
+    L('masslock', lock, 'Mass lock', undefined, lock ? `${lock.name} is too close for FTL · ${Math.round(lockOut * 100)}% of the way out (${fmtDist(dropAlt(lock) * MASS_LOCK_K)} up) · the red LOCK EXIT marker points the way` : 'Clear for FTL', 'warn', false, lock ? 1 - lockOut : undefined),
     L('hot', ship.temp >= TEMP.warn, 'Hull temperature', undefined, `${ship.temp.toFixed(0)} K · warning at ${TEMP.warn} K`, 'warn', ship.temp >= TEMP.drives),
     L('battery', battLow, 'Battery low', undefined, `${fmtEnergy(ship.batt)} of ${fmtEnergy(cap)}`, 'warn', ship.batt < 1),
     L('power', power.limited, 'Power short', undefined, power.limited ? `${power.limited.what} got ${Math.round(power.limited.frac * 100)}% of what it asked for` : 'The bus covers every load', 'warn'),

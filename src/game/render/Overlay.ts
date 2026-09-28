@@ -2,6 +2,7 @@ import { surfaceDist } from '../sim/terrain';
 import { JUMP_CHARGE_TIME, RESPAWN_TIME } from '../constants';
 import { fmtDist } from '../format';
 import type { Game } from '../Game';
+import { massLockExit } from '../sim/ftl';
 import { THREE } from '../lib/three';
 import { relVel } from '../sim/frame';
 import { transitState, type TransitState } from '../sim/hyperspace';
@@ -15,7 +16,8 @@ import { contactLabel, known } from '../sim/radar';
 
 const AMB = 'rgba(255,165,58,',
   CYA = 'rgba(127,220,255,',
-  MINT = 'rgba(115,255,178,'; // stations (matches STATION_RGB in SceneRenderer)
+  MINT = 'rgba(115,255,178,', // stations (matches STATION_RGB in SceneRenderer)
+  RED = 'rgba(255,91,70,'; // warnings (the mass lock's way out)
 const MONO = '"Share Tech Mono", monospace';
 const SANS = '"Chakra Petch", system-ui, sans-serif';
 
@@ -229,6 +231,7 @@ export class Overlay {
       if (!s.behind) this.drawVelMarker(s.x, s.y, !pro.behind, ship.mode === 'ftl' ? CYA : AMB);
     }
 
+    this.drawLockExit(g);
     this.drawBodies(g);
     this.drawStations(g);
     this.drawTraffic(g);
@@ -281,6 +284,59 @@ export class Overlay {
     ctx.fillStyle = `rgba(255,165,58,${0.8 * k})`;
     ctx.font = this.font(12, MONO);
     ctx.fillText(`RESTORING SHIP IN ${Math.max(0, t).toFixed(1)} S`, cx, cy + 34);
+  }
+
+  /**
+   * Mass lock: the way out (sim/ftl.ts massLockExit), straight away from the world holding you,
+   * with the height still to climb; an edge arrow when it's off screen. Normal space only.
+   */
+  private drawLockExit(g: Game) {
+    const { ship } = g;
+    if (ship.mode !== 'normal' || g.jump || g.dock?.docked || g.inStation) return;
+    const exit = massLockExit(g);
+    if (!exit) return;
+    const label = `LOCK EXIT · CLIMB ${fmtDist(exit.climb)}`;
+    const s = this.toScreen(g, this.tmp.copy(exit.dir).multiplyScalar(1000));
+    const { W, H } = this;
+    if (s.behind || s.x < 0 || s.x > W || s.y < 0 || s.y > H) {
+      this.edgeArrow(s.v, RED, label);
+      return;
+    }
+    const { ctx } = this;
+    this.drawExitMarker(s.x, s.y);
+    ctx.fillStyle = RED + '0.85)';
+    ctx.font = this.font(10, MONO);
+    ctx.textAlign = 'center';
+    ctx.fillText(label, s.x, s.y + 26);
+  }
+
+  /** The lock exit marker: a ring with a dot and three arrowheads pointing out (up, and down either side). */
+  private drawExitMarker(x: number, y: number) {
+    const { ctx } = this;
+    ctx.strokeStyle = RED + '0.9)';
+    ctx.fillStyle = RED + '0.9)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(x, y, 6, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x, y, 1.4, 0, Math.PI * 2);
+    ctx.fill();
+    for (const a of [-Math.PI / 2, Math.PI / 6, (5 * Math.PI) / 6]) {
+      const c = Math.cos(a),
+        s = Math.sin(a);
+      // a short stalk from the ring and an arrowhead at its end, pointing outward
+      ctx.beginPath();
+      ctx.moveTo(x + c * 7, y + s * 7);
+      ctx.lineTo(x + c * 12, y + s * 12);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x + c * 16, y + s * 16);
+      ctx.lineTo(x + c * 11 - s * 3.5, y + s * 11 + c * 3.5);
+      ctx.lineTo(x + c * 11 + s * 3.5, y + s * 11 - c * 3.5);
+      ctx.closePath();
+      ctx.fill();
+    }
   }
 
   /** Prograde: a ring with three spikes. Retrograde: a ring with a cross through it. */

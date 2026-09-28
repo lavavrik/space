@@ -30,6 +30,30 @@ export function massLock(g: Game) {
   return null;
 }
 
+/**
+ * The way out of a mass lock: the direction that climbs fastest out of every well holding you
+ * (straight away from the one world, or a blend weighted by how deep you are in each), and the
+ * height still to climb (m) out of the deepest. Null when nothing holds you.
+ */
+export function massLockExit(g: Game) {
+  const dir = new THREE.Vector3();
+  let climb = 0,
+    body: Body | null = null;
+  for (const b of g.cur.bodies) {
+    const away = new THREE.Vector3().subVectors(g.ship.pos, b.pos);
+    const d = away.length();
+    const left = dropAlt(b) * MASS_LOCK_K - (d - b.radius);
+    if (left <= 0) continue;
+    dir.addScaledVector(away.divideScalar(d), left);
+    if (left > climb) {
+      climb = left;
+      body = b;
+    }
+  }
+  if (!body || dir.lengthSq() < 1e-12) return null;
+  return { dir: dir.normalize(), climb, body };
+}
+
 /** FTL speed limit from the nearby gravity wells. */
 export function ftlSpeedLimit(g: Game) {
   let vmax = FTL_MAX;
