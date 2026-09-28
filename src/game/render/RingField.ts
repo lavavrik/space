@@ -90,9 +90,10 @@ float ringShadow(vec3 p){
 /**
  * Rock meshes. Every rock has its own shape: the base icosphere's directions pushed out by three
  * octaves of 3D noise at a per-rock offset (uNoise3D), then squashed and turned, with normals from the
- * shape itself (finite differences on the sphere). The fragment shader shades that smoothly (no
- * surface noise) like regolith: Lommel–Seeliger (the Moon's flat-looking disc) mixed with Lambert,
- * plus light from the giant it circles (planetshine).
+ * shape itself (finite differences on the sphere). The fragment shader adds fine relief (bump-mapped
+ * noise, scaled to the rock; filtered at full precision so it doesn't block up under the periscope)
+ * and mottling, and lights it like regolith: Lommel–Seeliger (the Moon's flat-looking disc) mixed with
+ * Lambert, plus light from the giant it circles (planetshine).
  */
 const ROCK_NOISE = `
 uniform highp sampler3D uNoise3D;
@@ -103,7 +104,7 @@ const MESH_VS = `
 #include <logdepthbuf_pars_vertex>
 ${ROCK_GLSL}
 ${ROCK_NOISE}
-varying vec3 vWP; varying vec3 vN; varying vec3 vCol; varying float vSh;
+varying vec3 vWP; varying vec3 vN; varying vec3 vObj; varying vec3 vCol; varying float vSize; varying float vSh;
 vec3 qrot(vec4 q, vec3 v){ return v + 2.0 * cross(q.xyz, cross(q.xyz, v) + q.w * v); }
 float shape(vec3 d, vec3 o){ return 1.0 + 0.30 * tn(d * 0.9 + o) + 0.14 * tn(d * 2.1 + o.yzx) + 0.06 * tn(d * 4.7 + o.zxy); }
 void main(){
@@ -131,6 +132,8 @@ void main(){
 #endif
   vWP = c + qrot(q, p0 * sc);
   vN = qrot(q, normalize(n / sc));
+  vObj = p0 + o;
+  vSize = size;
   vCol = uColor * tint;
   vSh = ringShadow(c);
   gl_Position = projectionMatrix * viewMatrix * vec4(vWP, 1.0);
@@ -138,14 +141,44 @@ void main(){
 }`;
 const MESH_FS = `
 #include <logdepthbuf_pars_fragment>
+uniform highp sampler3D uNoise3D;
 uniform vec3 uLight, uPC; uniform float uPR, uPlanetA, uExp;
-varying vec3 vWP; varying vec3 vN; varying vec3 vCol; varying float vSh;
+varying vec3 vWP; varying vec3 vN; varying vec3 vObj; varying vec3 vCol; varying float vSize; varying float vSh;
+// the noise texture filtered here at full precision: the GPU's own filter weights have only 8 bits,
+// which magnified through the periscope showed as square blocks and moiré (as noise3d.glsl tnoiseHQ)
+float tnq(vec3 p){
+  vec3 x = p * 8.0 - 0.5;
+  vec3 i0 = floor(x), f = x - i0;
+  ivec3 a = ivec3(mod(i0, 64.0)), b = ivec3(mod(i0 + 1.0, 64.0));
+  float c000 = texelFetch(uNoise3D, ivec3(a.x, a.y, a.z), 0).r, c100 = texelFetch(uNoise3D, ivec3(b.x, a.y, a.z), 0).r;
+  float c010 = texelFetch(uNoise3D, ivec3(a.x, b.y, a.z), 0).r, c110 = texelFetch(uNoise3D, ivec3(b.x, b.y, a.z), 0).r;
+  float c001 = texelFetch(uNoise3D, ivec3(a.x, a.y, b.z), 0).r, c101 = texelFetch(uNoise3D, ivec3(b.x, a.y, b.z), 0).r;
+  float c011 = texelFetch(uNoise3D, ivec3(a.x, b.y, b.z), 0).r, c111 = texelFetch(uNoise3D, ivec3(b.x, b.y, b.z), 0).r;
+  return mix(mix(mix(c000, c100, f.x), mix(c010, c110, f.x), f.y), mix(mix(c001, c101, f.x), mix(c011, c111, f.x), f.y), f.z) * 2.0 - 1.0;
+}
+// an octave of noise at frequency k: full precision only where it's magnified (a texel over a few
+// pixels), the GPU's own cheap filtering where it isn't (most of the time: 8 fetches → 1)
+float fwObj;
+float tno(float k){
+  vec3 p = vObj * k;
+  return fwObj * k * 8.0 < 0.3 ? tnq(p) : texture(uNoise3D, p * 0.125).r * 2.0 - 1.0;
+}
+// bump mapping from a height field H (m) over the surface (screen-space derivatives; as planet.frag.glsl)
+vec3 bumpN(vec3 N, float H){
+  vec3 dpx = dFdx(vWP), dpy = dFdy(vWP);
+  float dhx = dFdx(H), dhy = dFdy(H);
+  vec3 r1 = cross(dpy, N), r2 = cross(N, dpx);
+  float det = dot(dpx, r1);
+  if (abs(det) < 1e-30) return N;
+  return normalize(abs(det) * N - sign(det) * (dhx * r1 + dhy * r2));
+}
 void main(){
   #include <logdepthbuf_fragment>
-  // smooth shading from the rock's shape alone: no surface noise (fine bump relief looked like a
-  // planet's ground grain and streaked under the periscope)
   vec3 N = normalize(vN);
   if (!gl_FrontFacing) N = -N;
+  // fine relief: knobs and pits a few percent of the rock's size
+  fwObj = length(fwidth(vObj));
+  N = bumpN(N, (0.5 * tno(9.0) + 0.25 * tno(23.0) + 0.12 * tno(51.0)) * vSize * 0.05);
   vec3 L = normalize(uLight), V = normalize(-vWP);
   float mu0 = max(dot(N, L), 0.0), mu = max(dot(N, V), 0.05);
   float sun = mix(mu0, 2.0 * mu0 / (mu0 + mu), 0.6) * vSh; // Lommel–Seeliger, a little Lambert
@@ -154,7 +187,8 @@ void main(){
   float dp = length(toPl);
   vec3 Lp = toPl / dp;
   float shine = uPlanetA * (0.5 + 0.5 * dot(-Lp, L)) * (uPR * uPR) / (dp * dp) * max(dot(N, Lp), 0.0);
-  gl_FragColor = vec4(vCol * (sun + shine + 0.002) * uExp, 1.0);
+  float mottle = 0.8 + 0.2 * tno(3.1) + 0.1 * tno(13.0);
+  gl_FragColor = vec4(vCol * mottle * (sun + shine + 0.002) * uExp, 1.0);
 }`;
 
 const DOT_VS = `
