@@ -7,6 +7,7 @@ uniform float uCamAlt; // camera height above the mean radius (m)
 uniform vec3 uLightL;  // the sun in the world's own frame (for cloud shadows)
 uniform float uCloudH; // the cloud deck's height (m), 0 if none (render: cloud layer)
 uniform samplerCube uCloudTex; // the baked cloud pattern (clouds.glsl)
+uniform mat3 uToLocal; // world axes → the world's own frame (the far sphere's object frame)
 varying vec3 vObj; varying vec3 vWN; varying vec3 vWP;
 varying float vOct; // octaves the geometry already shows (0 on the far sphere; planet.vert.glsl)
 varying float vShadow; // mountains' shadows (1 lit; planet.vert.glsl)
@@ -21,7 +22,16 @@ varying vec3 vOffDir; // terrain chunks: direction minus the chunk centre's (ter
 // Bump mapping from a height field H (m) over the surface, from screen-space derivatives
 // (Mikkelsen, "Bump Mapping Unparametrized Surfaces on the GPU"): tilts N by H's slope.
 vec3 bumpN(vec3 N, float H){
+#ifdef TERRAIN
   vec3 dpx = dFdx(vWP), dpy = dFdy(vWP);
+#else
+  // The far sphere: from the object-space position, turned to world axes. vWP (camera-relative
+  // world metres) is ~10¹¹ m away across the system, where float32 steps are kilometres: through
+  // the periscope its derivatives were rounding noise, and the relief flashed in a disc where the
+  // surface faces you. The object-space position is good to about a metre.
+  mat3 toWorld = transpose(uToLocal);
+  vec3 dpx = toWorld * dFdx(vObj * uRadius), dpy = toWorld * dFdy(vObj * uRadius);
+#endif
   float dhx = dFdx(H), dhy = dFdy(H);
   vec3 r1 = cross(dpy, N), r2 = cross(N, dpx);
   float det = dot(dpx, r1);
@@ -126,7 +136,12 @@ void main(){
 #ifdef TERRAIN
   vec3 sunC=vSun;
 #else
-  vec3 sunC=atSunlight(vWP,L);
+  // the far sphere: the air worked out from the world's centre, from the surface point in object space
+  // (precise), not from camera-relative world positions: across the system those are ~10¹¹ m, and
+  // subtracting the centre from them left kilometres of error in the height, against scale heights of
+  // ~10 km, so sunlight and haze flickered through the periscope
+  vec3 C1=transpose(uToLocal)*(vObj*uRadius);
+  vec3 sunC=atSunlightC(C1,L);
 #endif
   float sky=uAtOn>0.5?0.07*smoothstep(-0.12,0.35,ndl0):0.0;
   float diff0=clamp(ndl0*1.05+0.03,0.0,1.0);
@@ -140,14 +155,14 @@ void main(){
     col=col*vHazeT+vHaze;
 #else
     vec3 vd=normalize(vWP);
-    // End the ray on the true sphere, not the mesh: its flat faces sag inside the sphere (up to
-    // ~R·(π/segments)²/2, tens of km on a giant, a good part of its scale height), and the haze then
-    // traced out every face as a fine square grid. (Perpendicular form, as b² − c cancels in float32.)
-    vec3 hp=uAtC-vd*dot(vd,uAtC);
-    float disc=uAtR*uAtR-dot(hp,hp);
-    vec3 P1=disc>0.0?vd*(dot(vd,uAtC)-sqrt(disc)):vWP;
+    // From the surface point (C1, centre-relative, above) back along the view ray to where it enters
+    // the air, or to the camera if that's inside it. C1 is on the true sphere, not the mesh, whose flat
+    // faces sag tens of km inside it on a giant (the haze traced every face as a square grid).
+    vec3 C1s=normalize(C1)*uAtR;
+    float k=dot(C1s,vd);
+    float sAir=k+sqrt(max(k*k-dot(C1s,C1s)+uAtTop*uAtTop,0.0));
     vec3 trans;
-    vec3 haze=atInscatter(vd*atSpan(vd).x,P1,L,trans,5);
+    vec3 haze=atInscatterC(C1s-vd*min(sAir,length(vWP)),C1s,L,trans,5);
     col=col*trans+haze;
 #endif
   } else {

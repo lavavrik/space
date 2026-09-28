@@ -59,6 +59,8 @@ function airBeta(b: World) {
 const MAXDOTS = 256;
 /** Apparent radius (px) above which a world with relief is drawn as LOD terrain instead of a sphere. */
 const TERRAIN_PX = 200;
+/** …and only within this many radii of its centre (without the periscope it turns on at ~7). */
+const TERRAIN_NEAR = 10;
 /** Face size of the baked Milky Way cube map (6 × 1024² × 4 bytes ≈ 25 MB of GPU memory). */
 const SKY_CUBE_SIZE = 1024;
 /** ms a new periscope sky patch takes to fade in over the last one (also the least time between bakes). */
@@ -620,7 +622,9 @@ export class SceneRenderer {
       // up close, LOD terrain replaces the sphere (render/Terrain.ts), fed the camera in the world's frame
       const ter = v.terrain;
       if (ter) {
-        const on = pxR > TERRAIN_PX;
+        // big on screen and actually close: through the periscope a world across the system can be
+        // hundreds of px, but chunks positioned from ~10¹¹ m away lose their precision and flashed
+        const on = pxR > TERRAIN_PX && d < b.radius * TERRAIN_NEAR;
         ter.root.visible = on;
         if (on) {
           v.mesh.visible = false;

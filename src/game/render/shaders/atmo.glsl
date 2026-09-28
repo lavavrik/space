@@ -37,15 +37,16 @@ vec2 atSpan(vec3 dir){
   return vec2(max(b - s, 0.0), b + s);
 }
 
-// Light scattered toward the camera between P0 and P1, and the transmittance along it, from n
-// samples (≤ AT_MAX_SAMPLES) packed toward whichever end is lower (denser).
-vec3 atInscatter(vec3 P0, vec3 P1, vec3 L, out vec3 trans, int n){
-  vec3 d = P1 - P0;
+// Light scattered toward the camera between C0 and C1 (relative to the world's centre), and the
+// transmittance along it, from n samples (≤ AT_MAX_SAMPLES) packed toward whichever end is lower
+// (denser). Centre-relative so a caller far away can pass precise points (see atInscatter).
+vec3 atInscatterC(vec3 C0, vec3 C1, vec3 L, out vec3 trans, int n){
+  vec3 d = C1 - C0;
   float len = length(d);
   trans = vec3(1.0);
   if (len < 1e-3 || uAtOn < 0.5) return vec3(0.0);
   vec3 dir = d / len;
-  bool startLow = length(P0 - uAtC) < length(P1 - uAtC);
+  bool startLow = length(C0) < length(C1);
   vec3 sum = vec3(0.0);
   float od = 0.0, prev = 0.0;
   for (int i = 0; i < AT_MAX_SAMPLES; i++) {
@@ -53,9 +54,8 @@ vec3 atInscatter(vec3 P0, vec3 P1, vec3 L, out vec3 trans, int n){
     float u = (float(i) + 1.0) / float(n);
     float w = startLow ? u * u : 1.0 - (1.0 - u) * (1.0 - u);
     float t = w * len, ds = t - prev;
-    vec3 P = P0 + dir * (t - ds * 0.5);
+    vec3 n = C0 + dir * (t - ds * 0.5);
     prev = t;
-    vec3 n = P - uAtC;
     float r = length(n);
     float rho = atDens(r);
     od += rho * ds;
@@ -68,10 +68,16 @@ vec3 atInscatter(vec3 P0, vec3 P1, vec3 L, out vec3 trans, int n){
   return uAtSunI * uAtBeta * sum * phase;
 }
 
-// Sunlight reaching a point (0…1 per colour): reddens and dims through thick air
-vec3 atSunlight(vec3 P, vec3 L){
+// The same between camera-relative points P0 and P1 (fine near the world; far away the subtraction
+// of its ~10¹¹ m centre loses kilometres, so pass centre-relative points to atInscatterC instead)
+vec3 atInscatter(vec3 P0, vec3 P1, vec3 L, out vec3 trans, int n){
+  return atInscatterC(P0 - uAtC, P1 - uAtC, L, trans, n);
+}
+
+// Sunlight reaching a point n from the world's centre (0…1 per colour): reddens and dims through thick air
+vec3 atSunlightC(vec3 n, vec3 L){
   if (uAtOn < 0.5) return vec3(1.0);
-  vec3 n = P - uAtC;
   float r = length(n);
   return exp(-uAtBeta * atChapman(r, dot(n / r, L)));
 }
+vec3 atSunlight(vec3 P, vec3 L){ return atSunlightC(P - uAtC, L); }
