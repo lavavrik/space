@@ -11,7 +11,7 @@ uniform float uAtSunI;  // sunlight's strength in display units
 uniform float uAtOn;    // 1 if the world has air
 #define AT_MAX_SAMPLES 10
 
-float atDens(float r){ return exp(-(r - uAtR) / uAtH); }
+float atDens(float r){ return exp(-max(r - uAtR, 0.0) / uAtH); } // no denser than at the mean radius
 
 // Optical depth (∫ρ/ρ0 ds, m) from radius r to space toward a direction at cos-zenith mu
 // (Schüler's approximation of the Chapman function); huge when the planet is in the way.

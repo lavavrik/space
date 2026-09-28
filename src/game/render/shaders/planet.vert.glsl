@@ -107,9 +107,11 @@ void main(){
   vWP = wp.xyz;
 #ifdef TERRAIN
   // the air between the camera and here varies smoothly: worked out per vertex, not per pixel
-  vec3 L = normalize(uLight), vd = normalize(wp.xyz);
-  vHaze = atInscatter(vd * atSpan(vd).x, wp.xyz, L, vHazeT, 5);
-  vSun = atSunlight(wp.xyz, L);
+  // (at the ground: skirt vertices hang far below it, where the air's density would blow up)
+  vec3 ground = (modelMatrix * vec4(pos + aDir * aSkirt * uSkirtD, 1.0)).xyz;
+  vec3 L = normalize(uLight), vd = normalize(ground);
+  vHaze = atInscatter(vd * atSpan(vd).x, ground, L, vHazeT, 5);
+  vSun = atSunlight(ground, L);
 #endif
   vWN = normalize(mat3(modelMatrix) * n);
   gl_Position = projectionMatrix * viewMatrix * wp;
