@@ -34,10 +34,8 @@ export function ringDensity(b: World, rR: number) {
 }
 
 /**
- * Rock size tiers: rock radius range (m), cell size (m), how far out they're drawn (m), rocks per
- * full cell, and how they're drawn: an icosphere of this subdivision (0 to 2), or −1 for a point.
- * The points go from where the boulders stop to far out, so the disc's grey band only starts where
- * even a 800 m rock is under a pixel.
+ * Rock size tiers drawn as meshes near you: rock radius range (m), cell size (m), how far out
+ * they're drawn (m), rocks per full cell, and the icosphere subdivision of their shapes.
  */
 export interface RockTier {
   minR: number;
@@ -51,7 +49,25 @@ export const ROCK_TIERS: RockTier[] = [
   { minR: 1.5, maxR: 10, cell: 250, range: 2500, perCell: 1.2, detail: 0 },
   { minR: 10, maxR: 70, cell: 1000, range: 12000, perCell: 1.6, detail: 1 },
   { minR: 70, maxR: 500, cell: 5000, range: 60000, perCell: 1.6, detail: 2 },
-  { minR: 100, maxR: 800, cell: 12000, range: 250000, perCell: 25, detail: -1 },
+];
+
+/**
+ * Beyond the meshes, rocks as dots generated on the GPU (render/RingField.ts): a grid of RING_GRID ×
+ * RING_GRID cells centred on the camera, `perCell` candidate dots each, from `inner` to `range` (m).
+ * Sizes are rock radii (m); far out they stand for clumps. The ring only turns into the disc's
+ * smooth band past the last one's range.
+ */
+export interface DotField {
+  inner: number;
+  range: number;
+  perCell: number;
+  minR: number;
+  maxR: number;
+}
+export const RING_GRID = 256;
+export const DOT_FIELDS: DotField[] = [
+  { inner: 55e3, range: 1500e3, perCell: 10, minR: 150, maxR: 900 },
+  { inner: 1300e3, range: 12000e3, perCell: 14, minR: 400, maxR: 2500 },
 ];
 
 /** Integer hash (murmur-style) of a few integers, as a uint32. */

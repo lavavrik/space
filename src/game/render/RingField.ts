@@ -1,33 +1,37 @@
 /*
- * A planetary ring up close (sim/rings.ts, docs/rings.md): the rocks themselves, generated around
- * the camera from the ring's cells. Tiers (ROCK_TIERS): pebbles, rocks and boulders as instanced,
- * lumpy, star-lit meshes (coarser shapes for the smaller tiers), and beyond the boulders a far field
- * of rocks as points out to 250 km, sized by how big they'd look (dimmed below a pixel), so the
- * disc's grey band only starts where even the biggest rock is under a pixel. Rocks shrink (points
- * fade) toward the edge of their tier's range instead of popping. The ring's flat disc fades out
- * inside the far field while you're in the belt (ring.frag.glsl, uNearFade).
+ * A planetary ring up close (sim/rings.ts, docs/rings.md): the rocks themselves.
  *
- * Each cell's rocks are generated once and cached in the cell's co-orbiting frame (offset from the
- * bin's radius, angle within the cell, height, and a world-space orientation × size); a frame only
- * turns each radial bin by its orbit and subtracts the camera. Positions are worked out in double
- * precision relative to the planet (rings are ~10⁸ m out) and handed to the GPU relative to the camera.
+ *   - Near you (ROCK_TIERS, to 60 km): pebbles, rocks and boulders as instanced, lumpy, star-lit
+ *     meshes, laid out on the CPU. Each cell's rocks are generated once and cached in the cell's
+ *     co-orbiting frame (offset from the bin's radius, angle within the cell, height, and a
+ *     world-space orientation × size); a frame only turns each radial bin by its orbit and subtracts
+ *     the camera, in double precision (rings are ~10⁸ m out).
+ *   - Beyond (DOT_FIELDS, to 12,000 km): rocks as dots generated entirely on the GPU. Each field is a
+ *     RING_GRID × RING_GRID grid of cells centred on the camera, `perCell` candidate dots each; the
+ *     vertex shader works out a dot's cell from its index, and its place, size and whether it exists
+ *     (the ring's density) from a hash of the cell's global indices, so the same rocks are there
+ *     every visit. The CPU only fills a small table per radial bin each frame (DotField.update):
+ *     its offset from the camera's radius, the camera's place in its co-orbiting frame, the density.
+ *     Dots are sized by how big the rock would look, dimmed below a pixel.
+ *
+ * So the ring only turns into the disc's smooth band 12,000 km out; the disc fades out inside that
+ * while you're in the belt (ring.frag.glsl, uNearFade). Rocks shrink (dots fade) toward the edge of
+ * their range instead of popping.
  */
 import { mulberry32 } from '../lib/rng';
 import { THREE } from '../lib/three';
 import { snoise } from '../sim/terrain';
-import { hashInts, RING_HALF_THICK, ROCK_TIERS, ringDensity } from '../sim/rings';
+import { DOT_FIELDS, type DotField, hashInts, RING_GRID, RING_HALF_THICK, ROCK_TIERS, ringDensity } from '../sim/rings';
 import type { World } from '../types';
 
-/** Rock shapes per mesh tier, how many of each can be drawn at once per tier, and far-field points. */
+/** Rock shapes per mesh tier, and how many of each can be drawn at once per tier. */
 const VARIANTS = 4,
-  CAPS = [4000, 2500, 800],
-  POINTS_CAP = 30000;
+  CAPS = [4000, 2500, 800];
 /** Above (or below) the belt by this much (m), the disc is back in full around you. */
 const FADE_ABOVE = 6000;
 /** Cached cells at most (then the cache starts over). */
 const CACHE_MAX = 60000;
-/** Floats per cached rock: dr, u (angle in the cell, 0…1), z, then a mesh rock's variant, tint and
- * world orientation × size (9), or a point's radius and tint. */
+/** Floats per cached rock: dr, u (angle in the cell, 0…1), z, variant, tint, world orientation × size (9). */
 const STRIDE = 14;
 
 const ROCK_VS = `
@@ -59,33 +63,72 @@ void main(){
   gl_FragColor = vec4(vCol * (d * sh + 0.004) * uExp, 1.0);
 }`;
 
-/** Far-field rocks: a round dot of the rock's apparent size (at least a pixel, dimmed below it). */
-const PT_VS = `
+/**
+ * GPU dots. Bin table (uBins, RING_GRID × 2): row 0 = (offset of the bin's radius from the camera's
+ * (m), the camera's fractional cell in the bin's co-orbiting frame, density 0…1, the bin's cell angle
+ * (rad)); row 1 = (the bin's global radial index, the camera's global angular cell index).
+ */
+const DOT_VS = `
 #include <common>
 #include <logdepthbuf_pars_vertex>
-attribute float aSize; attribute vec3 aColor;
-uniform vec3 uLight; uniform vec3 uPC; uniform float uPR;
+uniform sampler2D uBins;
+uniform float uK, uCell, uH, uInner, uRange, uRc, uHc, uPx, uMinR, uMaxR, uSeed, uPR;
+uniform vec3 uE1, uE2, uN, uLight, uPC, uColor;
 varying vec3 vC;
+uvec3 pcg3(uvec3 v){
+  v = v * 1664525u + 1013904223u;
+  v.x += v.y * v.z; v.y += v.z * v.x; v.z += v.x * v.y;
+  v ^= v >> 16u;
+  v.x += v.y * v.z; v.y += v.z * v.x; v.z += v.x * v.y;
+  return v;
+}
+float rnd(inout uint s){
+  s = s * 747796405u + 2891336453u;
+  uint w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
+  return float((w >> 22u) ^ w) / 4294967295.0;
+}
 void main(){
+  gl_PointSize = 0.0;
+  gl_Position = vec4(2.0, 2.0, 2.0, 1.0); // off screen unless this dot exists
+  vC = vec3(0.0);
+  int K = int(uK), G = ${RING_GRID};
+  int cid = gl_VertexID / K, q = gl_VertexID - cid * K;
+  int bi = cid / G, bj = cid - bi * G;
+  vec4 A = texelFetch(uBins, ivec2(bi, 0), 0), B = texelFetch(uBins, ivec2(bi, 1), 0);
+  if (A.z <= 0.0) return;
+  int jrel = bj - G / 2;
+  uvec3 hv = pcg3(uvec3(uint(int(B.x) + 1073741824), uint(int(B.y) + jrel + 1073741824), uint(q) + uint(uSeed) * 977u));
+  uint s = hv.x ^ hv.y ^ hv.z;
+  if (rnd(s) > A.z) return; // the ring's density
+  float du = (rnd(s) - 0.5) * uCell, u = rnd(s), zz = (rnd(s) * 2.0 - 1.0) * uH;
+  // camera-relative, in the ring's axes: the camera at radius uRc, height uHc, angle 0
+  float dphi = (float(jrel) + u - A.y) * A.w;
+  float rr = A.x + du;
+  float sh2 = sin(0.5 * dphi);
+  float x = rr * cos(dphi) - 2.0 * uRc * sh2 * sh2, y = (uRc + rr) * sin(dphi), z = zz - uHc;
+  vec3 p = uE1 * x + uE2 * y + uN * z;
+  float d = length(p);
+  if (d < uInner || d > uRange) return;
+  float size = uMinR * pow(uMaxR / uMinR, pow(rnd(s), 2.2));
+  float px = 2.0 * size * uPx / d;
+  float fade = smoothstep(uInner, uInner * 1.1, d) * smoothstep(uRange, uRange * 0.85, d);
   vec3 L = normalize(uLight);
-  vec3 toP = position - uPC;
+  vec3 toP = p - uPC;
   float along = dot(toP, L);
   float sh = (along < 0.0 && length(toP - along * L) < uPR) ? 0.0 : 1.0;
-  // lit from the star's side: brighter seen from the sun's side (a rough phase)
-  float phase = 0.35 + 0.65 * max(dot(normalize(-position), L), 0.0);
-  vC = aColor * sh * phase * min(aSize * aSize, 1.0);
-  gl_PointSize = max(aSize, 1.0);
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  float phase = 0.35 + 0.65 * max(dot(normalize(-p), L), 0.0); // brighter seen from the sun's side
+  vC = uColor * (0.5 + 0.6 * rnd(s)) * sh * phase * fade * min(px * px, 1.0);
+  gl_PointSize = max(px, 1.0);
+  gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
   #include <logdepthbuf_vertex>
 }`;
-const PT_FS = `
+const DOT_FS = `
 #include <logdepthbuf_pars_fragment>
 uniform float uExp;
 varying vec3 vC;
 void main(){
   #include <logdepthbuf_fragment>
-  float r = length(gl_PointCoord - 0.5) * 2.0;
-  if (r > 1.0) discard;
+  if (length(gl_PointCoord - 0.5) > 0.5) discard;
   gl_FragColor = vec4(vC * uExp, 1.0);
 }`;
 
@@ -114,13 +157,121 @@ const tmpM = new THREE.Matrix4(),
   tmpS = new THREE.Vector3(),
   tmpC = new THREE.Color();
 
+/** The ring and camera as the GPU dot fields need them this frame. */
+interface RingFrame {
+  b: World;
+  e1: THREE.Vector3;
+  e2: THREE.Vector3;
+  n: THREE.Vector3;
+  r: number; // camera's distance from the axis (m)
+  h: number; // camera's height above the plane (m)
+  thC: number; // camera's angle round the ring (rad)
+  t: number;
+  pxPerRad: number;
+}
+
+/** One GPU dot field (see the top). */
+class DotLayer {
+  readonly points: THREE.Points;
+  private readonly bins: THREE.DataTexture;
+  private readonly data: Float32Array<ArrayBuffer>;
+  private readonly uni: Record<string, THREE.IUniform>;
+
+  constructor(
+    private readonly f: DotField,
+    shared: Record<string, THREE.IUniform>,
+    seed: number,
+  ) {
+    const G = RING_GRID;
+    this.data = new Float32Array(G * 2 * 4);
+    this.bins = new THREE.DataTexture(this.data, G, 2, THREE.RGBAFormat, THREE.FloatType);
+    this.bins.minFilter = this.bins.magFilter = THREE.NearestFilter;
+    this.uni = {
+      ...shared,
+      uBins: { value: this.bins },
+      uK: { value: f.perCell },
+      uCell: { value: (2 * f.range) / G },
+      uH: { value: RING_HALF_THICK },
+      uInner: { value: f.inner },
+      uRange: { value: f.range },
+      uRc: { value: 0 },
+      uHc: { value: 0 },
+      uPx: { value: 1 },
+      uMinR: { value: f.minR },
+      uMaxR: { value: f.maxR },
+      uSeed: { value: seed },
+      uE1: { value: new THREE.Vector3() },
+      uE2: { value: new THREE.Vector3() },
+      uN: { value: new THREE.Vector3() },
+      uColor: { value: new THREE.Color() },
+    };
+    // one vertex per candidate dot; the shader makes its own position (a 1-float attribute just sets the count)
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(G * G * f.perCell), 1));
+    const mat = new THREE.ShaderMaterial({ vertexShader: DOT_VS, fragmentShader: DOT_FS, uniforms: this.uni });
+    this.points = new THREE.Points(g, mat);
+    this.points.frustumCulled = false;
+  }
+
+  /** Fill the bin table for this frame; false if no part of this field is near the ring. */
+  update(fr: RingFrame, seed: number) {
+    const { b, r, h } = fr;
+    const f = this.f,
+      G = RING_GRID,
+      cell = (2 * f.range) / G,
+      R = b.radius;
+    const i0 = Math.floor(r / cell);
+    let any = false;
+    for (let bi = 0; bi < G; bi++) {
+      const gi = i0 - G / 2 + bi;
+      const rb = (gi + 0.5) * cell;
+      const dR = rb - r;
+      let dens = 0;
+      if (Math.abs(dR) < f.range && Math.abs(h) < f.range && rb > 0) dens = ringDensity(b, rb / R) / 0.85;
+      const o = bi * 4,
+        o2 = (G + bi) * 4;
+      this.data[o + 2] = dens;
+      if (dens <= 0) continue;
+      any = true;
+      // the camera's place in this bin's co-orbiting frame (double precision here)
+      const w = Math.sqrt(b.mu / (rb * rb * rb));
+      const dth = cell / rb;
+      const phiC = (fr.thC - ((w * fr.t) % (2 * Math.PI))) / dth;
+      const jc = Math.floor(phiC);
+      this.data[o] = dR;
+      this.data[o + 1] = phiC - jc;
+      this.data[o + 3] = dth;
+      this.data[o2] = gi;
+      this.data[o2 + 1] = jc;
+    }
+    this.points.visible = any;
+    if (!any) return false;
+    this.bins.needsUpdate = true;
+    const u = this.uni;
+    u.uRc.value = r;
+    u.uHc.value = h;
+    u.uPx.value = fr.pxPerRad;
+    u.uSeed.value = seed;
+    (u.uE1.value as THREE.Vector3).copy(fr.e1);
+    (u.uE2.value as THREE.Vector3).copy(fr.e2);
+    (u.uN.value as THREE.Vector3).copy(fr.n);
+    (u.uColor.value as THREE.Color).copy(b.ring!.color);
+    return true;
+  }
+
+  dispose() {
+    this.points.geometry.dispose();
+    (this.points.material as THREE.Material).dispose();
+    this.bins.dispose();
+  }
+}
+
 export class RingField {
   readonly group = new THREE.Group();
   /** Instanced meshes per mesh tier and shape. */
   private readonly meshes: THREE.InstancedMesh[][] = [];
   private readonly mat: THREE.ShaderMaterial;
-  private readonly points: THREE.Points;
-  private readonly ptMat: THREE.ShaderMaterial;
+  private readonly dots: DotLayer[];
   readonly uni = { uLight: { value: new THREE.Vector3() }, uPC: { value: new THREE.Vector3() }, uPR: { value: 1 } };
   /** How far the flat disc should fade out around the camera (m; 0 when there are no rocks here). */
   nearFade = 0;
@@ -131,7 +282,6 @@ export class RingField {
   constructor(exp: THREE.IUniform) {
     this.mat = new THREE.ShaderMaterial({ vertexShader: ROCK_VS, fragmentShader: ROCK_FS, uniforms: { ...this.uni, uExp: exp } });
     ROCK_TIERS.forEach((tier, ti) => {
-      if (tier.detail < 0) return;
       const row: THREE.InstancedMesh[] = [];
       for (let k = 0; k < VARIANTS; k++) {
         const m = new THREE.InstancedMesh(rockGeometry(k * 7.3 + 1.1, tier.detail), this.mat, CAPS[ti]);
@@ -144,14 +294,8 @@ export class RingField {
       }
       this.meshes.push(row);
     });
-    const pg = new THREE.BufferGeometry();
-    pg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(POINTS_CAP * 3), 3).setUsage(THREE.DynamicDrawUsage));
-    pg.setAttribute('aColor', new THREE.BufferAttribute(new Float32Array(POINTS_CAP * 3), 3).setUsage(THREE.DynamicDrawUsage));
-    pg.setAttribute('aSize', new THREE.BufferAttribute(new Float32Array(POINTS_CAP), 1).setUsage(THREE.DynamicDrawUsage));
-    this.ptMat = new THREE.ShaderMaterial({ vertexShader: PT_VS, fragmentShader: PT_FS, uniforms: { ...this.uni, uExp: exp } });
-    this.points = new THREE.Points(pg, this.ptMat);
-    this.points.frustumCulled = false;
-    this.group.add(this.points);
+    this.dots = DOT_FIELDS.map((f, k) => new DotLayer(f, { ...this.uni, uExp: exp }, k));
+    for (const d of this.dots) this.group.add(d.points);
   }
 
   /** A cell's rocks, generated on first use (deterministic from the ring's seed and the cell). */
@@ -169,12 +313,8 @@ export class RingField {
       c[o + 1] = rnd(); // angle within the cell
       c[o + 2] = z0 + rnd() * (z1 - z0);
       const size = tier.minR * Math.pow(tier.maxR / tier.minR, Math.pow(rnd(), 2.2));
-      c[o + 4] = 0.5 + 0.6 * rnd(); // tint
-      if (tier.detail < 0) {
-        c[o + 3] = size;
-        continue;
-      }
       c[o + 3] = Math.floor(rnd() * VARIANTS);
+      c[o + 4] = 0.5 + 0.6 * rnd(); // tint
       // orientation × squashed size, in world axes (the ring's frame is fixed)
       tmpA.set(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize();
       tmpQ.setFromAxisAngle(tmpA, rnd() * 6.28);
@@ -190,8 +330,8 @@ export class RingField {
   /**
    * Show the rocks of `b`'s ring around the camera. `rel` is the planet's centre relative to the
    * camera (m), `n` the ring's normal (the planet's axis), `light` the direction to the star, `t` the
-   * sim time, `pxPerRad` the view's pixels per radian (for the far field's dot sizes). Returns
-   * whether any part of the ring is close enough to have rocks.
+   * sim time, `pxPerRad` the view's pixels per radian (for the dots' sizes). Returns whether any
+   * part of the ring is close enough to have rocks.
    */
   update(b: World, rel: THREE.Vector3, n: THREE.Vector3, light: THREE.Vector3, t: number, pxPerRad: number) {
     const ring = b.ring!;
@@ -200,7 +340,7 @@ export class RingField {
       this.cache.clear();
       this.cacheRing = b;
     }
-    const far = ROCK_TIERS[ROCK_TIERS.length - 1].range;
+    const far = DOT_FIELDS[DOT_FIELDS.length - 1].range;
     // the camera in the ring's frame (double precision): height above the plane, radius, angle
     const cx = -rel.x,
       cy = -rel.y,
@@ -211,9 +351,9 @@ export class RingField {
       pz = cz - h * n.z;
     const r = Math.hypot(px, py, pz);
     const counts = this.meshes.map(() => new Array(VARIANTS).fill(0));
-    let np = 0;
     this.nearFade = 0;
     const active = Math.abs(h) < far + RING_HALF_THICK && r > ring.inner * R - far && r < ring.outer * R + far;
+    for (const d of this.dots) d.points.visible = false;
     if (active) {
       // the disc stands for the rocks too small or far to draw: inside the belt the drawn rocks
       // replace it around you; from well above or below it, it shows again (or you'd look down
@@ -229,14 +369,15 @@ export class RingField {
       this.uni.uLight.value.copy(light);
       this.uni.uPC.value.copy(rel);
       this.uni.uPR.value = R;
-      const pPos = this.points.geometry.attributes.position.array as Float32Array,
-        pCol = this.points.geometry.attributes.aColor.array as Float32Array,
-        pSize = this.points.geometry.attributes.aSize.array as Float32Array;
-      const boulders = ROCK_TIERS[2].range;
+      // the GPU dots work in axes turned to the camera's angle (it sits at angle 0 there)
+      const d1 = e1.clone().multiplyScalar(Math.cos(thC)).addScaledVector(e2, Math.sin(thC));
+      const d2 = new THREE.Vector3().crossVectors(n, d1);
+      const fr: RingFrame = { b, e1: d1, e2: d2, n, r, h, thC, t, pxPerRad };
+      const seed = Math.floor(ring.seed * 1e4);
+      this.dots.forEach((d, k) => d.update(fr, seed + k * 7919));
       ROCK_TIERS.forEach((tier, ti) => {
         const C = tier.cell,
           range = tier.range;
-        const isPt = tier.detail < 0;
         const iR = Math.ceil(range / C);
         const i0 = Math.floor(r / C);
         const kLo = Math.floor(-RING_HALF_THICK / C),
@@ -271,48 +412,25 @@ export class RingField {
                   az = cell[o + 2] - h;
                 const dist = Math.hypot(ax, ay, az);
                 if (dist > range) continue;
-                const wx = e1.x * ax + e2.x * ay + n.x * az,
-                  wy = e1.y * ax + e2.y * ay + n.y * az,
-                  wz = e1.z * ax + e2.z * ay + n.z * az;
-                // shrink away (or fade, for points) toward the edge of the tier's range
-                const edge = Math.min(1, (range - dist) / (range * 0.15));
-                const tint = cell[o + 4];
-                if (isPt) {
-                  if (dist < boulders * 0.9 || np >= POINTS_CAP) continue; // the boulders have it
-                  const inner = Math.min(1, (dist - boulders * 0.9) / (boulders * 0.1));
-                  pPos[np * 3] = wx;
-                  pPos[np * 3 + 1] = wy;
-                  pPos[np * 3 + 2] = wz;
-                  pCol[np * 3] = ring.color.r * tint * edge * inner;
-                  pCol[np * 3 + 1] = ring.color.g * tint * edge * inner;
-                  pCol[np * 3 + 2] = ring.color.b * tint * edge * inner;
-                  pSize[np] = (2 * cell[o + 3] * pxPerRad) / dist;
-                  np++;
-                  continue;
-                }
                 const variant = cell[o + 3];
                 const mesh = this.meshes[ti][variant];
                 const cnt = counts[ti][variant];
                 if (cnt >= CAPS[ti]) continue;
+                // shrink away toward the edge of the tier's range
+                const edge = Math.min(1, (range - dist) / (range * 0.15));
                 const a = mesh.instanceMatrix.array as Float32Array;
                 const p = cnt * 16;
-                a[p] = cell[o + 5] * edge;
-                a[p + 1] = cell[o + 6] * edge;
-                a[p + 2] = cell[o + 7] * edge;
-                a[p + 3] = 0;
-                a[p + 4] = cell[o + 8] * edge;
-                a[p + 5] = cell[o + 9] * edge;
-                a[p + 6] = cell[o + 10] * edge;
-                a[p + 7] = 0;
-                a[p + 8] = cell[o + 11] * edge;
-                a[p + 9] = cell[o + 12] * edge;
-                a[p + 10] = cell[o + 13] * edge;
-                a[p + 11] = 0;
-                a[p + 12] = wx;
-                a[p + 13] = wy;
-                a[p + 14] = wz;
+                for (let e = 0; e < 3; e++) {
+                  a[p + e] = cell[o + 5 + e] * edge;
+                  a[p + 4 + e] = cell[o + 8 + e] * edge;
+                  a[p + 8 + e] = cell[o + 11 + e] * edge;
+                }
+                a[p + 3] = a[p + 7] = a[p + 11] = 0;
+                a[p + 12] = e1.x * ax + e2.x * ay + n.x * az;
+                a[p + 13] = e1.y * ax + e2.y * ay + n.y * az;
+                a[p + 14] = e1.z * ax + e2.z * ay + n.z * az;
                 a[p + 15] = 1;
-                mesh.setColorAt(cnt, tmpC.copy(ring.color).multiplyScalar(tint));
+                mesh.setColorAt(cnt, tmpC.copy(ring.color).multiplyScalar(cell[o + 4]));
                 counts[ti][variant] = cnt + 1;
               }
             }
@@ -330,10 +448,6 @@ export class RingField {
         }
       }),
     );
-    const pg = this.points.geometry;
-    pg.setDrawRange(0, np);
-    this.points.visible = np > 0;
-    if (np) for (const at of ['position', 'aColor', 'aSize']) pg.attributes[at].needsUpdate = true;
     return active;
   }
 
@@ -344,7 +458,6 @@ export class RingField {
         m.dispose();
       }
     this.mat.dispose();
-    this.points.geometry.dispose();
-    this.ptMat.dispose();
+    for (const d of this.dots) d.dispose();
   }
 }
