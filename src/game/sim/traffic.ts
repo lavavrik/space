@@ -438,5 +438,27 @@ export function easeTrail(L: number, speed: number, dt: number) {
   return L + (want - L) * Math.min(1, TRAIL_EASE * dt);
 }
 
-/** A ship's pilot context (its Ship, dock, autopilot …), for debugging from the console. */
+/** A ship's pilot context (its Ship, dock, autopilot …): for saving (save.ts) and debugging. */
 export const pilotOf = (npc: Npc) => pilots.get(npc);
+
+/**
+ * A ship with a fresh pilot context and nothing set yet, for restoring a save: save.ts fills in its
+ * pilot's flight state and its captain's task, then calls syncNpc.
+ */
+export function blankNpc(game: Game, name: string, cls: string) {
+  const pilot = pilotFor(game);
+  const npc: Npc = {
+    kind: 'ship', radius: SHIP_R, name, cls, pos: pilot.ship.pos, vel: new THREE.Vector3(), q: pilot.ship.q,
+    ftl: false, thrust: 0, task: 'docked', at: null, to: null, t: 0, wait: 0, trailL: 0, trailDir: new THREE.Vector3(0, 0, 1), flashAt: -Infinity,
+  };
+  pilots.set(npc, pilot);
+  rides.set(npc, new THREE.Vector3());
+  return { npc, pilot };
+}
+
+/** Refresh what the renderer, radar and info panel read from the ship's pilot (after a restore). */
+export function syncNpc(npc: Npc) {
+  const c = pilots.get(npc)!;
+  syncView(npc, c, 0);
+  if (npc.ftl) npc.trailDir.copy(c.ship.travelDir).negate();
+}
