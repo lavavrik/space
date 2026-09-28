@@ -4,10 +4,9 @@
  * read the same density: bands from two octaves of noise across the radius, soft edges, and a
  * Cassini-like division at 63 % of the way out.
  *
- * The rocks are generated, not stored: the ring is cut into cells in its own co-orbiting frame
- * (radial bins of CELL width; in each, angular bins about CELL long along the orbit; and vertical
- * bins through the ring's thickness), and each cell's rocks come from a hash of its indices. A radial
- * bin turns at the circular orbit rate at its radius, so the ring shears like a real one: inner rocks
+ * The rocks are generated, not stored: the ring is cut into cells in its own co-orbiting frame, and
+ * each cell's rocks come from a hash of its indices (on the GPU: render/RingField.ts). A radial bin
+ * turns at the circular orbit rate at its radius, so the ring shears like a real one: inner rocks
  * overtake outer ones, and a ship on the same orbit sees its neighbours drift slowly.
  */
 import type { World } from '../types';
@@ -34,58 +33,34 @@ export function ringDensity(b: World, rR: number) {
 }
 
 /**
- * Rock size tiers drawn as meshes near you: rock radius range (m), cell size (m), how far out
- * they're drawn (m), rocks per full cell, and the icosphere subdivision of their shapes.
+ * The ring's rocks, all generated on the GPU (render/RingField.ts). Each layer is a grid of
+ * `grid` × `grid` cells centred on the camera (cell = 2 · range / grid), `perCell` candidate
+ * rocks each, spread through the belt's thickness; a rock exists where a hash of its cell falls under
+ * the ring's density. `detail` ≥ 0: drawn as a lumpy mesh (icosphere subdivision); −1: as a speck.
+ * Each layer fades in from `inner` to `fadeTo` and out over the last 15–50 % of its range.
+ *
+ * Sizes are rock radii (m). The first speck layer carries on the boulders' own population (same
+ * sizes, the same number per area) as they shrink away, so there's no step where meshes turn to
+ * specks; beyond it the disc's band takes over, with a sparse grain of far specks on it.
  */
-export interface RockTier {
-  minR: number;
-  maxR: number;
-  cell: number;
+export interface RockLayer {
+  grid: number;
   range: number;
   perCell: number;
+  minR: number;
+  maxR: number;
   detail: number;
-}
-export const ROCK_TIERS: RockTier[] = [
-  { minR: 1.5, maxR: 10, cell: 250, range: 2500, perCell: 1.2, detail: 0 },
-  { minR: 10, maxR: 70, cell: 1000, range: 12000, perCell: 1.6, detail: 1 },
-  { minR: 70, maxR: 500, cell: 5000, range: 120000, perCell: 1.6, detail: 2 },
-];
-
-/**
- * Beyond the meshes, rocks as dots generated on the GPU (render/RingField.ts): a grid of RING_GRID ×
- * RING_GRID cells centred on the camera, `perCell` candidate dots each, from `inner` to `range` (m).
- * Sizes are rock radii (m). The first carries on the boulders' population, so there's no jump in
- * density where meshes turn to specks; a speck is never drawn wider than 2 px (bigger dots read as
- * flat discs), its light kept for its apparent size.
- */
-export interface DotField {
   inner: number;
-  fadeTo: number; // fades in from `inner` to here (m), as the tier before fades out
-
-  range: number;
-  perCell: number;
-  minR: number;
-  maxR: number;
+  fadeTo: number;
 }
-export const RING_GRID = 256;
-export const DOT_FIELDS: DotField[] = [
-  // the boulders, carried on as specks: same sizes and the same number per area (1.6 per 5 km cell
-  // × 3/5 of it in the belt's thickness ≈ 5.3 per 11.7 km cell), crossfading with them over 60–120 km
-  { inner: 60e3, fadeTo: 120e3, range: 1500e3, perCell: 5, minR: 70, maxR: 500 },
-  // grain on the disc far off (sparser than the ring really is; the disc carries the band)
-  { inner: 1300e3, fadeTo: 1500e3, range: 12000e3, perCell: 14, minR: 60, maxR: 400 },
+export const ROCK_LAYERS: RockLayer[] = [
+  { grid: 128, range: 3e3, perCell: 3, minR: 1.5, maxR: 10, detail: 0, inner: 0, fadeTo: 0 }, // pebbles
+  { grid: 128, range: 25e3, perCell: 3, minR: 10, maxR: 70, detail: 1, inner: 0, fadeTo: 0 }, // rocks
+  { grid: 128, range: 150e3, perCell: 4, minR: 70, maxR: 500, detail: 1, inner: 0, fadeTo: 0 }, // boulders
+  // the boulders as specks: 4 per (2.34 km)² → 16 per (4.7 km)², fading in as they shrink away
+  { grid: 256, range: 600e3, perCell: 16, minR: 70, maxR: 500, detail: -1, inner: 75e3, fadeTo: 150e3 },
+  // sparse grain on the disc far off
+  { grid: 256, range: 12000e3, perCell: 14, minR: 60, maxR: 400, detail: -1, inner: 500e3, fadeTo: 650e3 },
 ];
-
-/** Integer hash (murmur-style) of a few integers, as a uint32. */
-export function hashInts(...ns: number[]) {
-  let h = 0x2545f491;
-  for (const n of ns) {
-    h = Math.imul(h ^ (n | 0), 0xcc9e2d51);
-    h = (h << 15) | (h >>> 17);
-    h = Math.imul(h, 0x1b873593) ^ 0x9e3779b9;
-  }
-  h ^= h >>> 16;
-  h = Math.imul(h, 0x85ebca6b);
-  h ^= h >>> 13;
-  return (h ^ (h >>> 16)) >>> 0;
-}
+/** Where the disc's band takes over from the specks (m): the boulder specks' range, less their fade. */
+export const DISC_FROM = 540e3;

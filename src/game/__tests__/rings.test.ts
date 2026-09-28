@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { THREE } from '../lib/three';
-import { hashInts, ringDensity } from '../sim/rings';
+import { ringDensity } from '../sim/rings';
 import { homeSystem, systemsNear } from '../universe/galaxy';
 import { buildSystem } from '../universe/system';
 import type { World } from '../types';
@@ -22,8 +22,4 @@ describe('rings', () => {
     }
   });
 
-  it('hashes cells the same way every time, and differently for neighbours', () => {
-    expect(hashInts(1, 2, 3)).toBe(hashInts(1, 2, 3));
-    expect(hashInts(1, 2, 3)).not.toBe(hashInts(1, 2, 4));
-  });
 });
