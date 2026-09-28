@@ -29,7 +29,7 @@ import type { ApproachMark, ApproachView } from './types';
 /** Width of the outside zone (fraction of the strip). */
 const OUT = 0.1;
 /** Label width per letter, and where labels flip to the tick's left (fractions of the strip; Hud.tsx). */
-const LABEL_W = 0.026,
+const LABEL_W = 0.019,
   FLIP_X = 0.85;
 
 type Raw = Omit<ApproachMark, 'x' | 'row' | 'outside'>;
@@ -41,30 +41,30 @@ function milestones(g: Game, t: Target): Raw[] {
     if (d > 0 && Number.isFinite(d)) out.push({ d, label, detail, kind });
   };
   if (t.kind === 'station') {
-    add(TARGET_FRAME_ENTER, 'FRAME', 'Flight assist and speed work relative to the station (as your target)', 'info');
+    add(TARGET_FRAME_ENTER, 'STATION FRAME', 'Flight assist and speed work relative to the station (as your target)', 'info');
     const unit = g.ship.avionics.dock;
-    if (unit?.caps.clearance) add(unit.caps.range, 'AUTO', `${unit.model} can fly you in from here (K)`, 'ftl');
-    add(FRAME_ENTER, 'NEAR', 'Station frame even when not targeted', 'info');
-    add(DOCK_REQUEST_RANGE, 'PAD', 'Close enough to request a pad from traffic control (K)', 'on');
-    add(HOLD_OUT, 'HOLD', 'Approach hold point on the slot axis', 'info');
+    if (unit?.caps.clearance) add(unit.caps.range, 'AUTODOCK', `${unit.model} can fly you in from here (K)`, 'ftl');
+    add(FRAME_ENTER, 'LOCAL', 'Station frame even when not targeted', 'info');
+    add(DOCK_REQUEST_RANGE, 'PAD REQUEST', 'Close enough to request a pad from traffic control (K)', 'on');
+    add(HOLD_OUT, 'HOLD POINT', 'Approach hold point on the slot axis', 'info');
     return out;
   }
   const b = t;
-  if (b.kind !== 'star') add(b.soi - b.radius, 'SOI', `${b.name}'s gravity dominates: its frame and orbits from here`, 'info');
-  add(dropAlt(b) * 1.15, 'LOCK', "Mass lock: FTL can't be engaged closer", 'warn');
-  add(dropAlt(b), 'DROP', 'FTL drops out here', 'ftl');
+  if (b.kind !== 'star') add(b.soi - b.radius, 'GRAVITY', `Sphere of influence: ${b.name}'s gravity dominates, its frame and orbits from here`, 'info');
+  add(dropAlt(b) * 1.15, 'MASS LOCK', "Mass lock: FTL can't be engaged closer", 'warn');
+  add(dropAlt(b), 'FTL DROP', 'FTL drops out here', 'ftl');
   if (b.kind === 'star') {
-    add(fluxDist(b.L, ARRIVE_FLUX, b.radius) - b.radius, 'ARRIVE', 'Where hyperjumps arrive (20× Earth’s sunlight)', 'info');
+    add(fluxDist(b.L, ARRIVE_FLUX, b.radius) - b.radius, 'ARRIVAL', 'Where hyperjumps arrive (20× Earth’s sunlight)', 'info');
     add(fluxDist(b.L, SCOOP_FLUX_MIN, b.radius) - b.radius, 'SCOOP', 'Corona scoop starts working (25× Earth’s sunlight)', 'on');
-    add(fluxDist(b.L, SCOOP_FLUX_FULL, b.radius) - b.radius, 'FULL', 'Corona scoop at its full rate (100×)', 'on');
+    add(fluxDist(b.L, SCOOP_FLUX_FULL, b.radius) - b.radius, 'SCOOP MAX', 'Corona scoop at its full rate (100×)', 'on');
     return out;
   }
-  add(minOrbitAlt(b), 'ORBIT', 'Lowest safe orbit', 'info');
-  if (b.pal.atmo) add(b.radius * 0.025, 'AIR', 'Top of the atmosphere', 'info');
+  add(minOrbitAlt(b), 'LOW ORBIT', 'Lowest safe orbit', 'info');
+  if (b.pal.atmo) add(b.radius * 0.025, 'ATMOSPHERE', 'Top of the atmosphere', 'info');
   if (b.type >= WT.GasGiant) add(b.radius * 0.05, 'SCOOP', 'Fuel scoop works below this (skimming the upper atmosphere)', 'on');
   if (reliefAmp(b) > 0) {
-    add(SURFACE_FRAME_ALT, 'GROUND', 'Flight assist starts following the turning ground', 'info');
-    add(NORMAL_MAX / SURF_K + CLEARANCE, 'SLOW', 'Flight assist caps your speed by height from here', 'warn');
+    add(SURFACE_FRAME_ALT, 'GROUND FRAME', 'Flight assist starts following the turning ground', 'info');
+    add(NORMAL_MAX / SURF_K + CLEARANCE, 'SPEED CAP', 'Flight assist caps your speed by height from here', 'warn');
   }
   return out;
 }

@@ -9,6 +9,7 @@
 #gauges { justify-self: start; }
 #centre { position: relative; }
 #target { justify-self: end; }
+#target.card { width: 28rem; } /* wide enough for the approach strip's labels */
 .pan {
   background: var(--panel);
   border: 1px solid var(--amber-faint);
@@ -78,7 +79,7 @@
 
 /* flight cluster, bottom centre: the speedo */
 /* 44rem wide, but it gives way on narrow windows so the gauges and target card (20rem each) fit */
-#flight { width: clamp(22rem, 100vw - 46rem, 44rem); max-width: 100%; text-align: center; display: flex; flex-direction: column; gap: .35rem; align-items: stretch; }
+#flight { width: clamp(22rem, 100vw - 62rem, 44rem); max-width: 100%; text-align: center; display: flex; flex-direction: column; gap: .35rem; align-items: stretch; }
 #hMode {
   align-self: center; font-size: .9rem; font-weight: 700; letter-spacing: .22em;
   padding: .2rem .8rem; border: 1px solid currentColor; color: var(--amber);
