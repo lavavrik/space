@@ -8,7 +8,9 @@ import { velRel } from '../sim/frame';
 import { orbitElementsRel } from '../sim/gravity';
 import { resolvable, SCAN_STAGE, scanProgress } from '../sim/scanner';
 import { npcStatus } from '../sim/traffic';
-import type { Body, KeplerOrbit, Npc, Station, Target } from '../types';
+import type { Body, KeplerOrbit, Npc, Station, Target, World } from '../types';
+import { atmoOf, type Atmo } from '../sim/atmosphere';
+import { HULL, SIGMA, TEMP, heatCap } from '../sim/thermal';
 import type { InfoView, Readout } from './types';
 
 const MEARTH = 5.972e24;
@@ -84,11 +86,11 @@ function bodyPhysical(g: Game, b: Body): [string, string][] {
     rows.push(['PLANETS', String(g.cur.bodies.filter((m) => m.kind === 'planet').length)]);
     return rows;
   }
-  const atmo = b.pal.atmo ? (b.type >= 6 ? 'deep atmosphere' : 'atmosphere') : 'airless';
+  const air = atmoOf(b);
   const stations = g.cur.stations.filter((s) => s.parent === b).map((s) => s.name);
   const moons = g.cur.bodies.filter((m) => m.kind === 'moon' && m.parent === b).length;
+  rows.push(...airRows(g, b, air));
   rows.push(
-    ['CLIMATE', `${Math.round(b.T - 273)} °C · ${atmo}`],
     ['DAY · TILT', `${fmtTime((2 * Math.PI) / b.spin)} · ${(b.tilt * DEG).toFixed(1)}°`],
     ['SPHERE OF INFLUENCE', fmtDist(b.soi)],
     [b.kind === 'planet' ? 'MOONS · STATIONS' : 'STATIONS', (b.kind === 'planet' ? `${moons} · ` : '') + (stations.length ? stations.join(', ') : 'none')],
@@ -96,6 +98,37 @@ function bodyPhysical(g: Game, b: Body): [string, string][] {
   if (b.ring) rows.push(['RINGS', `${b.ring.inner.toFixed(2)}–${b.ring.outer.toFixed(2)} radii`]);
   return rows;
 }
+
+/** The world's air (sim/atmosphere.ts): climate, pressure and density, what it's made of, how tall it is, and what it does to a ship on the ground. */
+function airRows(g: Game, b: World, a: Atmo | null): [string, string][] {
+  const C = (K: number) => `${Math.round(K - 273)} °C`;
+  if (!a) return [['CLIMATE', `${C(b.T)} · airless`]];
+  const giant = b.type >= 6;
+  const gh = a.Ts - b.T;
+  const bar = a.P0 / 1e5;
+  const rows: [string, string][] = [
+    ['CLIMATE', giant ? `${C(a.Ts)} at the cloud tops` : `${C(a.Ts)} at the surface${gh > 5 ? ` · greenhouse +${Math.round(gh)} K` : ''}`],
+    ['ATMOSPHERE', `${fmtBar(bar)}${giant ? ' at the cloud tops' : ''} · ${fmtRho(a.rho0)}${a.rho0 > 2.4 || a.rho0 < 0.6 ? ` (${fmtX(a.rho0 / 1.225)} Earth)` : ''}`],
+    ['COMPOSITION', a.gases.slice(0, 3).map(([gas, x]) => `${gas} ${fmtPct(x)}`).join(' · ')],
+    ['AIR COLUMN', `scale height ${fmtDist(a.H)} · ends ${fmtDist(a.top)} up`],
+  ];
+  // on the ground, the hot air heats the hull by convection and by its infrared glow (all the sky
+  // under thick air), as in sim/thermal.ts: roughly how fast, from the hull's temperature now
+  if (!giant && a.Ts > TEMP.warn) {
+    const T = g.ship.temp;
+    const conv = 15 * Math.sqrt(a.rho0 / 1.2) * HULL.area * (a.Ts - T);
+    const glow = HULL.emit * SIGMA * HULL.area * ((1 - Math.exp(-a.tau)) * a.Ts ** 4 - T ** 4);
+    const rate = (conv + glow) / heatCap(g.ship); // K/s
+    const note = a.Ts > TEMP.fail && rate > 0 ? `lethal · the hull fails in ~${fmtTime((TEMP.fail - T) / rate)}` : a.Ts > TEMP.drives ? `hot · the hull heads for ${C(a.Ts)}: drives can't charge` : `hot · the hull heads for ${C(a.Ts)}`;
+    rows.push(['ON THE GROUND', note]);
+  }
+  return rows;
+}
+
+const fmtBar = (bar: number) => (bar < 0.01 ? `${(bar * 1000).toFixed(1)} mbar` : bar < 10 ? `${bar.toFixed(bar < 1 ? 3 : 2)} bar` : `${Math.round(bar)} bar`);
+const fmtRho = (r: number) => `${r < 0.1 ? r.toFixed(3) : r < 10 ? r.toFixed(2) : Math.round(r)} kg/m³`;
+const fmtX = (x: number) => (x < 0.1 ? `${Math.round(x * 100)} % of` : `${x < 10 ? x.toFixed(1) : Math.round(x)}×`);
+const fmtPct = (x: number) => `${x < 0.001 ? '<0.1' : x < 0.1 ? (x * 100).toFixed(1) : Math.round(x * 100)} %`;
 
 function stationPhysical(st: Station): [string, string][] {
   return [['SIZE · SPIN', `${fmtDist(st.size)} cube · ${fmtTime((2 * Math.PI) / Math.abs(st.spinRate))} per turn`]];

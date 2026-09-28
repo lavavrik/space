@@ -4,20 +4,34 @@ Desert, Earth-like, ocean, some volcanic worlds and the giants have air. It drag
 
 ## The air (`sim/atmosphere.ts`)
 
-- **Density:** ρ(h) = ρ0 · e^(−h/H) above the mean radius. The atmosphere ends at 12 scale heights (`ATMO_TOP_H`), where density is 6 millionths of the surface's.
-- **Scale height:** H = R·T / (M·g), from the world's equilibrium temperature and surface gravity. An Earth-like world comes out at ~7 km.
-- **By type** (ρ0 and molar mass M):
+Every world with air gets its own, generated from its seed (`makeAir`): a surface pressure and a mix of gases. The rest follows from those and the world:
 
-| Type | ρ0 (kg/m³) | Gas |
+| Type | Surface pressure | Gases |
 |---|---|---|
-| Desert | 0.25 | thin CO₂ |
-| Earth-like | 1.2 | N₂/O₂ |
-| Ocean | 1.5 | N₂/O₂ |
-| Volcanic (when it has air) | 8 | thick CO₂ |
-| Giants | 0.5 at the cloud tops | H₂/He |
+| Desert | mostly 4–80 mbar (Mars-like); some 0.1–1.5 bar; ~1 in 8 hot ones 8–60 bar (runaway greenhouse) | CO₂, N₂, Ar; SO₂ in the thick ones |
+| Earth-like | 0.6–2.2 bar | N₂ 70–82 %, O₂ 15–26 %, Ar, H₂O, CO₂ |
+| Ocean | 1–4 bar | N₂, O₂ 6–20 %, more water vapour |
+| Volcanic, hot (≥ 300 K) | 20–95 bar (Venus) | CO₂ ~96 %, N₂, SO₂ |
+| Volcanic, cold | 1–50 mbar (tidally heated moons: an Io-like haze, thicker) | SO₂ ~90 % |
+| Gas giant | 1 bar at the cloud tops | H₂ 84–90 %, He, CH₄, NH₃ |
+| Ice giant | 1 bar at the cloud tops | H₂ ~80 %, He 14–19 %, CH₄ 1.5–2.5 % |
 
+- **Molar mass:** the mix's average (`GASES`).
+- **Greenhouse:** the surface is warmer than the world's equilibrium temperature: Ts = T · (1 + 0.75 τ)^¼, with an infrared optical depth τ = P(bar) · (0.5 + Σ x·k), k per gas (CO₂ 2.2, H₂O 25, SO₂ 8, CH₄ 20, NH₃ 10 per bar). Earth-like worlds come out 20–40 K warmer; a thick CO₂ world hundreds of K (a 21-bar desert at 540 K equilibrium: 1,380 K). Giants: none at the cloud tops.
+- **Density:** ρ0 = P · M / (R · Ts), an ideal gas: Earth 1.2 kg/m³, a Mars-like desert ~0.01–0.06, a Venus-like world 50–100.
+- **Scale height:** H = R · Ts / (M · g) (Earth-like ~6–10 km; a light, hot, low-gravity desert 25 km). Density and pressure fall as e^(−h/H); the air ends at 12 scale heights (`ATMO_TOP_H`).
+- **Air temperature:** Ts at the ground, cooling with height toward the world's skin temperature (0.84 T) over ~1.5 H (`airTemp`).
 - **Moving air:** the air turns with its world, so speed through it is measured against that motion.
-- **Lowest safe orbit:** now above the air (`orbits.ts minOrbitAlt`), since drag would bring a lower orbit down. Station orbits follow.
+- **Lowest safe orbit:** above the air (`orbits.ts minOrbitAlt`), since drag would bring a lower orbit down. Station orbits follow.
+- **In the info panel (I)**, once scanned: CLIMATE (surface temperature and the greenhouse warming), ATMOSPHERE (pressure, density against Earth's), COMPOSITION (the three main gases), AIR COLUMN (scale height and where it ends), and on hot worlds ON THE GROUND: where the hull heads, or how soon it fails. The influences panel (B) shows the air around the ship (pressure, density, temperature).
+
+Venydes 2 (a hot desert, 566 K, 0.45 g) used to get a fixed desert air of 0.25 kg/m³ with a 24 km scale height at 566 K, which is why it looked thick and heated the hull on the way down. Now it's a thin 13 mbar of CO₂: still hot and tall, but ~20× thinner.
+
+## Heat from the air
+
+- **Convection:** the hull trades heat with the air, ~15 W/m²K in still sea-level air, more in denser or faster air (`thermal.ts`). It works on the ground too (and under time warp there).
+- **Sky glow:** in air the sky isn't cold space. The air above glows at its own temperature as far as it's opaque in the infrared, 1 − e^−τ(above): about half the sky on an Earth-like world, all of it under a thick CO₂ blanket (`SKY GLOW` in the heat breakdown). The radiators' fins get it too, so they can't dump heat into hot air.
+- **What that means on the ground:** on an Earth-like world, nothing much. On a hot thin desert the hull drifts slowly toward the air's temperature. Under a thick hot atmosphere it can't shed heat at all. At ~740 K (Venus-like) the hull settles above the 600 K drive limit, so no FTL until you've climbed out on thrusters. At 1,300 K it fails within a couple of minutes.
 
 ## Drag and entry heating
 
@@ -31,7 +45,6 @@ Desert, Earth-like, ocean, some volcanic worlds and the giants have air. It drag
 | steep 6.5 km/s | ~720 K |
 
   Faster or steeper entries can cook the hull (900 K fails).
-- **Convection:** in air the hull also trades heat with the air (~15 W/m²K in still sea-level air, more at speed), so it settles toward the air's temperature.
 - **Where it shows:**
   - the heat breakdown (B) has ENTRY HEATING and AIR rows;
   - the dashboard gets an entry-heating lamp;

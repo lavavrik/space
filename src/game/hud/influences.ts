@@ -108,7 +108,9 @@ export function buildInfluences(g: Game): InfluencesView {
     if (h.planets > 1000) heat.push(['NEARBY WORLDS', mw(h.planets)]);
     heat.push(['SHIP SYSTEMS', mw(h.internal)]);
     if (h.aero > 1000) heat.push(['ENTRY HEATING', { text: `${mw(h.aero)} · slow down or fly nose-first`, warn: h.aero > 20e6 }]);
+    if (g.aero.rho > 0) heat.push(['OUTSIDE', `${g.aero.P >= 1e4 ? (g.aero.P / 1e5).toFixed(2) + ' bar' : (g.aero.P / 100).toFixed(1) + ' mbar'} · ${g.aero.rho.toFixed(g.aero.rho < 1 ? 3 : 1)} kg/m³ · ${Math.round(g.aero.T - 273)} °C`]);
     if (Math.abs(h.air) > 1000) heat.push(['AIR', h.air > 0 ? `${mw(h.air)} warming the hull` : `${mw(-h.air)} cooling the hull`]);
+    if (h.sky > 1000) heat.push(['SKY GLOW', `${mw(h.sky)} · the air above radiates back at ${Math.round(g.aero.T)} K`]);
     heat.push(['RADIATED BY THE HULL', mw(h.out)]);
     if (ship.outfit.radiatorsOut > 0) heat.push(['RADIATORS', `${mw(h.radiators)} shed · ${mw(h.radAbsorbed)} absorbed on the fins`]);
     if (h.pumpW > 0) heat.push(['HEAT PUMP', `${mw(h.pumpW)} drawn · loop at ${h.radTemp.toFixed(0)} K`]);

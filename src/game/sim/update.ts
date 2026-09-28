@@ -133,6 +133,8 @@ export function update(g: Game, dt: number, realDt = dt) {
       ship.grav = gravityAt(g.cur, ship.pos);
       if (g.dock?.docked) holdDocked(g);
       else railsStep(g, dt);
+      // on the ground the air still heats (or cools) the hull under warp
+      if (ship.landed) updateAero(g, dt, (u) => crossSection(g, u), shipMass(ship));
       g.curSpeed = relVel(g).length();
     } else if (g.dock?.docked) {
       // docked: held on the pad, turning with the station

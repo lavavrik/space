@@ -49,7 +49,7 @@ const CLOUD_H = 1.3;
 function airBeta(b: World) {
   const a = atmoOf(b);
   if (!a) return new THREE.Vector3();
-  const k = a.rho0 / 1.2;
+  const k = Math.min(a.rho0 / 1.2, 50); // (a 60 kg/m³ Venus-like air would be solid white otherwise)
   if (b.type === WT.EarthLike || b.type === WT.Ocean) return new THREE.Vector3(5.8e-6, 13.5e-6, 33.1e-6).multiplyScalar(k);
   const c = b.pal.atmo!.c;
   const m = Math.max(c.r, c.g, c.b, 1e-3);

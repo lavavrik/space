@@ -22,7 +22,7 @@ import { destroyShip } from './flight';
 import { dryMass } from './resources';
 import { grant } from './power';
 
-const SIGMA = 5.670374e-8; // Stefan–Boltzmann, W/m²K⁴
+export const SIGMA = 5.670374e-8; // Stefan–Boltzmann, W/m²K⁴
 /** Solar constant: flux from a Sun-like star at 1 AU, W/m² (power.flux is in these units). */
 export const S0 = 1361;
 
@@ -74,6 +74,7 @@ export interface HeatBudget {
   pumpW: number; // electrical power the heat pump draws
   aero: number; // entry heating (sim/atmosphere.ts)
   air: number; // exchanged with the surrounding air (+ in, − out)
+  sky: number; // infrared from the air above (it isn't cold space in thick air)
   vent: number; // carried off by vented hydrogen
   ventFlow: number; // kg/s
   /** K/s */
@@ -108,6 +109,7 @@ interface Inputs {
   aero: number; // W of entry heating
   airCoef: number; // W/K the hull exchanges with the air (convection)
   airT: number; // K, the air's temperature
+  skyIR: number; // W of infrared the air around the hull radiates onto it
 }
 
 /**
@@ -146,7 +148,7 @@ function balance(inp: Inputs, T: number) {
   const out = HULL.emit * SIGMA * HULL.area * T ** 4;
   const rad = radiatorSink(inp, T);
   const air = inp.airCoef * (inp.airT - T);
-  return { out, rad, air, net: inp.star + inp.planets + inp.internal + inp.aero + air - out - rad.removed };
+  return { out, rad, air, net: inp.star + inp.planets + inp.skyIR + inp.internal + inp.aero + air - out - rad.removed };
 }
 
 /** The heat budget at the ship right now (W). Needs solarPower() to have run this frame (flux, shadow). */
@@ -177,11 +179,15 @@ export function heatBudget(g: Game, inTunnel: boolean): HeatBudget {
     }
   }
   const pump = pumpFitted(ship.outfit);
+  // in air the sky isn't cold space: the air above glows at its own temperature, as far as it's
+  // opaque in the infrared (1 − e^−τ: ~half the sky on an Earth-like world, all of it under a
+  // thick CO₂ blanket, where the hull can't radiate its heat away at all)
+  const skyW = (1 - Math.exp(-g.aero.tauAbove)) * SIGMA * g.aero.T ** 4; // W/m²
   const inp: Inputs = {
     star,
     planets: planetFlux * (HULL.area / 4),
     internal: 1000 * (power.draw - power.thrustKW * (1 - HULL.exhaustKeep) - power.pumpKW),
-    radAbs: radStar + planetFlux * ((2 * finFace) / 4),
+    radAbs: radStar + planetFlux * ((2 * finFace) / 4) + RADIATOR_SURFACE.emit * skyW * 2 * finFace,
     radArea: 2 * finFace,
     pumpMaxW: pump && ship.outfit.pumpAuto ? Math.min(pump.caps.maxKW, Math.max(0, power.left)) * 1000 : 0,
     pumpLift: pump?.caps.lift ?? 0,
@@ -189,7 +195,8 @@ export function heatBudget(g: Game, inTunnel: boolean): HeatBudget {
     // faster the air: ~15 W/m²K in Earth's still air at sea level)
     aero: g.aero.heatW,
     airCoef: g.aero.rho > 0 ? 15 * Math.sqrt(g.aero.rho / 1.2) * Math.sqrt(1 + g.aero.speed / 20) * HULL.area : 0,
-    airT: g.aero.body?.T ?? 0,
+    airT: g.aero.T,
+    skyIR: HULL.emit * skyW * HULL.area,
   };
   const now = balance(inp, ship.temp);
   // the vent: whatever hydrogen the exchanger can boil off this frame
@@ -219,6 +226,7 @@ export function heatBudget(g: Game, inTunnel: boolean): HeatBudget {
     pumpW: now.rad.pumpW,
     aero: inp.aero,
     air: now.air,
+    sky: inp.skyIR,
     vent,
     ventFlow,
     rate: (now.net - vent) / heatCap(ship),
