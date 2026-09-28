@@ -72,7 +72,7 @@ const DOT_VS = `
 #include <common>
 #include <logdepthbuf_pars_vertex>
 uniform sampler2D uBins;
-uniform float uK, uCell, uH, uInner, uRange, uRc, uHc, uPx, uMinR, uMaxR, uSeed, uPR;
+uniform float uK, uCell, uH, uInner, uFadeTo, uRange, uRc, uHc, uPx, uMinR, uMaxR, uSeed, uPR;
 uniform vec3 uE1, uE2, uN, uLight, uPC, uColor;
 varying vec3 vC;
 uvec3 pcg3(uvec3 v){
@@ -111,7 +111,7 @@ void main(){
   if (d < uInner || d > uRange) return;
   float size = uMinR * pow(uMaxR / uMinR, pow(rnd(s), 2.2));
   float px = 2.0 * size * uPx / d;
-  float fade = smoothstep(uInner, uInner * 1.1, d) * smoothstep(uRange, uRange * 0.85, d);
+  float fade = smoothstep(uInner, uFadeTo, d) * smoothstep(uRange, uRange * 0.85, d);
   vec3 L = normalize(uLight);
   vec3 toP = p - uPC;
   float along = dot(toP, L);
@@ -119,7 +119,10 @@ void main(){
   float phase = 0.35 + 0.65 * max(dot(normalize(-p), L), 0.0); // brighter seen from the sun's side
   // a speck: its light spread over at least a pixel (dimmer below one), never more than 2 px wide
   // (through the periscope rocks that big would be flat discs)
-  vC = uColor * (0.5 + 0.6 * rnd(s)) * sh * phase * fade * min(px * px, 1.0);
+  // (below a pixel dimmed by its share of it; above 2 px brighter, so its light is what a rock that
+  // size would give)
+  float light = px < 1.0 ? px * px : min(max(px * px / 4.0, 1.0), 8.0);
+  vC = uColor * (0.5 + 0.6 * rnd(s)) * sh * phase * fade * light;
   gl_PointSize = clamp(px, 1.0, 2.0);
   gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
   #include <logdepthbuf_vertex>
@@ -194,6 +197,7 @@ class DotLayer {
       uCell: { value: (2 * f.range) / G },
       uH: { value: RING_HALF_THICK },
       uInner: { value: f.inner },
+      uFadeTo: { value: f.fadeTo },
       uRange: { value: f.range },
       uRc: { value: 0 },
       uHc: { value: 0 },
@@ -419,8 +423,9 @@ export class RingField {
                 const mesh = this.meshes[ti][variant];
                 const cnt = counts[ti][variant];
                 if (cnt >= CAPS[ti]) continue;
-                // shrink away toward the edge of the tier's range
-                const edge = Math.min(1, (range - dist) / (range * 0.15));
+                // shrink away over the outer half of the tier's range (the specks fade in over the
+                // boulders' outer half: a wide crossfade, no visible edge)
+                const edge = Math.min(1, (range - dist) / (range * 0.5));
                 const a = mesh.instanceMatrix.array as Float32Array;
                 const p = cnt * 16;
                 for (let e = 0; e < 3; e++) {
