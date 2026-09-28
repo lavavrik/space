@@ -6,7 +6,7 @@
  *   - its engines: a glow at the tail while it thrusts (orange; blue in FTL), a smaller one at the
  *     nose while it brakes;
  *   - in FTL a trail streaming behind it: a line along its motion, as long as TRAIL_S seconds of
- *     travel at its speed (up to 0.5 AU), bright at the ship and fading to nothing, which pulls in
+ *     travel at its speed (up to 0.2 AU), bright at the ship and fading to nothing, which pulls in
  *     after drop-out; your ship gets one too;
  *   - a flash as it enters or leaves FTL.
  * Positions are camera-relative (world − ship), like the rest of the scene.
@@ -16,6 +16,8 @@ import { THREE } from '../lib/three';
 import { FLASH_S, easeTrail, type Npc } from '../sim/traffic';
 
 const MAX_SHIPS = 16;
+/** Turns the model (nose +z) to a ship's attitude (nose −z). */
+const FLIP = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
 
 const HULL_VS = `
 #include <common>
@@ -182,19 +184,19 @@ export class TrafficView {
     npcs.forEach((npc, i) => {
       const v = this.view(i);
       const rel = this.tmp.subVectors(npc.pos, ship.pos);
-      // hull: its own attitude (sim/traffic.ts turns it like a pilot would)
+      // hull: its ship's attitude (sim/traffic.ts flies it on the player's flight code)
       v.hull.visible = rel.length() < 200e3;
       if (v.hull.visible) {
         v.hull.position.copy(rel);
-        v.hull.quaternion.copy(npc.q);
+        v.hull.quaternion.copy(npc.q).multiply(FLIP); // the model's nose is +z, a ship's −z
       }
       // marker, and the engines: main at the tail while thrusting, retro at the nose while braking
-      const ftl = npc.phase === 'ftl';
+      const ftl = npc.ftl;
       dp.set([rel.x, rel.y, rel.z], nd * 3);
       dc.set(ftl ? [0.5, 0.9, 1.0] : [0.85, 0.85, 0.8], nd * 3);
       ds[nd++] = (ftl ? 5 : 3.5) * pxScale;
       if (npc.thrust !== 0) {
-        const nose = this.tmp2.set(0, 0, 1).applyQuaternion(npc.q);
+        const nose = this.tmp2.set(0, 0, -1).applyQuaternion(npc.q);
         const at = rel.clone().addScaledVector(nose, npc.thrust > 0 ? -36 : 34);
         dp.set([at.x, at.y, at.z], nd * 3);
         dc.set(ftl ? [0.6, 0.95, 1.4] : npc.thrust > 0 ? [1.4, 0.8, 0.4] : [1.0, 0.7, 0.45], nd * 3);

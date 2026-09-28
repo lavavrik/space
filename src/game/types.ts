@@ -102,37 +102,26 @@ export interface Npc {
   radius: number; // m, for the radar, scanner and clicks
   name: string;
   cls: string; // "Freighter", "Courier", …
-  seed: number;
-  at: Body | Station; // where it is or last was
-  to: Body | Station | null; // where it's going (depart, ftl, arrive)
-  phase: 'linger' | 'turn' | 'depart' | 'ftl' | 'arrive';
-  t: number; // seconds into the phase
-  dur: number; // the phase's length (s)
-  /** Linger offset from the body (m, world axes) and the circling rate (rad/s), for linger. */
-  off: Vec3;
-  spin: number;
-  /** Start of the current leg (world, m): where depart / ftl / arrive began. */
-  p0: Vec3;
-  pos: Vec3; // world, m
-  vel: Vec3; // m/s, system frame
+  /** Its ship's position (the same vector), velocity in the system frame, and attitude (the same
+   * quaternion; nose along −z like yours). Flown by sim/traffic.ts on the player's flight code. */
+  pos: Vec3;
+  vel: Vec3;
+  q: Quat;
+  /** In FTL, and its thrust this step: +1 along the nose (main engine), −1 against it, 0 coasting. */
+  ftl: boolean;
+  thrust: number;
+  /** What its captain is doing (sim/traffic.ts), where it is or last was, and where it's going. */
+  task: 'docked' | 'launch' | 'travel' | 'dock' | 'orbit';
+  at: Body | Station | null;
+  to: Body | Station | null;
+  /** Seconds into the task, and how long it stays (docked or in orbit) before moving on. */
+  t: number;
+  wait: number;
   /** The trail streaming behind it: length (m) and direction (world, unit). */
   trailL: number;
   trailDir: Vec3;
   /** Sim time of its last FTL entry or exit (the flash), or −∞. */
   flashAt: number;
-  /** Attitude (nose along +z), and how it's thrusting now: +1 main engine, −1 braking, 0 coasting. */
-  q: Quat;
-  thrust: number;
-  /** Departing: direction (world), speed and distance so far, relative to where it lingered. */
-  dir: Vec3;
-  sv: number;
-  ss: number;
-  /** Arriving: its offset from the destination and velocity against it at drop-out, and the spot it
-   * settles into (all relative to the destination; see sim/traffic.ts arrive). */
-  rel0: Vec3;
-  relV0: Vec3;
-  rel1: Vec3;
-  relV1: Vec3; // its velocity against the destination once parked (a world's orbit)
 }
 
 

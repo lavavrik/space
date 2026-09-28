@@ -89,6 +89,13 @@ export function Lamps({ lamps }: { lamps: Lamp[] }) {
         return (
           <Tip key={l.id} className={cx('lamp', l.state, l.blink && 'blink')} content={<LampTip l={l} />}>
             <I weight={l.state === 'off' ? 'regular' : 'fill'} aria-label={l.name} />
+            {l.progress !== undefined && (
+              // a ring round the icon filling clockwise from the top (Lamp.progress)
+              <svg className="lring" viewBox="0 0 24 24" aria-hidden>
+                <circle cx="12" cy="12" r="11" pathLength={1} className="lring-bg" />
+                <circle cx="12" cy="12" r="11" pathLength={1} strokeDasharray={`${l.progress} 1`} transform="rotate(-90 12 12)" />
+              </svg>
+            )}
           </Tip>
         );
       })}
@@ -139,7 +146,7 @@ function Approach({ a }: { a: ApproachView }) {
           {m.row >= 0 && <span className={cx('alabel', m.row === 1 && 'hi', m.x > 0.85 && 'flip')}>{m.label}</span>}
         </Tip>
       ))}
-      <span className="aship" style={{ left: `${a.shipX * 100}%` }} />
+      <span className={cx('aship', a.away && 'away')} style={{ left: `${a.shipX * 100}%` }} />
       <span className="abody" />
       <span className="ascale">{a.scale}</span>
       <span className="ascale zero">0</span>

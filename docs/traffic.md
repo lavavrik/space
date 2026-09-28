@@ -4,17 +4,25 @@ Other ships go about their business in each system (`sim/traffic.ts`, drawn by `
 
 ## What they do
 
-They don't fly with the player's physics, but they move like piloted ships. Each follows a scripted cycle between destinations (stations and worlds, not stars), worked out from the sim clock and the bodies' current positions. Time warp simply runs it faster.
+Each ship is flown by the same code as yours (`sim/traffic.ts`): gravity and patched conics, the FTL drive with its speed limits and drop-outs near worlds, the orbit autopilot (FTL transfer legs, insertion, circular orbits, station rendezvous) and the docking computer (it asks traffic control for a pad, waits, flies to the hold point, lines up with the slot, goes in and lands; after launch it flies out). Every ship has the best gear, like yours, and plenty of power.
 
-| Phase | What happens |
+**How:** each ship has a *pilot context*, `Object.create(game)`, with its own `Ship` and its own copy of every piece of flight state (frame body, station frame, dock and request, docking computer, power bus, messages, …; `pilotFor`). Everything else (the system, the sim clock) is read through to the game. The flight functions take that context in place of the game, so they run unchanged, and nothing they write reaches your ship. One step (`fly`) is the normal-flight branch of `sim/update.ts`: charge, frames, then the docking computer, the autopilot or hands-off flight assist, then contact with worlds and stations. Before the bodies move each frame, each ship's offset from its frame body is noted (`rideTraffic`), so it's carried along with that body as yours is.
+
+**The captain** only decides; the computers fly:
+
+| Task | What happens |
 |---|---|
-| **linger** | parked 2–6 km off a station, holding its heading, or in a low orbit round a world at the real orbital speed, nose along the orbit; 40–150 s |
-| **turn** | swings its nose toward the next destination at up to ~9°/s (`TURN_RATE`), still parked |
-| **depart** | main engine: thrust builds up over 2.5 s to 30 m/s², pushing along the nose while still carried with the station or orbit it left, until it's doing 450 m/s against it |
-| **ftl** | a flash, then a straight leg with the speed easing up and back down (smootherstep). It takes 20 s + 25 s × log₁₀(1 + d / 10,000 km): ~20 s next door, ~2 min across an AU. It ends outside the destination's FTL limit (60 km off a station). |
-| **arrive** | a flash at drop-out, still moving fast. It brakes along a smooth curve in the destination's own frame (a Hermite curve from its drop-out point and speed to its parking spot and that spot's orbital velocity), so it slows all the way without overshooting. Its nose points along its motion (braking thrusters at the nose), and it parks on the side it came in from, never cutting across a world. |
+| **docked** | on a pad for 40–240 s, tanks filled, then launches (K) |
+| **launch** | the docking computer lifts it off the pad and flies it out through the slot |
+| **travel** | picks somewhere else: a station (60 %: autopilot rendezvous) or a world (autopilot into a circular equatorial orbit). The autopilot takes an FTL leg when it's worth it, climbing out of any mass lock first, exactly as for you |
+| **dock** | matched with the station, the docking computer takes over: request, wait for the pad, hold point, slot, pad |
+| **orbit** | in orbit round the world for 60–300 s, then travel again |
 
-They don't collide, dock, answer hails, or use the entry corridors yet.
+A leg taking over 30 min is given up for another destination. A ship that crashes (it shouldn't) is replaced by a new one docked at a station. At first most ships are docked and the rest in orbit, with their waits staggered so the first leave within a minute or so.
+
+**Time warp:** a ship on a pad or coasting in orbit takes the warped step at once (on rails, like yours). One that's manoeuvring is stepped at most 10 × 0.1 s per frame, so under high warp it falls behind the clock (still carried with its frame body).
+
+They don't collide with each other or with you, and don't use the entry corridors' lights yet.
 
 ## Radar, targeting and scanning
 
@@ -27,7 +35,7 @@ Ships are targets like bodies and stations (`types.ts Npc`, kind `ship`).
 | Scanned | Reveals |
 |---|---|
 | 25 % | class and name ("Hauler Meridian") |
-| 50 % | what it's doing (holding near, leaving, in FTL, arriving at) |
+| 50 % | what it's doing (docked at, launching from, FTL transfer to, closing on, waiting for clearance, docking at, in orbit round) |
 | 75 % | where it's bound |
 
   The info panel (I) shows these rows plus your distance and relative speed. Your home system's ships aren't known in advance; you have to find them.
@@ -37,8 +45,8 @@ Ships are targets like bodies and stations (`types.ts Npc`, kind `ship`).
 ## On screen
 
 - **Marker:** a dot a few pixels across from any distance, cyan in FTL.
-- **Engines:** a glow at the tail while the main engine fires (orange; blue in FTL) and a smaller one at the nose while it brakes.
+- **Engines:** a glow at the tail while it thrusts along its nose (orange; blue in FTL), a smaller one at the nose while it thrusts against it (worked out from its change of velocity, less gravity's share).
 - **Model:** within 200 km, a small procedural ship (~60 m: tapered hull, nose cone, cockpit, twin engine pods on pylons, a fin) at its own attitude, lit by the star.
-- **Trail:** in FTL a trail streams behind each ship: a line along its motion, as long as 30 s of travel at its current speed (`TRAIL_S`), capped at 0.5 AU (`TRAIL_MAX`). It's bright at the ship and fades to nothing at the tail, grows as the ship speeds up, and pulls back in after it drops out (eased, `TRAIL_EASE`). Your own ship gets the same trail in FTL, streaming back along your course.
+- **Trail:** in FTL a trail streams behind each ship: a line along its motion, as long as 30 s of travel at its current speed (`TRAIL_S`), capped at 0.2 AU (`TRAIL_MAX`). It's bright at the ship and fades to nothing at the tail, grows as the ship speeds up, and pulls back in after it drops out (eased, `TRAIL_EASE`). Your own ship gets the same trail in FTL, streaming back along your course.
 - **Flash:** a burst that swells and fades over 0.8 s where a ship enters or leaves FTL (`FLASH_S`).
 - **Label:** beside any ship the radar has found within 500,000 km: its name once scanned, and its distance (or "FTL") (`Overlay.ts TRAFFIC_LABEL`).

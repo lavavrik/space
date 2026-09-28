@@ -32,7 +32,8 @@ import { dockKey, launch, refuelDocked, type Dock } from './sim/docking';
 import type { AutoPhase } from './sim/autodock';
 import { fitBattery, fitModule, removeModule } from './outfit/fit';
 
-function newShip(): Ship {
+/** A ship with full tanks and the best gear (yours, and every other ship's: sim/traffic.ts). */
+export function newShip(): Ship {
   return {
     pos: new THREE.Vector3(), vel: new THREE.Vector3(), q: new THREE.Quaternion(),
     mode: 'normal', throttle: 0, cruise: false, ftlSpeed: 0, ftlCharge: 0, vmax: 0,
@@ -241,7 +242,6 @@ export class Game {
     updateBodies(bodies, this.simTime);
     updateStations(stations, this.simTime);
     this.cur = { sys, bodies, star: bodies[0] as CurrentSystem['star'], stations };
-    this.traffic = spawnTraffic(this.cur);
     this.frameBody = this.cur.star; // callers place the ship and then pick its frame
     this.dock = null;
     this.dockRequest = null;
@@ -251,6 +251,7 @@ export class Game {
     this.nearby = systemsNear(sys.pos, JUMP_RANGE + 1).filter((s) => s.id !== sys.id);
     this.sky = systemsNear(sys.pos, SKY_RADIUS);
     this.scene.setSystem(this.cur, this.sky);
+    this.traffic = spawnTraffic(this); // after the system's state is reset: each ship copies it
     this.target = null;
     this.scanning = null;
     this.refFrame = null;

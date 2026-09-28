@@ -14,7 +14,7 @@ import { galPos } from '../sim/navigation';
 import { apLabel, evalPlan } from '../sim/orbits';
 import { deltaVLeft, dryMass } from '../sim/resources';
 import { battCap } from '../sim/power';
-import { massLock } from '../sim/ftl';
+import { MASS_LOCK_K, dropAlt, massLock } from '../sim/ftl';
 import { surfaceDist, surfaceRadius } from '../sim/terrain';
 import { surfaceLimit } from '../sim/flight';
 import { TEMP, nextLimit } from '../sim/thermal';
@@ -100,12 +100,15 @@ function flightMode(g: Game): [string, FlightView['modeClass']] {
 /** Dashboard tell-tales (see Lamp in hud/types.ts). */
 function lamps(g: Game): Lamp[] {
   const { ship, power } = g;
-  const L = (id: Lamp['id'], on: unknown, name: string, key: string | undefined, detail: string | undefined, state: Lamp['state'] = 'on', blink = false): Lamp => ({
-    id, name, key, detail, state: on ? state : 'off', blink: !!on && blink,
+  const L = (id: Lamp['id'], on: unknown, name: string, key: string | undefined, detail: string | undefined, state: Lamp['state'] = 'on', blink = false, progress?: number): Lamp => ({
+    id, name, key, detail, state: on ? state : 'off', blink: !!on && blink, progress: on && progress !== undefined ? Math.min(1, Math.max(0, progress)) : undefined,
   });
   const charging = g.jump?.phase === 'charge' || ship.ftlCharge > 0;
   const rad = ship.outfit.radiatorsOut;
   const lock = ship.mode === 'normal' && !g.jump ? massLock(g) : null;
+  // how far out of the lock: height over the world as a share of the lock's reach (sim/ftl.ts)
+  const lockOut = lock ? Math.max(0, lock.pos.distanceTo(ship.pos) - lock.radius) / (dropAlt(lock) * MASS_LOCK_K) : 0;
+  const chargeDone = g.jump?.phase === 'charge' ? 1 - g.jump.t / JUMP_CHARGE_TIME : ship.ftlCharge > 0 ? 1 - ship.ftlCharge / FTL_CHARGE_TIME : 0;
   const cap = battCap(ship);
   const battLow = ship.batt < cap * 0.1;
   const ap = ship.ap;
@@ -122,16 +125,16 @@ function lamps(g: Game): Lamp[] {
     // ship systems
     L('sun', ship.sunTrack, 'Sun tracking', 'P', `Keeps the solar panels on the star · ${fmtPower(power.solar)}`),
     L('lights', g.lights, 'Headlights', 'Shift+L', g.lights ? `Drawing ${fmtPower(power.lightsKW)}` : undefined),
-    L('radiators', rad > 0, 'Radiators', 'Shift+R', rad > 0 ? (rad < 1 ? `Moving · ${Math.round(rad * 100)}% out` : 'Deployed · thrust limited') : radiatorsFitted(ship.outfit).length ? 'Stowed' : 'None fitted', 'on', rad > 0 && rad < 1),
+    L('radiators', rad > 0, 'Radiators', 'Shift+R', rad > 0 ? (rad < 1 ? `Moving · ${Math.round(rad * 100)}% out` : 'Deployed · thrust limited') : radiatorsFitted(ship.outfit).length ? 'Stowed' : 'None fitted', 'on', rad > 0 && rad < 1, rad > 0 && rad < 1 ? rad : undefined),
     L('pump', power.pumpKW > 0, 'Heat pump', undefined, power.pumpKW > 0 ? `Running · ${fmtPower(power.pumpKW)}` : pumpFitted(ship.outfit) ? 'Idle · runs when the hull is hot' : 'None fitted'),
     L('vent', ship.vent, 'Hydrogen vent', 'R', 'Dumps hydrogen through the heat exchanger to cool the hull', 'ftl'),
     L('scoop', ship.scoop, 'Fuel scoop', undefined, ship.scoop || 'Not scooping', 'ftl'),
     L('radar', g.radar.sweep > 0, 'Radar sweep', 'Shift+Y', g.radar.sweep > 0 ? `${g.radar.sweep.toFixed(1)} s left` : 'Idle', 'on', true),
     L('shore', power.shore > 0, 'Shore power', undefined, power.shore > 0 ? `Station supplying ${fmtPower(power.shore)}` : 'Only when docked'),
     // warnings and modes
-    L('charge', charging, g.jump ? 'Hyperdrive charging' : 'FTL drive charging', g.jump ? 'H' : 'J', charging ? `${Math.max(0, g.jump?.t ?? ship.ftlCharge).toFixed(1)} s at full power` : undefined, 'ftl', true),
+    L('charge', charging, g.jump ? 'Hyperdrive charging' : 'FTL drive charging', g.jump ? 'H' : 'J', charging ? `${Math.max(0, g.jump?.t ?? ship.ftlCharge).toFixed(1)} s at full power` : undefined, 'ftl', true, charging ? chargeDone : undefined),
     L('entry', g.aero.heatW > 1e6, 'Entry heating', undefined, g.aero.heatW > 1e6 ? `${fmtPower(g.aero.heatW / 1000)} into the hull at ${Math.round(g.aero.speed)} m/s · slow down, nose first` : 'Not in air at speed', 'warn', g.aero.heatW > 1e8),
-    L('masslock', lock, 'Mass lock', undefined, lock ? `${lock.name} is too close for FTL` : 'Clear for FTL', 'warn'),
+    L('masslock', lock, 'Mass lock', undefined, lock ? `${lock.name} is too close for FTL · ${Math.round(lockOut * 100)}% of the way out (${fmtDist(dropAlt(lock) * MASS_LOCK_K)} up)` : 'Clear for FTL', 'warn', false, lock ? lockOut : undefined),
     L('hot', ship.temp >= TEMP.warn, 'Hull temperature', undefined, `${ship.temp.toFixed(0)} K · warning at ${TEMP.warn} K`, 'warn', ship.temp >= TEMP.drives),
     L('battery', battLow, 'Battery low', undefined, `${fmtEnergy(ship.batt)} of ${fmtEnergy(cap)}`, 'warn', ship.batt < 1),
     L('power', power.limited, 'Power short', undefined, power.limited ? `${power.limited.what} got ${Math.round(power.limited.frac * 100)}% of what it asked for` : 'The bus covers every load', 'warn'),
@@ -245,7 +248,7 @@ function target(g: Game): TargetView {
   const closing = vel.dot(dir);
   const type = sp < SCAN_STAGE.type ? (t.kind === 'ship' ? 'SHIP' : 'UNKNOWN') : t.kind === 'station' ? 'ORBITAL STATION' : t.kind === 'ship' ? t.cls.toUpperCase() : t.typeName.toUpperCase();
   const inside = g.inStation === t;
-  return { name: contactLabel(g, t), type, distance: inside ? (g.dock?.docked ? 'DOCKED' : 'INSIDE') : fmtDist(d), eta: closing > 1 ? `ETA ${fmtTime(d / closing)}` : 'NOT CLOSING', none: false, scan, scanFrac: sp, approach: inside ? null : approachView(g, t, d) };
+  return { name: contactLabel(g, t), type, distance: inside ? (g.dock?.docked ? 'DOCKED' : 'INSIDE') : fmtDist(d), eta: closing > 1 ? `ETA ${fmtTime(d / closing)}` : 'NOT CLOSING', none: false, scan, scanFrac: sp, approach: inside ? null : approachView(g, t, d, closing) };
 }
 
 function systems(g: Game): SystemsView {

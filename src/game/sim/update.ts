@@ -1,4 +1,4 @@
-import { updateTraffic } from './traffic';
+import { rideTraffic, updateTraffic } from './traffic';
 import { noAero, updateAero } from './atmosphere';
 import { JUMP_DEPART_TIME, SHIP } from '../constants';
 import type { Game } from '../Game';
@@ -101,7 +101,8 @@ export function update(g: Game, dt: number, realDt = dt) {
   chargeFTL(g, dt);
   updateJump(g, dt);
 
-  // --- orbits (the ship rides along with its frame body) and planet spin
+  // --- orbits (the ship rides along with its frame body, as do the other ships) and planet spin
+  if (!inTunnel) rideTraffic(g);
   advanceBodies(g);
   for (const b of g.cur.bodies) b.rot += b.spin * dt;
   if (!inTunnel) updateTraffic(g, dt); // other ships (sim/traffic.ts)

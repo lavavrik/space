@@ -20,7 +20,7 @@ import { HOLD_OUT } from '../sim/autodock';
 import { DOCK_REQUEST_RANGE } from '../sim/docking';
 import { CLEARANCE, SURF_K } from '../sim/flight';
 import { FRAME_ENTER, SURFACE_FRAME_ALT, TARGET_FRAME_ENTER } from '../sim/frame';
-import { dropAlt } from '../sim/ftl';
+import { MASS_LOCK_K, dropAlt } from '../sim/ftl';
 import { minOrbitAlt } from '../sim/orbits';
 import { reliefAmp } from '../sim/terrain';
 import { atmoOf } from '../sim/atmosphere';
@@ -53,7 +53,7 @@ function milestones(g: Game, t: Target): Raw[] {
   if (t.kind === 'ship') return out; // another ship: nothing to mark on the way
   const b = t;
   if (b.kind !== 'star') add(b.soi - b.radius, 'GRAVITY', `Sphere of influence: ${b.name}'s gravity dominates, its frame and orbits from here`, 'info');
-  add(dropAlt(b) * 1.15, 'MASS LOCK', "Mass lock: FTL can't be engaged closer", 'warn');
+  add(dropAlt(b) * MASS_LOCK_K, 'MASS LOCK', "Mass lock: FTL can't be engaged closer", 'warn');
   add(dropAlt(b), 'FTL DROP', 'FTL drops out here', 'ftl');
   if (b.kind === 'star') {
     add(fluxDist(b.L, ARRIVE_FLUX, b.radius) - b.radius, 'ARRIVAL', 'Where hyperjumps arrive (20× Earth’s sunlight)', 'info');
@@ -72,7 +72,8 @@ function milestones(g: Game, t: Target): Raw[] {
   return out;
 }
 
-export function approachView(g: Game, t: Target, d: number): ApproachView {
+/** `closing`: closing speed (m/s); negative while the ship is getting farther away. */
+export function approachView(g: Game, t: Target, d: number, closing: number): ApproachView {
   const raw = milestones(g, t);
   const size = t.kind === 'station' ? t.size : t.radius;
   // the window: a power of two past 1.5× the ship's distance, at least a few target sizes
@@ -92,5 +93,6 @@ export function approachView(g: Game, t: Target, d: number): ApproachView {
     m.row = free ?? -1;
     if (free !== undefined) end[free] = b;
   }
-  return { shipX: x(Math.max(0, d)), marks, scale: fmtDist(D) };
+  // the ship's arrow points the way it's going: at the target, or away from it (left) while receding
+  return { shipX: x(Math.max(0, d)), away: closing < -1, marks, scale: fmtDist(D) };
 }

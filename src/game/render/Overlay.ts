@@ -456,7 +456,7 @@ export class Overlay {
       const s = this.toScreen(g, rel);
       const onScreen = !s.behind && s.x > 0 && s.x < W && s.y > 0 && s.y < H;
       const name = contactLabel(g, npc);
-      const ftl = npc.phase === 'ftl';
+      const ftl = npc.ftl;
       const text = `${name} · ${ftl ? 'FTL' : fmtDist(d)}`;
       if (!onScreen) {
         if (isT) this.edgeArrow(s.v, CYA, text);

@@ -12,7 +12,7 @@ import { scoopFitted } from '../outfit/catalog';
 import { fmtDist, fmtPower, fmtSpeedText } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
-import { dropAlt, ftlSpeedLimit, massLock, wellFactor } from '../sim/ftl';
+import { MASS_LOCK_K, dropAlt, ftlSpeedLimit, massLock, wellFactor } from '../sim/ftl';
 import type { Body } from '../types';
 import type { InfluencesView, Readout } from './types';
 
@@ -68,7 +68,7 @@ export function buildInfluences(g: Game): InfluencesView {
   const ftl: [string, string | Readout][] = [];
   const lock = massLock(g);
   if (lock) {
-    const climb = dropAlt(lock) * 1.15 - (ship.pos.distanceTo(lock.pos) - lock.radius);
+    const climb = dropAlt(lock) * MASS_LOCK_K - (ship.pos.distanceTo(lock.pos) - lock.radius);
     ftl.push(['MASS LOCK', { text: `${lock.name} · climb ${fmtDist(Math.max(0, climb))} to clear`, warn: true }]);
   } else ftl.push(['MASS LOCK', 'clear · FTL can start']);
   let capBody: Body | null = null,

@@ -18,11 +18,14 @@ export function dropAlt(b: Body) {
   return b.kind === 'star' ? b.radius * 0.6 : Math.max(b.radius * 0.12, 30e3);
 }
 
+/** The mass lock reaches this many times a world's FTL drop-out altitude. */
+export const MASS_LOCK_K = 1.15;
+
 /** The body whose gravity well stops the FTL drive from starting, if any. */
 export function massLock(g: Game) {
   for (const b of g.cur.bodies) {
     const alt = b.pos.distanceTo(g.ship.pos) - b.radius;
-    if (alt < dropAlt(b) * 1.15) return b;
+    if (alt < dropAlt(b) * MASS_LOCK_K) return b;
   }
   return null;
 }
@@ -94,7 +97,7 @@ export function toggleFTL(g: Game) {
   }
   const lock = massLock(g);
   if (lock) {
-    g.showMsg(`Mass-locked by ${lock.name} · climb above ${fmtDist(dropAlt(lock) * 1.15)}`, 'warn');
+    g.showMsg(`Mass-locked by ${lock.name} · climb above ${fmtDist(dropAlt(lock) * MASS_LOCK_K)}`, 'warn');
     return;
   }
   const blocked = ftlBlocked(ship);
@@ -176,6 +179,33 @@ export function chargeFTL(g: Game, dt: number) {
   }
 }
 
+/** Flying at a station in FTL, the drive drops out this far from it (m). */
+export const STATION_DROP = 100e3;
+
+/**
+ * A station the ship, flying `step` metres along its course this frame, comes within STATION_DROP
+ * of while closing on it, and how far along the step (s, m) that happens. Leaving one (starting FTL
+ * right beside it) doesn't count.
+ */
+function stationAhead(g: Game, step: number) {
+  const { ship } = g;
+  const dir = ship.travelDir;
+  for (const st of g.cur.stations) {
+    const rel = tmpS.subVectors(st.pos, ship.pos);
+    const along = rel.dot(dir);
+    if (along <= 0) continue; // behind: moving away
+    const d2 = rel.lengthSq(),
+      R2 = STATION_DROP * STATION_DROP;
+    const perp2 = d2 - along * along;
+    if (perp2 >= R2) continue; // the course passes wide of it
+    // where the course enters the bubble (or here, if already inside it and still closing)
+    const s = Math.max(0, along - Math.sqrt(R2 - perp2));
+    if (s <= step) return { st, s };
+  }
+  return null;
+}
+const tmpS = new THREE.Vector3();
+
 /** Throttle lost per second with cruise control off and W released: from full to idle in ~6 s. */
 const SPOOL_DOWN = 0.17;
 
@@ -204,7 +234,19 @@ export function ftlCruise(g: Game, dt: number) {
   if (ship.ftlSpeed < tgt) ship.ftlSpeed = Math.min(tgt, ship.ftlSpeed * Math.exp(1.5 * dt) + 20000 * dt);
   else ship.ftlSpeed = Math.max(tgt, ship.ftlSpeed * Math.exp(-2.5 * dt));
   ship.ftlSpeed = Math.min(ship.ftlSpeed, vmax);
-  ship.pos.addScaledVector(ship.travelDir, ship.ftlSpeed * dt);
+  const step = ship.ftlSpeed * dt;
+  // closing on a station: drop out STATION_DROP from it, matched to its orbit (at FTL speed that
+  // bubble can be crossed in a frame, so check along this frame's whole path)
+  const st = stationAhead(g, step);
+  if (st) {
+    ship.pos.addScaledVector(ship.travelDir, st.s);
+    dropFTL(g, false);
+    ship.vel.copy(stationVel(g, st.st));
+    g.refFrame = st.st;
+    g.showMsg(`Dropped out approaching ${st.st.name} · matched its orbit`);
+    return;
+  }
+  ship.pos.addScaledVector(ship.travelDir, step);
   g.curSpeed = ship.ftlSpeed;
   if (ftlUpkeep(g, dt, ship.throttle)) {
     for (const b of g.cur.bodies) {

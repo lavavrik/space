@@ -124,8 +124,11 @@ export function updateDockRequest(g: Game, dt: number) {
   g.invalidateHud();
 }
 
-/** The ship's last clear position (station unit coordinates) near each station, for bouncing back to. */
-const lastClear = new WeakMap<Station, THREE.Vector3>();
+/**
+ * Each ship's last clear position (station unit coordinates) near each station, for bouncing back
+ * to. Per ship: other ships (sim/traffic.ts) fly this same code.
+ */
+const clearSpots = new WeakMap<object, WeakMap<Station, THREE.Vector3>>();
 
 /**
  * After the ship moves: collide with any station it's near, notice when it's inside one, and dock
@@ -133,6 +136,7 @@ const lastClear = new WeakMap<Station, THREE.Vector3>();
  */
 export function stationContact(g: Game) {
   const { ship } = g;
+  const lastClear = clearSpots.get(ship) ?? clearSpots.set(ship, new WeakMap()).get(ship)!;
   // the docking computer's reference: the ship's offset from its station at the end of the step
   const ds = g.dock?.station ?? g.autodockStation;
   if (ds) g.dockRel.subVectors(ship.pos, ds.pos);

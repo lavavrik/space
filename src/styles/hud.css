@@ -107,6 +107,9 @@
 .lamp.on { opacity: 1; filter: drop-shadow(0 0 .3rem currentColor); }
 .lamp.ftl { opacity: 1; color: var(--cyan); filter: drop-shadow(0 0 .3rem currentColor); }
 .lamp.warn { opacity: 1; color: var(--red); filter: drop-shadow(0 0 .3rem currentColor); }
+.lamp { position: relative; }
+.lring { position: absolute; inset: -.1rem; width: calc(100% + .2rem); height: calc(100% + .2rem); fill: none; stroke: currentColor; stroke-width: 1.6; pointer-events: none; }
+.lring .lring-bg { stroke-opacity: .2; }
 .lamp.blink { animation: lampBlink 1s steps(2, jump-none) infinite; }
 @keyframes lampBlink { 50% { opacity: .35; } }
 
@@ -144,6 +147,7 @@
 .alabel { position: absolute; left: 3px; top: 0; font-size: .6rem; font-weight: 700; letter-spacing: .08em; white-space: nowrap; }
 .alabel.hi { top: .75rem; }
 .alabel.flip { left: auto; right: 3px; } /* near the right end: label on the tick's left */
+.aship.away { transform: scaleX(-1); margin-left: -.05rem; } /* tip on the ship's spot, pointing left */
 .aship { position: absolute; top: calc(2.1rem - .38rem); width: 0; height: 0; margin-left: -.55rem; border-top: .38rem solid transparent; border-bottom: .38rem solid transparent; border-left: .6rem solid var(--text); transition: left .5s ease; filter: drop-shadow(0 0 .25rem var(--text)); }
 .abody { position: absolute; right: -.3rem; top: calc(2.1rem - .55rem); width: .6rem; height: 1.1rem; border-radius: .6rem 0 0 .6rem; background: var(--amber-dim); }
 .ascale { position: absolute; left: 10%; top: 2.35rem; font: .62rem "Share Tech Mono", ui-monospace, monospace; color: var(--amber-dim); }

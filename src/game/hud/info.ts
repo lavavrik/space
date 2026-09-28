@@ -7,6 +7,7 @@ import { THREE } from '../lib/three';
 import { velRel } from '../sim/frame';
 import { orbitElementsRel } from '../sim/gravity';
 import { resolvable, SCAN_STAGE, scanProgress } from '../sim/scanner';
+import { npcStatus } from '../sim/traffic';
 import type { Body, KeplerOrbit, Npc, Station, Target } from '../types';
 import type { InfoView, Readout } from './types';
 
@@ -49,10 +50,9 @@ function shipInfo(g: Game, t: Npc): InfoView {
   const p = scanProgress(g, t);
   const hint: [string, string] = ['SCAN', scanHint(g, t, p)];
   const physical: [string, string][] = p >= SCAN_STAGE.type ? [['CLASS', t.cls], ['LENGTH', '≈ 60 m']] : [hint];
-  const doing = { linger: `holding near ${t.at.name}`, turn: `turning to leave ${t.at.name}`, depart: `leaving ${t.at.name}`, ftl: 'in FTL', arrive: `arriving at ${t.to?.name ?? t.at.name}` }[t.phase];
   const orbit: [string, string][] = [];
-  if (p >= SCAN_STAGE.physical) orbit.push(['STATUS', doing]);
-  if (p >= SCAN_STAGE.orbit) orbit.push(['BOUND FOR', t.to ? t.to.name : `${t.at.name} (staying)`]);
+  if (p >= SCAN_STAGE.physical) orbit.push(['STATUS', npcStatus(t)]);
+  if (p >= SCAN_STAGE.orbit) orbit.push(['BOUND FOR', t.to ? t.to.name : `${t.at?.name ?? '—'} (staying)`]);
   if (p < SCAN_STAGE.orbit) orbit.push(hint);
   const rv = g.ship.pos.clone().sub(t.pos);
   const v = g.ship.vel.clone().add(g.frameBody.vel).sub(t.vel);

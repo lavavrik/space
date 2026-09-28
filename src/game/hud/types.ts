@@ -64,6 +64,8 @@ export interface ApproachMark {
 }
 export interface ApproachView {
   shipX: number;
+  /** Getting farther from the target: the ship marker points away (left). */
+  away: boolean;
   marks: ApproachMark[];
   scale: string; // the window's far edge
 }
@@ -252,6 +254,8 @@ export interface Lamp {
   detail?: string;
   state: 'off' | 'on' | 'ftl' | 'warn';
   blink?: boolean;
+  /** 0…1: a ring round the icon fills with it (how far out of a mass lock, radiators moving, a drive charging). */
+  progress?: number;
 }
 
 export interface HudSnapshot {

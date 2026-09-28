@@ -140,8 +140,14 @@ void main(){
     col=col*vHazeT+vHaze;
 #else
     vec3 vd=normalize(vWP);
+    // End the ray on the true sphere, not the mesh: its flat faces sag inside the sphere (up to
+    // ~R·(π/segments)²/2, tens of km on a giant, a good part of its scale height), and the haze then
+    // traced out every face as a fine square grid. (Perpendicular form, as b² − c cancels in float32.)
+    vec3 hp=uAtC-vd*dot(vd,uAtC);
+    float disc=uAtR*uAtR-dot(hp,hp);
+    vec3 P1=disc>0.0?vd*(dot(vd,uAtC)-sqrt(disc)):vWP;
     vec3 trans;
-    vec3 haze=atInscatter(vd*atSpan(vd).x,vWP,L,trans,5);
+    vec3 haze=atInscatter(vd*atSpan(vd).x,P1,L,trans,5);
     col=col*trans+haze;
 #endif
   } else {
