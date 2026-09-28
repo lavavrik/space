@@ -44,6 +44,8 @@ export function ringDensity(b: World, rR: number) {
  * specks; beyond it the disc's band takes over, with a sparse grain of far specks on it.
  */
 export interface RockLayer {
+  /** Close by, the same rocks drawn with a finer mesh (subdivision), out to `cut` (m). */
+  near?: { detail: number; cut: number };
   grid: number;
   range: number;
   perCell: number;
@@ -54,9 +56,9 @@ export interface RockLayer {
   fadeTo: number;
 }
 export const ROCK_LAYERS: RockLayer[] = [
-  { grid: 128, range: 3e3, perCell: 3, minR: 1.5, maxR: 10, detail: 0, inner: 0, fadeTo: 0 }, // pebbles
-  { grid: 128, range: 25e3, perCell: 3, minR: 10, maxR: 70, detail: 1, inner: 0, fadeTo: 0 }, // rocks
-  { grid: 128, range: 150e3, perCell: 4, minR: 70, maxR: 500, detail: 1, inner: 0, fadeTo: 0 }, // boulders
+  { grid: 128, range: 3e3, perCell: 3, minR: 1.5, maxR: 10, detail: 1, inner: 0, fadeTo: 0, near: { detail: 3, cut: 300 } }, // pebbles
+  { grid: 128, range: 25e3, perCell: 3, minR: 10, maxR: 70, detail: 1, inner: 0, fadeTo: 0, near: { detail: 3, cut: 3000 } }, // rocks
+  { grid: 128, range: 150e3, perCell: 4, minR: 70, maxR: 500, detail: 1, inner: 0, fadeTo: 0, near: { detail: 3, cut: 10000 } }, // boulders
   // the boulders as specks: 4 per (2.34 km)² → 16 per (4.7 km)², fading in as they shrink away
   { grid: 256, range: 600e3, perCell: 16, minR: 70, maxR: 500, detail: -1, inner: 75e3, fadeTo: 150e3 },
   // sparse grain on the disc far off

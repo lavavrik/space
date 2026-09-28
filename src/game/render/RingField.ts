@@ -17,7 +17,6 @@
  * (ring.frag.glsl, uNearFade), and fully again once you're well above or below it.
  */
 import { THREE } from '../lib/three';
-import { snoise } from '../sim/terrain';
 import { DISC_FROM, RING_HALF_THICK, ROCK_LAYERS, type RockLayer, ringDensity } from '../sim/rings';
 import type { World } from '../types';
 
@@ -32,7 +31,7 @@ const FADE_ABOVE = 6000;
  */
 const ROCK_GLSL = `
 uniform sampler2D uBins;
-uniform float uK, uCell, uH, uInner, uFadeTo, uRange, uOut, uRc, uHc, uMinR, uMaxR, uSeed;
+uniform float uK, uCell, uH, uInner, uFadeTo, uRange, uOut, uRc, uHc, uMinR, uMaxR, uSeed, uCutMin, uCutMax;
 uniform vec3 uE1, uE2, uN, uColor;
 uvec3 pcg3(uvec3 v){
   v = v * 1664525u + 1013904223u;
@@ -51,7 +50,9 @@ float rnd(inout uint s){
 bool ringRock(int id, out vec3 p, out float size, out float tint, out float fade, out uint s){
   int K = int(uK);
   int cid = id / K, q = id - cid * K;
-  int bi = cid / GRID, bj = cid - bi * GRID;
+  // a fine-mesh layer draws only the central WINDOW × WINDOW cells of the grid (the same rocks)
+  int li = cid / WINDOW, lj = cid - li * WINDOW;
+  int bi = (GRID - WINDOW) / 2 + li, bj = (GRID - WINDOW) / 2 + lj;
   vec4 A = texelFetch(uBins, ivec2(bi, 0), 0), B = texelFetch(uBins, ivec2(bi, 1), 0);
   if (A.z <= 0.0) return false;
   int jrel = bj - GRID / 2;
@@ -65,7 +66,7 @@ bool ringRock(int id, out vec3 p, out float size, out float tint, out float fade
   float sh2 = sin(0.5 * dphi);
   p = uE1 * (rr * cos(dphi) - 2.0 * uRc * sh2 * sh2) + uE2 * ((uRc + rr) * sin(dphi)) + uN * (zz - uHc);
   float d = length(p);
-  if (d > uRange || d < uInner) return false;
+  if (d > uRange || d < uInner || d < uCutMin || d > uCutMax) return false; // (cuts: which mesh draws it)
   size = uMinR * pow(uMaxR / uMinR, pow(rnd(s), 2.2));
   tint = 0.5 + 0.6 * rnd(s);
   fade = (uFadeTo > 0.0 ? smoothstep(uInner, uFadeTo, d) : 1.0) * smoothstep(uRange, uRange * uOut, d);
@@ -79,35 +80,87 @@ float ringShadow(vec3 p){
   return (along < 0.0 && length(toP - along * L) < uPR) ? 0.0 : 1.0;
 }`;
 
+/**
+ * Rock meshes. Every rock has its own shape: the base icosphere's directions pushed out by three
+ * octaves of 3D noise at a per-rock offset (uNoise3D), then squashed and turned, with normals from the
+ * shape itself (finite differences on the sphere). The fragment shader adds fine relief (bump-mapped
+ * noise, scaled to the rock) and mottling, and lights it like regolith: Lommel–Seeliger (the Moon's
+ * flat-looking disc) mixed with Lambert, plus light from the giant it circles (planetshine).
+ */
+const ROCK_NOISE = `
+uniform highp sampler3D uNoise3D;
+float tn(vec3 p){ return textureLod(uNoise3D, p * 0.125, 0.0).r * 2.0 - 1.0; }
+`;
 const MESH_VS = `
 #include <common>
 #include <logdepthbuf_pars_vertex>
 ${ROCK_GLSL}
-varying vec3 vWP; varying vec3 vCol;
+${ROCK_NOISE}
+varying vec3 vWP; varying vec3 vN; varying vec3 vObj; varying vec3 vCol; varying float vSize; varying float vSh;
 vec3 qrot(vec4 q, vec3 v){ return v + 2.0 * cross(q.xyz, cross(q.xyz, v) + q.w * v); }
+float shape(vec3 d, vec3 o){ return 1.0 + 0.30 * tn(d * 0.9 + o) + 0.14 * tn(d * 2.1 + o.yzx) + 0.06 * tn(d * 4.7 + o.zxy); }
 void main(){
   vec3 c; float size, tint, fade; uint s;
   if (!ringRock(gl_InstanceID, c, size, tint, fade, s) || fade <= 0.0) {
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0); // off screen: no rock here
     return;
   }
-  // a random orientation (uniform quaternion) and a squash
+  // a random orientation (uniform quaternion), an elongation, and its own shape
   float u1 = rnd(s), u2 = rnd(s) * 6.2831853, u3 = rnd(s) * 6.2831853;
   vec4 q = vec4(sqrt(1.0 - u1) * sin(u2), sqrt(1.0 - u1) * cos(u2), sqrt(u1) * sin(u3), sqrt(u1) * cos(u3));
-  vec3 sc = vec3(0.6 + 0.4 * rnd(s), 0.55 + 0.45 * rnd(s), 1.0) * size * fade; // shrinks away with the fade
-  vWP = c + qrot(q, position * sc);
-  vCol = uColor * tint * ringShadow(c);
+  vec3 sc = vec3(1.0, 0.55 + 0.4 * rnd(s), 0.45 + 0.45 * rnd(s)) * size * fade; // shrinks away with the fade
+  vec3 o = vec3(rnd(s), rnd(s), rnd(s)) * 8.0;
+  vec3 d = normalize(position);
+  vec3 p0 = d * shape(d, o);
+#ifdef FINE
+  // up close: normals from the shape itself (finite differences on the sphere)
+  vec3 t1 = normalize(cross(d, abs(d.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0))), t2 = cross(d, t1);
+  vec3 d1 = normalize(d + 0.02 * t1), d2 = normalize(d + 0.02 * t2);
+  vec3 n = normalize(cross(d1 * shape(d1, o) - p0, d2 * shape(d2, o) - p0));
+  if (dot(n, d) < 0.0) n = -n;
+#else
+  // far off (a few pixels): the sphere's normal will do, a third of the noise lookups
+  vec3 n = d;
+#endif
+  vWP = c + qrot(q, p0 * sc);
+  vN = qrot(q, normalize(n / sc));
+  vObj = p0 + o;
+  vSize = size;
+  vCol = uColor * tint;
+  vSh = ringShadow(c);
   gl_Position = projectionMatrix * viewMatrix * vec4(vWP, 1.0);
   #include <logdepthbuf_vertex>
 }`;
 const MESH_FS = `
 #include <logdepthbuf_pars_fragment>
-uniform vec3 uLight; uniform float uExp;
-varying vec3 vWP; varying vec3 vCol;
+${ROCK_NOISE}
+uniform vec3 uLight, uPC; uniform float uPR, uPlanetA, uExp;
+varying vec3 vWP; varying vec3 vN; varying vec3 vObj; varying vec3 vCol; varying float vSize; varying float vSh;
+// bump mapping from a height field H (m) over the surface (screen-space derivatives; as planet.frag.glsl)
+vec3 bumpN(vec3 N, float H){
+  vec3 dpx = dFdx(vWP), dpy = dFdy(vWP);
+  float dhx = dFdx(H), dhy = dFdy(H);
+  vec3 r1 = cross(dpy, N), r2 = cross(N, dpx);
+  float det = dot(dpx, r1);
+  if (abs(det) < 1e-30) return N;
+  return normalize(abs(det) * N - sign(det) * (dhx * r1 + dhy * r2));
+}
 void main(){
   #include <logdepthbuf_fragment>
-  vec3 N = normalize(cross(dFdx(vWP), dFdy(vWP))); // faceted
-  gl_FragColor = vec4(vCol * (max(dot(N, normalize(uLight)), 0.0) + 0.004) * uExp, 1.0);
+  vec3 N = normalize(vN);
+  if (!gl_FrontFacing) N = -N;
+  // fine relief: knobs and pits a few percent of the rock's size
+  N = bumpN(N, (0.5 * tn(vObj * 9.0) + 0.25 * tn(vObj * 23.0) + 0.12 * tn(vObj * 51.0)) * vSize * 0.05);
+  vec3 L = normalize(uLight), V = normalize(-vWP);
+  float mu0 = max(dot(N, L), 0.0), mu = max(dot(N, V), 0.05);
+  float sun = mix(mu0, 2.0 * mu0 / (mu0 + mu), 0.6) * vSh; // Lommel–Seeliger, a little Lambert
+  // planetshine: the giant's sunlit face, seen from here (rough), falling off with distance
+  vec3 toPl = uPC - vWP;
+  float dp = length(toPl);
+  vec3 Lp = toPl / dp;
+  float shine = uPlanetA * (0.5 + 0.5 * dot(-Lp, L)) * (uPR * uPR) / (dp * dp) * max(dot(N, Lp), 0.0);
+  float mottle = 0.8 + 0.2 * tn(vObj * 3.1) + 0.1 * tn(vObj * 13.0);
+  gl_FragColor = vec4(vCol * mottle * (sun + shine + 0.002) * uExp, 1.0);
 }`;
 
 const DOT_VS = `
@@ -141,25 +194,20 @@ void main(){
   gl_FragColor = vec4(vC * uExp, 1.0);
 }`;
 
-/** A lumpy rock: an icosphere pushed in and out by noise, welded (shading is faceted in the shader). */
-function rockGeometry(seed: number, detail: number) {
+/** A unit icosphere, welded (the vertex shader shapes each rock from it: the instances are many, so vertex count matters). */
+function sphereGeometry(detail: number) {
   const g = new THREE.IcosahedronGeometry(1, detail);
-  // IcosahedronGeometry is non-indexed; weld it so each corner is one vertex (the grid of rocks is
-  // tens of thousands of instances: vertex count matters)
   const p = g.attributes.position as THREE.BufferAttribute;
   const map = new Map<string, number>();
   const verts: number[] = [],
     index: number[] = [];
-  const v = new THREE.Vector3();
   for (let i = 0; i < p.count; i++) {
     const k = `${p.getX(i).toFixed(5)},${p.getY(i).toFixed(5)},${p.getZ(i).toFixed(5)}`;
     let j = map.get(k);
     if (j === undefined) {
       j = verts.length / 3;
       map.set(k, j);
-      v.fromBufferAttribute(p, i);
-      const s = 1 + 0.32 * snoise(v.x * 1.3 + seed, v.y * 1.3, v.z * 1.3) + 0.12 * snoise(v.x * 3.1, v.y * 3.1 + seed, v.z * 3.1);
-      verts.push(v.x * s, v.y * s, v.z * s);
+      verts.push(p.getX(i), p.getY(i), p.getZ(i));
     }
     index.push(j);
   }
@@ -190,16 +238,24 @@ class Layer {
   private readonly data: Float32Array<ArrayBuffer>;
   private readonly uni: Record<string, THREE.IUniform>;
 
+  /**
+   * `lod`: this is the fine-mesh copy of a mesh layer, drawing only its rocks within `cut` (m) with a
+   * finer sphere (the coarse copy then skips those). Both see the same cells, so the same rocks.
+   */
   constructor(
     private readonly L: RockLayer,
     shared: Record<string, THREE.IUniform>,
     private readonly seedK: number,
+    lod?: { detail: number; cut: number },
   ) {
     const G = L.grid;
     this.data = new Float32Array(G * 2 * 4);
     this.bins = new THREE.DataTexture(this.data, G, 2, THREE.RGBAFormat, THREE.FloatType);
     this.bins.minFilter = this.bins.magFilter = THREE.NearestFilter;
     const mesh = L.detail >= 0;
+    const cell = (2 * L.range) / G;
+    // the fine copy covers just enough central cells to reach its cut (and a cell to spare)
+    const window = lod ? Math.min(G, 2 * Math.ceil(lod.cut / cell) + 2) : G;
     this.uni = {
       ...shared,
       uBins: { value: this.bins },
@@ -220,11 +276,14 @@ class Layer {
       uN: { value: new THREE.Vector3() },
       uColor: { value: new THREE.Color() },
       uPx: { value: 1 },
+      uCutMin: { value: !lod && L.near ? L.near.cut : 0 },
+      uCutMax: { value: lod ? lod.cut : 1e30 },
     };
-    const defines = { GRID: G };
-    const count = G * G * L.perCell;
+    const defines: Record<string, number | string> = { GRID: G, WINDOW: window };
+    if (lod) defines.FINE = '';
+    const count = window * window * L.perCell;
     if (mesh) {
-      const base = rockGeometry(1.1 + seedK * 7.3, L.detail);
+      const base = sphereGeometry(lod ? lod.detail : L.detail);
       const g = new THREE.InstancedBufferGeometry();
       g.setAttribute('position', base.attributes.position);
       g.setIndex(base.index);
@@ -298,12 +357,17 @@ const X = new THREE.Vector3(1, 0, 0),
 export class RingField {
   readonly group = new THREE.Group();
   private readonly layers: Layer[];
-  readonly uni = { uLight: { value: new THREE.Vector3() }, uPC: { value: new THREE.Vector3() }, uPR: { value: 1 } };
+  readonly uni = { uLight: { value: new THREE.Vector3() }, uPC: { value: new THREE.Vector3() }, uPR: { value: 1 }, uPlanetA: { value: 0.3 } };
   /** How far the flat disc should fade out around the camera (m; 0 when there are no rocks here). */
   nearFade = 0;
 
-  constructor(exp: THREE.IUniform) {
-    this.layers = ROCK_LAYERS.map((L, k) => new Layer(L, { ...this.uni, uExp: exp }, k));
+  constructor(exp: THREE.IUniform, noise: THREE.Texture) {
+    const shared = { ...this.uni, uExp: exp, uNoise3D: { value: noise } };
+    this.layers = [];
+    ROCK_LAYERS.forEach((L, k) => {
+      this.layers.push(new Layer(L, shared, k));
+      if (L.near) this.layers.push(new Layer(L, shared, k, L.near));
+    });
     for (const l of this.layers) this.group.add(l.object);
   }
 
@@ -345,6 +409,7 @@ export class RingField {
     this.uni.uLight.value.copy(light);
     this.uni.uPC.value.copy(rel);
     this.uni.uPR.value = R;
+    this.uni.uPlanetA.value = b.albedo;
     const fr: RingFrame = { b, e1: d1, e2: d2, n, r, h, thC, t, pxPerRad };
     const seed = Math.floor(ring.seed * 1e4);
     for (const l of this.layers) l.update(fr, seed);
