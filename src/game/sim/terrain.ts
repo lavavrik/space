@@ -9,7 +9,9 @@
  * fixed shift), with the offsets O_i worked out here in double precision. That fBm gives the
  * continents; on its own it's far too smooth up close (every slope ~1%), so mountain ranges are
  * added: ridged noise (sharp crests, detail gathering on them) from octave MTN_FROM, where octave 2
- * marks a range. Both come from the same noise samples, so they cost nothing extra. The texture octaves
+ * marks a range. Both come from the same noise samples, so they cost nothing extra. Moons also
+ * get impact craters (every other octave from 3 to 13, ~50 km down to ~20 m across on a
+ * Moon-sized world), placed by an integer hash that's exact in float32 and double alike. The texture octaves
  * (i ≥ FBM_EXACT) tile every 8 lattice cells, so their offsets are wrapped into [0, 8): that keeps
  * the shader's coordinates small, and so precise to ~17 octaves (tens of metres on an Earth) where
  * the unwrapped chain lost its precision past ~11.
@@ -34,7 +36,10 @@ const TERR_GAIN = 0.55,
   MTN_K = 1.3,
   MTN_MEAN = 0.3,
   FINE_FROM = 8, // from here both roughen (FINE_GAIN), so detail keeps coming as you descend
-  FINE_GAIN = 0.68;
+  FINE_GAIN = 0.68,
+  CRATER_FROM = 3,
+  CRATER_TO = 13,
+  CRATER_P = 0.5;
 /** Octaves the height function has at most (the shader's uTOff array size). */
 export const T_OCT_MAX = 17;
 /** Octaves of simplex noise before the texture takes over (noise3d.glsl FBM_EXACT). */
@@ -45,6 +50,8 @@ const PHYS_OCT = 14;
 const hasTerrain = (b: Body): b is World => b.kind !== 'star' && RELIEF[b.type] > 0;
 /** Relief amplitude (m); 0 for stars and giants. */
 export const reliefAmp = (b: Body) => (hasTerrain(b) ? RELIEF[b.type] * b.radius : 0);
+/** Moons are cratered (planets' craters have long since worn away, as far as this game goes). */
+export const hasCraters = (b: World) => b.kind === 'moon';
 /** Whether elevation is measured from a sea (seas flatten everything below it). */
 export const hasSea = (b: World) => b.type === WT.EarthLike || b.type === WT.Ocean;
 
@@ -73,8 +80,9 @@ const offsetsFor = (seed: number) => {
   return o;
 };
 
-/** Raw fBm h at a unit direction in the world's frame (the shader's terrH). */
-export function terrainH(seed: number, x: number, y: number, z: number, oct = PHYS_OCT) {
+/** Raw h at a unit direction in the world's frame (the shader's terrH). `crater` gives the world's
+ * radius and relief amplitude (m) if it has craters (moons). */
+export function terrainH(seed: number, x: number, y: number, z: number, oct = PHYS_OCT, crater?: { R: number; A: number }) {
   const O = offsetsFor(seed);
   let a = 0.5,
     s = 0,
@@ -82,7 +90,8 @@ export function terrainH(seed: number, x: number, y: number, z: number, oct = PH
   let am = 0.5,
     r = 0,
     w = 1,
-    mask = 0;
+    mask = 0,
+    cr = 0;
   for (let i = 0; i < oct; i++) {
     const qx = x * k + O[i * 3],
       qy = y * k + O[i * 3 + 1],
@@ -97,10 +106,41 @@ export function terrainH(seed: number, x: number, y: number, z: number, oct = PH
       w = Math.min(1, Math.max(0.25, rn * 1.4));
       am *= i >= FINE_FROM ? FINE_GAIN : MTN_GAIN;
     }
+    if (crater && i >= CRATER_FROM && i <= CRATER_TO && (i & 1) === 1) cr += craters(qx, qy, qz, k, crater.R, crater.A);
     k *= 2.03;
     a *= i >= FINE_FROM ? FINE_GAIN : TERR_GAIN;
   }
-  return s + mask * (r - MTN_MEAN) * MTN_K;
+  return s + mask * (r - MTN_MEAN) * MTN_K + cr;
+}
+
+/* Integer hashing that's exact in float32 (the shader) and double (here): values stay integers < 2^24. */
+const mod289i = (x: number) => x - Math.floor((x + 0.5) * (1 / 289)) * 289;
+const perm289 = (x: number) => mod289i((x * 34 + 1) * x);
+
+/** Crater relief (h units) at lattice point q (terrain.glsl `craters` has the details). */
+function craters(qx: number, qy: number, qz: number, k: number, R: number, A: number) {
+  const bx = Math.floor(qx - 0.5),
+    by = Math.floor(qy - 0.5),
+    bz = Math.floor(qz - 0.5);
+  let acc = 0;
+  for (let n = 0; n < 8; n++) {
+    const cx = bx + (n & 1),
+      cy = by + ((n >> 1) & 1),
+      cz = bz + (n >> 2);
+    const h = perm289(perm289(perm289(mod289i(cz) + 7) + mod289i(cy)) + mod289i(cx));
+    if (perm289(h + 5) / 289 > CRATER_P) continue;
+    const ex = cx + perm289(h + 1) / 289,
+      ey = cy + perm289(h + 2) / 289,
+      ez = cz + perm289(h + 3) / 289;
+    const r = 0.12 + (0.23 * perm289(h + 4)) / 289;
+    const x = Math.hypot(qx - ex, qy - ey, qz - ez) / r;
+    if (x > 1.4) continue;
+    const rho = (r * R) / k;
+    const depth = rho * 0.4 * Math.min(1, Math.sqrt(4000 / rho));
+    const prof = (x < 1 ? Math.max(x * x - 1, -0.85) : 0) + 0.3 * Math.exp(-(((x - 1) / 0.22) ** 2));
+    acc += (prof * depth) / A;
+  }
+  return acc;
 }
 
 const smoothstep = (e0: number, e1: number, x: number) => {
@@ -112,7 +152,7 @@ const smoothstep = (e0: number, e1: number, x: number) => {
 export function elevationLocal(b: World, x: number, y: number, z: number, oct = PHYS_OCT) {
   const A = reliefAmp(b);
   if (!A) return 0;
-  const h = terrainH(b.seed, x, y, z, oct);
+  const h = terrainH(b.seed, x, y, z, oct, hasCraters(b) ? { R: b.radius, A } : undefined);
   return A * (hasSea(b) ? Math.max(0, h - b.pal.sea) : h);
 }
 

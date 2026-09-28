@@ -203,7 +203,6 @@ export class TerrainView {
       uniforms: {
         ...this.uni,
         uVOct: { value: vOct },
-        uRadius: { value: R },
         uSpacing: { value: spacing },
         uSkirtD: { value: spacing * 4 + this.A * 0.6 ** vOct },
       },

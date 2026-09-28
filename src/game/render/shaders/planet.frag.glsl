@@ -6,6 +6,7 @@ uniform float uExp; // exposure (render/exposure.ts)
 uniform float uCamAlt; // camera height above the mean radius (m)
 varying vec3 vObj; varying vec3 vWN; varying vec3 vWP;
 varying float vOct; // octaves the geometry already shows (0 on the far sphere; planet.vert.glsl)
+varying float vShadow; // mountains' shadows (1 lit; planet.vert.glsl)
 #pragma farlight_noise
 #pragma farlight_noise3d
 #pragma farlight_terrain
@@ -104,7 +105,7 @@ void main(){
   }
   col*=mix(det,1.0,spec); // not on water
   ndl=dot(N,L);
-  float diff=clamp(ndl*1.05+0.03,0.0,1.0);
+  float diff=clamp(ndl*1.05+0.03,0.0,1.0)*vShadow;
   float diff0=clamp(ndl0*1.05+0.03,0.0,1.0);
   vec3 R=reflect(-L,N);
   float s=pow(max(dot(R,V),0.0),60.0)*0.7*spec*diff;

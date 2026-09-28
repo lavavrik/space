@@ -11,7 +11,7 @@ import { CORRIDOR_LEN, corridorGeometry, hullGeometry, interiorGeometry } from '
 import { AUTO_EXPOSURE, AutoExposure, FLOOD_K, HEAD_K, INT_K, MAX_EXP, SKY_EXP_P, SKY_K, STAR_EXP_P, WINDOW_K } from './exposure';
 import { HdrTarget } from './hdr';
 import { TerrainView } from './Terrain';
-import { reliefAmp, terrainOffsets, worldQuat } from '../sim/terrain';
+import { hasCraters, reliefAmp, terrainOffsets, worldQuat } from '../sim/terrain';
 import { padLocal, stationQuat } from '../sim/stationGeom';
 import { ATMO_FS, BODY_VS, GLOW_FS, GLOW_VS, PLANET_FS, PLANET_VS, POINT_FS, POINT_VS, RING_FS, SKYPT_FS, SKYPT_VS, SKY_BAKE_FS, SKY_CUBE_FS, SKY_VS, STAR_FS, STATION_FS, STATION_INTERIOR_FS, CORRIDOR_FS } from './shaders';
 
@@ -417,6 +417,7 @@ export class SceneRenderer {
       uExp: this.expUni.uExp,
       // terrain height (sim/terrain.ts): per-octave offsets and relief amplitude
       uTOff: { value: terrainOffsets(b.seed) }, uTerrA: { value: reliefAmp(b) }, uCamAlt: { value: 1e9 },
+      uRadius: { value: b.radius }, uCraters: { value: hasCraters(b) ? 1 : 0 },
     };
     const mesh = new THREE.Mesh(this.geoMid, new THREE.ShaderMaterial({ vertexShader: PLANET_VS, fragmentShader: PLANET_FS, uniforms: uni }));
     mesh.scale.setScalar(b.radius);

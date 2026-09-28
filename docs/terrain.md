@@ -19,6 +19,7 @@ For each octave i, the noise is sampled at `q_i = dir · 1.6 · 2.03^i + O_i`, i
 
 - **Continents:** fBm, each octave weighing 0.55 of the one before.
 - **Mountain ranges:** ridged noise (`(1 − |n|)²`, each octave weighted by the one before so detail gathers on the crests) from octave 3, where octave 2's noise marks a range. Added as `mask · (r − 0.3) · 1.3`.
+- **Craters (moons only):** on every other octave from 3 to 13 (~50 km down to ~20 m across on a Moon-sized world). Each lattice cell may hold one (50%), with a random centre, a radius of 0.12–0.35 cells, a flat-floored bowl and a raised rim. Depth is 0.2 of the diameter up to 8 km across, then shallower (∝ √size). They're placed by an integer hash (`mod289i`, `perm289`) that stays exact in float32 and double alike, so the GPU and the physics agree. Floors are darker and rims brighter (`tDet`). They're part of `h`, so they collide, cast shadows and follow the vertex/bump split like everything else.
 - **Roughness:** from octave 8 (a few km on an Earth) both gains rise to 0.68, so hills, rocks and gullies keep appearing as you descend. With 0.5 throughout every slope would be about 1%.
 - **Elevation (m):** `A · h`, where the amplitude `A = RELIEF[type] × radius`. Worlds with seas use `A · max(0, h − sea)`, so the sea surface sits at the mean radius. Peaks reach about 2.5 A: ~12 km on an Earth-sized world, ~6 km on a Moon-sized rocky one.
 
@@ -36,6 +37,7 @@ The old shader chain `sp = 1.6·dir + seedOffset`, multiplied by 2.03 per octave
 - **Albedo detail:** colour varies from octave 6 on (`tDet`), about the same contrast at every scale.
 - **Skirts** hang from chunk edges to hide cracks between levels.
 - **Culling:** chunks past the horizon (allowing for mountains) aren't drawn. At most 12 chunks are built per frame, and ones unused for 240 frames are freed.
+- **Shadows:** each terrain vertex marches 12 steps toward the sun over the height field, using up to 9 octaves (mountains and big craters). The steps grow from 2 vertex spacings to 60 relief amplitudes (a 12 km peak's shadow at a 3° sun). The result is a soft shadow term (`vShadow`, the ray's closest clearance against the distance travelled). It's per vertex, so shadows are as sharp as the chunk is detailed, about the same on screen near and far. The far sphere has none.
 - **Clouds** are painted on the surface, so they fade out below 25 km (`uCamAlt`) instead of lying on the mountains.
 
 ## Physics
@@ -47,7 +49,6 @@ The old shader chain `sp = 1.6·dir + seedOffset`, multiplied by 2.03 per octave
 
 ## Not yet
 
-- No cast shadows: mountains don't shade the valleys behind them; only slopes facing away from the sun darken.
+- Shadows are per vertex: finer relief (bump-mapped) shades itself but casts nothing.
 - Contact is radial, so you don't slide down steep slopes.
-- No craters on airless worlds.
 - Orbits, holds and the planner still measure from the mean radius. They stay above the peaks (`minOrbitAlt` > the highest terrain; tested).
