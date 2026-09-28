@@ -105,6 +105,25 @@
 .lamp.blink { animation: lampBlink 1s steps(2, jump-none) infinite; }
 @keyframes lampBlink { 50% { opacity: .35; } }
 
+/* tooltips (Tooltip.tsx, Floating UI): a small HUD panel with an arrow */
+.tip {
+  z-index: 1000; pointer-events: none; max-width: 18rem; padding: .45rem .6rem;
+  background: rgba(16, 11, 6, .94); border: 1px solid var(--amber-dim); color: var(--text);
+  font-size: .8rem; line-height: 1.3; box-shadow: 0 0 .8rem rgba(255, 165, 58, .15);
+}
+.tiparrow { fill: rgba(16, 11, 6, .94); stroke: var(--amber-dim); stroke-width: 1px; }
+.tiph { display: flex; align-items: center; gap: .45rem; }
+.tipn { font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--amber); }
+.tips { font-size: .7rem; font-weight: 700; letter-spacing: .14em; padding: 0 .3rem; border: 1px solid currentColor; color: var(--amber-dim); }
+.tips.on { color: var(--amber); }
+.tips.ftl { color: var(--cyan); }
+.tips.warn { color: var(--red); }
+.tiph kbd { margin-left: auto; font: .75rem "Share Tech Mono", ui-monospace, monospace; padding: 0 .3rem; border: 1px solid var(--amber-faint); color: var(--amber-dim); }
+.tipd { font-family: "Share Tech Mono", ui-monospace, monospace; color: var(--text); margin-top: .15rem; }
+.tiph + .tipd { margin-top: .25rem; }
+.lamp, .gbadge { pointer-events: auto; cursor: help; } /* the HUD is click-through; these take hover for their tooltips */
+.lamp:focus, .gbadge:focus { outline: none; }
+
 /* target card, bottom right */
 .tname { font-size: 1.35rem; font-weight: 700; letter-spacing: .06em; color: var(--text); line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ttype { font-size: .85rem; letter-spacing: .14em; color: var(--amber-dim); }

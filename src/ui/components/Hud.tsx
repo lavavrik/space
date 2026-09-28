@@ -4,6 +4,7 @@ import {
 } from '@phosphor-icons/react';
 import type { FlightView, GaugeBadge as GaugeBadgeView, Lamp, LampId, LocationView, SystemsView, TargetView } from '../../game/hud/types';
 import { Bar, Panel, cx } from './primitives';
+import { Tip } from './Tooltip';
 
 /**
  * The cockpit HUD: a location line (top left) and, along the bottom, ship gauges (left), the
@@ -30,9 +31,9 @@ const BADGE_ICONS: Record<GaugeBadgeView['icon'], Icon> = { 'panels-off': SolarP
 function GaugeBadge({ icon, title, warn }: GaugeBadgeView) {
   const I = BADGE_ICONS[icon];
   return (
-    <span className={cx('gbadge', warn && 'warnc')} title={title}>
+    <Tip className={cx('gbadge', warn && 'warnc')} content={<div className="tipd">{title}</div>}>
       <I weight="bold" aria-label={title} />
-    </span>
+    </Tip>
   );
 }
 
@@ -65,6 +66,20 @@ const LAMP_ICONS: Record<LampId, Icon> = {
   charge: Lightning, masslock: Lock, hot: ThermometerHot, battery: BatteryWarning, power: LightningSlash, warp: Hourglass, zoom: Binoculars,
 };
 
+/** A lamp's tooltip: name, on/off, its key, and a line of live detail. */
+function LampTip({ l }: { l: Lamp }) {
+  return (
+    <>
+      <div className="tiph">
+        <span className="tipn">{l.name}</span>
+        <span className={cx('tips', l.state)}>{l.state === 'off' ? 'OFF' : l.state === 'warn' ? 'WARN' : 'ON'}</span>
+        {l.key && <kbd>{l.key}</kbd>}
+      </div>
+      {l.detail && <div className="tipd">{l.detail}</div>}
+    </>
+  );
+}
+
 /** Above the speedometer: a row of tell-tales, dim when off and lit when on (hud/types.ts, Lamp). */
 export function Lamps({ lamps }: { lamps: Lamp[] }) {
   return (
@@ -72,9 +87,9 @@ export function Lamps({ lamps }: { lamps: Lamp[] }) {
       {lamps.map((l) => {
         const I = LAMP_ICONS[l.id];
         return (
-          <span key={l.id} className={cx('lamp', l.state, l.blink && 'blink')} title={l.title}>
-            <I weight={l.state === 'off' ? 'regular' : 'fill'} aria-label={l.title} />
-          </span>
+          <Tip key={l.id} className={cx('lamp', l.state, l.blink && 'blink')} content={<LampTip l={l} />}>
+            <I weight={l.state === 'off' ? 'regular' : 'fill'} aria-label={l.name} />
+          </Tip>
         );
       })}
     </div>

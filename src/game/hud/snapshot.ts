@@ -96,35 +96,42 @@ function flightMode(g: Game): [string, FlightView['modeClass']] {
 /** Dashboard tell-tales (see Lamp in hud/types.ts). */
 function lamps(g: Game): Lamp[] {
   const { ship, power } = g;
-  const L = (id: Lamp['id'], on: unknown, title: string, state: Lamp['state'] = 'on', blink = false): Lamp => ({ id, title, state: on ? state : 'off', blink: !!on && blink });
+  const L = (id: Lamp['id'], on: unknown, name: string, key: string | undefined, detail: string | undefined, state: Lamp['state'] = 'on', blink = false): Lamp => ({
+    id, name, key, detail, state: on ? state : 'off', blink: !!on && blink,
+  });
   const charging = g.jump?.phase === 'charge' || ship.ftlCharge > 0;
   const rad = ship.outfit.radiatorsOut;
   const lock = ship.mode === 'normal' && !g.jump ? massLock(g) : null;
-  const battLow = ship.batt < battCap(ship) * 0.1;
+  const cap = battCap(ship);
+  const battLow = ship.batt < cap * 0.1;
+  const ap = ship.ap;
   return [
     // flight
-    L('fa', ship.fa, ship.fa ? 'Flight assist on (Shift+Z)' : 'Flight assist off (Shift+Z)'),
-    L('decoupled', ship.decoupled, 'Decoupled: rotation doesn\'t steer (V)', 'warn'),
-    L('autopilot', ship.ap || g.autodock || g.route?.running, g.autodock ? 'Docking computer flying' : g.route?.running ? 'Nav route flying' : 'Autopilot (O)', 'ftl'),
-    L('cruise', ship.mode === 'ftl' && ship.cruise, 'FTL cruise control (F)', 'ftl'),
-    L('dock', g.dock, g.dock?.docked ? `Docked · pad ${g.dock.pad + 1}` : g.dock ? `Pad ${g.dock.pad + 1} granted` : g.dockRequest ? 'Docking requested' : 'Docking (K)', 'on', !g.dock && !!g.dockRequest),
+    L('fa', ship.fa, 'Flight assist', 'Shift+Z', ship.fa ? 'Damps drift and holds the speed limit' : 'Off: pure Newtonian flight, no speed limit'),
+    L('decoupled', ship.decoupled, 'Decoupled', 'V', "Turning doesn't change your course", 'warn'),
+    L('autopilot', ap || g.autodock || g.route?.running, 'Autopilot', 'O',
+      g.autodock ? `Docking computer · ${g.autodock.phase}` : g.route?.running ? `Nav route · ${g.route.status || 'flying'}` : ap ? apLabel(ap) : 'Idle', 'ftl'),
+    L('cruise', ship.mode === 'ftl' && ship.cruise, 'FTL cruise control', 'F', ship.mode === 'ftl' ? `Throttle ${Math.round(ship.throttle * 100)}%` : 'FTL only', 'ftl'),
+    L('dock', g.dock, 'Docking', 'K',
+      g.dock?.docked ? `Docked at ${g.dock.station.name} · pad ${g.dock.pad + 1}` : g.dock ? `Pad ${g.dock.pad + 1} granted at ${g.dock.station.name}` : g.dockRequest ? 'Request sent · waiting for traffic control' : 'No clearance',
+      'on', !g.dock && !!g.dockRequest),
     // ship systems
-    L('sun', ship.sunTrack, 'Sun tracking: panels to the star (P)'),
-    L('lights', g.lights, 'Headlights (Shift+L)'),
-    L('radiators', rad > 0, rad < 1 ? `Radiators ${Math.round(rad * 100)}%` : 'Radiators out (Shift+R)', 'on', rad > 0 && rad < 1),
-    L('pump', power.pumpKW > 0, `Heat pump running · ${fmtPower(power.pumpKW)}`),
-    L('vent', ship.vent, 'Venting hydrogen for cooling (R)', 'ftl'),
-    L('scoop', ship.scoop, ship.scoop || 'Fuel scoop', 'ftl'),
-    L('radar', g.radar.sweep > 0, 'Radar sweeping', 'on', true),
-    L('shore', power.shore > 0, 'Shore power'),
+    L('sun', ship.sunTrack, 'Sun tracking', 'P', `Keeps the solar panels on the star · ${fmtPower(power.solar)}`),
+    L('lights', g.lights, 'Headlights', 'Shift+L', g.lights ? `Drawing ${fmtPower(power.lightsKW)}` : undefined),
+    L('radiators', rad > 0, 'Radiators', 'Shift+R', rad > 0 ? (rad < 1 ? `Moving · ${Math.round(rad * 100)}% out` : 'Deployed · thrust limited') : radiatorsFitted(ship.outfit).length ? 'Stowed' : 'None fitted', 'on', rad > 0 && rad < 1),
+    L('pump', power.pumpKW > 0, 'Heat pump', undefined, power.pumpKW > 0 ? `Running · ${fmtPower(power.pumpKW)}` : pumpFitted(ship.outfit) ? 'Idle · runs when the hull is hot' : 'None fitted'),
+    L('vent', ship.vent, 'Hydrogen vent', 'R', 'Dumps hydrogen through the heat exchanger to cool the hull', 'ftl'),
+    L('scoop', ship.scoop, 'Fuel scoop', undefined, ship.scoop || 'Not scooping', 'ftl'),
+    L('radar', g.radar.sweep > 0, 'Radar sweep', 'Shift+Y', g.radar.sweep > 0 ? `${g.radar.sweep.toFixed(1)} s left` : 'Idle', 'on', true),
+    L('shore', power.shore > 0, 'Shore power', undefined, power.shore > 0 ? `Station supplying ${fmtPower(power.shore)}` : 'Only when docked'),
     // warnings and modes
-    L('charge', charging, g.jump ? 'Hyperdrive charging' : 'FTL drive charging', 'ftl', true),
-    L('masslock', lock, lock ? `Mass-locked by ${lock.name}` : 'Mass lock', 'warn'),
-    L('hot', ship.temp >= TEMP.warn, `Hull ${ship.temp.toFixed(0)} K`, 'warn', ship.temp >= TEMP.drives),
-    L('battery', battLow, 'Battery low', 'warn', ship.batt < 1),
-    L('power', power.limited, power.limited ? `Power short: ${power.limited.what}` : 'Power', 'warn'),
-    L('warp', g.warp > 1, `Time warp ×${g.warp.toLocaleString('en-US')}`, 'warn'),
-    L('zoom', g.zoom.on, `Periscope ${g.zoom.mag}× (Z)`),
+    L('charge', charging, g.jump ? 'Hyperdrive charging' : 'FTL drive charging', g.jump ? 'H' : 'J', charging ? `${Math.max(0, g.jump?.t ?? ship.ftlCharge).toFixed(1)} s at full power` : undefined, 'ftl', true),
+    L('masslock', lock, 'Mass lock', undefined, lock ? `${lock.name} is too close for FTL` : 'Clear for FTL', 'warn'),
+    L('hot', ship.temp >= TEMP.warn, 'Hull temperature', undefined, `${ship.temp.toFixed(0)} K · warning at ${TEMP.warn} K`, 'warn', ship.temp >= TEMP.drives),
+    L('battery', battLow, 'Battery low', undefined, `${fmtEnergy(ship.batt)} of ${fmtEnergy(cap)}`, 'warn', ship.batt < 1),
+    L('power', power.limited, 'Power short', undefined, power.limited ? `${power.limited.what} got ${Math.round(power.limited.frac * 100)}% of what it asked for` : 'The bus covers every load', 'warn'),
+    L('warp', g.warp > 1, 'Time warp', ', / .', g.warp > 1 ? `×${g.warp.toLocaleString('en-US')}` : 'Real time', 'warn'),
+    L('zoom', g.zoom.on, 'Periscope', 'Z', g.zoom.on ? `${g.zoom.mag}× zoom` : undefined),
   ];
 }
 

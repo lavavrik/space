@@ -229,7 +229,10 @@ export type LampId =
   | 'charge' | 'masslock' | 'hot' | 'battery' | 'power' | 'warp' | 'zoom';
 export interface Lamp {
   id: LampId;
-  title: string;
+  /** Tooltip: what it is, the key that toggles it (if any), and a line of live detail. */
+  name: string;
+  key?: string;
+  detail?: string;
   state: 'off' | 'on' | 'ftl' | 'warn';
   blink?: boolean;
 }
