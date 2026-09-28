@@ -13,6 +13,8 @@ import skyVert from './sky.vert.glsl?raw';
 import stationInteriorFrag from './stationInterior.frag.glsl?raw';
 import headlightGlsl from './headlight.glsl?raw';
 import corridorFrag from './corridor.frag.glsl?raw';
+import corridorLightVert from './corridorLight.vert.glsl?raw';
+import corridorLightFrag from './corridorLight.frag.glsl?raw';
 import skyFrag from './sky.frag.glsl?raw';
 import skyCubeFrag from './skyCube.frag.glsl?raw';
 import skyPointVert from './skyPoint.vert.glsl?raw';
@@ -46,6 +48,9 @@ export const STATION_FS = withHeadlight(withNoise(stationFrag));
 export const STATION_INTERIOR_FS = withHeadlight(stationInteriorFrag);
 /** The lit approach corridor in front of a station's slot while you have a pad there. */
 export const CORRIDOR_FS = corridorFrag;
+/** The entry corridor's approach lights (points). */
+export const CORRIDOR_LIGHT_VS = corridorLightVert;
+export const CORRIDOR_LIGHT_FS = corridorLightFrag;
 /** Point sprites: distant bodies and dust. */
 export const POINT_VS = pointVert;
 export const POINT_FS = pointFrag;

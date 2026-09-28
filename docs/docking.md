@@ -99,3 +99,11 @@ Using the mid-step position put ω × r about 15 m/s wrong, and bounced ships ou
 ## Getting round the station
 
 The docking computer never flies through the station on its way to the hold point. If the straight line would pass within 150 m of the station's circumscribed sphere, it heads for a point on a sphere 1.2 station sizes + 250 m out, 0.5 rad further round toward the slot's side. It re-picks that point every step, so it climbs away from the hull and curves round to the front. This matters because the hull spins: its corners move at ~70 m/s, over the 35 m/s crash limit, so any touch is fatal. (`autodock.ts clearPath`; tested from starts all round a station, down to 50 m off the hull.)
+
+## Attitude on the way in
+
+On the way to the hold point (and while waiting for clearance) the docking computer points the nose where it's going, or at the station while it waits, and keeps the ship's roll. Within 250 m of the hold point it turns to the slot's orientation for the align phase. (`autodock.ts`, FACE_SLOT.)
+
+## Entry corridor
+
+The corridor runs 5 km out from the slot along the spin axis (`stationMesh.ts` CORRIDOR_M), widening 4× (CORRIDOR_GROW). 25 approach lights sit along each edge: green on +x, red on −x, like the slot's own lights. They're drawn at least 3 px wide so the corridor reads from far out, and pulses run in toward the slot. The lights are on within 60 km. The walls glow only while you have a pad there.

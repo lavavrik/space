@@ -7,13 +7,13 @@ import { orbitPreview } from '../sim/planner';
 import { HyperspaceView } from './Hyperspace';
 import { createNoiseTexture } from '../lib/noise3d';
 import { skyColor, skyLook } from '../sim/hyperspace';
-import { CORRIDOR_LEN, corridorGeometry, hullGeometry, interiorGeometry } from './stationMesh';
+import { CORRIDOR_GROW, CORRIDOR_M, corridorGeometry, corridorLights, hullGeometry, interiorGeometry } from './stationMesh';
 import { AUTO_EXPOSURE, AutoExposure, FLOOD_K, HEAD_K, INT_K, MAX_EXP, SKY_EXP_P, SKY_K, STAR_EXP_P, WINDOW_K } from './exposure';
 import { HdrTarget } from './hdr';
 import { TerrainView } from './Terrain';
 import { hasCraters, reliefAmp, terrainOffsets, worldQuat } from '../sim/terrain';
 import { padLocal, stationQuat } from '../sim/stationGeom';
-import { ATMO_FS, BODY_VS, GLOW_FS, GLOW_VS, PLANET_FS, PLANET_VS, POINT_FS, POINT_VS, RING_FS, SKYPT_FS, SKYPT_VS, SKY_BAKE_FS, SKY_CUBE_FS, SKY_VS, STAR_FS, STATION_FS, STATION_INTERIOR_FS, CORRIDOR_FS } from './shaders';
+import { ATMO_FS, BODY_VS, GLOW_FS, GLOW_VS, PLANET_FS, PLANET_VS, POINT_FS, POINT_VS, RING_FS, SKYPT_FS, SKYPT_VS, SKY_BAKE_FS, SKY_CUBE_FS, SKY_VS, STAR_FS, STATION_FS, STATION_INTERIOR_FS, CORRIDOR_FS, CORRIDOR_LIGHT_FS, CORRIDOR_LIGHT_VS } from './shaders';
 
 type Uniforms = Record<string, THREE.IUniform>;
 
@@ -64,7 +64,7 @@ const DUST_FADE_FROM = 20e3,
 export class SceneRenderer {
   readonly gl: THREE.WebGLRenderer;
   readonly views = new Map<Body, BodyView>();
-  readonly stationViews = new Map<Station, { mesh: THREE.Group; uni: Uniforms; inner: THREE.Mesh; innerUni: Uniforms; corridor: THREE.Mesh; corridorUni: Uniforms; dist: number; pxR: number }>();
+  readonly stationViews = new Map<Station, { mesh: THREE.Group; uni: Uniforms; inner: THREE.Mesh; innerUni: Uniforms; corridor: THREE.Mesh; corridorUni: Uniforms; lights: THREE.Points; lightsUni: Uniforms; dist: number; pxR: number }>();
   /** Headlights, shared by every station material: the ship's nose (world axes) and on/off. */
   /** Exposure, shared by every physically lit material (render/exposure.ts): uExp, uSkyExp for the Milky Way and uStarExp for stars (see STAR_EXP_P). */
   private readonly expUni = { uExp: { value: 1 }, uSkyExp: { value: SKY_K }, uStarExp: { value: 1 } };
@@ -78,7 +78,6 @@ export class SceneRenderer {
   /** HDR frame, metering and tone mapping (render/hdr.ts), and the eye's adaptation. */
   private readonly hdr: HdrTarget;
   private readonly exposure: AutoExposure;
-  private readonly stationCorridor = corridorGeometry();
   /** Station hull (slot cut in the front) and interior, shared by every station (render/stationMesh.ts). */
   private readonly stationHull = hullGeometry();
   private readonly stationInside = interiorGeometry();
@@ -369,19 +368,29 @@ export class SceneRenderer {
     const innerUni: Uniforms = { uPad: { value: new THREE.Vector3() }, uPadOn: { value: 0 }, uTime: { value: 0 }, uSeed: { value: st.seed }, ...this.headUni };
     const inner = new THREE.Mesh(this.stationInside, new THREE.ShaderMaterial({ vertexShader: BODY_VS, fragmentShader: STATION_INTERIOR_FS, uniforms: innerUni, side: THREE.DoubleSide }));
     group.add(inner);
-    // the lit approach corridor, shown while you have a pad here
-    const corridorUni: Uniforms = { uTime: { value: 0 }, uLen: { value: CORRIDOR_LEN } };
+    // the entry corridor (5 km out along the spin axis): its walls glow while you have a pad here,
+    // and its approach lights are always on
+    const len = CORRIDOR_M / st.size;
+    const corridorUni: Uniforms = { uTime: { value: 0 }, uLen: { value: len }, uGrow: { value: CORRIDOR_GROW } };
     const corridor = new THREE.Mesh(
-      this.stationCorridor,
+      corridorGeometry(len),
       new THREE.ShaderMaterial({ vertexShader: BODY_VS, fragmentShader: CORRIDOR_FS, uniforms: corridorUni, side: THREE.DoubleSide, transparent: true, depthWrite: false,
         // colour adds; alpha multiplies the meter weight underneath (render/hdr.ts)
         blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.SrcAlphaFactor }),
     );
     corridor.visible = false;
     group.add(corridor);
+    const lightsUni: Uniforms = { uTime: { value: 0 }, uPxPerRad: { value: 1000 }, uSize: { value: st.size } };
+    const lights = new THREE.Points(
+      corridorLights(len),
+      new THREE.ShaderMaterial({ vertexShader: CORRIDOR_LIGHT_VS, fragmentShader: CORRIDOR_LIGHT_FS, uniforms: lightsUni, transparent: true, depthWrite: false,
+        blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.SrcAlphaFactor }),
+    );
+    lights.frustumCulled = false;
+    group.add(lights);
     group.scale.setScalar(st.size);
     this.scene.add(group);
-    return { mesh: group, uni, inner, innerUni, corridor, corridorUni, dist: Infinity, pxR: 0 };
+    return { mesh: group, uni, inner, innerUni, corridor, corridorUni, lights, lightsUni, dist: Infinity, pxR: 0 };
   }
 
   private attachStar(b: Star): BodyView {
@@ -586,6 +595,12 @@ export class SceneRenderer {
       const dk = g.dock;
       v.corridor.visible = !!dk && dk.station === st && !dk.docked && !g.inStation;
       if (v.corridor.visible) v.corridorUni.uTime.value = now;
+      // approach lights: on within 60 km, from outside the station
+      v.lights.visible = d < 60e3 && !g.inStation;
+      if (v.lights.visible) {
+        v.lightsUni.uTime.value = now;
+        v.lightsUni.uPxPerRad.value = pxPerRad;
+      }
       if (v.inner.visible) {
         v.innerUni.uPadOn.value = dk && dk.station === st && !dk.docked ? 1 : 0;
         if (dk && dk.station === st) (v.innerUni.uPad.value as THREE.Vector3).copy(padLocal(dk.pad).pos);

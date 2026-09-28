@@ -56,6 +56,8 @@ const KEEP_OUT = 150,
   AROUND_M = 250;
 /** How far ahead along the way round it aims (rad): the ship curves round rather than cutting in. */
 const AROUND_STEP = 0.5;
+/** Within this of the hold point (m) the nose turns from the way ahead to the slot's orientation. */
+const FACE_SLOT = 250;
 
 /**
  * Where to head for `target` from `p` (both in station coordinates, m) without passing through the
@@ -237,11 +239,21 @@ export function autodock(g: Game, dt: number, gravVec: THREE.Vector3) {
   applyThrust(g, T, dt);
   ship.vel.add(T);
 
-  // attitude: turn toward the wanted one (with the station's spin carried by rotation correction);
-  // not while still getting in range or waiting for the answer
-  if (ad.phase === 'approach' || ad.phase === 'wait') return;
-  const fwdW = toWorld(fwdL),
+  // attitude: turn toward the wanted one (with the station's spin carried by rotation correction).
+  // On the way to the hold point the nose points where it's going (at the station while waiting for
+  // clearance), not strafing; only the last FACE_SLOT metres turn it to the slot's orientation.
+  let fwdW: THREE.Vector3, upW: THREE.Vector3;
+  const cruising = ad.phase === 'approach' || ad.phase === 'wait' || (ad.phase === 'hold' && dist > FACE_SLOT);
+  if (cruising) {
+    const way = ad.phase === 'wait' || target.distanceTo(p) < 1 ? p.clone().negate() : target.clone().sub(p);
+    fwdW = toWorld(way).normalize();
+    upW = new THREE.Vector3(0, 1, 0).applyQuaternion(ship.q); // keep the roll the ship has
+    if (Math.abs(upW.dot(fwdW)) > 0.98) upW = new THREE.Vector3(1, 0, 0).applyQuaternion(ship.q);
+    upW.addScaledVector(fwdW, -upW.dot(fwdW)).normalize(); // square to the nose
+  } else {
+    fwdW = toWorld(fwdL);
     upW = toWorld(upL);
+  }
   const m = new THREE.Matrix4().makeBasis(new THREE.Vector3().crossVectors(upW, fwdW.clone().negate()).normalize(), upW, fwdW.clone().negate());
   const want = new THREE.Quaternion().setFromRotationMatrix(m);
   ship.q.rotateTowards(want, Math.max(0.6 * dt, ship.q.angleTo(want) * (1 - Math.exp(-2.5 * dt)))).normalize();

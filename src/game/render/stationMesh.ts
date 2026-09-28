@@ -105,19 +105,23 @@ function mergeInto(a: THREE.BufferGeometry, b: THREE.BufferGeometry) {
   return g;
 }
 
-/** Length of the approach corridor in front of the slot (unit coordinates: 1.3 station sizes). */
-export const CORRIDOR_LEN = 1.3;
+/** Length of the entry corridor in front of the slot (m), and how much wider it is at the far end. */
+export const CORRIDOR_M = 5000,
+  CORRIDOR_GROW = 4;
+/** Approach lights along each of the corridor's four edges. */
+const CORRIDOR_LIGHTS = 25;
 
 /**
- * The approach corridor: four walls running out from the slot along the spin axis, widening to
- * 2.5× the slot's size at the far end (drawn additively with the corridor shader).
+ * The entry corridor: four walls running out from the slot along the spin axis for `len` (unit
+ * coordinates), a funnel widening to CORRIDOR_GROW× the slot's size at the far end (drawn
+ * additively with the corridor shader while you have a pad).
  */
-export function corridorGeometry() {
+export function corridorGeometry(len: number) {
   const pos: number[] = [],
     nor: number[] = [];
   const z0 = 0.5,
-    z1 = 0.5 + CORRIDOR_LEN,
-    k = 2.5;
+    z1 = 0.5 + len,
+    k = CORRIDOR_GROW;
   const x0 = SLOT_W / 2,
     y0 = SLOT_H / 2,
     x1 = x0 * k,
@@ -127,4 +131,31 @@ export function corridorGeometry() {
   quad(pos, nor, [x0, -y0, z0], [x1, -y1, z1], [x1, y1, z1], [x0, y0, z0], [1, 0, 0]);
   quad(pos, nor, [-x0, -y0, z0], [-x0, y0, z0], [-x1, y1, z1], [-x1, -y1, z1], [-1, 0, 0]);
   return geometry(pos, nor);
+}
+
+/**
+ * The corridor's approach lights: points along its four edges, from the slot to the far end, with
+ * aAlong (0 at the slot, 1 far out) and aSide (+1 on the +x side: green, −1: red, like the slot's).
+ */
+export function corridorLights(len: number) {
+  const pos: number[] = [],
+    along: number[] = [],
+    side: number[] = [];
+  const x0 = SLOT_W / 2,
+    y0 = SLOT_H / 2;
+  for (let i = 0; i < CORRIDOR_LIGHTS; i++) {
+    const u = i / (CORRIDOR_LIGHTS - 1);
+    const grow = 1 + u * (CORRIDOR_GROW - 1);
+    for (const sx of [-1, 1])
+      for (const sy of [-1, 1]) {
+        pos.push(sx * x0 * grow, sy * y0 * grow, 0.5 + u * len);
+        along.push(u);
+        side.push(sx);
+      }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('aAlong', new THREE.Float32BufferAttribute(along, 1));
+  g.setAttribute('aSide', new THREE.Float32BufferAttribute(side, 1));
+  return g;
 }
