@@ -12,6 +12,7 @@ import { AUTO_EXPOSURE, AutoExposure, FLOOD_K, HEAD_K, INT_K, MAX_EXP, SKY_EXP_P
 import { HdrTarget } from './hdr';
 import { TerrainView } from './Terrain';
 import { TrafficView } from './Traffic';
+import { RingField } from './RingField';
 import { hasCraters, reliefAmp, terrainOffsets, worldQuat } from '../sim/terrain';
 import { atmoOf } from '../sim/atmosphere';
 import { padLocal, stationQuat } from '../sim/stationGeom';
@@ -140,6 +141,8 @@ export class SceneRenderer {
   private skyGeo!: THREE.SphereGeometry;
   /** Other ships (render/Traffic.ts). */
   private readonly trafficView = new TrafficView();
+  /** A ring's rocks up close (render/RingField.ts). */
+  private readonly ringField: RingField;
   private readonly hyper = new HyperspaceView(() => this.pointsMaterial(), this.expUni.uStarExp);
   /** Orbit preview (L): the planned or autopilot orbit as a ring, depth-tested so the planet hides its far side. */
   private readonly ring = new THREE.LineLoop(
@@ -174,6 +177,8 @@ export class SceneRenderer {
     this.ring.visible = false;
     this.scene.add(this.ring);
     this.scene.add(this.trafficView.group);
+    this.ringField = new RingField(this.expUni.uExp);
+    this.scene.add(this.ringField.group);
 
     // dust around the ship, so you can feel your speed in normal space
     const g = mulberry32(99);
@@ -519,7 +524,7 @@ export class SceneRenderer {
       group.add(view.clouds);
     }
     if (b.ring) {
-      view.ringUni = { uColor: { value: b.ring.color }, uLight: { value: light }, uPC: { value: new THREE.Vector3() }, uPR: { value: b.radius }, uIn: { value: b.ring.inner }, uOut: { value: b.ring.outer }, uSeed: { value: b.ring.seed }, uExp: this.expUni.uExp };
+      view.ringUni = { uColor: { value: b.ring.color }, uLight: { value: light }, uPC: { value: new THREE.Vector3() }, uPR: { value: b.radius }, uIn: { value: b.ring.inner }, uOut: { value: b.ring.outer }, uSeed: { value: b.ring.seed }, uExp: this.expUni.uExp, uNearFade: { value: 0 } };
       const rm = new THREE.Mesh(new THREE.RingGeometry(b.ring.inner, b.ring.outer, 256, 1), new THREE.ShaderMaterial({ vertexShader: BODY_VS, fragmentShader: RING_FS, uniforms: view.ringUni, side: THREE.DoubleSide, transparent: true, depthWrite: false }));
       rm.rotation.x = -Math.PI / 2;
       rm.scale.setScalar(b.radius);
@@ -582,6 +587,7 @@ export class SceneRenderer {
       dSize = dotGeo.attributes.aSize.array as Float32Array;
     let nd = 0;
     const starPos = cur.star.pos;
+    let ringDone = false;
     for (const b of cur.bodies) {
       const v = this.views.get(b)!;
       const rel = tmp.subVectors(b.pos, ship.pos);
@@ -633,7 +639,15 @@ export class SceneRenderer {
           ter.update(tmp2.subVectors(ship.pos, b.pos).applyQuaternion(qInvW), this.tmp3.copy(v.light!).applyQuaternion(qInvW), this.gl);
         }
       }
-      if (v.ringUni) (v.ringUni.uPC.value as THREE.Vector3).copy(rel);
+      if (v.ringUni) {
+        (v.ringUni.uPC.value as THREE.Vector3).copy(rel);
+        // up close, the ring's rocks (render/RingField.ts); the nearest ringed world has them
+        v.ringUni.uNearFade.value = 0;
+        if (!ringDone && this.ringField.update(b as World, rel, b.axis, v.light!, simTime)) {
+          ringDone = true;
+          v.ringUni.uNearFade.value = this.ringField.nearFade;
+        }
+      }
       // distant bodies as dots of reflected starlight
       if (pxR < 2.5 && nd < MAXDOTS) {
         const dS = b.pos.distanceTo(starPos);
@@ -705,6 +719,7 @@ export class SceneRenderer {
 
     this.updateDust(g);
     this.trafficView.update(g, this.PR);
+    this.ringField.group.visible = ringDone;
     this.updateRing(g);
 
     const gl = this.gl;
@@ -824,6 +839,7 @@ export class SceneRenderer {
 
   dispose() {
     this.disposeSystem();
+    this.ringField.dispose();
     this.hyper.dispose();
     this.ring.geometry.dispose();
     (this.ring.material as THREE.Material).dispose();
