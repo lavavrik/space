@@ -1,4 +1,5 @@
 /* Body info panel (I): everything about the current target, and where the ship stands relative to it. */
+import { surfaceDist } from '../sim/terrain';
 import { AU, MSUN, REARTH } from '../constants';
 import { fmtDist, fmtSpeedText, fmtTime } from '../format';
 import type { Game } from '../Game';
@@ -105,7 +106,7 @@ function youRows(g: Game, t: Target): [string, string | Readout][] {
   const v = t.kind === 'station' ? ship.vel.clone().add(g.frameBody.vel).sub(t.vel) : velRel(g, t);
   const vr = v.dot(rv) / r;
   const rows: [string, string | Readout][] = [
-    [t.kind === 'station' ? 'DISTANCE' : 'ALTITUDE', fmtDist(r - (t.kind === 'station' ? t.size / 2 : t.radius))],
+    [t.kind === 'station' ? 'DISTANCE' : 'ALTITUDE', fmtDist(t.kind === 'station' ? r - t.size / 2 : surfaceDist(t, g.ship.pos))],
     ['SPEED · VERTICAL', ship.mode === 'ftl' ? 'in FTL' : `${fmtSpeedText(v.length())} · ${vr >= 0 ? '+' : '−'}${fmtSpeedText(Math.abs(vr))}`],
   ];
   if (t.kind === 'station') {

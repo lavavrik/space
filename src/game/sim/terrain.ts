@@ -177,6 +177,15 @@ export function surfaceRadius(b: Body, pos: THREE.Vector3) {
   return b.radius + elevationLocal(b, tv.x, tv.y, tv.z);
 }
 
+/**
+ * Distance (m) from `pos` to a body's surface: the terrain under it when within a few percent of the
+ * radius (where the mountains matter), the mean radius farther out.
+ */
+export function surfaceDist(b: Body, pos: THREE.Vector3) {
+  const d = pos.distanceTo(b.pos);
+  return d - (d < b.radius * 1.05 ? surfaceRadius(b, pos) : b.radius);
+}
+
 /** Height (m) above the ground under the ship (radar altitude). */
 export const altitudeAt = (b: Body, pos: THREE.Vector3) => pos.distanceTo(b.pos) - surfaceRadius(b, pos);
 

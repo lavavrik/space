@@ -1,3 +1,4 @@
+import { surfaceDist } from '../sim/terrain';
 import { JUMP_CHARGE_TIME, RESPAWN_TIME } from '../constants';
 import { fmtDist } from '../format';
 import type { Game } from '../Game';
@@ -341,7 +342,7 @@ export class Overlay {
       if (!isT && !known(g, b)) continue;
       const s = this.toScreen(g, rel);
       const name = contactLabel(g, b);
-      const label = () => `${name} · ${fmtDist(view.dist - b.radius)}`;
+      const label = () => `${name} · ${fmtDist(surfaceDist(b, ship.pos))}`;
       if (s.behind) {
         if (isT) this.edgeArrow(s.v, AMB, label());
         continue;
@@ -372,7 +373,7 @@ export class Overlay {
           ctx.fillStyle = AMB + '1)';
           ctx.fillText(name.toUpperCase(), s.x, s.y - r - 8);
           ctx.fillStyle = 'rgba(255,230,199,0.9)';
-          ctx.fillText(fmtDist(view.dist - b.radius), s.x, s.y + r + 15);
+          ctx.fillText(fmtDist(surfaceDist(b, ship.pos)), s.x, s.y + r + 15);
         }
       } else if (pxR < 18) {
         ctx.strokeStyle = AMB + (b.kind === 'moon' ? '0.35)' : '0.55)');

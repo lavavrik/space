@@ -15,7 +15,7 @@ import { apLabel, evalPlan } from '../sim/orbits';
 import { deltaVLeft, dryMass } from '../sim/resources';
 import { battCap } from '../sim/power';
 import { massLock } from '../sim/ftl';
-import { surfaceRadius } from '../sim/terrain';
+import { surfaceDist, surfaceRadius } from '../sim/terrain';
 import { surfaceLimit } from '../sim/flight';
 import { TEMP, nextLimit } from '../sim/thermal';
 import { BATTERIES, MODULES, PUMP_ON_ABOVE, type BatteryModule, RADIATOR_MAX_ACC, moduleLabel, outfitMass, pumpFitted, radiatorsFitted, type Module } from '../outfit/catalog';
@@ -238,7 +238,7 @@ function target(g: Game): TargetView {
     const r = resolvable(g, t);
     scan = !g.ship.avionics.scanner ? { text: 'UNSCANNED · NO SCANNER' } : r.ok ? { text: sp > 0 ? `${Math.floor(sp * 100)} % SCANNED · Y` : 'UNSCANNED · Y TO SCAN' } : { text: `OUT OF RESOLUTION · ${fmtDist(r.needDist)}`, warn: true };
   }
-  const d = t.pos.distanceTo(ship.pos) - (t.kind === 'station' ? t.size / 2 : t.radius);
+  const d = t.kind === 'station' ? t.pos.distanceTo(ship.pos) - t.size / 2 : surfaceDist(t, ship.pos); // to the ground under you up close
   const dir = tmp.subVectors(t.pos, ship.pos).normalize();
   const vel = ship.mode === 'ftl' ? ship.travelDir.clone().multiplyScalar(ship.ftlSpeed) : ship.vel.clone();
   vel.add(g.frameBody.vel).sub(t.vel); // everything moves, so close on the target in its own frame
