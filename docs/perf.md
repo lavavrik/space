@@ -8,6 +8,10 @@ Press **`** (backquote) or open the game with `?perf` to show the performance ov
 - Render and overlay resolution, draw calls, triangles, points and lines.
 - A 240-frame graph: stacked CPU stages; grey for the rest of each frame (waiting on the GPU or vsync); a cyan line for GPU time; guides at 60 and 30 fps.
 
+## GPU time by category
+
+While the overlay is up, the fourth line splits GPU time by what's being drawn: terrain (the LOD chunks), planet (the far spheres), air (atmosphere shells), clouds, sky, star, stations, points (dust, markers, stars), rings, post (tone mapping), and the bakes (terrain chunk bakes, the periscope's sky patch). Each draw is tagged by its shader (`SceneRenderer.perfTag`), and each change of category starts a new timer query (`Perf.gpuSegment`). The queries themselves cost a little, and a category includes some GPU pipeline wait, so read it for where the time goes rather than exact numbers.
+
 ## Measurements (2026-09-27)
 
 Start view (home planet large on screen, Milky Way behind it), with an emulated 2560×1440 CSS viewport at DPR 2 (a 4K-class screen). Each frame is rendered and forced to finish (`readPixels`), so these are CPU + GPU times.

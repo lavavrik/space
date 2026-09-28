@@ -86,7 +86,7 @@ The simulation never touches the DOM. Each frame it steps the physics, draws the
 | L | Orbit preview ring on / off: the planned orbit (amber) or the one the autopilot is flying (cyan), drawn around the body |
 | P | Turn the solar panels to the star |
 | K | Call a fuel tanker |
-| ` | Performance overlay: FPS, frame-time graph, per-stage timings (see docs/perf.md) |
+| ` | Performance overlay: FPS, frame-time graph, per-stage timings, GPU time by category (terrain, air, clouds, sky, post…; see docs/perf.md) |
 | Tab | Hide the controls panel (a colour-coded keyboard schema with a legend by group) |
 | Click a panel heading | Collapse / expand that panel (all but the speed readout; remembered per browser). Release the mouse (Esc) first if it's captured |
 

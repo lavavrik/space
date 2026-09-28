@@ -20,6 +20,10 @@ interface TimerExt {
  * EXT_disjoint_timer_query_webgl2, draw calls, and render resolution, plus a graph of the last
  * 240 frames: stacked CPU stages, the rest of each frame in grey (waiting on the GPU or vsync),
  * GPU time as a cyan line, and 60 / 30 fps guides.
+ *
+ * While it's shown, GPU time is also split by what's drawn: the renderer tags each draw with a
+ * category (terrain, planet, air, clouds, sky, post…; SceneRenderer.perfTag) and every change of
+ * category starts a new timer query (gpuSegment), so a slow frame shows where its GPU time went.
  */
 export class PerfMonitor {
   visible: boolean;
@@ -34,8 +38,11 @@ export class PerfMonitor {
   private drawIn = 0;
   private readonly gl2: WebGL2RenderingContext | null;
   private readonly timer: TimerExt | null;
-  private readonly queries: { q: WebGLQuery; slot: number }[] = [];
+  private readonly queries: { q: WebGLQuery; slot: number; label: string | null }[] = [];
   private active: WebGLQuery | null = null;
+  /** The category being timed (split timing), and GPU ms per category per frame. */
+  private activeLabel: string | null = null;
+  private readonly split = new Map<string, Float32Array>();
 
   constructor(
     host: HTMLElement,
@@ -60,7 +67,7 @@ export class PerfMonitor {
     this.canvas.style.display = this.visible ? '' : 'none';
     const dpr = Math.min(devicePixelRatio || 1, 2);
     this.canvas.width = 330 * dpr;
-    this.canvas.height = 150 * dpr;
+    this.canvas.height = 165 * dpr;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
@@ -89,26 +96,52 @@ export class PerfMonitor {
     this.t = now;
   }
 
+  /** Whether GPU time is split by category this frame (only while shown). */
+  get splitting() {
+    return this.visible && !!this.timer;
+  }
+
   /** Bracket the GPU work of the frame (only when the timer extension exists). */
   gpuBegin() {
-    if (!this.timer || !this.gl2 || this.active || this.queries.length > 6) return;
+    if (!this.timer || !this.gl2 || this.active || this.queries.length > 600) return;
+    if (this.splitting) {
+      this.gpuSegment('other');
+      return;
+    }
     const q = this.gl2.createQuery();
     if (!q) return;
     this.gl2.beginQuery(this.timer.TIME_ELAPSED_EXT, q);
     this.active = q;
+    this.activeLabel = null;
+  }
+
+  /** Split timing: what's drawn from here on counts toward `label` (until the next segment). */
+  gpuSegment(label: string) {
+    if (!this.timer || !this.gl2 || !this.splitting || label === this.activeLabel) return;
+    if (this.active) this.endQuery();
+    const q = this.gl2.createQuery();
+    if (!q) return;
+    this.gl2.beginQuery(this.timer.TIME_ELAPSED_EXT, q);
+    this.active = q;
+    this.activeLabel = label;
   }
 
   gpuEnd() {
-    if (!this.timer || !this.gl2 || !this.active) return;
-    this.gl2.endQuery(this.timer.TIME_ELAPSED_EXT);
-    this.queries.push({ q: this.active, slot: this.i });
+    if (this.active) this.endQuery();
+  }
+
+  private endQuery() {
+    this.gl2!.endQuery(this.timer!.TIME_ELAPSED_EXT);
+    this.queries.push({ q: this.active!, slot: this.i, label: this.activeLabel });
     this.active = null;
+    this.activeLabel = null;
   }
 
   frameEnd() {
     this.i = (this.i + 1) % N;
     this.count = Math.min(N, this.count + 1);
     this.gpuMs[this.i] = NaN;
+    for (const a of this.split.values()) a[this.i] = NaN;
     if (this.visible && --this.drawIn <= 0) {
       this.drawIn = 4; // redraw the panel every 4th frame; it's cheap but not free
       this.draw();
@@ -121,9 +154,19 @@ export class PerfMonitor {
     if (!gl || !ext) return;
     const disjoint = gl.getParameter(ext.GPU_DISJOINT_EXT) as boolean;
     while (this.queries.length) {
-      const { q, slot } = this.queries[0];
+      const { q, slot, label } = this.queries[0];
       if (!gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) break;
-      if (!disjoint) this.gpuMs[slot] = (gl.getQueryParameter(q, gl.QUERY_RESULT) as number) / 1e6;
+      if (!disjoint) {
+        const ms = (gl.getQueryParameter(q, gl.QUERY_RESULT) as number) / 1e6;
+        const add = (a: Float32Array) => (a[slot] = (Number.isNaN(a[slot]) ? 0 : a[slot]) + ms);
+        if (label === null) this.gpuMs[slot] = ms;
+        else {
+          add(this.gpuMs);
+          let a = this.split.get(label);
+          if (!a) this.split.set(label, (a = new Float32Array(N).fill(NaN)));
+          add(a);
+        }
+      }
       gl.deleteQuery(q);
       this.queries.shift();
     }
@@ -141,7 +184,7 @@ export class PerfMonitor {
   private draw() {
     const { ctx } = this;
     const W = 330,
-      H = 150,
+      H = 165,
       gh = 70,
       gy = H - gh - 6;
     ctx.clearRect(0, 0, W, H);
@@ -181,6 +224,10 @@ export class PerfMonitor {
       36,
     );
     ctx.fillText(`${info.render.points} points  ${info.render.lines} lines  geo ${info.memory.geometries}  tex ${info.memory.textures}`, 8, 51);
+    // GPU time by category, most first
+    const parts = [...this.split].map(([k, a]): [string, number] => [k, mean(a)]).filter(([, v]) => v >= 0.05).sort((a, b) => b[1] - a[1]);
+    ctx.fillStyle = '#7fdcff';
+    ctx.fillText(parts.length ? 'gpu: ' + parts.slice(0, 6).map(([k, v]) => `${k} ${v.toFixed(1)}`).join('  ') : '', 8, 66);
 
     // graph: one column per frame, newest on the right
     const bw = (W - 16) / N;

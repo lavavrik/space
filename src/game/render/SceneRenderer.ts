@@ -15,7 +15,7 @@ import { TrafficView } from './Traffic';
 import { hasCraters, reliefAmp, terrainOffsets, worldQuat } from '../sim/terrain';
 import { atmoOf } from '../sim/atmosphere';
 import { padLocal, stationQuat } from '../sim/stationGeom';
-import { ATMO_FS, BODY_VS, GLOW_FS, GLOW_VS, PLANET_FS, PLANET_VS, POINT_FS, POINT_VS, RING_FS, SKYPT_FS, SKYPT_VS, SKY_BAKE_FS, SKY_CUBE_FS, SKY_VS, STAR_FS, STATION_FS, STATION_INTERIOR_FS, CLOUD_BAKE_FS, CLOUD_FS, CORRIDOR_FS, CORRIDOR_LIGHT_FS, CORRIDOR_LIGHT_VS } from './shaders';
+import { ATMO_FS, BODY_VS, GLOW_FS, GLOW_VS, PLANET_FS, PLANET_VS, POINT_FS, POINT_VS, RING_FS, SKYPT_FS, SKYPT_VS, SKY_BAKE_FS, SKY_CUBE_FS, SKY_FS, SKY_VS, STAR_FS, STATION_FS, STATION_INTERIOR_FS, CLOUD_BAKE_FS, CLOUD_FS, CORRIDOR_FS, CORRIDOR_LIGHT_FS, CORRIDOR_LIGHT_VS } from './shaders';
 
 type Uniforms = Record<string, THREE.IUniform>;
 
@@ -532,12 +532,14 @@ export class SceneRenderer {
    * it to the screen (render/exposure.ts).
    */
   render(g: Game) {
+    this.perf = g.perf.splitting ? g.perf : null;
     const e = this.exposure.value;
     this.expUni.uExp.value = e;
     this.expUni.uSkyExp.value = AUTO_EXPOSURE ? (e / MAX_EXP) ** SKY_EXP_P : 1;
     this.expUni.uStarExp.value = AUTO_EXPOSURE ? (e / MAX_EXP) ** STAR_EXP_P : 1;
     this.gl.setRenderTarget(this.hdr.target);
     this.renderScene(g);
+    this.perf?.gpuSegment('post');
     this.hdr.finish(this.exposure);
   }
 
@@ -570,6 +572,7 @@ export class SceneRenderer {
     camera.updateMatrixWorld();
     skyCam.quaternion.copy(ship.q);
     skyCam.updateMatrixWorld();
+    this.perf?.gpuSegment('sky bake'); // the periscope's sky patch, when it re-bakes
     this.updateSkyPatch(g);
 
     const dPos = dotGeo.attributes.position.array as Float32Array,
@@ -622,6 +625,7 @@ export class SceneRenderer {
         if (on) {
           v.mesh.visible = false;
           ter.root.rotation.y = b.rot;
+          this.perf?.gpuSegment('terrain bake'); // new chunks and sun re-bakes
           ter.update(tmp2.subVectors(ship.pos, b.pos).applyQuaternion(qInvW), this.tmp3.copy(v.light!).applyQuaternion(qInvW), this.gl);
         }
       }
@@ -700,10 +704,40 @@ export class SceneRenderer {
     this.updateRing(g);
 
     const gl = this.gl;
+    if (this.perf) for (const s of [this.skyScene, this.scene]) s.traverse((o) => this.perfTag(o));
     gl.clear();
     gl.render(this.skyScene, skyCam);
     gl.clearDepth();
     gl.render(this.scene, camera);
+  }
+
+  /** The perf monitor while it splits GPU time by category (debug/Perf.ts), else null. */
+  private perf: Game['perf'] | null = null;
+
+  /**
+   * Split GPU timing: give a drawable a hook that tells the perf monitor what kind of thing it is
+   * just before it's drawn (by its shader), so each category's draws are timed together.
+   */
+  private perfTag(o: THREE.Object3D) {
+    if (o.userData.perfTag || !(o as THREE.Mesh).material) return;
+    const m = (o as THREE.Mesh).material as THREE.ShaderMaterial;
+    const fs = m.fragmentShader;
+    const cat =
+      fs === PLANET_FS ? (m.defines?.TERRAIN !== undefined ? 'terrain' : 'planet')
+        : fs === CLOUD_FS ? 'clouds'
+          : fs === ATMO_FS ? 'air'
+            : fs === SKY_FS || fs === SKY_CUBE_FS || fs === SKYPT_FS ? 'sky'
+              : fs === RING_FS ? 'rings'
+                : fs === STAR_FS || fs === GLOW_FS ? 'star'
+                  : fs === STATION_FS || fs === STATION_INTERIOR_FS || fs === CORRIDOR_FS || fs === CORRIDOR_LIGHT_FS ? 'stations'
+                    : (o as THREE.Points).isPoints ? 'points'
+                      : 'other';
+    o.userData.perfTag = cat;
+    const prev = o.onBeforeRender;
+    o.onBeforeRender = (...args) => {
+      this.perf?.gpuSegment(cat);
+      prev.apply(o, args);
+    };
   }
 
   /**
