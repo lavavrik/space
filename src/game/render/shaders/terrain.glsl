@@ -19,14 +19,17 @@ float tDet;              // albedo detail from octaves 6+, ~unit contrast at eve
 float tMask;             // the mountain-range mask terrH found (octave 2), for terrHFrom
 // Precision up close. A unit direction in float32 resolves ~0.5 m on an Earth, far coarser than a
 // pixel through the periscope, and the fine octaves turned to static. On terrain chunks the lattice
-// point is instead uQc[i] (the chunk centre's, worked out per chunk in double precision and wrapped
-// by 2312 = 8 × 289, which neither the texture noise nor the crater hash can tell) plus the small,
-// precise offset from the centre, tOffDir × k (see render/Terrain.ts).
+// point is instead the chunk centre's (worked out per chunk in double precision, render/Terrain.ts)
+// plus the small, precise offset from the centre, tOffDir × k. The centre point comes wrapped twice:
+// by 8 for the noise (uQn: the texture's period, so its coordinates stay tiny and precise) and by
+// 2312 = 8 × 289 for the crater hash (uQc), which neither can tell apart.
+uniform vec3 uQn[17];
 uniform vec3 uQc[17];
 uniform float uUseQc;
 vec3 tOffDir;            // the point's direction minus the chunk centre's (set before terrH/terrHFrom)
 bool tUseOff = false;
-vec3 terrQ(vec3 d, int i, float k){ return tUseOff ? uQc[i] + tOffDir * k : d * k + uTOff[i]; }
+vec3 terrQ(vec3 d, int i, float k){ return tUseOff ? uQn[i] + tOffDir * k : d * k + uTOff[i]; }
+vec3 terrQC(vec3 d, int i, float k){ return tUseOff ? uQc[i] + tOffDir * k : d * k + uTOff[i]; }
 
 // Integer hashing that's exact in float32 and in double (sim/terrain.ts), so both sides put the
 // same craters in the same places: every value stays an integer below 2^24.
@@ -81,7 +84,7 @@ float terrH(vec3 d, int oct, int split, out float coarse){
       w = clamp(rn * 1.4, 0.25, 1.0);
       am *= i >= FINE_FROM ? FINE_GAIN : MTN_GAIN;
     }
-    if (uCraters > 0.5 && i >= CRATER_FROM && i <= CRATER_TO && (i & 1) == 1) cr += craters(q, k);
+    if (uCraters > 0.5 && i >= CRATER_FROM && i <= CRATER_TO && (i & 1) == 1) cr += craters(terrQC(d, i, k), k);
     k *= 2.03;
     a *= i >= FINE_FROM ? FINE_GAIN : TERR_GAIN;
   }
@@ -107,7 +110,7 @@ float terrHFrom(vec3 d, int from, int oct, float hc, float mask){
     if (i < from) continue;
     if (i >= oct) break;
     vec3 q = terrQ(d, i, k);
-    float n = i < FBM_EXACT ? snoise(q) : tnoise(q);
+    float n = i < FBM_EXACT ? snoise(q) : tnoiseHQ(q); // full-precision filtering (noise3d.glsl)
     s += octA(i) * n;
     if (i >= 6) tDet = tDet * 0.8 + n;
     if (i == 2) mask = smoothstep(-0.05, 0.45, n);
@@ -117,7 +120,7 @@ float terrHFrom(vec3 d, int from, int oct, float hc, float mask){
       r += octAm(i) * rn * w;
       w = clamp(rn * 1.4, 0.25, 1.0);
     }
-    if (uCraters > 0.5 && i >= CRATER_FROM && i <= CRATER_TO && (i & 1) == 1) cr += craters(q, k);
+    if (uCraters > 0.5 && i >= CRATER_FROM && i <= CRATER_TO && (i & 1) == 1) cr += craters(terrQC(d, i, k), k);
     k *= 2.03;
   }
   // hc has the ranges' mean subtracted once the mask is known (from octave 3); before that, here

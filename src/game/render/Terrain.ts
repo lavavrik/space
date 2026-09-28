@@ -100,6 +100,7 @@ export class TerrainView {
         uLightL: { value: new THREE.Vector3() },
         uParity: { value: 0 },
         uQc: { value: new Float32Array(T_OCT_MAX * 3) },
+        uQn: { value: new Float32Array(T_OCT_MAX * 3) },
         uUseQc: { value: 1 },
       },
       depthTest: false,
@@ -185,6 +186,7 @@ export class TerrainView {
     u.uVOct.value = mu.uVOct.value;
     u.uSpacing.value = mu.uSpacing.value;
     u.uQc.value = mu.uQc.value;
+    u.uQn.value = mu.uQn.value;
     (u.uLightL.value as THREE.Vector3).copy(this.sun);
     c.sun.copy(this.sun);
     const pts = new THREE.Points(c.mesh.geometry, this.bakeMat);
@@ -203,16 +205,17 @@ export class TerrainView {
 
   /**
    * The chunk centre's lattice point for each octave (terrain.glsl terrQ): centre · 1.6 · 2.03^i +
-   * offset, in double precision, wrapped by 2312 (= 8 × 289: the texture noise tiles every 8 cells,
-   * the crater hash every 289) for the texture octaves, so the shader adds only small offsets.
+   * offset, in double precision, wrapped by `period` for the texture octaves so the shader adds only
+   * small offsets: 8 for the noise (the texture tiles every 8 cells), 2312 = 8 × 289 for the crater
+   * hash (which repeats every 289).
    */
-  private latticeAt(c: number[]) {
+  private latticeAt(c: number[], period: number) {
     const q = new Float32Array(T_OCT_MAX * 3);
     let k = 1.6;
     for (let i = 0; i < T_OCT_MAX; i++) {
       for (let a = 0; a < 3; a++) {
         const v = c[a] * k + this.off[i * 3 + a];
-        q[i * 3 + a] = i >= 3 ? v - Math.floor(v / 2312) * 2312 : v;
+        q[i * 3 + a] = i >= 3 ? v - Math.floor(v / period) * period : v;
       }
       k *= 2.03;
     }
@@ -306,7 +309,8 @@ export class TerrainView {
         uSkirtD: { value: spacing * 4 + this.A * 0.6 ** vOct },
         uGridW: { value: N + 1 },
         uBake: { value: bake },
-        uQc: { value: this.latticeAt(cen) },
+        uQc: { value: this.latticeAt(cen, 2312) },
+        uQn: { value: this.latticeAt(cen, 8) },
         uUseQc: { value: 1 },
       },
     });
