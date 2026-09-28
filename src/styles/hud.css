@@ -125,6 +125,25 @@
 .lamp:focus, .gbadge:focus { outline: none; }
 
 /* target card, bottom right */
+/* approach strip (Hud.tsx, Approach): line at 2.1rem, labels in two rows above, scale below */
+.appr { position: relative; height: 3.2rem; margin: .35rem .3rem .1rem; }
+.appr-out { position: absolute; left: 0; width: 10%; top: 1.6rem; height: 1rem; background: repeating-linear-gradient(90deg, var(--amber-faint) 0 2px, transparent 2px 5px); opacity: .6; }
+.appr-line { position: absolute; left: 10%; right: 0; top: 2.1rem; border-top: 1px solid var(--amber-dim); }
+.amark { position: absolute; top: .2rem; height: 2.4rem; width: 0; border-left: 1px solid var(--amber-dim); pointer-events: auto; cursor: help; transition: left .5s ease; }
+.amark::after { content: ''; position: absolute; left: -4px; top: calc(1.9rem - 4px); width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.amark { color: var(--amber-dim); }
+.amark.on { color: var(--amber); border-color: var(--amber); }
+.amark.ftl { color: var(--cyan); border-color: var(--cyan); }
+.amark.warn { color: var(--red); border-color: var(--red); }
+.amark.outside { opacity: .45; }
+.alabel { position: absolute; left: 3px; top: 0; font-size: .6rem; font-weight: 700; letter-spacing: .08em; white-space: nowrap; }
+.alabel.hi { top: .75rem; }
+.alabel.flip { left: auto; right: 3px; } /* near the right end: label on the tick's left */
+.aship { position: absolute; top: calc(2.1rem - .38rem); width: 0; height: 0; margin-left: -.55rem; border-top: .38rem solid transparent; border-bottom: .38rem solid transparent; border-left: .6rem solid var(--text); transition: left .5s ease; filter: drop-shadow(0 0 .25rem var(--text)); }
+.abody { position: absolute; right: -.3rem; top: calc(2.1rem - .55rem); width: .6rem; height: 1.1rem; border-radius: .6rem 0 0 .6rem; background: var(--amber-dim); }
+.ascale { position: absolute; left: 10%; top: 2.35rem; font: .62rem "Share Tech Mono", ui-monospace, monospace; color: var(--amber-dim); }
+.ascale.zero { left: auto; right: 0; }
+
 .tname { font-size: 1.35rem; font-weight: 700; letter-spacing: .06em; color: var(--text); line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ttype { font-size: .85rem; letter-spacing: .14em; color: var(--amber-dim); }
 .tdist { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; margin-top: .2rem; }

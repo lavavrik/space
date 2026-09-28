@@ -2,7 +2,7 @@ import {
   Anchor, ArrowsOutCardinal, BatteryWarning, Binoculars, Broadcast, Fan, Funnel, Gauge, Headlights, Hourglass, Lightning,
   LightningSlash, Lock, PlugsConnected, ShieldCheck, SolarPanel, Snowflake, SteeringWheel, Sun, ThermometerHot, Wind, type Icon,
 } from '@phosphor-icons/react';
-import type { FlightView, GaugeBadge as GaugeBadgeView, Lamp, LampId, LocationView, SystemsView, TargetView } from '../../game/hud/types';
+import type { ApproachView, FlightView, GaugeBadge as GaugeBadgeView, Lamp, LampId, LocationView, SystemsView, TargetView } from '../../game/hud/types';
 import { Bar, Panel, cx } from './primitives';
 import { Tip } from './Tooltip';
 
@@ -124,6 +124,29 @@ export function FlightCluster({ f, lamps }: { f: FlightView; lamps: Lamp[] }) {
   );
 }
 
+/**
+ * The approach strip (hud/approach.ts): far away on the left, the target's surface on the right,
+ * the ship on the line and the approach's milestones marked (hover for what each means). The left
+ * zone holds, squeezed, what's beyond the current window; positions glide as the window zooms.
+ */
+function Approach({ a }: { a: ApproachView }) {
+  return (
+    <div className="appr">
+      <div className="appr-out" />
+      <div className="appr-line" />
+      {a.marks.map((m) => (
+        <Tip key={m.label} className={cx('amark', m.kind, m.outside && 'outside')} style={{ left: `${m.x * 100}%` }} content={<><div className="tiph"><span className="tipn">{m.label}</span></div><div className="tipd">{m.detail}</div></>}>
+          {m.row >= 0 && <span className={cx('alabel', m.row === 1 && 'hi', m.x > 0.85 && 'flip')}>{m.label}</span>}
+        </Tip>
+      ))}
+      <span className="aship" style={{ left: `${a.shipX * 100}%` }} />
+      <span className="abody" />
+      <span className="ascale">{a.scale}</span>
+      <span className="ascale zero">0</span>
+    </div>
+  );
+}
+
 /** Bottom right: the target's name, type, distance and ETA. */
 export function TargetCard({ t }: { t: TargetView }) {
   return (
@@ -136,6 +159,7 @@ export function TargetCard({ t }: { t: TargetView }) {
           <span>{t.eta}</span>
         </div>
       )}
+      {t.approach && <Approach a={t.approach} />}
       {t.scan && (
         <>
           <div className={cx('tscan', t.scan.warn && 'warnc')}>{t.scan.text}</div>

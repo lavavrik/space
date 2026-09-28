@@ -49,6 +49,7 @@ The simulation never touches the DOM. Each frame it steps the physics, draws the
 
 ## HUD
 - **Dashboard lamps** above the speedometer: one icon per system, dim when off and lit when on (amber on, cyan drive-related, red warning; blinking while changing). Flight assist, decoupled, autopilot/route/docking computer, FTL cruise, docking; sun tracking, headlights, radiators, heat pump, H₂ vent, fuel scoop, radar sweep, shore power; drive charging, mass lock, hull hot, battery low, power short, time warp, periscope. Hover one (with the mouse free) for a tooltip: its name, on/off, key and live detail.
+- **Approach strip** in the target card: a line from far away to the target's surface (right), with you on it and the approach's milestones marked (mass lock, FTL drop, sphere of influence, lowest orbit, air, scoop zones, ground frame and surface speed limit; for stations the frame, docking computer range, pad request range and hold point). Log-scaled; it zooms in steps as you close in, and the hatched left zone squeezes in what's beyond the window. Hover a mark for details (hud/approach.ts).
 - **One selection at a time:** targeting a body or station clears the jump destination, and picking a star clears the target.
 
 ## Controls

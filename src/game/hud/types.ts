@@ -49,6 +49,23 @@ export interface TargetView {
   none: boolean;
   scan: Readout | null; // scan status (unscanned / scanning / out of resolution); null once scanned
   scanFrac: number; // 0…1, for the card's scan bar
+  approach: ApproachView | null;
+}
+
+/** A milestone on the approach strip (hud/approach.ts): x ∈ [0, 1] from the left, label row 0/1 or −1 (tick only). */
+export interface ApproachMark {
+  d: number;
+  label: string;
+  detail: string;
+  kind: 'info' | 'on' | 'ftl' | 'warn';
+  x: number;
+  row: number;
+  outside: boolean; // beyond the window, squeezed into the left zone
+}
+export interface ApproachView {
+  shipX: number;
+  marks: ApproachMark[];
+  scale: string; // the window's far edge
 }
 
 export interface GaugeBadge {

@@ -35,7 +35,7 @@ import { HANGAR_R, padLocal, stationPointVelAt, stationQuat } from './stationGeo
 export type AutoPhase = 'approach' | 'wait' | 'hold' | 'align' | 'enter' | 'descend' | 'rise' | 'exit';
 
 /** How far out on the axis the approach holds before going in (m). */
-const HOLD_OUT = 600;
+export const HOLD_OUT = 600;
 /** Beyond this from the station (m) the approach may go up to FAR_SPEED (m/s). */
 const APPROACH_NEAR = 3000,
   FAR_SPEED = 1500;

@@ -8,9 +8,9 @@ import {
   FloatingArrow, FloatingPortal, arrow, autoUpdate, flip, offset, shift, useDismiss, useFloating, useFocus, useHover, useInteractions, useRole,
   type Placement,
 } from '@floating-ui/react';
-import { useRef, useState, type ReactNode } from 'react';
+import { useRef, useState, type CSSProperties, type ReactNode } from 'react';
 
-export function Tip({ content, children, className, placement = 'top' }: { content: ReactNode; children: ReactNode; className?: string; placement?: Placement }) {
+export function Tip({ content, children, className, style, placement = 'top' }: { content: ReactNode; children: ReactNode; className?: string; style?: CSSProperties; placement?: Placement }) {
   const [open, setOpen] = useState(false);
   const arrowRef = useRef<SVGSVGElement>(null);
   const { refs, floatingStyles, context } = useFloating({
@@ -28,7 +28,7 @@ export function Tip({ content, children, className, placement = 'top' }: { conte
   ]);
   return (
     <>
-      <span ref={refs.setReference} className={className} tabIndex={0} {...getReferenceProps()}>
+      <span ref={refs.setReference} className={className} style={style} tabIndex={0} {...getReferenceProps()}>
         {children}
       </span>
       {open && (

@@ -19,7 +19,7 @@ const tmp = new THREE.Vector3(),
   spinVel = new THREE.Vector3();
 
 /** Near the ground flight assist caps your speed against it at SURF_K × height (m/s per m) … */
-const SURF_K = 0.2,
+export const SURF_K = 0.2,
   /** … but never below this, so you can still land (well under CRASH_SPEED). */
   SURF_MIN = 8,
   /** Height the ship rests at above the terrain (collide). */

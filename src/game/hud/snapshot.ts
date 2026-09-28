@@ -24,6 +24,7 @@ import { SHORE_POWER } from '../sim/docking';
 import { RADAR_RANGE, SWEEP, contactLabel, radarClass, radarContacts } from '../sim/radar';
 import { unitLabel, type Computer } from '../avionics/catalog';
 import { buildInfluences } from './influences';
+import { approachView } from './approach';
 import { buildInfo } from './info';
 import type { AutopilotView, AvionicsSlotView, ElectricalView, ModuleIcon, RadarView, OutfitView, FlightView, GaugeBadge, GaugeView, Lamp, NavView, GuideView, HudSnapshot, LocationView, Pill, PlannerView, Readout, SystemsView, TargetView } from './types';
 
@@ -227,7 +228,7 @@ function flight(g: Game): FlightView {
 function target(g: Game): TargetView {
   const { ship } = g;
   const t = g.target;
-  if (!t) return { name: 'NO TARGET', type: 'T · G · CLICK', distance: '—', eta: '', none: true, scan: null, scanFrac: 0 };
+  if (!t) return { name: 'NO TARGET', type: 'T · G · CLICK', distance: '—', eta: '', none: true, scan: null, scanFrac: 0, approach: null };
   const sp = scanProgress(g, t);
   let scan: Readout | null = null;
   if (g.scanning === t) scan = { text: `SCANNING · ${Math.floor(sp * 100)} %` };
@@ -242,7 +243,7 @@ function target(g: Game): TargetView {
   const closing = vel.dot(dir);
   const type = sp < SCAN_STAGE.type ? 'UNKNOWN' : t.kind === 'station' ? 'ORBITAL STATION' : t.typeName.toUpperCase();
   const inside = g.inStation === t;
-  return { name: contactLabel(g, t), type, distance: inside ? (g.dock?.docked ? 'DOCKED' : 'INSIDE') : fmtDist(d), eta: closing > 1 ? `ETA ${fmtTime(d / closing)}` : 'NOT CLOSING', none: false, scan, scanFrac: sp };
+  return { name: contactLabel(g, t), type, distance: inside ? (g.dock?.docked ? 'DOCKED' : 'INSIDE') : fmtDist(d), eta: closing > 1 ? `ETA ${fmtTime(d / closing)}` : 'NOT CLOSING', none: false, scan, scanFrac: sp, approach: inside ? null : approachView(g, t, d) };
 }
 
 function systems(g: Game): SystemsView {
