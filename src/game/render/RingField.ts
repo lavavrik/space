@@ -27,7 +27,11 @@ const FADE_ABOVE = 6000;
  * A rock from its index (shared by meshes and specks). Bin table (uBins, grid × 2): row 0 = (offset
  * of the bin's radius from the camera's (m), the camera's fractional cell in the bin's co-orbiting
  * frame, density 0…1, the bin's cell angle (rad)); row 1 = (the bin's global radial index, the
- * camera's global angular cell index).
+ * camera's angular cell index round the bin, and the number of cells round it, each split in two
+ * (÷ 4096, remainder) as they pass float32's exact integers at a giant's outer rings). A whole number of cells
+ * goes round each bin, and angular indices wrap at it: then the bin's phase wrapping by a full turn
+ * (every orbit; every few seconds under time warp) leaves every rock where it was. Before, a turn was
+ * a fraction of a cell off, and each wrap swapped the bin's rocks for a different set.
  */
 const ROCK_GLSL = `
 uniform sampler2D uBins;
@@ -53,10 +57,13 @@ bool ringRock(int id, out vec3 p, out float size, out float tint, out float fade
   // a fine-mesh layer draws only the central WINDOW × WINDOW cells of the grid (the same rocks)
   int li = cid / WINDOW, lj = cid - li * WINDOW;
   int bi = (GRID - WINDOW) / 2 + li, bj = (GRID - WINDOW) / 2 + lj;
-  vec4 A = texelFetch(uBins, ivec2(bi, 0), 0), B = texelFetch(uBins, ivec2(bi, 1), 0);
+  vec4 A = texelFetch(uBins, ivec2(bi, 0), 0), B = texelFetch(uBins, ivec2(bi, 1), 0), C = texelFetch(uBins, ivec2(bi, 2), 0);
   if (A.z <= 0.0) return false;
   int jrel = bj - GRID / 2;
-  uvec3 hv = pcg3(uvec3(uint(int(B.x) + 1073741824), uint(int(B.y) + jrel + 1073741824), uint(q) + uint(uSeed) * 977u));
+  int nth = int(C.x) * 4096 + int(C.y), jc = int(B.y) * 4096 + int(B.z);
+  int jj = (jc + jrel) % nth;
+  if (jj < 0) jj += nth;
+  uvec3 hv = pcg3(uvec3(uint(int(B.x) + 1073741824), uint(jj), uint(q) + uint(uSeed) * 977u));
   s = hv.x ^ hv.y ^ hv.z;
   if (rnd(s) > A.z) return false; // the ring's density
   float du = (rnd(s) - 0.5) * uCell, u = rnd(s), zz = (rnd(s) * 2.0 - 1.0) * uH;
@@ -249,8 +256,8 @@ class Layer {
     lod?: { detail: number; cut: number },
   ) {
     const G = L.grid;
-    this.data = new Float32Array(G * 2 * 4);
-    this.bins = new THREE.DataTexture(this.data, G, 2, THREE.RGBAFormat, THREE.FloatType);
+    this.data = new Float32Array(G * 3 * 4);
+    this.bins = new THREE.DataTexture(this.data, G, 3, THREE.RGBAFormat, THREE.FloatType);
     this.bins.minFilter = this.bins.magFilter = THREE.NearestFilter;
     const mesh = L.detail >= 0;
     const cell = (2 * L.range) / G;
@@ -314,20 +321,26 @@ class Layer {
       let dens = 0;
       if (Math.abs(dR) < L.range && Math.abs(h) < L.range + RING_HALF_THICK && rb > 0) dens = ringDensity(b, rb / R) / 0.85;
       const o = bi * 4,
-        o2 = (G + bi) * 4;
+        o2 = (G + bi) * 4,
+        o3 = (2 * G + bi) * 4;
       this.data[o + 2] = dens;
       if (dens <= 0) continue;
       any = true;
       // the camera's place in this bin's co-orbiting frame (double precision here)
       const w = Math.sqrt(b.mu / (rb * rb * rb));
-      const dth = cell / rb;
+      const nth = Math.max(1, Math.round((2 * Math.PI * rb) / cell)); // a whole number of cells round (see the top)
+      const dth = (2 * Math.PI) / nth;
       const phiC = (fr.thC - ((w * fr.t) % (2 * Math.PI))) / dth;
       const jc = Math.floor(phiC);
       this.data[o] = dR;
       this.data[o + 1] = phiC - jc;
       this.data[o + 3] = dth;
+      const jm = ((jc % nth) + nth) % nth; // the camera's cell round the bin, wrapped
       this.data[o2] = gi;
-      this.data[o2 + 1] = jc;
+      this.data[o2 + 1] = Math.floor(jm / 4096);
+      this.data[o2 + 2] = jm % 4096;
+      this.data[o3] = Math.floor(nth / 4096);
+      this.data[o3 + 1] = nth % 4096;
     }
     this.object.visible = any;
     if (!any) return;
