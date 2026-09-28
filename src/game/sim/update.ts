@@ -101,10 +101,9 @@ export function update(g: Game, dt: number, realDt = dt) {
   chargeFTL(g, dt);
   updateJump(g, dt);
 
-  // --- orbits (the ship rides along with its frame body, as do the other ships) and planet spin
+  // --- orbits and spin (the ship rides along with its frame body, as do the other ships)
   if (!inTunnel) rideTraffic(g);
   advanceBodies(g);
-  for (const b of g.cur.bodies) b.rot += b.spin * dt;
   if (!inTunnel) updateTraffic(g, dt); // other ships (sim/traffic.ts)
   updateFrame(g);
 

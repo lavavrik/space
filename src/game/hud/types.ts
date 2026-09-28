@@ -261,6 +261,8 @@ export interface Lamp {
 export interface HudSnapshot {
   lamps: Lamp[];
   helpVisible: boolean;
+  /** The save (save.ts): when it was last written, and whether "new game" is armed. */
+  save: { status: string; confirm: boolean };
   info: InfoView | null;
   showRelock: boolean;
   toast: { text: string; kind: MsgKind; visible: boolean };

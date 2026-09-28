@@ -15,6 +15,7 @@ import { apLabel, evalPlan } from '../sim/orbits';
 import { deltaVLeft, dryMass } from '../sim/resources';
 import { battCap } from '../sim/power';
 import { MASS_LOCK_K, dropAlt, massLock } from '../sim/ftl';
+import { AUTOSAVE_S, ago } from '../save';
 import { surfaceDist, surfaceRadius } from '../sim/terrain';
 import { surfaceLimit } from '../sim/flight';
 import { TEMP, nextLimit } from '../sim/thermal';
@@ -34,6 +35,7 @@ const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 export function buildSnapshot(g: Game): HudSnapshot {
   return {
     helpVisible: g.helpVisible,
+    save: { status: g.savedAt ? `Saved ${ago(g.savedAt)} · autosaves every ${AUTOSAVE_S} s` : `Not saved yet · autosaves every ${AUTOSAVE_S} s`, confirm: g.newGameConfirm > 0 },
     info: g.infoVisible && g.target ? buildInfo(g, g.target) : null,
     showRelock: !g.pointerLocked,
     toast: { text: g.msg.text, kind: g.msg.kind, visible: g.msg.on },

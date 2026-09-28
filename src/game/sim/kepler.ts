@@ -40,5 +40,9 @@ export function orbitThrough(rel: THREE.Vector3, mu: number, e: number, nu0: num
 
 /** Move every world along its orbit to time t. Parents come before their moons in `bodies`. */
 export function updateBodies(bodies: Body[], t: number) {
-  for (const b of bodies) if (b.kind !== 'star') keplerState(b.orb, t, b.parent.pos, b.parent.vel, b.pos, b.vel);
+  for (const b of bodies) {
+    if (b.kind !== 'star') keplerState(b.orb, t, b.parent.pos, b.parent.vel, b.pos, b.vel);
+    // spin from the clock too (not accumulated), so a saved game's worlds face the same way on load
+    b.rot = (b.spin * t) % (2 * Math.PI);
+  }
 }

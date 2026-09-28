@@ -110,3 +110,11 @@ export function systemsNear(center: THREE.Vector3, radius: number): StarSystem[]
         for (const s of sector(ix, iy, iz)) if (s.pos.distanceToSquared(center) <= r2) out.push(s);
   return out;
 }
+
+/** The system with this id ("ix,iy,iz:k": the k-th of its sector), or null if there's none. */
+export function systemById(id: string): StarSystem | null {
+  if (id === HOME_ID) return homeSystem();
+  const m = /^(-?\d+),(-?\d+),(-?\d+):(\d+)$/.exec(id);
+  if (!m) return null;
+  return sector(+m[1], +m[2], +m[3]).find((s) => s.id === id) ?? null;
+}

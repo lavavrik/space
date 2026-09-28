@@ -31,6 +31,7 @@ import { toggleScan } from './sim/scanner';
 import { dockKey, launch, refuelDocked, type Dock } from './sim/docking';
 import type { AutoPhase } from './sim/autodock';
 import { fitBattery, fitModule, removeModule } from './outfit/fit';
+import { AUTOSAVE_S, clearSave, loadGame, saveGame } from './save';
 
 /** A ship with full tanks and the best gear (yours, and every other ship's: sim/traffic.ts). */
 export function newShip(): Ship {
@@ -162,6 +163,13 @@ export class Game {
   /** Seconds left to confirm disengaging the autopilot (0 = not armed). */
   apConfirm = 0;
   pointerLocked = false;
+  /** When the game was last saved (wall clock, ms; 0 = not yet), and seconds to the next autosave (save.ts). */
+  savedAt = 0;
+  private saveT = AUTOSAVE_S;
+  /** Starting over: nothing more is saved before the reload. */
+  private noSave = false;
+  /** Seconds left to confirm starting a new game (0 = not armed). */
+  newGameConfirm = 0;
 
   /** Inverse ship orientation and forward vector, refreshed each simulation step. */
   readonly qInv = new THREE.Quaternion();
@@ -213,9 +221,15 @@ export class Game {
     addEventListener('resize', this.resize);
 
     this.resize();
-    placeAtHome(this);
-    // no title card: you're in the pilot's seat from the first frame (click to capture the mouse)
-    this.showMsg('Engines online · hold W to thrust, J for FTL');
+    // resume the saved game if there is one (save.ts), otherwise start at home
+    if (!loadGame(this)) {
+      placeAtHome(this);
+      // no title card: you're in the pilot's seat from the first frame (click to capture the mouse)
+      this.showMsg('Engines online · hold W to thrust, J for FTL');
+    }
+    // save when the page is hidden or closed (tab switch, reload, quit), besides the autosave
+    addEventListener('pagehide', this.saveNow);
+    document.addEventListener('visibilitychange', this.onVisibility);
     this.publishHud();
     this.raf = requestAnimationFrame((t) => {
       this.last = t;
@@ -395,6 +409,28 @@ export class Game {
     this.invalidateHud();
   }
 
+  /** Save now (also the autosave, and on leaving the page). */
+  saveNow = () => {
+    if (!this.noSave) saveGame(this);
+  };
+
+  private onVisibility = () => {
+    if (document.visibilityState === 'hidden') this.saveNow();
+  };
+
+  /** Controls panel button: first click arms, a second within a few seconds wipes the save and starts over. */
+  newGame() {
+    if (this.newGameConfirm <= 0) {
+      this.newGameConfirm = 4;
+      this.showMsg('Start a new game? Click again to confirm · your save will be deleted', 'warn');
+      this.invalidateHud();
+      return;
+    }
+    this.noSave = true;
+    clearSave();
+    location.reload();
+  }
+
   /** Fast-forward the simulation (for debugging from the console). */
   step(seconds: number, dt = 0.02) {
     for (let t = 0; t < seconds; t += dt) update(this, dt);
@@ -416,6 +452,14 @@ export class Game {
     this.last = now;
     updatePeriscope(this, dt);
     update(this, dt * this.warp, dt);
+    if ((this.saveT -= dt) <= 0) {
+      this.saveT = AUTOSAVE_S;
+      this.saveNow();
+    }
+    if (this.newGameConfirm > 0 && (this.newGameConfirm -= dt) <= 0) {
+      this.newGameConfirm = 0;
+      this.invalidateHud();
+    }
     perf.mark('sim');
     perf.gpuBegin();
     this.scene.render(this);
@@ -438,6 +482,8 @@ export class Game {
   dispose() {
     cancelAnimationFrame(this.raf);
     removeEventListener('resize', this.resize);
+    removeEventListener('pagehide', this.saveNow);
+    document.removeEventListener('visibilitychange', this.onVisibility);
     this.input.dispose();
     this.scene.dispose();
     this.perf.dispose();

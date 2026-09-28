@@ -103,6 +103,9 @@ export const DOCK_COMPUTERS: DockComputer[] = [
   { id: 'wd-300', kind: 'dock', maker: 'Wharfside Avionics', model: 'WD-300', name: 'Berth', blurb: 'Engage from 50 km: flies in, requests clearance itself, docks, and flies you out after launch', caps: { approachSpeed: 150, insideSpeed: 60, launch: true, clearance: true, range: 50e3 } },
 ];
 
+/** Every computer in the catalog (for looking one up by id, e.g. from a save). */
+export const ALL_COMPUTERS: Computer[] = [...ORBIT_COMPUTERS, ...SCANNERS, ...NAV_COMPUTERS, ...DOCK_COMPUTERS];
+
 /** The computers a ship has fitted, one slot per kind (null = none fitted). */
 export interface Avionics {
   orbit: OrbitComputer | null;

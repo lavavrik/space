@@ -210,3 +210,6 @@
 .rdrow .obtn { display: inline-flex; align-items: center; gap: .25rem; }
 #radar > * { flex-shrink: 0; }
 #radar > .rdlist { flex-shrink: 1; }
+/* controls panel footer: save status and "new game" */
+.savebar { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .5rem; padding-bottom: .4rem; border-bottom: 1px solid var(--amber-faint); font-size: .7rem; opacity: .85; }
+.obtn.warn { color: var(--red); border-color: var(--red); }

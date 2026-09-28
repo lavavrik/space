@@ -32,7 +32,7 @@ export function App() {
               />
             ) : hud.avionics ? <AvionicsPanel slots={hud.avionics} electrical={hud.electrical} onOpen={(k) => game!.openAvionics(k)} /> : hud.docked ? (
               <DockedPanel d={hud.docked} act={{ refuel: () => game!.refuelDocked(), outfit: () => game!.openAvionics('outfit'), launch: () => game!.launch() }} />
-            ) : hud.helpVisible && <HelpPanel />}
+            ) : hud.helpVisible && <HelpPanel save={hud.save} onNewGame={() => game!.newGame()} />}
           </div>
           <div id="rightcol">
             {hud.nav && (
