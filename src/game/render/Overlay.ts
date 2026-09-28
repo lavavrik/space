@@ -570,7 +570,7 @@ export class Overlay {
 
   /** Diamond on the hyperjump destination star. */
   private drawJumpDest(g: Game) {
-    const dest = g.jumpDest;
+    const dest = g.jump?.dest ?? g.jumpDest; // a jump under way keeps its marker
     if (!dest) return;
     const { ctx, W, H } = this;
     const dir = dest.pos.clone().sub(galPos(g));

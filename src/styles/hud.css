@@ -96,6 +96,15 @@
 .pill.ftl { color: var(--cyan); border-color: var(--cyan); }
 .pill.warn { color: var(--red); border-color: var(--red); }
 
+/* dashboard tell-tales above the speedometer (Hud.tsx, Lamps): dim when off, lit when on */
+#lamps { display: flex; justify-content: center; flex-wrap: wrap; gap: .3rem; padding-bottom: .35rem; border-bottom: 1px solid var(--amber-faint); }
+.lamp { display: inline-flex; font-size: 1.15rem; padding: .15rem; color: var(--amber); opacity: .18; transition: opacity .15s, color .15s; }
+.lamp.on { opacity: 1; filter: drop-shadow(0 0 .3rem currentColor); }
+.lamp.ftl { opacity: 1; color: var(--cyan); filter: drop-shadow(0 0 .3rem currentColor); }
+.lamp.warn { opacity: 1; color: var(--red); filter: drop-shadow(0 0 .3rem currentColor); }
+.lamp.blink { animation: lampBlink 1s steps(2, jump-none) infinite; }
+@keyframes lampBlink { 50% { opacity: .35; } }
+
 /* target card, bottom right */
 .tname { font-size: 1.35rem; font-weight: 700; letter-spacing: .06em; color: var(--text); line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ttype { font-size: .85rem; letter-spacing: .14em; color: var(--amber-dim); }

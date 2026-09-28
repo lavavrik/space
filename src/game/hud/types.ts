@@ -218,7 +218,24 @@ export interface GuideView {
   time: string;
 }
 
+/**
+ * Dashboard tell-tales above the speedometer (render: ui/components/Hud.tsx, Lamps): one icon per
+ * system, dim when off and lit when on, like an old car's dashboard. `state` picks the colour:
+ * amber for on, cyan for drive/FTL-related, red for a warning; `blink` while something is changing.
+ */
+export type LampId =
+  | 'fa' | 'decoupled' | 'autopilot' | 'cruise' | 'dock'
+  | 'sun' | 'lights' | 'radiators' | 'pump' | 'vent' | 'scoop' | 'radar' | 'shore'
+  | 'charge' | 'masslock' | 'hot' | 'battery' | 'power' | 'warp' | 'zoom';
+export interface Lamp {
+  id: LampId;
+  title: string;
+  state: 'off' | 'on' | 'ftl' | 'warn';
+  blink?: boolean;
+}
+
 export interface HudSnapshot {
+  lamps: Lamp[];
   helpVisible: boolean;
   info: InfoView | null;
   showRelock: boolean;

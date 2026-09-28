@@ -1,5 +1,8 @@
-import { Fan, SolarPanel, Snowflake, Wind, type Icon } from '@phosphor-icons/react';
-import type { FlightView, GaugeBadge as GaugeBadgeView, LocationView, SystemsView, TargetView } from '../../game/hud/types';
+import {
+  Anchor, ArrowsOutCardinal, BatteryWarning, Binoculars, Broadcast, Fan, Funnel, Gauge, Headlights, Hourglass, Lightning,
+  LightningSlash, Lock, PlugsConnected, ShieldCheck, SolarPanel, Snowflake, SteeringWheel, Sun, ThermometerHot, Wind, type Icon,
+} from '@phosphor-icons/react';
+import type { FlightView, GaugeBadge as GaugeBadgeView, Lamp, LampId, LocationView, SystemsView, TargetView } from '../../game/hud/types';
 import { Bar, Panel, cx } from './primitives';
 
 /**
@@ -55,10 +58,34 @@ export function ShipGauges({ s }: { s: SystemsView }) {
   );
 }
 
-/** Bottom centre: mode, speed, speed-limit or throttle bar, altitude and orbit, status pills. Never collapses. */
-export function FlightCluster({ f }: { f: FlightView }) {
+/** Phosphor icons (MIT) for the dashboard lamps. */
+const LAMP_ICONS: Record<LampId, Icon> = {
+  fa: ShieldCheck, decoupled: ArrowsOutCardinal, autopilot: SteeringWheel, cruise: Gauge, dock: Anchor,
+  sun: Sun, lights: Headlights, radiators: Snowflake, pump: Fan, vent: Wind, scoop: Funnel, radar: Broadcast, shore: PlugsConnected,
+  charge: Lightning, masslock: Lock, hot: ThermometerHot, battery: BatteryWarning, power: LightningSlash, warp: Hourglass, zoom: Binoculars,
+};
+
+/** Above the speedometer: a row of tell-tales, dim when off and lit when on (hud/types.ts, Lamp). */
+export function Lamps({ lamps }: { lamps: Lamp[] }) {
+  return (
+    <div id="lamps">
+      {lamps.map((l) => {
+        const I = LAMP_ICONS[l.id];
+        return (
+          <span key={l.id} className={cx('lamp', l.state, l.blink && 'blink')} title={l.title}>
+            <I weight={l.state === 'off' ? 'regular' : 'fill'} aria-label={l.title} />
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Bottom centre: dashboard lamps, mode, speed, speed-limit or throttle bar, altitude and orbit, status pills. Never collapses. */
+export function FlightCluster({ f, lamps }: { f: FlightView; lamps: Lamp[] }) {
   return (
     <section id="flight" className="pan">
+      <Lamps lamps={lamps} />
       <div id="hMode" className={f.modeClass}>
         {f.mode}
       </div>

@@ -57,7 +57,7 @@ export function App() {
             <ShipGauges s={hud.systems} />
             <div id="centre">
               <Toast toast={hud.toast} />
-              <FlightCluster f={hud.flight} />
+              <FlightCluster f={hud.flight} lamps={hud.lamps} />
             </div>
             <TargetCard t={hud.target} />
           </div>

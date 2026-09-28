@@ -14,6 +14,7 @@ import { galPos } from '../sim/navigation';
 import { apLabel, evalPlan } from '../sim/orbits';
 import { deltaVLeft, dryMass } from '../sim/resources';
 import { battCap } from '../sim/power';
+import { massLock } from '../sim/ftl';
 import { TEMP, nextLimit } from '../sim/thermal';
 import { BATTERIES, MODULES, PUMP_ON_ABOVE, type BatteryModule, RADIATOR_MAX_ACC, moduleLabel, outfitMass, pumpFitted, radiatorsFitted, type Module } from '../outfit/catalog';
 import { outfitter } from '../outfit/fit';
@@ -22,7 +23,7 @@ import { RADAR_RANGE, SWEEP, contactLabel, radarClass, radarContacts } from '../
 import { unitLabel, type Computer } from '../avionics/catalog';
 import { buildInfluences } from './influences';
 import { buildInfo } from './info';
-import type { AutopilotView, AvionicsSlotView, ElectricalView, ModuleIcon, RadarView, OutfitView, FlightView, GaugeBadge, GaugeView, NavView, GuideView, HudSnapshot, LocationView, Pill, PlannerView, Readout, SystemsView, TargetView } from './types';
+import type { AutopilotView, AvionicsSlotView, ElectricalView, ModuleIcon, RadarView, OutfitView, FlightView, GaugeBadge, GaugeView, Lamp, NavView, GuideView, HudSnapshot, LocationView, Pill, PlannerView, Readout, SystemsView, TargetView } from './types';
 
 const tmp = new THREE.Vector3();
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
@@ -35,6 +36,7 @@ export function buildSnapshot(g: Game): HudSnapshot {
     toast: { text: g.msg.text, kind: g.msg.kind, visible: g.msg.on },
     location: location(g),
     flight: flight(g),
+    lamps: lamps(g),
     target: target(g),
     systems: systems(g),
     planner: planner(g),
@@ -60,7 +62,7 @@ export function buildSnapshot(g: Game): HudSnapshot {
 function location(g: Game): LocationView {
   const st = g.cur.sys.star;
   const gp = galPos(g);
-  const d = g.jumpDest;
+  const d = g.jump?.dest ?? g.jumpDest;
   return {
     system: g.cur.sys.name,
     star: `${st.spec} · ${st.R.toFixed(2)} R☉ · ${Math.round(st.T)} K`,
@@ -89,6 +91,41 @@ function flightMode(g: Game): [string, FlightView['modeClass']] {
   if (ship.mode === 'ftl') return ['FTL', 'ftl'];
   if (ship.landed) return ['LANDED', ''];
   return ['NORMAL SPACE', ''];
+}
+
+/** Dashboard tell-tales (see Lamp in hud/types.ts). */
+function lamps(g: Game): Lamp[] {
+  const { ship, power } = g;
+  const L = (id: Lamp['id'], on: unknown, title: string, state: Lamp['state'] = 'on', blink = false): Lamp => ({ id, title, state: on ? state : 'off', blink: !!on && blink });
+  const charging = g.jump?.phase === 'charge' || ship.ftlCharge > 0;
+  const rad = ship.outfit.radiatorsOut;
+  const lock = ship.mode === 'normal' && !g.jump ? massLock(g) : null;
+  const battLow = ship.batt < battCap(ship) * 0.1;
+  return [
+    // flight
+    L('fa', ship.fa, ship.fa ? 'Flight assist on (Shift+Z)' : 'Flight assist off (Shift+Z)'),
+    L('decoupled', ship.decoupled, 'Decoupled: rotation doesn\'t steer (V)', 'warn'),
+    L('autopilot', ship.ap || g.autodock || g.route?.running, g.autodock ? 'Docking computer flying' : g.route?.running ? 'Nav route flying' : 'Autopilot (O)', 'ftl'),
+    L('cruise', ship.mode === 'ftl' && ship.cruise, 'FTL cruise control (F)', 'ftl'),
+    L('dock', g.dock, g.dock?.docked ? `Docked · pad ${g.dock.pad + 1}` : g.dock ? `Pad ${g.dock.pad + 1} granted` : g.dockRequest ? 'Docking requested' : 'Docking (K)', 'on', !g.dock && !!g.dockRequest),
+    // ship systems
+    L('sun', ship.sunTrack, 'Sun tracking: panels to the star (P)'),
+    L('lights', g.lights, 'Headlights (Shift+L)'),
+    L('radiators', rad > 0, rad < 1 ? `Radiators ${Math.round(rad * 100)}%` : 'Radiators out (Shift+R)', 'on', rad > 0 && rad < 1),
+    L('pump', power.pumpKW > 0, `Heat pump running · ${fmtPower(power.pumpKW)}`),
+    L('vent', ship.vent, 'Venting hydrogen for cooling (R)', 'ftl'),
+    L('scoop', ship.scoop, ship.scoop || 'Fuel scoop', 'ftl'),
+    L('radar', g.radar.sweep > 0, 'Radar sweeping', 'on', true),
+    L('shore', power.shore > 0, 'Shore power'),
+    // warnings and modes
+    L('charge', charging, g.jump ? 'Hyperdrive charging' : 'FTL drive charging', 'ftl', true),
+    L('masslock', lock, lock ? `Mass-locked by ${lock.name}` : 'Mass lock', 'warn'),
+    L('hot', ship.temp >= TEMP.warn, `Hull ${ship.temp.toFixed(0)} K`, 'warn', ship.temp >= TEMP.drives),
+    L('battery', battLow, 'Battery low', 'warn', ship.batt < 1),
+    L('power', power.limited, power.limited ? `Power short: ${power.limited.what}` : 'Power', 'warn'),
+    L('warp', g.warp > 1, `Time warp ×${g.warp.toLocaleString('en-US')}`, 'warn'),
+    L('zoom', g.zoom.on, `Periscope ${g.zoom.mag}× (Z)`),
+  ];
 }
 
 function flight(g: Game): FlightView {
@@ -159,15 +196,13 @@ function flight(g: Game): FlightView {
     else orbit = { text: `IN ORBIT · PE ${fmtDist(oe.pe - b.radius)} · AP ${fmtDist(oe.ap - b.radius)}` };
   }
 
-  const pills: Pill[] = [{ text: ship.fa ? 'FA ON' : 'FA OFF', kind: ship.fa ? 'on' : 'warn' }];
-  if (ship.decoupled) pills.push({ text: 'DECOUPLED', kind: 'warn' });
+  // on/off states are dashboard lamps (lamps()); pills carry the ones with a value
+  const pills: Pill[] = [];
   if (g.autodock) pills.push({ text: `AUTO-DOCK · ${g.autodock.phase.toUpperCase()}`, kind: 'ftl' });
   if (g.dock) pills.push({ text: g.dock.docked ? `DOCKED · PAD ${g.dock.pad + 1}` : `PAD ${g.dock.pad + 1} GRANTED`, kind: g.dock.docked ? 'on' : 'ftl' });
   if (g.zoom.on) pills.push({ text: `ZOOM ${g.zoom.mag}×`, kind: 'on' });
   if (g.warp > 1) pills.push({ text: `TIME ×${g.warp.toLocaleString('en-US')}`, kind: 'warn' });
-  if (ship.vent) pills.push({ text: 'VENTING H₂', kind: 'ftl' });
-  if (ship.outfit.radiatorsOut > 0) pills.push({ text: ship.outfit.radiatorsOut < 1 ? `RADIATORS ${Math.round(ship.outfit.radiatorsOut * 100)}%` : 'RADIATORS OUT', kind: 'ftl' });
-  if (ship.mode === 'ftl') pills.push({ text: ship.cruise ? 'CRUISE' : 'HOLD W', kind: ship.cruise ? 'ftl' : '' });
+  if (ship.mode === 'ftl' && !ship.cruise) pills.push({ text: 'HOLD W', kind: '' });
   if (gr && ship.mode === 'normal' && !ship.dead) {
     const gs = gr.g / 9.80665;
     pills.push({ text: `${gs < 0.01 ? gs.toExponential(1) : gs.toFixed(gs < 1 ? 2 : 1)} g`, kind: gr.g > NORMAL_ACC ? 'warn' : '' });

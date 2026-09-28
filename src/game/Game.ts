@@ -51,12 +51,33 @@ export class Game {
   nearby: StarSystem[] = [];
   readonly ship = newShip();
   readonly power: Power = { solar: 0, shore: 0, cos: 0, shadow: null, draw: 0, net: 0, thrustKW: 0, ftlKW: 0, chargeKW: 0, pumpKW: 0, radarKW: 0, lightsKW: 0, burn: 0, flux: 0, cap: 0, left: 0, limited: null, curtailed: 0, ftlShort: 0 };
-  target: Target | null = null;
+  /**
+   * One selection at a time: a body or station (target) or a star to jump to (jumpDest). Setting
+   * either clears the other. A hyperjump in progress keeps its own destination (jump.dest).
+   */
+  private _target: Target | null = null;
+  private _jumpDest: StarSystem | null = null;
+  get target() {
+    return this._target;
+  }
+  set target(t: Target | null) {
+    this._target = t;
+    if (t) this._jumpDest = null;
+  }
+  get jumpDest() {
+    return this._jumpDest;
+  }
+  set jumpDest(s: StarSystem | null) {
+    this._jumpDest = s;
+    if (s) {
+      this._target = null;
+      this.scanning = null; // the scanner works on the target
+    }
+  }
   /** Station whose frame flight assist works in, or null for the system frame (see sim/frame.ts). */
   refFrame: Station | null = null;
   /** Body whose frame ship.vel is in: the one whose sphere of influence the ship is in (see sim/frame.ts). */
   frameBody!: Body;
-  jumpDest: StarSystem | null = null;
   jump: Jump | null = null;
   planner: Planner | null = null;
   guide: Guide | null = null;
