@@ -25,6 +25,8 @@ For each octave i, the noise is sampled at `q_i = dir · 1.6 · 2.03^i + O_i`, i
 
 ### Precision
 
+Up close, even float32 unit directions aren't enough: they resolve ~0.5 m on an Earth, and through the periscope a pixel covers millimetres, so the fine octaves and bump slopes turned to static. On terrain chunks the shaders don't sample `dir · k + O_i`. They use `uQc[i] + (dir − centre) · k`: the chunk centre's lattice point, computed per chunk in double precision (`Terrain.ts latticeAt`), plus the small, precise offset from the centre (`position / R`). The centre point is wrapped by 2312 = 8 × 289, a period of both the texture noise and the crater hash, so nothing changes but precision (`terrain.glsl terrQ`).
+
 The old shader chain `sp = 1.6·dir + seedOffset`, multiplied by 2.03 per octave, lost float32 precision past about 11 octaves. `terrainOffsets` works out each octave's offset `O_i` in double precision. For the texture octaves it wraps the offset into [0, 8), since the texture tiles every 8 cells. That keeps shader coordinates small and precise to 17 octaves, about 15 m features on an Earth.
 
 ## Rendering (`render/Terrain.ts`)

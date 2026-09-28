@@ -12,6 +12,7 @@ varying float vOct; // octaves the geometry already shows (0 on the far sphere; 
 varying float vShadow; // mountains' shadows (1 lit; planet.vert.glsl)
 varying float vHc, vMask; // the terrain h and range mask the geometry already has
 varying vec3 vHaze, vHazeT, vSun; // terrain chunks: the air's haze and the sunlight, per vertex
+varying vec3 vOffDir; // terrain chunks: direction minus the chunk centre's (terrain.glsl terrQ)
 #pragma farlight_noise
 #pragma farlight_noise3d
 #pragma farlight_clouds
@@ -64,7 +65,9 @@ void main(){
     // geometry shows (from vOct) light the surface as bumps instead
     // only the octaves finer than the geometry are worked out here (terrHFrom); the rest come baked
     float hc=vHc;
+    tUseOff=uUseQc>0.5; tOffDir=vOffDir; // precise lattice points on terrain chunks
     float h=terrHFrom(p,int(vOct+0.5),oct,vHc,vMask);
+    tUseOff=false;
     bool seaOn=uType==2||uType==3;
     elev=terrElev(h,uSea,seaOn);
     N=bumpN(N,elev-terrElev(hc,uSea,seaOn));

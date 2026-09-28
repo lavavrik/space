@@ -16,12 +16,14 @@ varying vec3 vObj; varying vec3 vWN; varying vec3 vWP; varying float vOct;
 varying float vShadow; // 1 lit, 0 in a mountain's shadow
 varying float vHc, vMask; // the terrain h and range mask the geometry has (terrHFrom continues them)
 varying vec3 vHaze, vHazeT, vSun; // terrain: the air's haze, its transmittance, and the sunlight here (atmo.glsl), per vertex
+varying vec3 vOffDir; // terrain: direction minus the chunk centre's (precise; terrain.glsl terrQ)
 #if defined(TERRAIN) || defined(TERRAIN_BAKE)
 attribute vec3 aDir; attribute vec2 aGrid; attribute float aSkirt;
 uniform float uVOct, uSpacing, uSkirtD;
 uniform float uGridW; // vertices per grid row (N + 1)
 #endif
 #ifdef TERRAIN
+uniform float uRadius;
 uniform highp sampler2D uBake;
 uniform vec3 uLight;
 #pragma farlight_atmo
@@ -36,6 +38,8 @@ flat varying vec4 vBake;
 #pragma farlight_noise3d
 #pragma farlight_terrain
 float elevAt(vec3 d, int vo){ float c; bool sea = uType == 2 || uType == 3; return terrElev(terrH(d, vo, vo, c), uSea, sea); }
+// the same at the vertex's direction plus a small precise offset (terrQ)
+float elevOff(vec3 d, vec3 off, int vo){ tUseOff = uUseQc > 0.5; tOffDir = off; float e = elevAt(d, vo); tUseOff = false; return e; }
 
 #define SHADOW_STEPS 12
 #define SHADOW_OCT 9   // mountains and big craters cast shadows; finer relief only shades itself
@@ -68,7 +72,11 @@ void main(){
   int vo = int(uVOct + 0.5);
   float hc;
   bool sea = uType == 2 || uType == 3;
+  vec3 off = position / uRadius; // the point's direction minus the chunk centre's
+  tUseOff = uUseQc > 0.5;
+  tOffDir = off;
   float h = terrH(aDir, vo, vo, hc);
+  tUseOff = false;
   float mask = tMask;
   float e = terrElev(h, uSea, sea);
   if (uParity < 0.5) {
@@ -76,7 +84,7 @@ void main(){
     vec3 t1 = normalize(cross(aDir, abs(aDir.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
     vec3 t2 = cross(aDir, t1);
     float eps = uSpacing / uRadius;
-    float e1 = elevAt(normalize(aDir + t1 * eps), vo), e2 = elevAt(normalize(aDir + t2 * eps), vo);
+    float e1 = elevOff(normalize(aDir + t1 * eps), off + t1 * eps, vo), e2 = elevOff(normalize(aDir + t2 * eps), off + t2 * eps, vo);
     vBake = vec4(normalize(aDir - t1 * ((e1 - e) / uSpacing) - t2 * ((e2 - e) / uSpacing)), e);
   } else {
     float sun = dot(aDir, uLightL) < -0.2 ? 0.0 : sunShadow(aDir * (uRadius + e), uLightL, vo); // night side: dark anyway
@@ -91,6 +99,7 @@ void main(){
   vec4 A = texelFetch(uBake, ivec2(2 * g.x, g.y), 0), B = texelFetch(uBake, ivec2(2 * g.x + 1, g.y), 0);
   vec3 pos = position + aDir * (A.w - aSkirt * uSkirtD), n = A.xyz;
   vObj = aDir;
+  vOffDir = position / uRadius;
   vOct = uVOct;
   vShadow = B.x;
   vHc = B.y;
@@ -102,6 +111,7 @@ void main(){
   vShadow = 1.0;
   vHc = 0.0;
   vMask = 0.0;
+  vOffDir = vec3(0.0);
 #endif
   vec4 wp = modelMatrix * vec4(pos, 1.0);
   vWP = wp.xyz;

@@ -17,6 +17,16 @@ uniform float uCraters;  // 1 on moons: impact craters (terrainH)
 #define CRATER_P 0.5     // chance a lattice cell holds a crater
 float tDet;              // albedo detail from octaves 6+, ~unit contrast at every scale (fragment only)
 float tMask;             // the mountain-range mask terrH found (octave 2), for terrHFrom
+// Precision up close. A unit direction in float32 resolves ~0.5 m on an Earth, far coarser than a
+// pixel through the periscope, and the fine octaves turned to static. On terrain chunks the lattice
+// point is instead uQc[i] (the chunk centre's, worked out per chunk in double precision and wrapped
+// by 2312 = 8 × 289, which neither the texture noise nor the crater hash can tell) plus the small,
+// precise offset from the centre, tOffDir × k (see render/Terrain.ts).
+uniform vec3 uQc[17];
+uniform float uUseQc;
+vec3 tOffDir;            // the point's direction minus the chunk centre's (set before terrH/terrHFrom)
+bool tUseOff = false;
+vec3 terrQ(vec3 d, int i, float k){ return tUseOff ? uQc[i] + tOffDir * k : d * k + uTOff[i]; }
 
 // Integer hashing that's exact in float32 and in double (sim/terrain.ts), so both sides put the
 // same craters in the same places: every value stays an integer below 2^24.
@@ -59,7 +69,7 @@ float terrH(vec3 d, int oct, int split, out float coarse){
   for (int i = 0; i < T_OCT_MAX; i++) {
     if (i >= oct) break;
     if (i == split) coarse = s + mask * (r - MTN_MEAN) * MTN_K + cr;
-    vec3 q = d * k + uTOff[i];
+    vec3 q = terrQ(d, i, k);
     float n = i < FBM_EXACT ? snoise(q) : tnoise(q);
     s += a * n;
     if (i >= 6) tDet = tDet * 0.8 + n;
@@ -96,7 +106,7 @@ float terrHFrom(vec3 d, int from, int oct, float hc, float mask){
   for (int i = 0; i < T_OCT_MAX; i++) {
     if (i < from) continue;
     if (i >= oct) break;
-    vec3 q = d * k + uTOff[i];
+    vec3 q = terrQ(d, i, k);
     float n = i < FBM_EXACT ? snoise(q) : tnoise(q);
     s += octA(i) * n;
     if (i >= 6) tDet = tDet * 0.8 + n;

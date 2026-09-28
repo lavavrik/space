@@ -17,7 +17,7 @@
  * - Chunks entirely beyond the horizon aren't drawn; unused ones are freed after a while.
  */
 import { THREE } from '../lib/three';
-import { reliefAmp } from '../sim/terrain';
+import { reliefAmp, T_OCT_MAX, terrainOffsets } from '../sim/terrain';
 import type { World } from '../types';
 import { PLANET_FS, PLANET_VS, TERRAIN_BAKE_FS } from './shaders';
 
@@ -77,6 +77,7 @@ export class TerrainView {
   private readonly bakeMat: THREE.ShaderMaterial;
   private gl!: THREE.WebGLRenderer;
   private readonly sun = new THREE.Vector3(0, 1, 0);
+  private readonly off: Float32Array;
 
   constructor(
     private readonly b: World,
@@ -84,6 +85,7 @@ export class TerrainView {
   ) {
     this.R = b.radius;
     this.A = reliefAmp(b);
+    this.off = terrainOffsets(b.seed);
     this.root.visible = false;
     this.bakeMat = new THREE.ShaderMaterial({
       vertexShader: PLANET_VS,
@@ -97,6 +99,8 @@ export class TerrainView {
         uGridW: { value: N + 1 },
         uLightL: { value: new THREE.Vector3() },
         uParity: { value: 0 },
+        uQc: { value: new Float32Array(T_OCT_MAX * 3) },
+        uUseQc: { value: 1 },
       },
       depthTest: false,
       depthWrite: false,
@@ -180,6 +184,7 @@ export class TerrainView {
       mu = c.mesh.material.uniforms;
     u.uVOct.value = mu.uVOct.value;
     u.uSpacing.value = mu.uSpacing.value;
+    u.uQc.value = mu.uQc.value;
     (u.uLightL.value as THREE.Vector3).copy(this.sun);
     c.sun.copy(this.sun);
     const pts = new THREE.Points(c.mesh.geometry, this.bakeMat);
@@ -194,6 +199,24 @@ export class TerrainView {
     }
     gl.setRenderTarget(prev);
     this.bakeScene.remove(pts);
+  }
+
+  /**
+   * The chunk centre's lattice point for each octave (terrain.glsl terrQ): centre · 1.6 · 2.03^i +
+   * offset, in double precision, wrapped by 2312 (= 8 × 289: the texture noise tiles every 8 cells,
+   * the crater hash every 289) for the texture octaves, so the shader adds only small offsets.
+   */
+  private latticeAt(c: number[]) {
+    const q = new Float32Array(T_OCT_MAX * 3);
+    let k = 1.6;
+    for (let i = 0; i < T_OCT_MAX; i++) {
+      for (let a = 0; a < 3; a++) {
+        const v = c[a] * k + this.off[i * 3 + a];
+        q[i * 3 + a] = i >= 3 ? v - Math.floor(v / 2312) * 2312 : v;
+      }
+      k *= 2.03;
+    }
+    return q;
   }
 
   private free(c: Chunk) {
@@ -283,6 +306,8 @@ export class TerrainView {
         uSkirtD: { value: spacing * 4 + this.A * 0.6 ** vOct },
         uGridW: { value: N + 1 },
         uBake: { value: bake },
+        uQc: { value: this.latticeAt(cen) },
+        uUseQc: { value: 1 },
       },
     });
     const m = new THREE.Mesh(g, mat);
