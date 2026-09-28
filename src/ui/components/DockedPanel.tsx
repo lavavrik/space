@@ -6,6 +6,7 @@ interface Actions {
   refuel: () => void;
   outfit: () => void;
   launch: () => void;
+  catapult: () => void;
 }
 
 /**
@@ -31,8 +32,13 @@ export function DockedPanel({ d, act }: { d: NonNullable<HudSnapshot['docked']>;
           outfitting (⇧U)
         </button>
         <button type="button" className="obtn" onClick={act.launch}>
-          launch (K)
+          {d.sky ? 'lift off (K)' : 'launch (K)'}
         </button>
+        {d.sky && (
+          <button type="button" className="obtn" onClick={act.catapult}>
+            catapult (⇧K)
+          </button>
+        )}
       </div>
     </Panel>
   );

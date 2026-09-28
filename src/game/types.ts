@@ -75,9 +75,14 @@ export interface World extends BodyBase {
 export type Body = Star | World;
 
 /**
- * An orbital station. Not a Body: it has no gravity, doesn't mass-lock, and isn't in
- * `CurrentSystem.bodies`. It follows a fixed Kepler orbit around its parent, so `pos` and `vel`
- * are recomputed from the sim clock every step (see sim/stations.ts).
+ * A station. Not a Body: it has no gravity, doesn't mass-lock, and isn't in
+ * `CurrentSystem.bodies`. `pos` and `vel` are recomputed from the sim clock every step (see
+ * sim/stations.ts):
+ *   - an orbital station (a Coriolis cube) follows a fixed Kepler orbit around its parent;
+ *   - a sky station (`sky` set) hangs 10–20 km over one spot on its world's surface, turning with
+ *     the world. It's an open deck with its pads on top (sim/skyGeom.ts). Its Kepler fields are
+ *     placeholders (a = its distance from the centre, n = the world's spin) so code that reads an
+ *     orbit still gets sane numbers.
  */
 export interface Station extends KeplerOrbit {
   kind: 'station';
@@ -88,9 +93,17 @@ export interface Station extends KeplerOrbit {
   radius: number; // m, half the cube's diagonal (for targeting and markers)
   seed: number;
   spinAxis: Vec3;
-  spinRate: number; // rad/s about spinAxis, which runs through the docking slot (sim/stationGeom.ts)
+  spinRate: number; // rad/s about spinAxis, which runs through the docking slot (sim/stationGeom.ts); a sky station: its world's axis and spin
   pos: Vec3; // m, system frame
   vel: Vec3; // m/s, system frame
+  sky?: SkyAnchor;
+}
+
+/** Where a sky station hangs: fixed in its world's own (turning) frame. */
+export interface SkyAnchor {
+  dir: Vec3; // unit direction from the world's centre, in the world's frame (worldQuat)
+  r: number; // m from the world's centre
+  alt: number; // m above the ground under it
 }
 
 /** Anything the ship can target. */

@@ -107,3 +107,60 @@ On the way to the hold point (and while waiting for clearance) the docking compu
 ## Entry corridor
 
 The corridor runs 5 km out from the slot along the spin axis (`stationMesh.ts` CORRIDOR_M), widening 4× (CORRIDOR_GROW). 25 approach lights sit along each edge: green on +x, red on −x, like the slot's own lights. They're drawn at least 3 px wide so the corridor reads from far out, and pulses run in toward the slot. The lights are on within 60 km. The walls glow only while you have a pad there.
+
+## Sky stations
+
+Open decks hanging 10–20 km over the ground of worlds with air and a solid surface (not the giants):
+most Earth-like and ocean worlds, fewer elsewhere, always one on the home world. They're generated
+after the orbital stations from their own RNG stream (`universe/stations.ts`), so adding them
+changed nothing that was there. Geometry: `sim/skyGeom.ts`; mesh: `render/skyMesh.ts`; shader:
+`shaders/skyStation.frag.glsl`.
+
+- **Where:** fixed in the world's own frame (`Station.sky`: a direction and a radius), at 10–20 km
+  over the ground under it (not the mean radius: a mountain range under it doesn't bring it
+  closer). Each step it's placed with the world's rotation, and its velocity is the world's plus
+  ω × r (`sim/stations.ts`). Its Kepler fields are placeholders (a = its radius, n = the day).
+- **Shape** (units of the deck's diameter, 0.9–1.3 km; +z up): a deck disc 30 m thick with its top
+  at z = 0; a control tower with a lit cab and a red beacon; a tapering keel underneath and four
+  lift-fan pods under the rim. It has no interior: 12 pads sit on top, 8 round the rim and 4 closer
+  in, open to the sky.
+- **Frames:** it's a station, so within 30 km (5,000 km as your target) flight assist works relative
+  to it, which here is the turning ground at its height: hands off, you hover beside it.
+- **Docking:** request a pad as usual (K). There's no slot: fly over the pad and come straight
+  down onto it, upright, under 6 m/s. Over the deck with a pad granted, flight assist uses the docking
+  thrusters and the same braking curve as above a hangar wall, by height over the deck, so holding
+  "down" settles you onto it (tested: 120 m over the pad to docked in ~4 s). Docked, the ship sits nose-outward on the pad in the open air
+  (sunlight, not "inside"). The HUD marks the pad; the guide's steps are *fly over the pad*, *land*.
+- **Docking computer:** hold point straight above the deck's centre (0.87 × size + 200 m up), turn
+  upright nose-outward (align), go to 60 m over the pad (enter), settle (descend). It holds the ship
+  up against gravity (the station doesn't fall with it: `stationAcc` is only ω²r across the axis)
+  and in the air never flies faster than the air allows. Lifting off with a WD-300 reverses it.
+- **Rendezvous** (autopilot, nav route legs, traffic): a sky station is low in thick air, so it
+  never crosses the air to reach one. Not yet over it (in a cone 3 km + 30 % of the height wide
+  above it), it heads for a point just over the top of the air above it, round the world clear of
+  the air (`autopilot.ts skyDescent`); over it, it comes straight down at the air's speed limit to
+  the usual 2 km standoff. Far off and low, it climbs out for an FTL leg first, as for any station.
+  From 300 km up and 2,800 km round a 7,700 km world it takes ~6½ min and ~28 t of propellant.
+
+### The catapult (`sim/catapult.ts`)
+
+Docked at a sky station you can lift off yourself (K), or take the catapult (Shift+K, or the button
+in the docked panel): it throws the ship straight up, free, and the ascent program flies it out of
+the air with no input.
+
+Why not just throw it hard enough to coast out? At 10–20 km the air is still thick: the ship
+(~113 m² nose-on, ~150 t) would lose about half its speed to drag on the way up, so coasting clear of
+an Earth-like atmosphere would need ~3 km/s at the pad, and at that speed in that air the hull takes
+hundreds of MW of entry heating. Rockets have the same problem and the same answer: climb no faster
+than the air allows, then speed up as it thins.
+
+- `airSpeedLimit(ρ)`: the fastest to climb through air of density ρ — under 30 kPa of dynamic
+  pressure (about a rocket's max Q), under 20 MW of entry heating, under 1.5 km/s.
+- **Catapult:** a free kick straight up to that limit at the deck (~950 m/s from 17 km over a
+  1-bar world).
+- **Ascent program:** holds the climb at the limit (thrust against gravity and drag, nose turning
+  up along the climb), damping drift across the ground. Above the top of the air it hands back
+  control, still climbing at up to 1.5 km/s. Any thrust key takes over earlier.
+- From 17 km over Venydes 5 (1 bar, top ~77 km) it's clear in ~1 min for ~1.5 t of propellant,
+  the hull barely warming. Time warp is off during the ascent.
+- Traffic uses it too when leaving a sky station.

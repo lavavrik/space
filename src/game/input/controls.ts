@@ -1,5 +1,6 @@
 import { TANKER_TIME } from '../constants';
 import { dockKey } from '../sim/docking';
+import { catapultLaunch } from '../sim/catapult';
 import { stopAutodock } from '../sim/autodock';
 import { togglePeriscope, wheelZoom } from '../sim/periscope';
 import { changeWarp, stopWarp } from '../sim/timewarp';
@@ -149,7 +150,12 @@ export function onPress(g: Game, code: string) {
       g.showMsg(ship.sunTrack ? 'Sun tracking on · turning panels to the star (steer to cancel)' : 'Sun tracking off');
       break;
     case 'KeyK':
-      // K is docking (request, docking computer, launch); Shift+K calls a tanker
+      // K is docking (request, docking computer, launch); Shift+K calls a tanker, or docked at a sky
+      // station fires the catapult (sim/catapult.ts)
+      if ((keys.ShiftLeft || keys.ShiftRight) && g.dock?.docked && g.dock.station.sky) {
+        catapultLaunch(g);
+        break;
+      }
       if (!(keys.ShiftLeft || keys.ShiftRight)) {
         if (!dockKey(g)) g.showMsg('Target a station to dock at · Shift+K calls a tanker', 'warn');
         break;

@@ -12,9 +12,13 @@ import type { Body, KeplerOrbit, Npc, Station, Target, World } from '../types';
 import { atmoOf, type Atmo } from '../sim/atmosphere';
 import { HULL, SIGMA, TEMP, heatCap } from '../sim/thermal';
 import type { InfoView, Readout } from './types';
+import { padCount } from '../sim/stationGeom';
 
 const MEARTH = 5.972e24;
 const DEG = 180 / Math.PI;
+
+/** How a station is labelled: its kind. */
+export const stationKind = (st: Station) => (st.sky ? 'SKY STATION' : 'ORBITAL STATION');
 const tmp = new THREE.Vector3();
 
 const sci = (x: number) => x.toExponential(2).replace('e+', 'e');
@@ -37,10 +41,10 @@ export function buildInfo(g: Game, t: Target): InfoView {
   let orbit: [string, string][] = [['ORBIT', 'none · everything here orbits it']];
   if (t.kind !== 'star') {
     const par = t.parent;
-    orbitHead = `ORBITS ${par.name.toUpperCase()}`;
-    orbit = p >= SCAN_STAGE.orbit ? orbitRows(t.kind === 'station' ? t : t.orb, t, par) : [['ORBIT', 'unknown · scan to 75 %']];
+    orbitHead = t.kind === 'station' && t.sky ? `HANGS OVER ${par.name.toUpperCase()}` : `ORBITS ${par.name.toUpperCase()}`;
+    orbit = p < SCAN_STAGE.orbit ? [['ORBIT', 'unknown · scan to 75 %']] : t.kind === 'station' && t.sky ? skyRows(t) : orbitRows(t.kind === 'station' ? t : t.orb, t, par);
   }
-  const type = p < SCAN_STAGE.type ? 'UNKNOWN · UNSCANNED' : t.kind === 'station' ? 'ORBITAL STATION' : t.typeName.toUpperCase();
+  const type = p < SCAN_STAGE.type ? 'UNKNOWN · UNSCANNED' : t.kind === 'station' ? stationKind(t) : t.typeName.toUpperCase();
   return { title: t.name, type, physical, orbitHead, orbit, you: youRows(g, t) };
 }
 
@@ -131,7 +135,20 @@ const fmtX = (x: number) => (x < 0.1 ? `${Math.round(x * 100)} % of` : `${x < 10
 const fmtPct = (x: number) => `${x < 0.001 ? '<0.1' : x < 0.1 ? (x * 100).toFixed(1) : Math.round(x * 100)} %`;
 
 function stationPhysical(st: Station): [string, string][] {
+  if (st.sky) return [['SIZE', `${fmtDist(st.size)} open deck · ${padCount(st)} pads · catapult`]];
   return [['SIZE · SPIN', `${fmtDist(st.size)} cube · ${fmtTime((2 * Math.PI) / Math.abs(st.spinRate))} per turn`]];
+}
+
+/** Where a sky station hangs: its height over the ground, latitude and longitude, and the day it turns with. */
+function skyRows(st: Station): [string, string][] {
+  const { dir, alt } = st.sky!;
+  const lat = Math.asin(Math.max(-1, Math.min(1, dir.y))) * DEG,
+    lon = Math.atan2(dir.z, dir.x) * DEG;
+  return [
+    ['ALTITUDE', `${fmtDist(alt)} over the ground`],
+    ['LAT · LON', `${Math.abs(lat).toFixed(1)}° ${lat >= 0 ? 'N' : 'S'} · ${Math.abs(lon).toFixed(1)}° ${lon >= 0 ? 'E' : 'W'}`],
+    ['MOTION', `turns with ${st.parent.name} · ${fmtTime((2 * Math.PI) / st.parent.spin)} day`],
+  ];
 }
 
 /** Orbital elements of `o` around `p`, plus where the body is on that orbit right now. */

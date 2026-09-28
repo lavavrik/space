@@ -21,6 +21,7 @@ import { railsStep, stopWarp, warpBlocked } from './timewarp';
 import { updatePivot } from './pivot';
 import { updateRadar } from './radar';
 import { autodock } from './autodock';
+import { ascent, stopAscent } from './catapult';
 import { SHORE_POWER, holdDocked, rotationCorrection, stationContact, updateDockRequest } from './docking';
 
 const qa = new THREE.Quaternion();
@@ -154,8 +155,12 @@ export function update(g: Game, dt: number, realDt = dt) {
       syncFrame(g, grav.body);
       maybeFtlLeg(g);
       rotationCorrection(g, dt);
+      // after a sky station's catapult: the ascent program flies until clear of the air or a thrust key
+      if (g.ascent && anyInput) stopAscent(g, 'Ascent program off · you have control');
       if (g.autodock) autodock(g, dt, grav.vec);
-      else if (ship.ap && ship.ap.phase === 'insert') autopilot(g, dt, grav);
+      else if (g.ascent && ascent(g, dt, grav)) {
+        /* flown by the ascent program */
+      } else if (ship.ap && ship.ap.phase === 'insert') autopilot(g, dt, grav);
       else manualFlight(g, dt, grav, inp);
       updateAero(g, dt, (u) => crossSection(g, u), shipMass(ship)); // drag and entry heating
       ship.pos.addScaledVector(ship.vel, dt);

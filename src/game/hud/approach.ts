@@ -47,7 +47,9 @@ function milestones(g: Game, t: Target): Raw[] {
     if (unit?.caps.clearance) add(unit.caps.range, 'AUTODOCK', `${unit.model} can fly you in from here (K)`, 'ftl');
     add(FRAME_ENTER, 'LOCAL', 'Station frame even when not targeted', 'info');
     add(DOCK_REQUEST_RANGE, 'PAD REQUEST', 'Close enough to request a pad from traffic control (K)', 'on');
-    add(HOLD_OUT, 'HOLD POINT', 'Approach hold point on the slot axis', 'info');
+    // (over a sky station the hold point is straight above the deck, a little higher than it's wide)
+    if (t.sky) add(t.size * 0.37 + 200, 'HOLD POINT', 'Approach hold point above the deck', 'info');
+    else add(HOLD_OUT, 'HOLD POINT', 'Approach hold point on the slot axis', 'info');
     return out;
   }
   if (t.kind === 'ship') return out; // another ship: nothing to mark on the way

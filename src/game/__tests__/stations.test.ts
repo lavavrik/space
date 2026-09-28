@@ -3,16 +3,23 @@ import { JUMP_RANGE } from '../constants';
 import { THREE } from '../lib/three';
 import { minOrbitAlt } from '../sim/orbits';
 import { updateBodies } from '../sim/kepler';
-import { stationState } from '../sim/stations';
+import { stationAcc, stationState } from '../sim/stations';
+import { atmoOf } from '../sim/atmosphere';
+import { skyWhereIs } from '../sim/skyGeom';
+import { padCount, padOf, stationQuat } from '../sim/stationGeom';
+import { altitudeAt } from '../sim/terrain';
 import { homeSystem, systemsNear } from '../universe/galaxy';
 import { buildStations } from '../universe/stations';
 import { buildSystem, findHome } from '../universe/system';
 
 const systems = systemsNear(new THREE.Vector3(), JUMP_RANGE).slice(0, 40);
-const all = systems.flatMap((sys) => {
+const every = systems.flatMap((sys) => {
   const bodies = buildSystem(sys);
   return buildStations(sys, bodies).map((st) => ({ st, bodies }));
 });
+/** The orbital stations, and the sky stations. */
+const all = every.filter(({ st }) => !st.sky);
+const skies = every.filter(({ st }) => st.sky);
 
 describe('stations', () => {
   it('orbit the home world', () => {
@@ -73,5 +80,61 @@ describe('stations', () => {
         expect(r1.distanceTo(rv) / st.a).toBeLessThan(1e-6);
       }
     }
+  });
+});
+
+describe('sky stations', () => {
+  it('hang over some worlds with air and ground, and always the home world', () => {
+    expect(skies.length).toBeGreaterThan(3);
+    for (const { st } of skies) {
+      expect(atmoOf(st.parent)).not.toBeNull();
+      expect(st.parent.type).toBeLessThan(6); // not the giants
+    }
+    const sys = homeSystem();
+    const bodies = buildSystem(sys);
+    expect(buildStations(sys, bodies).some((st) => st.sky && st.parent === findHome(bodies))).toBe(true);
+  });
+
+  it('have unique names, shared with the orbital ones', () => {
+    for (const sys of systems.slice(0, 20)) {
+      const names = buildStations(sys, buildSystem(sys)).map((s) => s.name);
+      expect(new Set(names).size).toBe(names.length);
+    }
+  });
+
+  it('stay 10–20 km over the same spot on the ground, turning with the world', () => {
+    for (const { st, bodies } of skies.slice(0, 20)) {
+      const p = st.parent;
+      for (const t of [0, 5000, 86400 * 3.3]) {
+        updateBodies(bodies, t);
+        stationState(st, t);
+        const h = altitudeAt(p, st.pos);
+        expect(h).toBeGreaterThan(10e3 - 1);
+        expect(h).toBeLessThan(20e3 + 1);
+        // its velocity is the ground's there (ω × r), and its up is away from the world's centre
+        const r = st.pos.clone().sub(p.pos);
+        const ground = p.axis.clone().multiplyScalar(p.spin).cross(r);
+        expect(st.vel.clone().sub(p.vel).distanceTo(ground)).toBeLessThan(1e-6);
+        const up = new THREE.Vector3(0, 0, 1).applyQuaternion(stationQuat(st, t));
+        expect(up.dot(r.normalize())).toBeCloseTo(1, 9);
+        // held up: its acceleration is only the turn (ω²r across the axis), a few % of gravity
+        const acc = stationAcc(st);
+        expect(acc.length()).toBeCloseTo(p.spin * p.spin * Math.sqrt(r.lengthSq() - r.dot(p.axis) ** 2) * st.pos.distanceTo(p.pos), 9);
+        expect(acc.length()).toBeLessThan((0.05 * p.mu) / p.radius ** 2);
+      }
+    }
+  });
+
+  it('keep their pads on the open deck, clear of the tower', () => {
+    const st = skies[0].st;
+    for (let i = 0; i < padCount(st); i++) {
+      const p = padOf(st, i);
+      expect(skyWhereIs(p.pos.clone().setZ(0.02), 0.008)).toBe('outside'); // 20 m over the pad
+      expect(skyWhereIs(p.pos.clone().setZ(0.002), 0.008)).toBe('wall'); // on it
+      for (let j = 0; j < i; j++) expect(padOf(st, j).pos.distanceTo(p.pos)).toBeGreaterThan(0.09);
+    }
+    expect(skyWhereIs(new THREE.Vector3(0, 0, 0.08), 0.008)).toBe('wall'); // the tower
+    expect(skyWhereIs(new THREE.Vector3(0, 0, -0.2), 0.008)).toBe('wall'); // the keel
+    expect(skyWhereIs(new THREE.Vector3(0.3, 0, -0.2), 0.008)).toBe('outside'); // under the deck, beside the keel
   });
 });

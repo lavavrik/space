@@ -16,6 +16,11 @@
  *
  * Hitting the hull, the tunnel or the hangar walls anywhere else bounces you off, and faster than
  * STATION_CRASH it's fatal. Geometry is in sim/stationGeom.ts.
+ *
+ * Sky stations (sim/skyGeom.ts) are open decks: no slot, no hangar, no spin to match. With a pad
+ * granted you fly down onto it from above like landing anywhere else, gently and upright (the
+ * world's gravity is "down" here), and K lifts you off again. Or the catapult throws you up and
+ * flies you out of the air (sim/catapult.ts).
  */
 import { SHIP } from '../constants';
 import type { Game } from '../Game';
@@ -24,7 +29,8 @@ import type { Station } from '../types';
 import { destroyShip } from './flight';
 import { engageAutoLaunch, engageAutodock } from './autodock';
 import { startDockGuide } from './guide';
-import { HANGAR_R, PAD_COUNT, PAD_R, padLocal, stationPointVel, stationQuat, toLocal, toWorld, whereIs } from './stationGeom';
+import { DECK_R } from './skyGeom';
+import { HANGAR_R, PAD_R, padCount, padOf, stationPointVel, stationQuat, toLocal, toWorld, whereIsAt } from './stationGeom';
 
 /** Within this distance (m) of a targeted station, K asks for a pad. */
 export const DOCK_REQUEST_RANGE = 10e3;
@@ -118,9 +124,10 @@ export function updateDockRequest(g: Game, dt: number) {
   r.t -= dt;
   if (r.t > 0) return;
   g.dockRequest = null;
-  const pad = Math.floor(Math.random() * PAD_COUNT);
+  const pad = Math.floor(Math.random() * padCount(r.station));
   g.dock = { station: r.station, pad, docked: false };
-  g.showMsg(`Docking granted · ${r.station.name} · pad ${pad + 1}${g.autodock ? '' : ' · enter through the slot, matching its spin'}`);
+  const how = r.station.sky ? ' · land on it from above' : ' · enter through the slot, matching its spin';
+  g.showMsg(`Docking granted · ${r.station.name} · pad ${pad + 1}${g.autodock ? '' : how}`);
   g.invalidateHud();
 }
 
@@ -148,7 +155,7 @@ export function stationContact(g: Game) {
   for (const st of g.cur.stations) {
     if (st.pos.distanceTo(ship.pos) > st.radius + 100) continue;
     const p = toLocal(st, g.simTime, ship.pos, tmp);
-    const where = whereIs(p, CLEARANCE / st.size);
+    const where = whereIsAt(st, p, CLEARANCE / st.size);
     if (where === 'outside') {
       (lastClear.get(st) ?? lastClear.set(st, new THREE.Vector3()).get(st)!).copy(p);
       continue;
@@ -156,13 +163,13 @@ export function stationContact(g: Game) {
     const sysVel = tmp2.copy(ship.vel).add(g.frameBody.vel);
     const vRel = sysVel.sub(stationPointVel(st, ship.pos));
     if (where === 'wall') {
-      // on the granted pad, gently, top toward the axis: docked
+      // on the granted pad, gently, top toward the axis (up, on a sky deck): docked
       const d = g.dock;
       if (d && d.station === st && onPad(st, p, d.pad) && vRel.length() < PAD_SPEED && upOk(g, st, d.pad)) {
         d.docked = true;
         g.autodock = null;
         holdDocked(g);
-        g.showMsg(`Docked at ${st.name} · pad ${d.pad + 1} · services below · K launches`);
+        g.showMsg(`Docked at ${st.name} · pad ${d.pad + 1} · services below · K ${st.sky ? 'lifts off · or take the catapult' : 'launches'}`);
         return;
       }
       const speed = vRel.length();
@@ -179,6 +186,7 @@ export function stationContact(g: Game) {
         g.warned.bump = true;
         g.showMsg(`Contact with ${st.name} · ${speed.toFixed(0)} m/s`, 'warn');
       }
+      if (st.sky) return; // open to the sky: never "inside"
       g.inStation = st;
       g.inStationRel.subVectors(ship.pos, st.pos);
       return;
@@ -191,18 +199,19 @@ export function stationContact(g: Game) {
   }
 }
 
-/** Is the local point on pad i (close to the wall, within the pad)? */
+/** Is the local point on pad i (close to the wall, or the deck, within the pad)? */
 function onPad(st: Station, p: THREE.Vector3, i: number) {
-  const pad = padLocal(i);
+  const pad = padOf(st, i);
+  if (st.sky) return p.z < PAD_HEIGHT / st.size && Math.hypot(p.x - pad.pos.x, p.y - pad.pos.y) < PAD_R;
   const r = Math.hypot(p.x, p.y);
   if (HANGAR_R - r > PAD_HEIGHT / st.size) return false;
   const dPhi = Math.atan2(Math.sin(Math.atan2(p.y, p.x) - pad.phi), Math.cos(Math.atan2(p.y, p.x) - pad.phi));
   return Math.hypot(dPhi * HANGAR_R, p.z - pad.pos.z) < PAD_R;
 }
 
-/** Is the ship's top facing roughly away from the pad (toward the station's axis)? */
+/** Is the ship's top facing roughly away from the pad (toward the station's axis; up, on a deck)? */
 function upOk(g: Game, st: Station, i: number) {
-  const up = padLocal(i).up.applyQuaternion(stationQuat(st, g.simTime));
+  const up = padOf(st, i).up.applyQuaternion(stationQuat(st, g.simTime));
   return new THREE.Vector3(0, 1, 0).applyQuaternion(g.ship.q).dot(up) > 0.85;
 }
 
@@ -211,16 +220,17 @@ export function holdDocked(g: Game) {
   const d = g.dock!;
   const st = d.station;
   const { ship } = g;
-  const pad = padLocal(d.pad);
+  const pad = padOf(st, d.pad);
   const q = stationQuat(st, g.simTime);
   const up = pad.up.clone().applyQuaternion(q);
   toWorld(st, g.simTime, pad.pos, ship.pos).addScaledVector(up, PAD_REST);
-  // nose along the station's axis (toward the slot), top toward the axis
-  const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
+  // nose along the station's axis (toward the slot), top toward the axis; on a deck, nose outward, top up
+  const fwd = pad.fwd.clone().applyQuaternion(q);
   const m = new THREE.Matrix4().makeBasis(new THREE.Vector3().crossVectors(up, fwd.clone().negate()).normalize(), up, fwd.clone().negate());
   ship.q.setFromRotationMatrix(m);
   ship.vel.copy(stationPointVel(st, ship.pos)).sub(g.frameBody.vel);
-  g.inStation = st;
+  // on an open deck you're in the open air and sunlight, not inside
+  g.inStation = st.sky ? null : st;
   g.inStationRel.subVectors(ship.pos, st.pos);
   g.dockRel.copy(g.inStationRel);
   g.curSpeed = 0;
@@ -230,9 +240,9 @@ export function holdDocked(g: Game) {
 export function launch(g: Game) {
   const d = g.dock;
   if (!d?.docked) return;
-  const up = padLocal(d.pad).up.applyQuaternion(stationQuat(d.station, g.simTime));
+  const up = padOf(d.station, d.pad).up.applyQuaternion(stationQuat(d.station, g.simTime));
   g.ship.vel.addScaledVector(up, LAUNCH_SPEED);
-  g.showMsg(`Launched from ${d.station.name} · fly out through the slot`);
+  g.showMsg(`Launched from ${d.station.name}${d.station.sky ? '' : ' · fly out through the slot'}`);
   g.dock = null;
   if (g.ship.avionics.dock?.caps.launch) {
     engageAutoLaunch(g, d.station, d.pad);
@@ -251,8 +261,15 @@ export function stationLimits(g: Game): { acc: number; maxV: number } | null {
     // approach control: with a pad granted and the station close, flight assist holds you to an
     // approach speed you can still brake from inside
     const d = g.dock;
-    if (d && !d.docked && d.station.pos.distanceTo(g.ship.pos) < APPROACH_RANGE) return { acc: 100, maxV: APPROACH_SPEED };
-    return null;
+    if (!d || d.docked || d.station.pos.distanceTo(g.ship.pos) > APPROACH_RANGE) return null;
+    // over a sky station's open deck: the docking thrusters and the braking curve down to it, as
+    // above a hangar's wall (from the end-of-step offset, like inside a cube)
+    const sk = d.station;
+    if (sk.sky) {
+      const p = tmp.copy(g.dockRel).applyQuaternion(stationQuat(sk, g.simTime).invert()).divideScalar(sk.size);
+      if (p.z > 0 && Math.hypot(p.x, p.y) < DECK_R + 0.1) return { acc: STATION_ACC, maxV: brakeCurve(p.z * sk.size) };
+    }
+    return { acc: 100, maxV: APPROACH_SPEED };
   }
   // from the end-of-step offset (mid-step the ship lags the station by its orbital motion)
   const p = tmp.copy(g.inStationRel).applyQuaternion(stationQuat(st, g.simTime).invert()).divideScalar(st.size);
@@ -260,9 +277,11 @@ export function stationLimits(g: Game): { acc: number; maxV: number } | null {
   // a braking curve: whatever the limit is here, the thrusters can shed it before the wall even
   // with "down" held (they bleed 2 × STATION_ACC against the held STATION_ACC: a net STATION_ACC,
   // so the curve assumes half of that). A straight taper fell faster than they could brake.
-  const maxV = Math.min(STATION_MAX_SPEED, PAD_SPEED - 1 + Math.sqrt(2 * STATION_ACC * 0.5 * Math.max(0, toWall - PAD_HEIGHT)));
-  return { acc: STATION_ACC, maxV };
+  return { acc: STATION_ACC, maxV: brakeCurve(toWall) };
 }
+
+/** The speed limit (m/s) `h` metres from a hangar wall or a deck: see stationLimits. */
+const brakeCurve = (h: number) => Math.min(STATION_MAX_SPEED, PAD_SPEED - 1 + Math.sqrt(2 * STATION_ACC * 0.5 * Math.max(0, h - PAD_HEIGHT)));
 
 /** Within this distance (m) of the station a granted pad caps speed at APPROACH_SPEED (m/s). */
 const APPROACH_RANGE = 3000,
@@ -291,6 +310,6 @@ export function refuelDocked(g: Game) {
 export function padWorld(g: Game) {
   const d = g.dock;
   if (!d) return null;
-  return toWorld(d.station, g.simTime, padLocal(d.pad).pos);
+  return toWorld(d.station, g.simTime, padOf(d.station, d.pad).pos);
 }
 

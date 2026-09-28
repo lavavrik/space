@@ -74,7 +74,8 @@ export class Overlay {
       [sx, sy],
       [-sx, sy],
     ].map(([x, y]) => this.toScreen(g, toWorld(st, g.simTime, new THREE.Vector3(x, y, 0.5)).sub(g.ship.pos)));
-    if (!g.inStation && pts.every((p) => !p.behind)) {
+    // (a sky station has no slot: you come down onto the pad from above)
+    if (!st.sky && !g.inStation && pts.every((p) => !p.behind)) {
       ctx.strokeStyle = MINT + '0.85)';
       ctx.beginPath();
       pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));

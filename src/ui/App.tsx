@@ -31,7 +31,7 @@ export function App() {
                 act={{ back: () => game!.openShipStats(), battery: (id) => game!.fitBattery(id), fit: (s, id) => game!.fitModule(s, id), remove: (s) => game!.removeModule(s), radiators: () => game!.toggleRadiators(), pump: () => game!.togglePump() }}
               />
             ) : hud.avionics ? <AvionicsPanel slots={hud.avionics} electrical={hud.electrical} onOpen={(k) => game!.openAvionics(k)} onToggle={(id) => game!.toggleLoad(id)} /> : hud.docked ? (
-              <DockedPanel d={hud.docked} act={{ refuel: () => game!.refuelDocked(), outfit: () => game!.openAvionics('outfit'), launch: () => game!.launch() }} />
+              <DockedPanel d={hud.docked} act={{ refuel: () => game!.refuelDocked(), outfit: () => game!.openAvionics('outfit'), launch: () => game!.launch(), catapult: () => game!.catapult() }} />
             ) : hud.helpVisible && <HelpPanel save={hud.save} onNewGame={() => game!.newGame()} />}
           </div>
           <div id="rightcol">

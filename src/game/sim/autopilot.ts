@@ -2,8 +2,11 @@ import { AP_ACC, AP_FTL_MIN, AP_TAU } from '../constants';
 import { fmtDist, fmtTime } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
+import { airDensityAt, airSpeedLimit } from './catapult';
+import { stationAcc } from './stations';
 import type { ApproachProfile } from '../avionics/catalog';
-import type { Autopilot, Body, Gravity, Ship } from '../types';
+import type { Autopilot, Body, Gravity, Ship, Station } from '../types';
+import { atmoOf } from './atmosphere';
 import { velRel } from './frame';
 import { dropAlt, dropFTL, ftlSpeedLimit, ftlUpkeep, massLock } from './ftl';
 import { minOrbitAlt } from './orbits';
@@ -138,6 +141,26 @@ export function aroundBody(from: THREE.Vector3, to: THREE.Vector3, b: Body, radi
 }
 
 /**
+ * On the way to a sky station: where to head while not yet over it (null once over it, to go straight
+ * down). Over it means in a cone above it: within SKY_COLUMN plus 30 % of the height above it off its
+ * vertical. The point is DESCENT_UP over the top of the air above it, reached round the world clear
+ * of the air (aroundBody).
+ */
+export function skyDescent(from: THREE.Vector3, st: Station) {
+  const b = st.parent;
+  const up = st.pos.clone().sub(b.pos).normalize();
+  const rel = from.clone().sub(st.pos);
+  const h = rel.dot(up);
+  if (h > 0 && rel.addScaledVector(up, -h).length() < SKY_COLUMN + 0.3 * h) return null;
+  const top = b.radius + (atmoOf(b)?.top ?? 0);
+  const P = b.pos.clone().addScaledVector(up, Math.max(top * DESCENT_UP, st.pos.distanceTo(b.pos) + 10e3));
+  return aroundBody(from, P, b, top) ?? P;
+}
+/** Sky station descent: the column (m) and the point over the air (× the air top's radius). */
+const SKY_COLUMN = 3000,
+  DESCENT_UP = 1.005;
+
+/**
  * How far the ship's orbital (horizontal, in-plane) speed is from circular speed at its current
  * radius. Climbing, descending and moving into the plane are left to their own steps, so this can
  * be matched straight away instead of waiting for the altitude (which is why it used to stall).
@@ -177,8 +200,9 @@ export function autopilot(g: Game, dt: number, grav: Gravity) {
     }
   } else if (ap.type === 'rendezvous') {
     // Close on a moving station and match it: aim for a point RDV_STANDOFF short of it, arriving at
-    // its velocity. We both fall toward its world, so the feed-forward is the station's own gravity
-    // minus ours (nearly equal, so rendezvous burns are small once close).
+    // its velocity. The feed-forward is the station's acceleration minus our gravity: for one in
+    // orbit we both fall toward its world (nearly equal, so rendezvous burns are small once close);
+    // a sky station is held up, so we must be too.
     const st = ap.station!;
     const toSt = st.pos.clone().sub(ship.pos),
       dist = toSt.length();
@@ -186,13 +210,24 @@ export function autopilot(g: Game, dt: number, grav: Gravity) {
     const close = Math.max(0, dist - RDV_STANDOFF);
     // keep clear of the world, but never by more than half the station's own altitude (a low
     // station would otherwise sit inside the no-go sphere and never be approached)
-    const clear = Math.min(minOrbitAlt(b) * 3, (st.pos.distanceTo(b.pos) - b.radius) * 0.5);
+    const clear = st.sky ? 0 : Math.min(minOrbitAlt(b) * 3, (st.pos.distanceTo(b.pos) - b.radius) * 0.5);
     const way = aroundBody(ship.pos, st.pos, b, b.radius + clear);
     const ftlFloor = b.radius + dropAlt(b) * 1.25; // just above where FTL can start near this world
-    if (way && dist > 2000e3 && g.ship.avionics.orbit?.caps.ftlLeg && r < ftlFloor) {
+    const descent = st.sky ? skyDescent(ship.pos, st) : null;
+    if ((way || descent) && dist > 2000e3 && g.ship.avionics.orbit?.caps.ftlLeg && r < ftlFloor) {
       // far round the other side and too low for FTL: climb out first, then the FTL leg takes over
       // (crawling round a world on thrusters took up to half an hour)
       vDes = u.clone().multiplyScalar(approachSpeed(ftlFloor - r, prof.radialCap, prof.acc) + 50);
+      aFF = grav.vec.clone().negate();
+    } else if (descent) {
+      // a sky station, and not yet over it: to the point above it, over the air, then straight down
+      // (flying to it through the air would crawl at the air's speed limit, burning propellant just
+      // to stay up)
+      // (the point turns with the world, as the station does)
+      const turn = b.axis.clone().multiplyScalar(b.spin).cross(descent.clone().sub(b.pos));
+      const toW = descent.sub(ship.pos),
+        dW = toW.length();
+      vDes = turn.addScaledVector(toW, approachSpeed(dW, prof.radialCap, prof.acc) / Math.max(dW, 1));
       aFF = grav.vec.clone().negate();
     } else if (way) {
       // the station is round the far side: go round the world first
@@ -202,8 +237,16 @@ export function autopilot(g: Game, dt: number, grav: Gravity) {
       aFF = grav.vec.clone().negate();
     } else {
       vDes = vSt.clone().addScaledVector(toSt, approachSpeed(close, prof.radialCap, prof.acc) / Math.max(dist, 1));
-      const rs = st.pos.clone().sub(st.parent.pos);
-      aFF = rs.multiplyScalar(-st.parent.mu / rs.length() ** 3).sub(grav.vec);
+      // a sky station doesn't fall with us: its acceleration is only its turn with the world
+      aFF = stationAcc(st).sub(grav.vec);
+    }
+    if (st.sky) {
+      // in the air, to a sky station: no faster through it than it allows (sim/catapult.ts), relative
+      // to the station (which turns with the world, as the air does)
+      const rho = airDensityAt(st.parent, ship.pos);
+      const cap = airSpeedLimit(rho);
+      const d = vDes.clone().sub(vSt);
+      if (rho > 0 && d.length() > cap) vDes.copy(vSt).add(d.setLength(cap));
     }
     if (!ap.settled && close < 1000 && vRel.distanceTo(vSt) < 2) {
       ap.settled = true;

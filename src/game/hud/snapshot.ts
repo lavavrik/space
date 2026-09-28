@@ -27,7 +27,7 @@ import { RADAR_RANGE, SWEEP, contactLabel, radarClass, radarContacts } from '../
 import { unitLabel, type Computer } from '../avionics/catalog';
 import { buildInfluences } from './influences';
 import { approachView } from './approach';
-import { buildInfo } from './info';
+import { buildInfo, stationKind } from './info';
 import type { AutopilotView, AvionicsSlotView, ElectricalView, ModuleIcon, RadarView, OutfitView, FlightView, GaugeBadge, GaugeView, Lamp, NavView, GuideView, HudSnapshot, LocationView, Pill, PlannerView, Readout, SystemsView, TargetView } from './types';
 
 const tmp = new THREE.Vector3();
@@ -57,7 +57,12 @@ export function buildSnapshot(g: Game): HudSnapshot {
       ? {
           station: g.dock.station.name,
           pad: g.dock.pad + 1,
-          notes: [`External power ${fmtPower(SHORE_POWER)} · battery charging`, `Hull held near room temperature (${g.ship.temp.toFixed(0)} K)`],
+          notes: [
+            `External power ${fmtPower(SHORE_POWER)} · battery charging`,
+            `Hull held near room temperature (${g.ship.temp.toFixed(0)} K)`,
+            ...(g.dock.station.sky ? ['Catapult: thrown up and flown clear of the air, no input needed'] : []),
+          ],
+          sky: !!g.dock.station.sky,
           tanksFull: g.ship.prop >= SHIP.propCap - 1 && g.ship.exotic >= SHIP.exoticCap - 0.01,
         }
       : null,
@@ -228,6 +233,7 @@ function flight(g: Game): FlightView {
   // on/off states are dashboard lamps (lamps()); pills carry the ones with a value
   const pills: Pill[] = [];
   if (g.autodock) pills.push({ text: `AUTO-DOCK · ${g.autodock.phase.toUpperCase()}`, kind: 'ftl' });
+  if (g.ascent) pills.push({ text: 'ASCENT PROGRAM', kind: 'ftl' });
   if (g.dock) pills.push({ text: g.dock.docked ? `DOCKED · PAD ${g.dock.pad + 1}` : `PAD ${g.dock.pad + 1} GRANTED`, kind: g.dock.docked ? 'on' : 'ftl' });
   if (g.zoom.on) pills.push({ text: `ZOOM ${g.zoom.mag}×`, kind: 'on' });
   if (g.warp > 1) pills.push({ text: `TIME ×${g.warp.toLocaleString('en-US')}`, kind: 'warn' });
@@ -255,8 +261,9 @@ function target(g: Game): TargetView {
   const vel = ship.mode === 'ftl' ? ship.travelDir.clone().multiplyScalar(ship.ftlSpeed) : ship.vel.clone();
   vel.add(g.frameBody.vel).sub(t.vel); // everything moves, so close on the target in its own frame
   const closing = vel.dot(dir);
-  const type = sp < SCAN_STAGE.type ? (t.kind === 'ship' ? 'SHIP' : 'UNKNOWN') : t.kind === 'station' ? 'ORBITAL STATION' : t.kind === 'ship' ? t.cls.toUpperCase() : t.typeName.toUpperCase();
-  const inside = g.inStation === t;
+  const type = sp < SCAN_STAGE.type ? (t.kind === 'ship' ? 'SHIP' : 'UNKNOWN') : t.kind === 'station' ? stationKind(t) : t.kind === 'ship' ? t.cls.toUpperCase() : t.typeName.toUpperCase();
+  // (on a sky station's open deck you're never "inside" it, but docked is docked)
+  const inside = g.inStation === t || (!!g.dock?.docked && g.dock.station === t);
   return { name: contactLabel(g, t), type, distance: inside ? (g.dock?.docked ? 'DOCKED' : 'INSIDE') : fmtDist(d), eta: closing > 1 ? `ETA ${fmtTime(d / closing)}` : 'NOT CLOSING', none: false, scan, scanFrac: sp, approach: inside ? null : approachView(g, t, d, closing) };
 }
 

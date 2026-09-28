@@ -25,6 +25,12 @@
  * structure there (orbit + spin), with thrust capped at AUTO_ACC; it uses real propellant and power.
  * Any thrust key hands control back.
  *
+ * A sky station (sim/skyGeom.ts) is simpler: no slot and no spin. The hold point is high over the
+ * deck's centre; 'align' turns the ship upright, nose outward; 'enter' goes to a point PAD_ABOVE
+ * over the pad; 'descend' settles onto it. 'rise' and 'exit' go back up the same way. The station
+ * doesn't fall with the ship (its fans hold it up), so the computer holds the ship up against
+ * gravity too, and in the air it keeps under the speed the air allows (sim/catapult.ts).
+ *
  * Getting to the hold point it never cuts through the station: if the straight line would pass
  * within KEEP_OUT of it (the spinning hull's corners move at ~70 m/s, so any touch is fatal), it
  * climbs out to a safe sphere around the station and flies round it toward the slot's side
@@ -35,7 +41,9 @@ import { THREE } from '../lib/three';
 import type { Station } from '../types';
 import { DOCK_REQUEST_RANGE, requestDocking } from './docking';
 import { applyThrust } from './resources';
-import { HANGAR_R, padLocal, stationPointVelAt, stationQuat } from './stationGeom';
+import { airDensityAt, airSpeedLimit } from './catapult';
+import { HANGAR_R, padOf, stationPointVelAt, stationQuat } from './stationGeom';
+import { stationAcc } from './stations';
 
 export type AutoPhase = 'approach' | 'wait' | 'hold' | 'align' | 'enter' | 'descend' | 'rise' | 'exit';
 
@@ -79,6 +87,10 @@ export function clearPath(p: THREE.Vector3, target: THREE.Vector3, S: number) {
   const step = Math.min(pn.angleTo(tn), AROUND_STEP);
   return pn.applyAxisAngle(axis, step).multiplyScalar(Math.max(R, p.length()));
 }
+
+/** Over a sky station: the hold point's height over the deck's centre (m, + the station's size), and where it stops over the pad before settling (m). */
+const SKY_HOLD = 200,
+  PAD_ABOVE = 60;
 
 /** Height above the pad it settles from (m), and the speed it settles at (m/s). */
 const SETTLE_H = 9,
@@ -150,9 +162,12 @@ export function autodock(g: Game, dt: number, gravVec: THREE.Vector3) {
   const toWorld = (local: THREE.Vector3) => local.clone().applyQuaternion(q);
 
   const padI = d?.pad ?? g.autodockPad;
-  // far out, fly the approach much faster (the braking profile still brings it in gently)
+  const sky = !!st.sky;
+  // far out, fly the approach much faster (the braking profile still brings it in gently); in the
+  // air, never faster than it allows
   const far = p.length() > APPROACH_NEAR;
-  const pad = padLocal(padI);
+  const farSpeed = sky ? Math.min(FAR_SPEED, airSpeedLimit(airDensityAt(st.parent, ship.pos))) : FAR_SPEED;
+  const pad = padOf(st, padI);
   const axisZ = pad.pos.z * S;
   let target = new THREE.Vector3(); // station coordinates, metres
   let cap = 0;
@@ -160,12 +175,13 @@ export function autodock(g: Game, dt: number, gravVec: THREE.Vector3) {
   // (lined up with the slot) or toward the axis (over the pad)
   let fwdL = new THREE.Vector3(0, 0, -1),
     upL = new THREE.Vector3(0, 1, 0);
-  const holdPt = new THREE.Vector3(0, 0, S / 2 + HOLD_OUT);
+  const holdPt = sky ? new THREE.Vector3(0, 0, S * 0.87 + SKY_HOLD) : new THREE.Vector3(0, 0, S / 2 + HOLD_OUT);
+  const overPad = pad.pos.clone().multiplyScalar(S).addScaledVector(pad.up, PAD_ABOVE);
   switch (ad.phase) {
     case 'approach':
       // toward the hold point, until in range to ask for a pad
       target = holdPt;
-      cap = far ? FAR_SPEED : unit.caps.approachSpeed;
+      cap = far ? farSpeed : unit.caps.approachSpeed;
       break;
     case 'wait':
       // hold still against the station while traffic control answers
@@ -174,7 +190,7 @@ export function autodock(g: Game, dt: number, gravVec: THREE.Vector3) {
       break;
     case 'hold':
       target = holdPt;
-      cap = far ? FAR_SPEED : unit.caps.approachSpeed;
+      cap = far ? farSpeed : unit.caps.approachSpeed;
       fwdL = new THREE.Vector3(0, 0, -1);
       upL = new THREE.Vector3(0, 1, 0);
       break;
@@ -185,7 +201,7 @@ export function autodock(g: Game, dt: number, gravVec: THREE.Vector3) {
       upL = new THREE.Vector3(0, 1, 0);
       break;
     case 'enter':
-      target = new THREE.Vector3(0, 0, axisZ);
+      target = sky ? overPad : new THREE.Vector3(0, 0, axisZ);
       cap = unit.caps.insideSpeed;
       fwdL = new THREE.Vector3(0, 0, -1);
       upL = new THREE.Vector3(0, 1, 0);
@@ -198,7 +214,7 @@ export function autodock(g: Game, dt: number, gravVec: THREE.Vector3) {
       break;
     }
     case 'rise':
-      target = new THREE.Vector3(0, 0, axisZ);
+      target = sky ? overPad : new THREE.Vector3(0, 0, axisZ);
       cap = Math.min(unit.caps.insideSpeed, 25);
       fwdL = new THREE.Vector3(0, 0, 1);
       upL = pad.up.clone();
@@ -209,6 +225,11 @@ export function autodock(g: Game, dt: number, gravVec: THREE.Vector3) {
       fwdL = new THREE.Vector3(0, 0, 1);
       upL = new THREE.Vector3(0, 1, 0);
       break;
+  }
+  // on a sky deck: upright, nose outward, all the way in and out
+  if (sky) {
+    fwdL = pad.fwd.clone();
+    upL = pad.up.clone();
   }
 
   // outside the station, don't fly through it on the way to the hold point
@@ -223,17 +244,20 @@ export function autodock(g: Game, dt: number, gravVec: THREE.Vector3) {
     // settle gently: the closer to the pad (height above the hangar wall), the slower, down to
     // SETTLE_V at touchdown; a profile on the distance to the target point alone reached the pad at
     // ~14 m/s when the ship lagged its commanded speed
-    const h = (HANGAR_R - Math.hypot(p.x, p.y) / S) * S;
+    const h = sky ? p.z : (HANGAR_R - Math.hypot(p.x, p.y) / S) * S; // (a deck's top is at z = 0)
     speed = Math.max(Math.min(speed, 12, SETTLE_V + 0.25 * Math.max(0, h - SETTLE_H)), dist > 1 ? SETTLE_V : 0);
   }
   const vDesL = dist > 1e-6 ? err.multiplyScalar(speed / dist) : err.set(0, 0, 0);
   // inside the hull match the turning structure; outside, just the station's orbit (the spin term
   // ω × r would be ~100 m/s a kilometre off the axis)
   const inHull = Math.max(Math.abs(p.x), Math.abs(p.y), Math.abs(p.z)) < S / 2;
-  const vFrame = (inHull ? stationPointVelAt(st, rel, tmp2) : tmp2.copy(st.vel)).sub(g.frameBody.vel);
+  // (a sky station turns with its world: slowly enough that ω × r is right everywhere near it)
+  const vFrame = (inHull || sky ? stationPointVelAt(st, rel, tmp2) : tmp2.copy(st.vel)).sub(g.frameBody.vel);
   const vDes = toWorld(vDesL).add(vFrame);
   // close to the pad, correct twice as quickly so the ship doesn't lag its (slowing) commanded speed
   const T = vDes.sub(ship.vel).divideScalar(ad.phase === 'descend' ? TAU / 2 : TAU);
+  // a sky station doesn't fall: hold the ship up with it (plus the pull that turns it with the world)
+  if (sky) T.add(stationAcc(st)).sub(gravVec);
   if (T.length() > AUTO_ACC) T.setLength(AUTO_ACC);
   T.multiplyScalar(dt);
   applyThrust(g, T, dt);

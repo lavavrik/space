@@ -177,6 +177,7 @@ export function destroyShip(g: Game, reason: string, body: Body) {
   g.dock = null;
   g.dockRequest = null;
   g.inStation = null;
+  g.ascent = null;
   ship.ap = null;
   ship.ftlCharge = 0;
   ship.landed = null;

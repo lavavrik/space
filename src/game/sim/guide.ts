@@ -342,7 +342,10 @@ export function startDockGuide(g: Game, st: Station) {
   const docked = () => granted() && !!g.dock!.docked;
   const inside = () => g.inStation === st;
   const phase = () => g.autodock?.phase;
-  const landing = () => docked() || (inside() && (phase() === 'descend' || (!g.autodock && !!g.dock && isInHangar(g, st))));
+  // (a sky station has no inside: landing starts once over the pad)
+  const overPad = () => !!g.dock && (padDistance(g) ?? Infinity) < SKY_OVER_PAD;
+  const landing = () =>
+    docked() || (st.sky ? overPad() || phase() === 'descend' : inside() && (phase() === 'descend' || (!g.autodock && !!g.dock && isInHangar(g, st))));
   const unit = ship.avionics.dock;
   startGuide(g, {
     title: 'DOCKING',
@@ -359,17 +362,26 @@ export function startDockGuide(g: Game, st: Station) {
         err: () => g.dockRequest?.t ?? 0, etaFn: () => g.dockRequest?.t ?? 0, guess: () => 6,
         detail: () => `Waiting for ${st.name} traffic control`,
       }),
-      mkStep({
-        titleFn: () => (phase() === 'align' ? 'Line up with the slot' : 'Approach the slot'), active: () => granted() && !inside() && !docked(), done: () => inside() || docked(),
-        err: () => dist(), detail: () => `${fmtDist(Math.max(0, dist() - st.size / 2))} · roll with the slot as you go in`,
-      }),
-      mkStep({
-        title: 'Enter the station', active: () => granted() && inside() && !landing(), done: () => landing(),
-        err: () => null, detail: () => 'Through the tunnel into the hangar',
-      }),
+      ...(st.sky
+        ? [
+            mkStep({
+              title: 'Fly over the pad', active: () => granted() && !landing(), done: () => landing(),
+              err: () => padDistance(g), detail: () => `${fmtDist(padDistance(g) ?? 0)} · come down from above`,
+            }),
+          ]
+        : [
+            mkStep({
+              titleFn: () => (phase() === 'align' ? 'Line up with the slot' : 'Approach the slot'), active: () => granted() && !inside() && !docked(), done: () => inside() || docked(),
+              err: () => dist(), detail: () => `${fmtDist(Math.max(0, dist() - st.size / 2))} · roll with the slot as you go in`,
+            }),
+            mkStep({
+              title: 'Enter the station', active: () => granted() && inside() && !landing(), done: () => landing(),
+              err: () => null, detail: () => 'Through the tunnel into the hangar',
+            }),
+          ]),
       mkStep({
         titleFn: () => `Land on pad ${g.dock ? g.dock.pad + 1 : ''}`, active: () => landing() && !docked(), done: () => docked(),
-        err: () => (padDistance(g) ?? null), detail: () => `${padDistance(g) !== null ? fmtDist(padDistance(g)!) : ''} · under 6 m/s, top toward the axis`,
+        err: () => (padDistance(g) ?? null), detail: () => `${padDistance(g) !== null ? fmtDist(padDistance(g)!) : ''} · under 6 m/s, ${st.sky ? 'upright' : 'top toward the axis'}`,
       }),
     ],
   });
@@ -377,6 +389,8 @@ export function startDockGuide(g: Game, st: Station) {
 
 /** Within 10 km a station takes docking requests. */
 const DOCK_RANGE = 10e3;
+/** Over a sky station, within this of the pad (m) you're landing. */
+const SKY_OVER_PAD = 300;
 
 function isInHangar(g: Game, st: Station) {
   const p = toLocal(st, g.simTime, g.ship.pos);

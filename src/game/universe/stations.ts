@@ -4,6 +4,8 @@ import { lr, mulberry32, rr, type Rng } from '../lib/rng';
 import { THREE } from '../lib/three';
 import { maxOrbitR, minOrbitAlt, syncRadius } from '../sim/orbits';
 import { stationState } from '../sim/stations';
+import { atmoOf } from '../sim/atmosphere';
+import { elevationLocal } from '../sim/terrain';
 import type { Body, Station, StarSystem, World } from '../types';
 import { HOME_ID } from './galaxy';
 import { findHome } from './system';
@@ -49,7 +51,75 @@ export function buildStations(sys: StarSystem, bodies: Body[]): Station[] {
     const st = makeStation(b, moons, sg, used);
     if (st) out.push(st);
   }
+  buildSkyStations(sys, bodies, home, used, out);
   return out;
+}
+
+/*
+ * Sky stations: open decks hanging 10–20 km over the ground of worlds with air and a solid surface
+ * (not the giants), turning with the world (sim/stations.ts). From their own RNG stream and after
+ * the orbital ones (sharing their name pool), so adding them changed nothing that was there.
+ */
+
+/** Chance that a world of each type (indexed by WT) with air and a surface has a sky station. Moons get half. */
+const SKY_CHANCE = [0.25, 0.45, 0.8, 0.6, 0.2, 0.3, 0, 0];
+const SKY_KINDS = ['Skyport', 'Highport', 'Aerie', 'Sky Dock', 'Cloudport'];
+/** Deck diameter (m). */
+const SKY_SIZE: [number, number] = [900, 1300];
+/** Height above the ground under it (m). */
+const SKY_ALT: [number, number] = [10e3, 20e3];
+
+function buildSkyStations(sys: StarSystem, bodies: Body[], home: Body | undefined, used: Set<string>, out: Station[]) {
+  const g = mulberry32(sys.seed ^ 0x5c1e57a7);
+  for (const b of bodies) {
+    if (b.kind === 'star') continue;
+    const roll = g(),
+      sg = mulberry32(Math.floor(g() * 2 ** 32));
+    if (!atmoOf(b) || !SKY_CHANCE[b.type]) continue;
+    if (b !== home && roll >= SKY_CHANCE[b.type] * (b.kind === 'moon' ? 0.5 : 1)) continue;
+    out.push(makeSkyStation(b, sg, used));
+  }
+}
+
+function makeSkyStation(b: World, g: Rng, used: Set<string>): Station {
+  // somewhere between the polar circles (the world's own frame has its spin axis along +y)
+  const lat = Math.asin(rr(g, -0.8, 0.8)),
+    lon = g() * 2 * Math.PI;
+  const dir = new THREE.Vector3(Math.cos(lat) * Math.cos(lon), Math.sin(lat), Math.cos(lat) * Math.sin(lon));
+  const alt = rr(g, SKY_ALT[0], SKY_ALT[1]);
+  // over the ground, not the mean radius: a mountain range under it doesn't bring it closer
+  const r = b.radius + elevationLocal(b, dir.x, dir.y, dir.z) + alt;
+  let name = '';
+  for (let t = 0; t < 10 && (!name || used.has(name)); t++) name = `${NAMES[Math.floor(g() * NAMES.length)]} ${SKY_KINDS[Math.floor(g() * SKY_KINDS.length)]}`;
+  used.add(name);
+  const size = rr(g, SKY_SIZE[0], SKY_SIZE[1]);
+  // placeholder orbit (see Station): a circle at its radius in the equatorial plane, one turn a day
+  const k = b.axis.clone().normalize();
+  const P = new THREE.Vector3(1, 0, 0).cross(k);
+  if (P.lengthSq() < 1e-8) P.set(0, 0, 1).cross(k);
+  P.normalize();
+  const st: Station = {
+    kind: 'station',
+    name,
+    typeName: `Sky station · ${b.name}`,
+    parent: b,
+    size,
+    radius: size * 0.55,
+    seed: g() * 50,
+    a: r,
+    e: 0,
+    P,
+    Q: new THREE.Vector3().crossVectors(k, P),
+    n: b.spin,
+    M0: 0,
+    spinAxis: b.axis,
+    spinRate: b.spin,
+    pos: new THREE.Vector3(),
+    vel: new THREE.Vector3(),
+    sky: { dir, r, alt },
+  };
+  stationState(st, 0);
+  return st;
 }
 
 /** Orbit radius for a station around `b`, or null if there's no room for a stable orbit. */

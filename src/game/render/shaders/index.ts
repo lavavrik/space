@@ -20,6 +20,7 @@ import skyCubeFrag from './skyCube.frag.glsl?raw';
 import skyPointVert from './skyPoint.vert.glsl?raw';
 import skyPointFrag from './skyPoint.frag.glsl?raw';
 import stationFrag from './station.frag.glsl?raw';
+import skyStationFrag from './skyStation.frag.glsl?raw';
 import terrainGlsl from './terrain.glsl?raw';
 import atmoGlsl from './atmo.glsl?raw';
 import cloudsGlsl from './clouds.glsl?raw';
@@ -54,6 +55,8 @@ export const RING_FS = withNoise(ringFrag);
 /** Orbital stations (drawn with BODY_VS on a unit cube). */
 const withHeadlight = (src: string) => src.replace('#pragma farlight_headlight', headlightGlsl);
 export const STATION_FS = withHeadlight(withNoise(stationFrag));
+/** Sky stations (drawn with BODY_VS on render/skyMesh.ts): lit and hazed through their world's air. */
+export const SKY_STATION_FS = withHeadlight(skyStationFrag.replace('#pragma farlight_atmo', atmoGlsl));
 /** Station interiors: slot tunnel, hangar and pads (drawn with BODY_VS). */
 export const STATION_INTERIOR_FS = withHeadlight(stationInteriorFrag);
 /** The lit approach corridor in front of a station's slot while you have a pad there. */

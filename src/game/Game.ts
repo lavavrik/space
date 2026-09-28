@@ -29,6 +29,7 @@ import { startPivot } from './sim/pivot';
 import { contactLabel, radarContacts, radarSweep } from './sim/radar';
 import { toggleScan } from './sim/scanner';
 import { dockKey, launch, refuelDocked, type Dock } from './sim/docking';
+import { catapultLaunch, type Ascent } from './sim/catapult';
 import type { AutoPhase } from './sim/autodock';
 import { fitBattery, fitModule, removeModule } from './outfit/fit';
 import { AUTOSAVE_S, clearSave, loadGame, saveGame } from './save';
@@ -110,6 +111,8 @@ export class Game {
   autodock: { phase: AutoPhase } | null = null;
   autodockStation: Station | null = null;
   autodockPad = 0;
+  /** The ascent program after a sky station's catapult (sim/catapult.ts), while it flies. */
+  ascent: Ascent | null = null;
   dockRel = new THREE.Vector3();
   /** Radar (sim/radar.ts): seconds left of the sweep in progress (0 = idle), and every object it
    *  has found (scan keys, so per system). */
@@ -264,6 +267,7 @@ export class Game {
     this.inStation = null;
     this.autodock = null;
     this.autodockStation = null;
+    this.ascent = null;
     this.nearby = systemsNear(sys.pos, JUMP_RANGE + 1).filter((s) => s.id !== sys.id);
     this.sky = systemsNear(sys.pos, SKY_RADIUS);
     this.scene.setSystem(this.cur, this.sky);
@@ -319,6 +323,12 @@ export class Game {
 
   launch() {
     launch(this);
+    this.invalidateHud();
+  }
+
+  /** Docked at a sky station: the catapult (sim/catapult.ts). */
+  catapult() {
+    catapultLaunch(this);
     this.invalidateHud();
   }
 

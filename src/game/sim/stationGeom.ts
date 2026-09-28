@@ -16,6 +16,8 @@
  */
 import { THREE } from '../lib/three';
 import type { Station } from '../types';
+import { SKY_PAD_COUNT, skyPadLocal, skyWhereIs } from './skyGeom';
+import { worldQuat } from './terrain';
 
 export const SLOT_W = 0.4,
   SLOT_H = 0.12;
@@ -45,13 +47,28 @@ export function padLocal(i: number) {
   const phi = (col / PAD_COLS) * Math.PI * 2 + (row % 2) * (Math.PI / PAD_COLS); // rows staggered
   const c = Math.cos(phi),
     s = Math.sin(phi);
-  return { pos: new THREE.Vector3(HANGAR_R * c, HANGAR_R * s, PAD_ROWS[row]), up: new THREE.Vector3(-c, -s, 0), phi };
+  // a docked ship faces along the axis, toward the slot
+  return { pos: new THREE.Vector3(HANGAR_R * c, HANGAR_R * s, PAD_ROWS[row]), up: new THREE.Vector3(-c, -s, 0), fwd: new THREE.Vector3(0, 0, 1), phi };
 }
+
+/** Pad `i` of any station, cube or sky deck (sim/skyGeom.ts). */
+export const padOf = (st: Station, i: number) => (st.sky ? skyPadLocal(i) : padLocal(i));
+/** How many pads the station has. */
+export const padCount = (st: Station) => (st.sky ? SKY_PAD_COUNT : PAD_COUNT);
+/** whereIs for any station. */
+export const whereIsAt = (st: Station, p: THREE.Vector3, m: number) => (st.sky ? skyWhereIs(p, m) : whereIs(p, m));
 
 const Z = new THREE.Vector3(0, 0, 1);
 
-/** The station's orientation at time t: local +z along its spin axis, turned by its spin. */
+const qSky = new THREE.Quaternion();
+
+/**
+ * The station's orientation at time t: local +z along its spin axis, turned by its spin. A sky
+ * station's +z is its local vertical, turning with its world (at the world's current rotation, which
+ * is always the sim clock's: stations only move after the worlds).
+ */
 export function stationQuat(st: Station, t: number, out = new THREE.Quaternion()) {
+  if (st.sky) return worldQuat(st.parent, out).multiply(qSky.setFromUnitVectors(Z, st.sky.dir));
   const base = out.setFromUnitVectors(Z, st.spinAxis);
   return base.premultiply(new THREE.Quaternion().setFromAxisAngle(st.spinAxis, st.spinRate * t));
 }

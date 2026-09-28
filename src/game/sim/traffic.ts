@@ -43,7 +43,8 @@ import { gravityAt } from './gravity';
 import { defaultOrbitAlt, maxOrbitR, orbitNormal } from './orbits';
 import { battCap, beginPower } from './power';
 import { engageAutopilot, engageRendezvous, maybeFtlLeg } from './planner';
-import { PAD_COUNT } from './stationGeom';
+import { padCount } from './stationGeom';
+import { ascent, catapultLaunch } from './catapult';
 import { railsStep } from './timewarp';
 
 export type { Npc };
@@ -114,6 +115,7 @@ function pilotFor(game: Game): Game {
     autodock: null,
     autodockStation: null,
     autodockPad: 0,
+    ascent: null,
     dockRel: new THREE.Vector3(),
     qInv: new THREE.Quaternion(),
     fwd: new THREE.Vector3(),
@@ -178,7 +180,7 @@ function dockAt(npc: Npc, c: Game, st: Station, g: () => number) {
   c.ship.mode = 'normal';
   c.autodock = null;
   c.dockRequest = null;
-  c.dock = { station: st, pad: Math.floor(g() * PAD_COUNT), docked: true };
+  c.dock = { station: st, pad: Math.floor(g() * padCount(st)), docked: true };
   resetFrame(c, gravityAt(c.cur, st.pos).body);
   holdDocked(c);
   refuel(c);
@@ -317,13 +319,15 @@ function captain(npc: Npc, c: Game) {
     case 'docked':
       if (!c.dock?.docked) npc.task = 'launch';
       else if (npc.t > npc.wait) {
-        launch(c); // the docking computer flies it out (WD-300)
+        // the docking computer flies it out (WD-300); from a sky station, the catapult and ascent program
+        if (c.dock.station.sky) catapultLaunch(c);
+        else launch(c);
         npc.task = 'launch';
         npc.t = 0;
       }
       break;
     case 'launch':
-      if (!c.autodock && !c.inStation) setOff(npc, c);
+      if (!c.autodock && !c.inStation && !c.ascent) setOff(npc, c);
       break;
     case 'travel': {
       const to = npc.to!;
@@ -393,7 +397,9 @@ function fly(c: Game, dt: number) {
     maybeFtlLeg(c);
     rotationCorrection(c, dt);
     if (c.autodock) autodock(c, dt, grav.vec);
-    else if (ship.ap && ship.ap.phase === 'insert') autopilot(c, dt, grav);
+    else if (c.ascent && ascent(c, dt, grav)) {
+      /* off a sky station's catapult: the ascent program flies it out of the air */
+    } else if (ship.ap && ship.ap.phase === 'insert') autopilot(c, dt, grav);
     else manualFlight(c, dt, grav, [0, 0, 0]); // flight assist, hands off
     ship.pos.addScaledVector(ship.vel, dt);
     collide(c, dt);
