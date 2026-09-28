@@ -212,7 +212,12 @@ export interface Ship {
   temp: number; // K, hull temperature (see sim/thermal.ts)
   vent: boolean; // venting hydrogen to cool the hull (R)
   outfit: Outfit; // modules in the utility slots (see outfit/catalog.ts)
+  /** Power switches for loads that have no switch of their own (sim/power.ts; headlights and the heat pump do). */
+  breakers: Record<Breaker, boolean>;
 }
+
+/** Loads on the power bus that can be switched off in the schematic (sim/power.ts). */
+export type Breaker = 'thrust' | 'ftl' | 'charge' | 'radar';
 
 /** Per-frame power bookkeeping. */
 export interface Power {

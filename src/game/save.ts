@@ -19,7 +19,7 @@ import type { Game } from './Game';
 import { THREE } from './lib/three';
 import { ALL_COMPUTERS, type Avionics } from './avionics/catalog';
 import { batteryById, moduleById } from './outfit/catalog';
-import type { ApType, Npc, Target } from './types';
+import type { ApType, Npc, Ship, Target } from './types';
 import { systemById } from './universe/galaxy';
 import { resetFrame } from './sim/frame';
 import { arriveAt } from './sim/navigation';
@@ -58,6 +58,7 @@ export interface ShipSave {
   landed: string | null;
   outfit: { battery: string; slots: (string | null)[]; radiatorsOut: number; deploy: boolean; pumpAuto: boolean };
   avionics: Record<keyof Avionics, string | null>;
+  breakers?: Ship['breakers']; // (absent in older saves: all on)
   ap: {
     body: string;
     type: ApType;
@@ -151,6 +152,7 @@ function snapshotFlight(c: Game): FlightSave {
         pumpAuto: ship.outfit.pumpAuto,
       },
       avionics: { orbit: ship.avionics.orbit?.id ?? null, scanner: ship.avionics.scanner?.id ?? null, nav: ship.avionics.nav?.id ?? null, dock: ship.avionics.dock?.id ?? null },
+      breakers: { ...ship.breakers },
       ap: ap && {
         body: ap.body.name,
         type: ap.type,
@@ -298,6 +300,7 @@ function restoreFlight(c: Game, f: FlightSave) {
     fa: s.fa, decoupled: s.decoupled, cruise: s.cruise, throttle: s.throttle, ftlSpeed: s.ftlSpeed, mode: s.mode,
     ftlCharge: 0, tanker: null, dead: null,
   });
+  if (s.breakers) Object.assign(ship.breakers, s.breakers);
   ship.travelDir.copy(V(s.travelDir));
   ship.q.set(s.q[0], s.q[1], s.q[2], s.q[3]).normalize();
 

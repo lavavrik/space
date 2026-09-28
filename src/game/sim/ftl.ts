@@ -41,6 +41,7 @@ export function ftlSpeedLimit(g: Game) {
 }
 
 export function ftlBlocked(ship: Ship) {
+  if (!ship.breakers.ftl) return 'The FTL drive is switched off · ship stats (U), power';
   if (ship.exotic < SHIP.ftlChargeKg) return 'Not enough exotic matter to start the FTL drive';
   if (ship.batt < 6) return 'Battery too low to charge the FTL drive (needs 6 kWh)';
   return heatBlocked(ship.temp);
@@ -57,7 +58,8 @@ export function ftlUpkeep(g: Game, dt: number, load: number) {
   // the drive rides out a brief brownout on its own field; short for longer than this, it fails
   power.ftlShort = power.ftlKW < SHIP.ftlCruiseKW * 0.999 ? power.ftlShort + dt : 0;
   let why: string | null = null;
-  if (ship.exotic <= 0) why = 'Exotic matter exhausted';
+  if (!ship.breakers.ftl) why = 'Switched off';
+  else if (ship.exotic <= 0) why = 'Exotic matter exhausted';
   else if (power.ftlShort > FTL_BROWNOUT) why = 'Power failure';
   if (!why) return true;
   ship.ap = null;
@@ -163,7 +165,7 @@ export function chargeFTL(g: Game, dt: number) {
   const { ship } = g;
   if (ship.ftlCharge <= 0) return;
   // a fixed energy (6 MW × 3 s = 5 kWh): at less than full power it takes longer
-  const kw = grant(g, SHIP.ftlChargeKW, 'FTL charging');
+  const kw = ship.breakers.charge ? grant(g, SHIP.ftlChargeKW, 'FTL charging') : 0; // switched off: the charge pauses
   g.power.chargeKW = kw;
   ship.ftlCharge -= (dt * kw) / SHIP.ftlChargeKW;
   if (ship.ftlCharge <= 0) {

@@ -13,7 +13,7 @@ import { resolvable, SCAN_STAGE, scanProgress } from '../sim/scanner';
 import { galPos } from '../sim/navigation';
 import { apLabel, evalPlan } from '../sim/orbits';
 import { deltaVLeft, dryMass } from '../sim/resources';
-import { battCap } from '../sim/power';
+import { battCap, loadOn } from '../sim/power';
 import { MASS_LOCK_K, dropAlt, massLock } from '../sim/ftl';
 import { AUTOSAVE_S, ago } from '../save';
 import { surfaceDist, surfaceRadius } from '../sim/terrain';
@@ -108,8 +108,9 @@ function lamps(g: Game): Lamp[] {
   const charging = g.jump?.phase === 'charge' || ship.ftlCharge > 0;
   const rad = ship.outfit.radiatorsOut;
   const lock = ship.mode === 'normal' && !g.jump ? massLock(g) : null;
-  // how far out of the lock: height over the world as a share of the lock's reach (sim/ftl.ts)
-  const lockOut = lock ? Math.max(0, lock.pos.distanceTo(ship.pos) - lock.radius) / (dropAlt(lock) * MASS_LOCK_K) : 0;
+  // how far out of the lock: height over the world as a share of the lock's reach (sim/ftl.ts); the
+  // ring shows how deep in it you are, full at the surface and emptying as you climb out
+  const lockOut = lock ? Math.min(1, Math.max(0, lock.pos.distanceTo(ship.pos) - lock.radius) / (dropAlt(lock) * MASS_LOCK_K)) : 0;
   const chargeDone = g.jump?.phase === 'charge' ? 1 - g.jump.t / JUMP_CHARGE_TIME : ship.ftlCharge > 0 ? 1 - ship.ftlCharge / FTL_CHARGE_TIME : 0;
   const cap = battCap(ship);
   const battLow = ship.batt < cap * 0.1;
@@ -136,11 +137,12 @@ function lamps(g: Game): Lamp[] {
     // warnings and modes
     L('charge', charging, g.jump ? 'Hyperdrive charging' : 'FTL drive charging', g.jump ? 'H' : 'J', charging ? `${Math.max(0, g.jump?.t ?? ship.ftlCharge).toFixed(1)} s at full power` : undefined, 'ftl', true, charging ? chargeDone : undefined),
     L('entry', g.aero.heatW > 1e6, 'Entry heating', undefined, g.aero.heatW > 1e6 ? `${fmtPower(g.aero.heatW / 1000)} into the hull at ${Math.round(g.aero.speed)} m/s · slow down, nose first` : 'Not in air at speed', 'warn', g.aero.heatW > 1e8),
-    L('masslock', lock, 'Mass lock', undefined, lock ? `${lock.name} is too close for FTL · ${Math.round(lockOut * 100)}% of the way out (${fmtDist(dropAlt(lock) * MASS_LOCK_K)} up)` : 'Clear for FTL', 'warn', false, lock ? lockOut : undefined),
+    L('masslock', lock, 'Mass lock', undefined, lock ? `${lock.name} is too close for FTL · ${Math.round(lockOut * 100)}% of the way out (${fmtDist(dropAlt(lock) * MASS_LOCK_K)} up)` : 'Clear for FTL', 'warn', false, lock ? 1 - lockOut : undefined),
     L('hot', ship.temp >= TEMP.warn, 'Hull temperature', undefined, `${ship.temp.toFixed(0)} K · warning at ${TEMP.warn} K`, 'warn', ship.temp >= TEMP.drives),
     L('battery', battLow, 'Battery low', undefined, `${fmtEnergy(ship.batt)} of ${fmtEnergy(cap)}`, 'warn', ship.batt < 1),
     L('power', power.limited, 'Power short', undefined, power.limited ? `${power.limited.what} got ${Math.round(power.limited.frac * 100)}% of what it asked for` : 'The bus covers every load', 'warn'),
     L('warp', g.warp > 1, 'Time warp', ', / .', g.warp > 1 ? `×${g.warp.toLocaleString('en-US')}` : 'Real time', 'warn'),
+    L('pivot', g.pivot, 'Pivot to target', 'Shift+T / wheel click', g.pivot ? `Turning onto ${g.target?.name ?? g.jumpDest?.name ?? 'the target'}` : 'Turns the nose onto the target'),
     L('zoom', g.zoom.on, 'Periscope', 'Z', g.zoom.on ? `${g.zoom.mag}× zoom` : undefined),
   ];
 }
@@ -514,12 +516,13 @@ function electricalView(g: Game): ElectricalView {
     battery: { unit: moduleLabel(b), kwh: ship.batt, cap, flowKW: net, maxKW: b.caps.maxKW, chargeKW: b.caps.chargeKW },
     bus: { capKW: power.cap, drawKW: power.draw },
     loads: [
-      { id: 'base', name: power.lightsKW > 0 ? 'LIFE SUPPORT · AVIONICS · LIGHTS' : 'LIFE SUPPORT · AVIONICS', kw: SHIP.baseLoad + power.lightsKW, limited: null },
-      { id: 'thrust', name: 'THRUSTERS', kw: power.thrustKW, limited: limitOf('thrust') },
-      { id: 'ftl', name: 'FTL DRIVE', kw: power.ftlKW, limited: limitOf('ftl') },
-      { id: 'charge', name: g.jump?.phase === 'charge' ? 'HYPERDRIVE CHARGING' : 'DRIVE CHARGING', kw: power.chargeKW, limited: limitOf('charge') },
-      { id: 'pump', name: 'HEAT PUMP', kw: power.pumpKW, limited: limitOf('pump') },
-      { id: 'radar', name: 'RADAR', kw: power.radarKW, limited: limitOf('radar') },
+      { id: 'base', name: 'LIFE SUPPORT · AVIONICS', kw: SHIP.baseLoad, limited: null, sw: null, on: true },
+      { id: 'lights', name: 'HEADLIGHTS', kw: power.lightsKW, limited: null, sw: 'lights', on: loadOn(g, 'lights') },
+      { id: 'thrust', name: 'THRUSTERS', kw: power.thrustKW, limited: limitOf('thrust'), sw: 'thrust', on: loadOn(g, 'thrust') },
+      { id: 'ftl', name: 'FTL DRIVE', kw: power.ftlKW, limited: limitOf('ftl'), sw: 'ftl', on: loadOn(g, 'ftl') },
+      { id: 'charge', name: g.jump?.phase === 'charge' ? 'HYPERDRIVE CHARGING' : 'DRIVE CHARGING', kw: power.chargeKW, limited: limitOf('charge'), sw: 'charge', on: loadOn(g, 'charge') },
+      { id: 'pump', name: 'HEAT PUMP', kw: power.pumpKW, limited: limitOf('pump'), sw: pumpFitted(ship.outfit) ? 'pump' : null, on: loadOn(g, 'pump') },
+      { id: 'radar', name: 'RADAR', kw: power.radarKW, limited: limitOf('radar'), sw: 'radar', on: loadOn(g, 'radar') },
     ],
     rows,
   };

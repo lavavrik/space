@@ -32,6 +32,7 @@ import { dockKey, launch, refuelDocked, type Dock } from './sim/docking';
 import type { AutoPhase } from './sim/autodock';
 import { fitBattery, fitModule, removeModule } from './outfit/fit';
 import { AUTOSAVE_S, clearSave, loadGame, saveGame } from './save';
+import { toggleLoad, type Switchable } from './sim/power';
 
 /** A ship with full tanks and the best gear (yours, and every other ship's: sim/traffic.ts). */
 export function newShip(): Ship {
@@ -41,6 +42,7 @@ export function newShip(): Ship {
     fa: true, decoupled: false, travelDir: new THREE.Vector3(0, 0, -1), ap: null, landed: null, dead: null, grav: null,
     prop: SHIP.propCap, exotic: SHIP.exoticCap, batt: BATTERIES[BATTERIES.length - 1].caps.capacity,
     burnRate: 0, sunTrack: false, tanker: null, scoop: '', scoopRate: { prop: 0, exotic: 0 }, avionics: defaultAvionics(), temp: TEMP.start, vent: false, outfit: bestOutfit(),
+    breakers: { thrust: true, ftl: true, charge: true, radar: true },
   };
 }
 
@@ -366,6 +368,17 @@ export class Game {
 
   togglePump() {
     this.ship.outfit.pumpAuto = !this.ship.outfit.pumpAuto;
+    this.invalidateHud();
+  }
+
+  /** Top-right button with the mouse free: capture it for steering. */
+  captureMouse() {
+    this.input.requestLock();
+  }
+
+  /** Power schematic switches (ship stats, U). */
+  toggleLoad(id: Switchable) {
+    toggleLoad(this, id);
     this.invalidateHud();
   }
 

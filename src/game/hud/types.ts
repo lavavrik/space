@@ -143,13 +143,15 @@ export interface AvionicsSlotView {
 }
 
 /** Ship stats (U), electrical section: drawn as a schematic (sources → bus → loads), plus a few rows. */
+import type { Switchable } from '../sim/power';
 export interface ElectricalView {
   solar: { kw: number; max: number; state: 'ok' | 'shadow' | 'feathered' | 'dark' | 'inside'; curtailed: number };
   /** External power: the station's supply while docked (null source name when not connected). */
   shore: { kw: number; source: string | null };
   battery: { unit: string; kwh: number; cap: number; flowKW: number; maxKW: number; chargeKW: number };
   bus: { capKW: number; drawKW: number };
-  loads: { id: string; name: string; kw: number; limited: number | null }[];
+  /** `sw`: the load's power switch (sim/power.ts), and whether it's on; null for loads that can't be switched. */
+  loads: { id: string; name: string; kw: number; limited: number | null; sw: Switchable | null; on: boolean }[];
   rows: [string, string | Readout][];
 }
 
@@ -245,7 +247,7 @@ export interface GuideView {
 export type LampId =
   | 'fa' | 'decoupled' | 'autopilot' | 'cruise' | 'dock'
   | 'sun' | 'lights' | 'radiators' | 'pump' | 'vent' | 'scoop' | 'radar' | 'shore'
-  | 'charge' | 'entry' | 'masslock' | 'hot' | 'battery' | 'power' | 'warp' | 'zoom';
+  | 'charge' | 'entry' | 'masslock' | 'hot' | 'battery' | 'power' | 'warp' | 'pivot' | 'zoom';
 export interface Lamp {
   id: LampId;
   /** Tooltip: what it is, the key that toggles it (if any), and a line of live detail. */

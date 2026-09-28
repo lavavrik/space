@@ -1,3 +1,4 @@
+import type { Switchable } from '../../game/sim/power';
 import type { ComputerKind } from '../../game/avionics/catalog';
 import type { AvionicsSlotView, ElectricalView } from '../../game/hud/types';
 import { ElectricalSchematic } from './ElectricalSchematic';
@@ -10,7 +11,7 @@ import { Panel, Row, cx } from './primitives';
  * tile's tooltip. Clicking a tile (or pressing its key) opens its tool. Below: the electrical
  * schematic, which gets the room the tiles save.
  */
-export function AvionicsPanel({ slots, electrical, onOpen }: { slots: AvionicsSlotView[]; electrical: ElectricalView | null; onOpen: (kind: ComputerKind | 'outfit') => void }) {
+export function AvionicsPanel({ slots, electrical, onOpen, onToggle }: { slots: AvionicsSlotView[]; electrical: ElectricalView | null; onOpen: (kind: ComputerKind | 'outfit') => void; onToggle: (id: Switchable) => void }) {
   return (
     <Panel name="avionics" id="avionics" className="pan" title="SHIP" right="U HIDES">
       <div className="isec first">AVIONICS</div>
@@ -51,7 +52,7 @@ export function AvionicsPanel({ slots, electrical, onOpen }: { slots: AvionicsSl
       {electrical && (
         <>
           <div className="isec">ELECTRICAL</div>
-          <ElectricalSchematic e={electrical} />
+          <ElectricalSchematic e={electrical} onToggle={onToggle} />
           {electrical.rows.map(([k, v]) => (
             <Row key={k} label={k} value={v} />
           ))}

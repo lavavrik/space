@@ -3,6 +3,7 @@ import { dockKey } from '../sim/docking';
 import { stopAutodock } from '../sim/autodock';
 import { togglePeriscope, wheelZoom } from '../sim/periscope';
 import { changeWarp, stopWarp } from '../sim/timewarp';
+import { startPivot } from '../sim/pivot';
 import { toggleRadiators, toggleVent } from '../sim/thermal';
 import type { Game } from '../Game';
 import { toggleCruise, toggleDecoupled, toggleFTL } from '../sim/ftl';
@@ -209,7 +210,9 @@ export function onPress(g: Game, code: string) {
       toggleFTL(g);
       break;
     case 'KeyT':
-      targetAhead(g);
+      // Shift+T: pivot onto the target (as the wheel click does); T: target what's ahead
+      if (keys.ShiftLeft || keys.ShiftRight) startPivot(g);
+      else targetAhead(g);
       break;
     case 'KeyG':
       cycleTarget(g);

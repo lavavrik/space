@@ -1,4 +1,5 @@
 import type { ElectricalView } from '../../game/hud/types';
+import type { Switchable } from '../../game/sim/power';
 import { fmtEnergy, fmtPower } from '../../game/format';
 import { cx } from './primitives';
 
@@ -6,11 +7,12 @@ import { cx } from './primitives';
  * The power bus as a schematic: the solar panels, external (station) power and the battery on the
  * left feed a vertical bus bar, which feeds every load on the right. A wire carrying power is drawn solid and thicker with
  * more power, with dashes marching the way the power flows (into the battery when it's charging);
- * an idle wire is faint. A load getting less than it asks for is red, with its share.
+ * an idle wire is faint. A load getting less than it asks for is red, with its share. Loads that
+ * can be switched off have a switch at their right edge (sim/power.ts); switched off, the box dims.
  */
 
 const W = 360,
-  H = 280;
+  MIN_H = 280;
 /** Source boxes end at SRC_R; the bus sits midway between them and the loads, so wires match both sides. */
 const SRC_R = 122,
   BUS_X = 160;
@@ -28,8 +30,20 @@ function Wire({ d, kw, rev, lim }: { d: string; kw: number; rev?: boolean; lim?:
   return <path d={d} className={cx('ew', on && 'on', rev && 'rev', lim && 'lim')} strokeWidth={thick(kw)} />;
 }
 
-export function ElectricalSchematic({ e }: { e: ElectricalView }) {
+/** A power switch: a slider, knob right and lit when on. */
+function Switch({ x, y, on, name, onToggle }: { x: number; y: number; on: boolean; name: string; onToggle: () => void }) {
+  return (
+    <g className={cx('esw', on && 'on')} onClick={onToggle} role="switch" aria-checked={on} aria-label={name}>
+      <rect x={x - 4} y={y - 6} width={30} height={24} className="eswhit" />
+      <rect x={x} y={y} width={22} height={12} rx={6} className="eswtrack" />
+      <circle cx={on ? x + 16 : x + 6} cy={y + 6} r={4} className="eswknob" />
+    </g>
+  );
+}
+
+export function ElectricalSchematic({ e, onToggle }: { e: ElectricalView; onToggle: (id: Switchable) => void }) {
   const { solar, shore, battery, bus, loads } = e;
+  const H = Math.max(MIN_H, LOAD_Y0 + (loads.length - 1) * LOAD_GAP + LOAD_H + 22);
   const busTop = LOAD_Y0 + LOAD_H / 2,
     busBot = LOAD_Y0 + (loads.length - 1) * LOAD_GAP + LOAD_H / 2;
   const solarY = 12,
@@ -43,7 +57,7 @@ export function ElectricalSchematic({ e }: { e: ElectricalView }) {
   const battFrac = Math.max(0, Math.min(1, battery.kwh / battery.cap));
   const solarNote = { ok: `max ${fmtPower(solar.max)}`, dark: 'panels off the star', shadow: 'in shadow', feathered: 'feathered · too hot', inside: 'inside the station' }[solar.state];
   return (
-    <svg className="esch" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Power schematic">
+    <svg className="esch" viewBox={`0 0 ${W} ${H}`} style={{ aspectRatio: `${W} / ${H}` }} role="img" aria-label="Power schematic">
       {/* bus bar */}
       <line x1={BUS_X} y1={Math.min(busTop, solarMid)} x2={BUS_X} y2={Math.max(busBot, battMid)} className="ebus" />
       <text x={BUS_X} y={H - 4} className="elab mid">
@@ -107,16 +121,17 @@ export function ElectricalSchematic({ e }: { e: ElectricalView }) {
         return (
           <g key={l.id}>
             <Wire d={`M${BUS_X} ${y + LOAD_H / 2} H${LOAD_X}`} kw={l.kw} lim={lim} />
-            <g className={cx('ebox', l.kw < 0.5 && 'off', lim && 'warn')}>
+            <g className={cx('ebox', l.kw < 0.5 && 'off', !l.on && 'dead', lim && 'warn')}>
               <rect x={LOAD_X} y={y} width={LOAD_W} height={LOAD_H} />
               <text x={LOAD_X + 8} y={y + 13} className="etitle">
                 {l.name}
               </text>
               <text x={LOAD_X + 8} y={y + 28} className="eval">
-                {l.kw < 0.5 ? 'off' : fmtPower(l.kw)}
+                {!l.on ? 'switched off' : l.kw < 0.5 ? 'idle' : fmtPower(l.kw)}
                 {lim && ` · ${Math.round(l.limited! * 100)} %`}
               </text>
             </g>
+            {l.sw && <Switch x={LOAD_X + LOAD_W - 30} y={y + LOAD_H / 2 - 6} on={l.on} name={l.name} onToggle={() => onToggle(l.sw!)} />}
           </g>
         );
       })}

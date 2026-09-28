@@ -1,5 +1,5 @@
 import {
-  Anchor, ArrowsOutCardinal, BatteryWarning, Binoculars, Broadcast, Fan, Funnel, Gauge, Headlights, Hourglass, Lightning,
+  Anchor, ArrowsOutCardinal, BatteryWarning, Binoculars, Broadcast, Crosshair, Fan, Funnel, Gauge, Headlights, Hourglass, Lightning,
   LightningSlash, Fire, Lock, PlugsConnected, ShieldCheck, SolarPanel, Snowflake, SteeringWheel, Sun, ThermometerHot, Wind, type Icon,
 } from '@phosphor-icons/react';
 import type { ApproachView, FlightView, GaugeBadge as GaugeBadgeView, Lamp, LampId, LocationView, SystemsView, TargetView } from '../../game/hud/types';
@@ -63,7 +63,7 @@ export function ShipGauges({ s }: { s: SystemsView }) {
 const LAMP_ICONS: Record<LampId, Icon> = {
   fa: ShieldCheck, decoupled: ArrowsOutCardinal, autopilot: SteeringWheel, cruise: Gauge, dock: Anchor,
   sun: Sun, lights: Headlights, radiators: Snowflake, pump: Fan, vent: Wind, scoop: Funnel, radar: Broadcast, shore: PlugsConnected,
-  charge: Lightning, entry: Fire, masslock: Lock, hot: ThermometerHot, battery: BatteryWarning, power: LightningSlash, warp: Hourglass, zoom: Binoculars,
+  charge: Lightning, entry: Fire, masslock: Lock, hot: ThermometerHot, battery: BatteryWarning, power: LightningSlash, warp: Hourglass, pivot: Crosshair, zoom: Binoculars,
 };
 
 /** A lamp's tooltip: name, on/off, its key, and a line of live detail. */

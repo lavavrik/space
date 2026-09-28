@@ -49,7 +49,13 @@
 #relock {
   position: fixed; top: calc(1.167rem + env(safe-area-inset-top, 0px)); right: 1.333rem;
   font-size: 0.917rem; letter-spacing: .16em; color: var(--amber-dim); pointer-events: none;
+  display: flex; align-items: center; gap: .8rem;
 }
+#relock button {
+  pointer-events: auto; cursor: pointer; font: inherit; letter-spacing: inherit; color: var(--amber);
+  background: rgba(255, 165, 58, .08); border: 1px solid var(--amber-dim); padding: .2rem .6rem;
+}
+#relock button:hover { background: rgba(255, 165, 58, .18); color: var(--text); }
 
 /* autopilot status panel: the only controls in the HUD that take clicks (with the mouse free) */
 #apstat { display: flex; flex-direction: column; gap: .15rem; }

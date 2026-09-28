@@ -30,7 +30,7 @@ export function App() {
                 v={hud.outfit}
                 act={{ back: () => game!.openShipStats(), battery: (id) => game!.fitBattery(id), fit: (s, id) => game!.fitModule(s, id), remove: (s) => game!.removeModule(s), radiators: () => game!.toggleRadiators(), pump: () => game!.togglePump() }}
               />
-            ) : hud.avionics ? <AvionicsPanel slots={hud.avionics} electrical={hud.electrical} onOpen={(k) => game!.openAvionics(k)} /> : hud.docked ? (
+            ) : hud.avionics ? <AvionicsPanel slots={hud.avionics} electrical={hud.electrical} onOpen={(k) => game!.openAvionics(k)} onToggle={(id) => game!.toggleLoad(id)} /> : hud.docked ? (
               <DockedPanel d={hud.docked} act={{ refuel: () => game!.refuelDocked(), outfit: () => game!.openAvionics('outfit'), launch: () => game!.launch() }} />
             ) : hud.helpVisible && <HelpPanel save={hud.save} onNewGame={() => game!.newGame()} />}
           </div>
@@ -52,7 +52,13 @@ export function App() {
             {hud.guide && <ManeuverGuide guide={hud.guide} />}
             {hud.planner && <OrbitPlanner p={hud.planner} />}
           </div>
-          {hud.showRelock && <div id="relock">CLICK: TARGET OR CAPTURE MOUSE · DRAG STEERS</div>}
+          {hud.showRelock && (
+            // with the mouse free: the button captures it (for when there's no empty space to click)
+            <div id="relock">
+              <span>CLICK: TARGET · DRAG STEERS</span>
+              <button type="button" onClick={() => game!.captureMouse()}>CAPTURE MOUSE</button>
+            </div>
+          )}
           {hud.plasma > 0 && <div id="plasma" style={{ opacity: hud.plasma }} />}
           <div id="hud">
             <ShipGauges s={hud.systems} />

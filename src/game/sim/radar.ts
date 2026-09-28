@@ -70,7 +70,7 @@ export function updateRadar(g: Game, dt: number) {
   const r = g.radar;
   g.power.radarKW = 0;
   if (r.sweep <= 0) return;
-  const kw = grant(g, RADAR_KW, 'radar');
+  const kw = g.ship.breakers.radar ? grant(g, RADAR_KW, 'radar') : 0; // switched off mid-sweep: it pauses
   g.power.radarKW = kw;
   r.sweep -= (dt * kw) / RADAR_KW; // a weak bus makes the sweep slower
   if (r.sweep > 0) return;
@@ -91,6 +91,10 @@ export function updateRadar(g: Game, dt: number) {
 export function radarSweep(g: Game) {
   const r = g.radar;
   if (r.sweep > 0) return;
+  if (!g.ship.breakers.radar) {
+    g.showMsg('The radar is switched off · ship stats (U), power', 'warn');
+    return;
+  }
   r.sweep = SWEEP;
   g.showMsg(`Radar sweeping · ${RADAR_RANGE / AU} AU · ${RADAR_KW} kW for ${SWEEP} s`);
 }

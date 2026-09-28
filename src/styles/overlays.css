@@ -120,7 +120,7 @@
 }
 
 /* electrical schematic (U): wires carry power; dashes march the way it flows */
-.esch { width: 100%; height: auto; flex: none; aspect-ratio: 360 / 280; display: block; margin: .2rem 0 .3rem; font-family: "Share Tech Mono", ui-monospace, monospace; }
+.esch { width: 100%; height: auto; flex: none; display: block; margin: .2rem 0 .3rem; font-family: "Share Tech Mono", ui-monospace, monospace; }
 .esch .ebus { stroke: var(--amber); stroke-width: 3; stroke-linecap: round; }
 .esch .ew { fill: none; stroke: var(--amber-faint); stroke-dasharray: 2 4; }
 .esch .ew.on { stroke: #a8e68c; stroke-dasharray: 7 5; animation: eflow .9s linear infinite; }
@@ -213,3 +213,11 @@
 /* controls panel footer: save status and "new game" */
 .savebar { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .5rem; padding-bottom: .4rem; border-bottom: 1px solid var(--amber-faint); font-size: .7rem; opacity: .85; }
 .obtn.warn { color: var(--red); border-color: var(--red); }
+/* power switches on the schematic's loads (sim/power.ts) */
+.esch .ebox.dead text { fill: var(--amber-faint); }
+.esch .esw { pointer-events: auto; cursor: pointer; }
+.esch .eswhit { fill: transparent; }
+.esch .eswtrack { fill: none; stroke: var(--amber-dim); stroke-width: 1; }
+.esch .eswknob { fill: var(--amber-dim); transition: cx .15s; }
+.esch .esw.on .eswtrack { fill: rgba(168, 230, 140, .15); stroke: #a8e68c; }
+.esch .esw.on .eswknob { fill: #a8e68c; }

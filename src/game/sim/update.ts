@@ -210,7 +210,7 @@ function updateJump(g: Game, dt: number) {
   if (!jump) return;
   if (jump.phase === 'charge') {
     // the charge takes a fixed energy: at less than full power it takes longer
-    const kw = grant(g, SHIP.jumpChargeKW, 'hyperdrive charging');
+    const kw = ship.breakers.charge ? grant(g, SHIP.jumpChargeKW, 'hyperdrive charging') : 0; // switched off: the charge pauses
     g.power.chargeKW = kw;
     jump.t -= (dt * kw) / SHIP.jumpChargeKW;
   } else jump.t -= dt;

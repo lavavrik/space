@@ -25,6 +25,11 @@ export function applyThrust(g: Game, T: THREE.Vector3, dt: number) {
   const { ship, power } = g;
   let dv = T.length();
   if (dv < 1e-9) return;
+  if (!ship.breakers.thrust) {
+    T.set(0, 0, 0);
+    warnOnce(g, 'thrustOff', 'Thrusters are switched off · ship stats (U), power');
+    return;
+  }
   if (ship.prop <= 0) {
     T.set(0, 0, 0);
     warnOnce(g, 'prop', 'Propellant exhausted · refuel at a gas giant, a star, ice, or call a tanker (Shift+K)');

@@ -13,7 +13,7 @@
  */
 import { SHIP } from '../constants';
 import type { Game } from '../Game';
-import type { Ship } from '../types';
+import type { Breaker, Ship } from '../types';
 
 export const battCap = (ship: Ship) => ship.outfit.battery.caps.capacity;
 
@@ -53,4 +53,32 @@ export function settleBattery(g: Game, dt: number) {
   power.net = surplus >= 0 ? Math.min(surplus, ship.batt < b.capacity ? b.chargeKW : 0) : Math.max(surplus, -b.maxKW);
   power.curtailed = surplus > 0 ? surplus - power.net : 0;
   ship.batt = Math.min(b.capacity, Math.max(0, ship.batt + (power.net * dt) / 3600));
+}
+
+/**
+ * Loads you can switch on and off (ship stats, U: the power schematic). Life support and avionics
+ * can't be. Headlights and the heat pump keep their own switches (Game.lights, the pump's
+ * thermostat); the rest are breakers on the ship. Off, a load draws nothing and doesn't work:
+ * thrusters give no thrust (the autopilot and docking computer too), the FTL drive won't start and
+ * drops out if running, drive charging pauses (FTL and hyperdrive), the radar can't sweep.
+ * (Later these could be set to a share of their draw instead, to direct power where it matters.)
+ */
+export type Switchable = Breaker | 'lights' | 'pump';
+
+export const SWITCH_NAMES: Record<Switchable, string> = {
+  thrust: 'Thrusters', ftl: 'FTL drive', charge: 'Drive charging', radar: 'Radar', lights: 'Headlights', pump: 'Heat pump',
+};
+
+export function loadOn(g: Game, id: Switchable) {
+  if (id === 'lights') return g.lights;
+  if (id === 'pump') return g.ship.outfit.pumpAuto;
+  return g.ship.breakers[id];
+}
+
+export function toggleLoad(g: Game, id: Switchable) {
+  const on = !loadOn(g, id);
+  if (id === 'lights') g.lights = on;
+  else if (id === 'pump') g.ship.outfit.pumpAuto = on;
+  else g.ship.breakers[id] = on;
+  g.showMsg(`${SWITCH_NAMES[id]} ${on ? 'on' : 'off'}`, on ? '' : 'warn');
 }

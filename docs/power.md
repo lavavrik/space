@@ -18,6 +18,17 @@ Loads are granted in this order:
 The first load that gets less than it asked for is reported on the HUD (note line, speedometer
 charge readout) and in the ship stats panel (U → Electrical).
 
+## Switches
+
+Ship stats (U) draws the bus as a schematic, and every load you can switch off has a switch on it (`sim/power.ts toggleLoad`): headlights (also Shift+L), thrusters, the FTL drive, drive charging, the heat pump (its thermostat; also in the outfit panel) and the radar. Life support and avionics can't be switched off. Off, a load draws nothing and doesn't work:
+
+- thrusters: no thrust at all, for you, the autopilot and the docking computer; flight assist can't hold you, so you coast and fall;
+- FTL drive: won't charge or start, and drops you out if it's running;
+- drive charging: an FTL or hyperdrive charge pauses where it is;
+- radar: can't sweep (a sweep in progress pauses).
+
+The switches are saved with the ship. Later they may become power shares instead of on/off, to direct a weak bus where it matters.
+
 ## Battery
 
 The battery settles each frame after the loads:
