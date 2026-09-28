@@ -20,6 +20,7 @@ import skyPointFrag from './skyPoint.frag.glsl?raw';
 import stationFrag from './station.frag.glsl?raw';
 import terrainGlsl from './terrain.glsl?raw';
 import planetVert from './planet.vert.glsl?raw';
+import terrainBakeFrag from './terrainBake.frag.glsl?raw';
 
 // Shaders that need simplex noise and fBm mark the spot with this pragma.
 const withNoise = (src: string) => src.replace('#pragma farlight_noise', noise);
@@ -31,6 +32,8 @@ const withTerrain = (src: string) => withNoise(src).replace('#pragma farlight_no
 export const PLANET_FS = withTerrain(planetFrag);
 /** Planets: the far sphere, or (with the TERRAIN define) a displaced terrain chunk (render/Terrain.ts). */
 export const PLANET_VS = withTerrain(planetVert);
+/** The terrain bake pass (render/Terrain.ts): PLANET_VS with TERRAIN_BAKE, as points. */
+export const TERRAIN_BAKE_FS = terrainBakeFrag;
 export const ATMO_FS = atmosphereFrag;
 export const STAR_FS = withNoise(starFrag);
 export const GLOW_VS = glowVert;

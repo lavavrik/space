@@ -7,6 +7,7 @@ uniform float uCamAlt; // camera height above the mean radius (m)
 varying vec3 vObj; varying vec3 vWN; varying vec3 vWP;
 varying float vOct; // octaves the geometry already shows (0 on the far sphere; planet.vert.glsl)
 varying float vShadow; // mountains' shadows (1 lit; planet.vert.glsl)
+varying float vHc, vMask; // the terrain h and range mask the geometry already has
 #pragma farlight_noise
 #pragma farlight_noise3d
 #pragma farlight_terrain
@@ -55,8 +56,9 @@ void main(){
   } else {
     // terrain height (terrain.glsl): the same h the geometry is raised by; octaves finer than the
     // geometry shows (from vOct) light the surface as bumps instead
-    float hc;
-    float h=terrH(p,oct,int(vOct+0.5),hc);
+    // only the octaves finer than the geometry are worked out here (terrHFrom); the rest come baked
+    float hc=vHc;
+    float h=terrHFrom(p,int(vOct+0.5),oct,vHc,vMask);
     bool seaOn=uType==2||uType==3;
     N=bumpN(N,terrElev(h,uSea,seaOn)-terrElev(hc,uSea,seaOn));
     det=1.0+0.1*tDet; // rock and soil variation at every scale (terrain.glsl)
@@ -86,10 +88,11 @@ void main(){
       col=mix(col,vec3(0.93,0.95,1.0),ice); spec*=1.0-ice;
       vec3 cp=sp*1.25+vec3(uTime*0.003,0.0,uTime*0.0017);
       // clouds: the 4-octave warp sets their pattern, so it stays; their own detail stops at 6 octaves
-      float c=dark?0.0:fbmF(cp+fbmF(cp*2.0,4)*0.7,min(max(oct-1,4),6));
       // the clouds are painted on the ground: from below ~25 km they'd sit on the mountains, so
-      // they thin out as you descend through the cloud deck
-      cloud=smoothstep(0.02,0.5,c)*(uType==3?0.95:0.85)*smoothstep(4e3,25e3,uCamAlt);
+      // they thin out as you descend through the cloud deck (and below 4 km cost nothing)
+      float deck=smoothstep(4e3,25e3,uCamAlt);
+      float c=dark||deck==0.0?0.0:fbmF(cp+fbmF(cp*2.0,4)*0.7,min(max(oct-1,4),6));
+      cloud=smoothstep(0.02,0.5,c)*(uType==3?0.95:0.85)*deck;
     } else if(uType==4){
       float cr=1.0-abs(snoise(sp*3.0+h));
       float cr2=1.0-abs(snoise(sp*9.0+h2*2.0));

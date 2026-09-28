@@ -11,12 +11,31 @@ import { closePlanner, disengageAP } from './planner';
 import { applyThrust, refillShip } from './resources';
 import { stationLimits } from './docking';
 import { TEMP } from './thermal';
-import { surfaceRadius } from './terrain';
+import { altitudeAt, reliefAmp, surfaceRadius } from './terrain';
 
 const tmp = new THREE.Vector3(),
   tmp2 = new THREE.Vector3(),
   tmp3 = new THREE.Vector3(),
   spinVel = new THREE.Vector3();
+
+/** Near the ground flight assist caps your speed against it at SURF_K × height (m/s per m) … */
+const SURF_K = 0.2,
+  /** … but never below this, so you can still land (well under CRASH_SPEED). */
+  SURF_MIN = 8,
+  /** Height the ship rests at above the terrain (collide). */
+  CLEARANCE = 30;
+
+/**
+ * Flight assist's speed limit near a world's surface, if it's lower than the normal one: SURF_K ×
+ * height above the ground, so it tightens as you descend (from 4 km/s at 20 km to 8 m/s at the
+ * ground) and you can't slam into the terrain with flight assist on. Null far from any surface.
+ */
+export function surfaceLimit(g: Game) {
+  const b = g.ship.landed ?? g.frameBody;
+  if (b.kind === 'star' || !reliefAmp(b)) return null;
+  const lim = Math.max(SURF_MIN, (altitudeAt(b, g.ship.pos) - CLEARANCE) * SURF_K);
+  return lim < NORMAL_MAX ? lim : null;
+}
 
 /** Manual flight. Gravity always acts. Flight assist damps drift on axes you are not
  *  thrusting on and holds your course against gravity while you thrust; hands-off near a
@@ -29,8 +48,9 @@ export function manualFlight(g: Game, dt: number, grav: Gravity, inp: number[]) 
   // inside a station: docking thrusters, and a speed limit that eases you onto the pad (sim/docking.ts)
   const inside = ship.fa ? stationLimits(g) : null;
   const boost = !inside && (keys.ShiftLeft || keys.ShiftRight);
+  const surf = inside || !ship.fa ? null : surfaceLimit(g);
   const acc = inside ? inside.acc : boost ? NORMAL_ACC * 3 : NORMAL_ACC,
-    maxV = inside ? inside.maxV : boost ? NORMAL_BOOST : NORMAL_MAX;
+    maxV = inside ? inside.maxV : surf !== null ? surf * (boost ? 3 : 1) : boost ? NORMAL_BOOST : NORMAL_MAX;
   ship.vel.addScaledVector(grav.vec, dt);
   // everything below works in the local frame: the station's, or the system's
   const fv = frameVel(g);
@@ -76,6 +96,16 @@ export function manualFlight(g: Game, dt: number, grav: Gravity, inp: number[]) 
       if (ta > allow) T.addScaledVector(vh, allow - ta);
     }
   }
+  // near the surface the limit covers falling too (hands off, the pull isn't otherwise damped), so
+  // the ship eases down onto the ground instead of hitting it
+  if (surf !== null) {
+    const v1 = tmp3.copy(v0).add(T);
+    const sp1 = v1.length();
+    if (sp1 > maxV) {
+      const cut = Math.min(sp1 - maxV, NORMAL_ACC * 4 * dt);
+      T.addScaledVector(v1, -cut / sp1);
+    }
+  }
   applyThrust(g, T, dt);
   ship.vel.copy(v0).add(T).add(fv);
   if (inp[0] || inp[1] || inp[2]) ship.landed = null;
@@ -92,7 +122,7 @@ export function collide(g: Game, dt: number) {
     const d = rel.length();
     // cheap reject before sampling the terrain: above the highest peaks
     if (d > b.radius * 1.01 + 200 && ship.landed !== b) continue;
-    const min = surfaceRadius(b, ship.pos) + 30;
+    const min = surfaceRadius(b, ship.pos) + CLEARANCE;
     if (d >= min) {
       if (ship.landed === b && d > min + 20) ship.landed = null;
       continue;

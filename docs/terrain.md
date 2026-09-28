@@ -29,8 +29,10 @@ The old shader chain `sp = 1.6·dir + seedOffset`, multiplied by 2.03 per octave
 
 ## Rendering (`render/Terrain.ts`)
 
+- **Baked, not per frame:** evaluating the terrain per vertex per frame (height, 2 more samples for the normal, a 12-step shadow march) and all 17 octaves per pixel cost ~36 ms of GPU on a 2.6K screen landed on a moon. Now each chunk's normals, heights, sun shadows and coarse terrain state (h and the range mask) are baked once into a 66×33 float texture. That's `planet.vert.glsl` with `TERRAIN_BAKE`, drawn as points, one per grid vertex. The shadows are re-baked only when the sun has moved ~0.2° over the chunk (8 chunks a frame at most). Drawing reads the texture, and the fragment shader works out only the octaves finer than the chunk's vertices (`terrHFrom`, ~4 per pixel), continuing from the baked coarse h.
+
 - **Far away:** below `TERRAIN_PX` (200 px apparent radius) a world is the old unit sphere. Its fragment shader bump-maps all the terrain octaves, so relief shows as shading.
-- **Close up:** a cube-sphere quadtree. Each face splits recursively while the camera is within 2.2 chunk edges, down to about 8 m between vertices.
+- **Close up:** a cube-sphere quadtree. Each face splits recursively while the camera is within 1.6 chunk edges (quads ~15–20 px on screen), down to about 8 m between vertices.
 - **Chunks:** each is a 32×32 grid. Positions are built on the CPU in double precision relative to the chunk centre, and the mesh sits at that centre, so there's no jitter on a 6,000 km world.
 - **Vertices:** the vertex shader (`planet.vert.glsl` with `TERRAIN`) raises each vertex by the height, using only the octaves its spacing can show (`uVOct`). Normals come from two nearby height samples.
 - **Finer detail:** the fragment shader computes the full height. It bump-maps the octaves the vertices don't have, using screen-space derivatives (Mikkelsen's surface-gradient method). Shading therefore doesn't change when a chunk splits; only the silhouette sharpens.
@@ -46,6 +48,7 @@ The old shader chain `sp = 1.6·dir + seedOffset`, multiplied by 2.03 per octave
 - **Landed:** the ship moves with the ground (`ω × r` from the world's spin) and turns with it during time warp (`timewarp.ts`).
 - **Surface frame** (`frame.ts`, 3.): below 30 km over a world with terrain, flight assist and the speed readout work relative to the turning ground. It's blended in from 30 km down to 15 km. Hands off, you hover over one spot instead of the mountains sliding past at the world's spin speed (~100 m/s on a small fast-spinning moon, ~465 m/s at Earth's equator).
 - **ALT** on the HUD is height above the ground under you.
+- **Surface speed limit** (`flight.ts surfaceLimit`): with flight assist on, speed against the ground is capped at 0.2 × height per second, never below 8 m/s (4 km/s at 20 km, 200 m/s at 1 km). It covers falling as well, so a hands-off or full-thrust dive eases down and touches down at ~8 m/s instead of hitting the ground. Shift triples it. The HUD bar shows it as SURFACE LIMIT.
 
 ## Not yet
 

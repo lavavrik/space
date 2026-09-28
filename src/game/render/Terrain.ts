@@ -9,21 +9,27 @@
  *   the chunk mesh sits at that centre, so nothing loses precision on a 6,000 km world.
  * - A chunk's vertices carry only the octaves its spacing can show (uVOct); the fragment shader
  *   bump-maps the finer ones, so shading doesn't change when a chunk splits, only the silhouette.
+ * - The terrain isn't evaluated per frame: a chunk's heights, normals, sun shadows and coarse
+ *   terrain state are baked once into a small float texture (planet.vert.glsl, TERRAIN_BAKE), and
+ *   re-baked only when the sun has moved over it by SUN_REBAKE (the world turns). Drawing just reads
+ *   it, and each pixel works out only the few octaves finer than its chunk's vertices.
  * - Skirts hang from every edge to hide the cracks where levels meet.
  * - Chunks entirely beyond the horizon aren't drawn; unused ones are freed after a while.
  */
 import { THREE } from '../lib/three';
 import { reliefAmp } from '../sim/terrain';
 import type { World } from '../types';
-import { PLANET_FS, PLANET_VS } from './shaders';
+import { PLANET_FS, PLANET_VS, TERRAIN_BAKE_FS } from './shaders';
 
 type Uniforms = Record<string, THREE.IUniform>;
 
 const N = 32; // quads per chunk edge
-const SPLIT_K = 2.2; // split when the camera is within this many edge lengths
+const SPLIT_K = 1.6; // split when the camera is within this many edge lengths (quads ~15–20 px on screen)
 const MIN_SPACING = 8; // m between vertices at the finest level
 const MAX_BUILDS = 12; // chunk meshes built per frame at most (the rest wait a frame)
 const KEEP_FRAMES = 240; // free a chunk unused this long
+const SUN_REBAKE = Math.cos(0.004); // re-bake a chunk's shadows once the sun has moved ~0.2° over it
+const MAX_REBAKES = 8; // shadow re-bakes per frame
 
 /** Cube faces: normal n and in-face axes u, v with u × v = n (so triangles face outward). */
 const FACES: [number, number, number][][] = [
@@ -53,6 +59,8 @@ function faceDir(f: number, s: number, t: number, out: number[]) {
 interface Chunk {
   mesh: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
   used: number;
+  bake: THREE.WebGLRenderTarget;
+  sun: THREE.Vector3; // the sun direction it was baked with (world's frame)
 }
 
 export class TerrainView {
@@ -63,6 +71,12 @@ export class TerrainView {
   private frame = 0;
   private builds = 0;
   private readonly tmp: number[] = [0, 0, 0];
+  private rebakes = 0;
+  private readonly bakeScene = new THREE.Scene();
+  private readonly bakeCam = new THREE.OrthographicCamera();
+  private readonly bakeMat: THREE.ShaderMaterial;
+  private gl!: THREE.WebGLRenderer;
+  private readonly sun = new THREE.Vector3(0, 1, 0);
 
   constructor(
     private readonly b: World,
@@ -71,12 +85,34 @@ export class TerrainView {
     this.R = b.radius;
     this.A = reliefAmp(b);
     this.root.visible = false;
+    this.bakeMat = new THREE.ShaderMaterial({
+      vertexShader: PLANET_VS,
+      fragmentShader: TERRAIN_BAKE_FS,
+      defines: { TERRAIN_BAKE: '' },
+      uniforms: {
+        ...uni,
+        uVOct: { value: 0 },
+        uSpacing: { value: 1 },
+        uSkirtD: { value: 0 },
+        uGridW: { value: N + 1 },
+        uLightL: { value: new THREE.Vector3() },
+        uParity: { value: 0 },
+      },
+      depthTest: false,
+      depthWrite: false,
+    });
   }
 
-  /** Pick and show the chunks for a camera at `cam` (m, in the world's own frame). */
-  update(cam: THREE.Vector3) {
+  /**
+   * Pick and show the chunks for a camera at `cam` (m, in the world's own frame), with the sun in
+   * direction `sun` (same frame). Bakes new chunks and re-bakes ones the sun has moved over.
+   */
+  update(cam: THREE.Vector3, sun: THREE.Vector3, gl: THREE.WebGLRenderer) {
     this.frame++;
     this.builds = 0;
+    this.rebakes = 0;
+    this.gl = gl;
+    this.sun.copy(sun);
     for (const c of this.chunks.values()) c.mesh.visible = false;
     const camDist = cam.length();
     const camDir = cam.clone().divideScalar(camDist);
@@ -86,8 +122,7 @@ export class TerrainView {
     for (const [k, c] of this.chunks)
       if (this.frame - c.used > KEEP_FRAMES) {
         this.root.remove(c.mesh);
-        c.mesh.geometry.dispose();
-        c.mesh.material.dispose();
+        this.free(c);
         this.chunks.delete(k);
       }
   }
@@ -123,15 +158,51 @@ export class TerrainView {
     let c = this.chunks.get(k);
     if (!c) {
       this.builds++;
-      c = { mesh: this.build(f, L, i, j), used: 0 };
+      const bake = new THREE.WebGLRenderTarget(2 * (N + 1), N + 1, {
+        type: THREE.FloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false, generateMipmaps: false,
+      });
+      c = { mesh: this.build(f, L, i, j, bake.texture), used: 0, bake, sun: new THREE.Vector3() };
       this.chunks.set(k, c);
       this.root.add(c.mesh);
+      this.bake(c);
+    } else if (c.sun.dot(this.sun) < SUN_REBAKE && this.rebakes < MAX_REBAKES) {
+      this.rebakes++;
+      this.bake(c);
     }
     c.used = this.frame;
     c.mesh.visible = true;
   }
 
-  private build(f: number, L: number, i: number, j: number) {
+  /** Evaluate the chunk's terrain into its bake texture (see planet.vert.glsl). */
+  private bake(c: Chunk) {
+    const gl = this.gl,
+      u = this.bakeMat.uniforms,
+      mu = c.mesh.material.uniforms;
+    u.uVOct.value = mu.uVOct.value;
+    u.uSpacing.value = mu.uSpacing.value;
+    (u.uLightL.value as THREE.Vector3).copy(this.sun);
+    c.sun.copy(this.sun);
+    const pts = new THREE.Points(c.mesh.geometry, this.bakeMat);
+    pts.frustumCulled = false;
+    this.bakeScene.add(pts);
+    const prev = gl.getRenderTarget();
+    gl.setRenderTarget(c.bake);
+    for (const parity of [0, 1]) {
+      u.uParity.value = parity;
+      this.bakeMat.uniformsNeedUpdate = true;
+      gl.render(this.bakeScene, this.bakeCam);
+    }
+    gl.setRenderTarget(prev);
+    this.bakeScene.remove(pts);
+  }
+
+  private free(c: Chunk) {
+    c.mesh.geometry.dispose();
+    c.mesh.material.dispose();
+    c.bake.dispose();
+  }
+
+  private build(f: number, L: number, i: number, j: number, bake: THREE.Texture) {
     const n = 2 ** L;
     const s0 = -1 + (2 * i) / n,
       t0 = -1 + (2 * j) / n,
@@ -146,8 +217,11 @@ export class TerrainView {
       S = 4 * (N + 1); // skirt vertices, one per edge vertex
     const pos = new Float32Array((V + S) * 3),
       dir = new Float32Array((V + S) * 3),
+      grid = new Float32Array((V + S) * 2),
       skirt = new Float32Array(V + S);
-    const put = (idx: number, s: number, t: number) => {
+    const put = (idx: number, s: number, t: number, gx: number, gy: number) => {
+      grid[idx * 2] = gx;
+      grid[idx * 2 + 1] = gy;
       faceDir(f, s, t, d);
       pos[idx * 3] = d[0] * R - cx;
       pos[idx * 3 + 1] = d[1] * R - cy;
@@ -156,7 +230,7 @@ export class TerrainView {
       dir[idx * 3 + 1] = d[1];
       dir[idx * 3 + 2] = d[2];
     };
-    for (let y = 0; y <= N; y++) for (let x = 0; x <= N; x++) put(y * (N + 1) + x, s0 + ds * x, t0 + ds * y);
+    for (let y = 0; y <= N; y++) for (let x = 0; x <= N; x++) put(y * (N + 1) + x, s0 + ds * x, t0 + ds * y, x, y);
     const idx: number[] = [];
     for (let y = 0; y < N; y++)
       for (let x = 0; x < N; x++) {
@@ -180,6 +254,7 @@ export class TerrainView {
       for (const v of e) {
         pos.copyWithin(sk * 3, v * 3, v * 3 + 3);
         dir.copyWithin(sk * 3, v * 3, v * 3 + 3);
+        grid.copyWithin(sk * 2, v * 2, v * 2 + 2); // a skirt vertex reads its edge vertex's bake
         skirt[sk] = 1;
         sk++;
       }
@@ -190,6 +265,7 @@ export class TerrainView {
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     g.setAttribute('aDir', new THREE.BufferAttribute(dir, 3));
     g.setAttribute('aSkirt', new THREE.BufferAttribute(skirt, 1));
+    g.setAttribute('aGrid', new THREE.BufferAttribute(grid, 2));
     g.setIndex(idx);
     const edge = (R * (Math.PI / 2)) / n,
       spacing = edge / N;
@@ -205,6 +281,8 @@ export class TerrainView {
         uVOct: { value: vOct },
         uSpacing: { value: spacing },
         uSkirtD: { value: spacing * 4 + this.A * 0.6 ** vOct },
+        uGridW: { value: N + 1 },
+        uBake: { value: bake },
       },
     });
     const m = new THREE.Mesh(g, mat);
@@ -213,11 +291,9 @@ export class TerrainView {
   }
 
   dispose() {
-    for (const c of this.chunks.values()) {
-      c.mesh.geometry.dispose();
-      c.mesh.material.dispose();
-    }
+    for (const c of this.chunks.values()) this.free(c);
     this.chunks.clear();
+    this.bakeMat.dispose();
     this.root.removeFromParent();
   }
 }

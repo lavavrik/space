@@ -16,6 +16,7 @@ uniform float uCraters;  // 1 on moons: impact craters (terrainH)
 #define CRATER_TO 13     //   across on a Moon-sized world
 #define CRATER_P 0.5     // chance a lattice cell holds a crater
 float tDet;              // albedo detail from octaves 6+, ~unit contrast at every scale (fragment only)
+float tMask;             // the mountain-range mask terrH found (octave 2), for terrHFrom
 
 // Integer hashing that's exact in float32 and in double (sim/terrain.ts), so both sides put the
 // same craters in the same places: every value stays an integer below 2^24.
@@ -76,7 +77,41 @@ float terrH(vec3 d, int oct, int split, out float coarse){
   }
   float h = s + mask * (r - MTN_MEAN) * MTN_K + cr;
   if (split >= oct) coarse = h;
+  tMask = mask;
   return h;
+}
+
+// Octave weights and lattice scale, as terrH's loop builds them up
+float octA(int i){ return 0.5 * pow(TERR_GAIN, float(min(i, FINE_FROM))) * pow(FINE_GAIN, float(max(i - FINE_FROM, 0))); }
+float octAm(int i){ return 0.5 * pow(MTN_GAIN, float(min(i, FINE_FROM) - MTN_FROM)) * pow(FINE_GAIN, float(max(i - FINE_FROM, 0))); }
+
+// terrH's octaves `from`…`oct` only, added to hc (terrH with `from` octaves, baked per vertex) with
+// the range mask found there: the fragment shader's share, a few octaves finer than the geometry,
+// instead of all 17 per pixel. (The ridge weight carried between octaves restarts at 0.6 here; only
+// the finest ridges differ.)
+float terrHFrom(vec3 d, int from, int oct, float hc, float mask){
+  float s = 0.0, r = 0.0, w = 0.6, cr = 0.0, k = 1.6 * pow(2.03, float(from));
+  if (from <= MTN_FROM) w = 1.0;
+  tDet = 0.0;
+  for (int i = 0; i < T_OCT_MAX; i++) {
+    if (i < from) continue;
+    if (i >= oct) break;
+    vec3 q = d * k + uTOff[i];
+    float n = i < FBM_EXACT ? snoise(q) : tnoise(q);
+    s += octA(i) * n;
+    if (i >= 6) tDet = tDet * 0.8 + n;
+    if (i == 2) mask = smoothstep(-0.05, 0.45, n);
+    if (i >= MTN_FROM) {
+      float rn = 1.0 - abs(n);
+      rn *= rn;
+      r += octAm(i) * rn * w;
+      w = clamp(rn * 1.4, 0.25, 1.0);
+    }
+    if (uCraters > 0.5 && i >= CRATER_FROM && i <= CRATER_TO && (i & 1) == 1) cr += craters(q, k);
+    k *= 2.03;
+  }
+  // hc has the ranges' mean subtracted once the mask is known (from octave 3); before that, here
+  return hc + s + mask * (r - (from <= 2 ? MTN_MEAN : 0.0)) * MTN_K + cr;
 }
 // elevation (m) above the mean radius for h: seas flatten everything below sea level
 float terrElev(float h, float sea, bool seaOn){ return uTerrA * (seaOn ? max(h - sea, 0.0) : h); }

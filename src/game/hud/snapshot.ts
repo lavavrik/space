@@ -16,6 +16,7 @@ import { deltaVLeft, dryMass } from '../sim/resources';
 import { battCap } from '../sim/power';
 import { massLock } from '../sim/ftl';
 import { surfaceRadius } from '../sim/terrain';
+import { surfaceLimit } from '../sim/flight';
 import { TEMP, nextLimit } from '../sim/thermal';
 import { BATTERIES, MODULES, PUMP_ON_ABOVE, type BatteryModule, RADIATOR_MAX_ACC, moduleLabel, outfitMass, pumpFitted, radiatorsFitted, type Module } from '../outfit/catalog';
 import { outfitter } from '../outfit/fit';
@@ -176,10 +177,15 @@ function flight(g: Game): FlightView {
     // won't thrust you past the limit (NORMAL_MAX, or NORMAL_BOOST while Shift is held) and bleeds
     // speed back to it after a boost; with flight assist off there's no limit, only propellant.
     const boost = !!(keys.ShiftLeft || keys.ShiftRight);
-    barFrac = Math.min(1, g.curSpeed / NORMAL_BOOST);
-    barMark = NORMAL_MAX / NORMAL_BOOST;
-    barLabel = ship.fa ? `LIMIT ${fmtSpeedText(NORMAL_MAX).toUpperCase()}` : 'FA OFF · NO LIMIT';
-    barValue = `SHIFT BOOST ${fmtSpeedText(NORMAL_BOOST).toUpperCase()}`;
+    // near a surface flight assist's limit tightens with height (sim/flight.ts surfaceLimit): the
+    // bar then spans 0 to the boosted limit, with the tick at the limit
+    const surf = ship.fa ? surfaceLimit(g) : null;
+    const lim = surf ?? NORMAL_MAX,
+      top = surf !== null ? surf * 3 : NORMAL_BOOST;
+    barFrac = Math.min(1, g.curSpeed / top);
+    barMark = lim / top;
+    barLabel = ship.fa ? `${surf !== null ? 'SURFACE ' : ''}LIMIT ${fmtSpeedText(lim).toUpperCase()}` : 'FA OFF · NO LIMIT';
+    barValue = `SHIFT BOOST ${fmtSpeedText(top).toUpperCase()}`;
     barHi = !ship.fa ? undefined : boost ? 'right' : 'left';
   }
 

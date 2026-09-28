@@ -543,7 +543,8 @@ export class SceneRenderer {
         if (on) {
           v.mesh.visible = false;
           ter.root.rotation.y = b.rot;
-          ter.update(tmp2.subVectors(ship.pos, b.pos).applyQuaternion(worldQuat(b as World).invert()));
+          const qInvW = worldQuat(b as World).invert();
+          ter.update(tmp2.subVectors(ship.pos, b.pos).applyQuaternion(qInvW), this.tmp3.copy(v.light!).applyQuaternion(qInvW), this.gl);
         }
       }
       if (v.ringUni) (v.ringUni.uPC.value as THREE.Vector3).copy(rel);
