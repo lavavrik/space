@@ -10,7 +10,7 @@ import { gravityAt } from './gravity';
 import { updateGuide } from './guide';
 import { arriveAt, galPos } from './navigation';
 import { departDist, departSpeed } from './hyperspace';
-import { advanceBodies, relVel, syncFrame, updateFrame } from './frame';
+import { advanceBodies, frameVel, relVel, ringFrameOf, syncFrame, updateFrame } from './frame';
 import { maybeFtlLeg } from './planner';
 import { updateScan } from './scanner';
 import { updateNav } from './navroute';
@@ -28,6 +28,8 @@ const AX = new THREE.Vector3(1, 0, 0),
   AY = new THREE.Vector3(0, 1, 0),
   AZ = new THREE.Vector3(0, 0, 1);
 const MOUSE_SENS = 0.0021;
+/** Under time warp in a ring's belt, drift slower than this (m/s) against the rocks is snapped to their orbit. */
+const RING_SNAP = 5;
 /** Headlights' draw (kW): a few floodlights. */
 const LIGHTS_KW = 5;
 
@@ -132,7 +134,13 @@ export function update(g: Game, dt: number, realDt = dt) {
       // time warp: coast on rails under the frame body's gravity
       ship.grav = gravityAt(g.cur, ship.pos);
       if (g.dock?.docked) holdDocked(g);
-      else railsStep(g, dt);
+      else {
+        // in a ring's belt drifting with its rocks: on rails exactly on their orbit. A leftover m/s
+        // (the autopilot settles within 1) swings you round a ~±10 km loop about your spot once an
+        // orbit: invisible in real time (hours), but under warp the whole field slid back and forth.
+        if (ringFrameOf(g) && relVel(g).length() < RING_SNAP) ship.vel.copy(frameVel(g));
+        railsStep(g, dt);
+      }
       // on the ground the air still heats (or cools) the hull under warp
       if (ship.landed) updateAero(g, dt, (u) => crossSection(g, u), shipMass(ship));
       g.curSpeed = relVel(g).length();
