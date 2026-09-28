@@ -243,7 +243,7 @@ export interface GuideView {
 export type LampId =
   | 'fa' | 'decoupled' | 'autopilot' | 'cruise' | 'dock'
   | 'sun' | 'lights' | 'radiators' | 'pump' | 'vent' | 'scoop' | 'radar' | 'shore'
-  | 'charge' | 'masslock' | 'hot' | 'battery' | 'power' | 'warp' | 'zoom';
+  | 'charge' | 'entry' | 'masslock' | 'hot' | 'battery' | 'power' | 'warp' | 'zoom';
 export interface Lamp {
   id: LampId;
   /** Tooltip: what it is, the key that toggles it (if any), and a line of live detail. */
@@ -260,6 +260,8 @@ export interface HudSnapshot {
   info: InfoView | null;
   showRelock: boolean;
   toast: { text: string; kind: MsgKind; visible: boolean };
+  /** Entry heating glow at the screen's edges, 0…1 (sim/atmosphere.ts): 10 MW → 0, 1 GW → 1. */
+  plasma: number;
   location: LocationView;
   flight: FlightView;
   target: TargetView;

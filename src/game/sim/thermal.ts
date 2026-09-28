@@ -72,6 +72,8 @@ export interface HeatBudget {
   radAbsorbed: number; // starlight and planet light falling on the radiators
   radTemp: number; // K, the radiator loop
   pumpW: number; // electrical power the heat pump draws
+  aero: number; // entry heating (sim/atmosphere.ts)
+  air: number; // exchanged with the surrounding air (+ in, − out)
   vent: number; // carried off by vented hydrogen
   ventFlow: number; // kg/s
   /** K/s */
@@ -84,7 +86,7 @@ const up = new THREE.Vector3(),
   side = new THREE.Vector3();
 
 /** Cross-section (m²) the cylinder shows along unit direction `u` (ship's nose is its local −z). */
-function crossSection(g: Game, u: THREE.Vector3) {
+export function crossSection(g: Game, u: THREE.Vector3) {
   const c = Math.abs(up.set(0, 0, -1).applyQuaternion(g.ship.q).dot(u));
   return HULL.endArea * c + HULL.sideArea * Math.sqrt(Math.max(0, 1 - c * c));
 }
@@ -103,6 +105,9 @@ interface Inputs {
   radArea: number; // m², both faces of the deployed fins
   pumpMaxW: number;
   pumpLift: number;
+  aero: number; // W of entry heating
+  airCoef: number; // W/K the hull exchanges with the air (convection)
+  airT: number; // K, the air's temperature
 }
 
 /**
@@ -140,7 +145,8 @@ function radiatorSink(inp: Inputs, T: number) {
 function balance(inp: Inputs, T: number) {
   const out = HULL.emit * SIGMA * HULL.area * T ** 4;
   const rad = radiatorSink(inp, T);
-  return { out, rad, net: inp.star + inp.planets + inp.internal - out - rad.removed };
+  const air = inp.airCoef * (inp.airT - T);
+  return { out, rad, air, net: inp.star + inp.planets + inp.internal + inp.aero + air - out - rad.removed };
 }
 
 /** The heat budget at the ship right now (W). Needs solarPower() to have run this frame (flux, shadow). */
@@ -179,6 +185,11 @@ export function heatBudget(g: Game, inTunnel: boolean): HeatBudget {
     radArea: 2 * finFace,
     pumpMaxW: pump && ship.outfit.pumpAuto ? Math.min(pump.caps.maxKW, Math.max(0, power.left)) * 1000 : 0,
     pumpLift: pump?.caps.lift ?? 0,
+    // in air: entry heating, and convection toward the air's temperature (stronger the denser and
+    // faster the air: ~15 W/m²K in Earth's still air at sea level)
+    aero: g.aero.heatW,
+    airCoef: g.aero.rho > 0 ? 15 * Math.sqrt(g.aero.rho / 1.2) * Math.sqrt(1 + g.aero.speed / 20) * HULL.area : 0,
+    airT: g.aero.body?.T ?? 0,
   };
   const now = balance(inp, ship.temp);
   // the vent: whatever hydrogen the exchanger can boil off this frame
@@ -206,6 +217,8 @@ export function heatBudget(g: Game, inTunnel: boolean): HeatBudget {
     radAbsorbed: inp.radAbs,
     radTemp: now.rad.radTemp,
     pumpW: now.rad.pumpW,
+    aero: inp.aero,
+    air: now.air,
     vent,
     ventFlow,
     rate: (now.net - vent) / heatCap(ship),

@@ -21,6 +21,10 @@ import skyPointVert from './skyPoint.vert.glsl?raw';
 import skyPointFrag from './skyPoint.frag.glsl?raw';
 import stationFrag from './station.frag.glsl?raw';
 import terrainGlsl from './terrain.glsl?raw';
+import atmoGlsl from './atmo.glsl?raw';
+import cloudsGlsl from './clouds.glsl?raw';
+import cloudLayerFrag from './cloudLayer.frag.glsl?raw';
+import cloudBakeFrag from './cloudBake.frag.glsl?raw';
 import planetVert from './planet.vert.glsl?raw';
 import terrainBakeFrag from './terrainBake.frag.glsl?raw';
 
@@ -30,13 +34,19 @@ const withNoise = (src: string) => src.replace('#pragma farlight_noise', noise);
 /** Planets, moons, atmospheres, rings and stars share one vertex shader. */
 export const BODY_VS = bodyVert;
 /** Planets: exact simplex noise for coarse octaves, the 3D noise texture (uNoise3D) for fine ones. */
-const withTerrain = (src: string) => withNoise(src).replace('#pragma farlight_noise3d', noise3d).replace('#pragma farlight_terrain', terrainGlsl);
+const withTerrain = (src: string) =>
+  withNoise(src).replace('#pragma farlight_noise3d', noise3d).replace('#pragma farlight_terrain', terrainGlsl).replace('#pragma farlight_atmo', atmoGlsl).replace('#pragma farlight_clouds', cloudsGlsl);
 export const PLANET_FS = withTerrain(planetFrag);
 /** Planets: the far sphere, or (with the TERRAIN define) a displaced terrain chunk (render/Terrain.ts). */
 export const PLANET_VS = withTerrain(planetVert);
+/** The cloud layer (a shell at the deck's height). */
+export const CLOUD_FS = withTerrain(cloudLayerFrag);
+/** Bakes a world's cloud pattern into a cube map. */
+export const CLOUD_BAKE_FS = withTerrain(cloudBakeFrag);
 /** The terrain bake pass (render/Terrain.ts): PLANET_VS with TERRAIN_BAKE, as points. */
 export const TERRAIN_BAKE_FS = terrainBakeFrag;
-export const ATMO_FS = atmosphereFrag;
+/** The sky shell (scattering, atmo.glsl). */
+export const ATMO_FS = atmosphereFrag.replace('#pragma farlight_atmo', atmoGlsl);
 export const STAR_FS = withNoise(starFrag);
 export const GLOW_VS = glowVert;
 export const GLOW_FS = glowFrag;

@@ -1,3 +1,4 @@
+import { noAero, type AeroState } from './sim/atmosphere';
 import { FOV, HUD_INTERVAL, JUMP_RANGE, MSG_TIME, SHIP, SKY_RADIUS } from './constants';
 import { buildSnapshot } from './hud/snapshot';
 import { HudStore } from './hud/HudStore';
@@ -83,6 +84,8 @@ export class Game {
   guide: Guide | null = null;
   /** This frame's heat budget (see sim/thermal.ts). */
   heat: HeatBudget | null = null;
+  /** The air around the ship this frame: drag and entry heating (sim/atmosphere.ts). */
+  aero: AeroState = noAero();
 
   simTime = 0;
   /** Time warp factor (sim/timewarp.ts): 1 = real time. */

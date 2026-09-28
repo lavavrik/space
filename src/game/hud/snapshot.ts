@@ -37,6 +37,7 @@ export function buildSnapshot(g: Game): HudSnapshot {
     info: g.infoVisible && g.target ? buildInfo(g, g.target) : null,
     showRelock: !g.pointerLocked,
     toast: { text: g.msg.text, kind: g.msg.kind, visible: g.msg.on },
+    plasma: g.aero.heatW > 1e7 ? Math.min(1, Math.log10(g.aero.heatW / 1e7) / 2) : 0,
     location: location(g),
     flight: flight(g),
     lamps: lamps(g),
@@ -129,6 +130,7 @@ function lamps(g: Game): Lamp[] {
     L('shore', power.shore > 0, 'Shore power', undefined, power.shore > 0 ? `Station supplying ${fmtPower(power.shore)}` : 'Only when docked'),
     // warnings and modes
     L('charge', charging, g.jump ? 'Hyperdrive charging' : 'FTL drive charging', g.jump ? 'H' : 'J', charging ? `${Math.max(0, g.jump?.t ?? ship.ftlCharge).toFixed(1)} s at full power` : undefined, 'ftl', true),
+    L('entry', g.aero.heatW > 1e6, 'Entry heating', undefined, g.aero.heatW > 1e6 ? `${fmtPower(g.aero.heatW / 1000)} into the hull at ${Math.round(g.aero.speed)} m/s · slow down, nose first` : 'Not in air at speed', 'warn', g.aero.heatW > 1e8),
     L('masslock', lock, 'Mass lock', undefined, lock ? `${lock.name} is too close for FTL` : 'Clear for FTL', 'warn'),
     L('hot', ship.temp >= TEMP.warn, 'Hull temperature', undefined, `${ship.temp.toFixed(0)} K · warning at ${TEMP.warn} K`, 'warn', ship.temp >= TEMP.drives),
     L('battery', battLow, 'Battery low', undefined, `${fmtEnergy(ship.batt)} of ${fmtEnergy(cap)}`, 'warn', ship.batt < 1),

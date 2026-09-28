@@ -53,6 +53,7 @@ export function App() {
             {hud.planner && <OrbitPlanner p={hud.planner} />}
           </div>
           {hud.showRelock && <div id="relock">CLICK: TARGET OR CAPTURE MOUSE · DRAG STEERS</div>}
+          {hud.plasma > 0 && <div id="plasma" style={{ opacity: hud.plasma }} />}
           <div id="hud">
             <ShipGauges s={hud.systems} />
             <div id="centre">

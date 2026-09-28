@@ -1,3 +1,4 @@
+import { noAero, updateAero } from './atmosphere';
 import { JUMP_DEPART_TIME, SHIP } from '../constants';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
@@ -12,8 +13,8 @@ import { advanceBodies, relVel, syncFrame, updateFrame } from './frame';
 import { maybeFtlLeg } from './planner';
 import { updateScan } from './scanner';
 import { updateNav } from './navroute';
-import { refillShip, scoop, solarPower } from './resources';
-import { updateThermal } from './thermal';
+import { refillShip, scoop, shipMass, solarPower } from './resources';
+import { crossSection, updateThermal } from './thermal';
 import { beginPower, grant, settleBattery } from './power';
 import { railsStep, stopWarp, warpBlocked } from './timewarp';
 import { updatePivot } from './pivot';
@@ -43,6 +44,7 @@ export function update(g: Game, dt: number, realDt = dt) {
     }
   }
   g.simTime += dt;
+  Object.assign(g.aero, noAero()); // set again below if the ship is flying through air
   const inTunnel = !!g.jump && g.jump.phase === 'tunnel';
   // departing: the jump flies the ship (straight out along the nose), no steering or physics
   const departing = !!g.jump && g.jump.phase === 'depart';
@@ -143,6 +145,7 @@ export function update(g: Game, dt: number, realDt = dt) {
       if (g.autodock) autodock(g, dt, grav.vec);
       else if (ship.ap && ship.ap.phase === 'insert') autopilot(g, dt, grav);
       else manualFlight(g, dt, grav, inp);
+      updateAero(g, dt, (u) => crossSection(g, u), shipMass(ship)); // drag and entry heating
       ship.pos.addScaledVector(ship.vel, dt);
       collide(g, dt);
       stationContact(g);

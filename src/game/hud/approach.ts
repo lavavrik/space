@@ -23,6 +23,7 @@ import { FRAME_ENTER, SURFACE_FRAME_ALT, TARGET_FRAME_ENTER } from '../sim/frame
 import { dropAlt } from '../sim/ftl';
 import { minOrbitAlt } from '../sim/orbits';
 import { reliefAmp } from '../sim/terrain';
+import { atmoOf } from '../sim/atmosphere';
 import type { Target } from '../types';
 import type { ApproachMark, ApproachView } from './types';
 
@@ -60,7 +61,8 @@ function milestones(g: Game, t: Target): Raw[] {
     return out;
   }
   add(minOrbitAlt(b), 'LOW ORBIT', 'Lowest safe orbit', 'info');
-  if (b.pal.atmo) add(b.radius * 0.025, 'ATMOSPHERE', 'Top of the atmosphere', 'info');
+  const air = atmoOf(b);
+  if (air) add(air.top, 'ATMOSPHERE', `Top of the atmosphere: drag and entry heating below (scale height ${fmtDist(air.H)})`, 'info');
   if (b.type >= WT.GasGiant) add(b.radius * 0.05, 'SCOOP', 'Fuel scoop works below this (skimming the upper atmosphere)', 'on');
   if (reliefAmp(b) > 0) {
     add(SURFACE_FRAME_ALT, 'GROUND FRAME', 'Flight assist starts following the turning ground', 'info');

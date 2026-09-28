@@ -12,8 +12,9 @@ import { AUTO_EXPOSURE, AutoExposure, FLOOD_K, HEAD_K, INT_K, MAX_EXP, SKY_EXP_P
 import { HdrTarget } from './hdr';
 import { TerrainView } from './Terrain';
 import { hasCraters, reliefAmp, terrainOffsets, worldQuat } from '../sim/terrain';
+import { atmoOf } from '../sim/atmosphere';
 import { padLocal, stationQuat } from '../sim/stationGeom';
-import { ATMO_FS, BODY_VS, GLOW_FS, GLOW_VS, PLANET_FS, PLANET_VS, POINT_FS, POINT_VS, RING_FS, SKYPT_FS, SKYPT_VS, SKY_BAKE_FS, SKY_CUBE_FS, SKY_VS, STAR_FS, STATION_FS, STATION_INTERIOR_FS, CORRIDOR_FS, CORRIDOR_LIGHT_FS, CORRIDOR_LIGHT_VS } from './shaders';
+import { ATMO_FS, BODY_VS, GLOW_FS, GLOW_VS, PLANET_FS, PLANET_VS, POINT_FS, POINT_VS, RING_FS, SKYPT_FS, SKYPT_VS, SKY_BAKE_FS, SKY_CUBE_FS, SKY_VS, STAR_FS, STATION_FS, STATION_INTERIOR_FS, CLOUD_BAKE_FS, CLOUD_FS, CORRIDOR_FS, CORRIDOR_LIGHT_FS, CORRIDOR_LIGHT_VS } from './shaders';
 
 type Uniforms = Record<string, THREE.IUniform>;
 
@@ -27,10 +28,31 @@ export interface BodyView {
   ringUni?: Uniforms;
   dotColor?: THREE.Color;
   light?: THREE.Vector3; // direction to the star, shared by the surface, atmosphere and ring uniforms
+  /** The cloud layer (worlds with weather), and its baked pattern (a cube map in the world's frame). */
+  clouds?: THREE.Mesh;
+  cloudTex?: THREE.WebGLCubeRenderTarget;
   /** LOD terrain, drawn instead of the sphere up close (render/Terrain.ts). */
   terrain?: TerrainView;
   dist: number; // m from the ship
   pxR: number; // apparent radius in pixels
+}
+
+/** Cloud deck height, in the air's scale heights (~9 km on an Earth). */
+const CLOUD_H = 1.3;
+
+/**
+ * Scattering coefficients at the ground (1/m, per colour) for the sky shader: Earth-like and ocean
+ * worlds scatter like air (Rayleigh, ∝ λ⁻⁴: blue sky, red sunsets); the rest in their palette's sky
+ * colour (dust, haze), thicker the denser the air.
+ */
+function airBeta(b: World) {
+  const a = atmoOf(b);
+  if (!a) return new THREE.Vector3();
+  const k = a.rho0 / 1.2;
+  if (b.type === WT.EarthLike || b.type === WT.Ocean) return new THREE.Vector3(5.8e-6, 13.5e-6, 33.1e-6).multiplyScalar(k);
+  const c = b.pal.atmo!.c;
+  const m = Math.max(c.r, c.g, c.b, 1e-3);
+  return new THREE.Vector3(c.r / m, c.g / m, c.b / m).multiplyScalar(1.5e-5 * Math.sqrt(k));
 }
 
 const MAXDOTS = 256;
@@ -125,6 +147,7 @@ export class SceneRenderer {
   private readonly tmp = new THREE.Vector3();
   private readonly tmp2 = new THREE.Vector3();
   private readonly tmp3 = new THREE.Vector3();
+  private readonly m4 = new THREE.Matrix4();
 
   constructor(canvas: HTMLCanvasElement) {
     this.gl = new THREE.WebGLRenderer({ canvas, antialias: false, logarithmicDepthBuffer: true }); // MSAA happens in the HDR target
@@ -335,6 +358,7 @@ export class SceneRenderer {
         this.scene.remove(v.glow);
         v.glow.material.dispose();
       }
+      v.cloudTex?.dispose();
     }
     this.views.clear();
     for (const v of this.stationViews.values()) {
@@ -393,6 +417,22 @@ export class SceneRenderer {
     return { mesh: group, uni, inner, innerUni, corridor, corridorUni, lights, lightsUni, dist: Infinity, pxR: 0 };
   }
 
+  /**
+   * Bake a world's cloud pattern (clouds.glsl cloudRaw, 7 octaves) into a 1024² cube map in its own
+   * frame: the cloud layer and the cloud shadows read it instead of evaluating the noise per pixel.
+   */
+  private bakeClouds(b: World) {
+    const rt = new THREE.WebGLCubeRenderTarget(1024, { type: THREE.HalfFloatType, generateMipmaps: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+    const mat = new THREE.ShaderMaterial({ vertexShader: BODY_VS, fragmentShader: CLOUD_BAKE_FS, side: THREE.BackSide, depthWrite: false, uniforms: { uSeed: { value: b.seed }, uType: { value: b.type }, uNoise3D: { value: this.noise3d } } });
+    const scene = new THREE.Scene();
+    const sphere = new THREE.Mesh(this.geoMid, mat);
+    sphere.scale.setScalar(100);
+    scene.add(sphere);
+    new THREE.CubeCamera(1, 1000, rt).update(this.gl, scene);
+    mat.dispose();
+    return rt;
+  }
+
   private attachStar(b: Star): BodyView {
     const group = new THREE.Group();
     this.scene.add(group);
@@ -418,6 +458,9 @@ export class SceneRenderer {
     tilt.quaternion.setFromAxisAngle(new THREE.Vector3(Math.cos(b.seed), 0, Math.sin(b.seed)), b.tilt);
     group.add(tilt);
     const atmo = b.pal.atmo;
+    const air = atmoOf(b);
+    // weather: Earth-like and ocean worlds get a cloud layer
+    const clouded = !!air && (b.type === WT.EarthLike || b.type === WT.Ocean);
     const uni: Uniforms = {
       uType: { value: b.type }, uOct: { value: 5 },
       uA: { value: b.pal.a }, uB: { value: b.pal.b }, uC: { value: b.pal.c }, uD: { value: b.pal.d },
@@ -427,6 +470,11 @@ export class SceneRenderer {
       // terrain height (sim/terrain.ts): per-octave offsets and relief amplitude
       uTOff: { value: terrainOffsets(b.seed) }, uTerrA: { value: reliefAmp(b) }, uCamAlt: { value: 1e9 },
       uRadius: { value: b.radius }, uCraters: { value: hasCraters(b) ? 1 : 0 },
+      // the air (sim/atmosphere.ts; shaders/atmo.glsl), shared by the ground, the sky and the clouds
+      uAtC: { value: new THREE.Vector3() }, uAtR: { value: b.radius }, uAtH: { value: air?.H ?? 1 }, uAtTop: { value: b.radius + (air?.top ?? 0) },
+      uAtBeta: { value: airBeta(b) }, uAtSunI: { value: 45 }, uAtOn: { value: air ? 1 : 0 },
+      uLightL: { value: new THREE.Vector3(0, 1, 0) }, uCloudH: { value: clouded ? air!.H * CLOUD_H : 0 },
+      uToLocal: { value: new THREE.Matrix3() }, uCloudTex: { value: null },
     };
     const mesh = new THREE.Mesh(this.geoMid, new THREE.ShaderMaterial({ vertexShader: PLANET_VS, fragmentShader: PLANET_FS, uniforms: uni }));
     mesh.scale.setScalar(b.radius);
@@ -437,17 +485,31 @@ export class SceneRenderer {
       view.terrain = new TerrainView(b, uni);
       tilt.add(view.terrain.root);
     }
-    if (atmo) {
-      const k = b.type >= WT.GasGiant ? 1.02 : 1.025;
+    if (air) {
+      // the sky: a shell at the top of the air (shaders/atmosphere.frag.glsl); it adds the scattered
+      // light and dims what's behind it (blending: src + dst × alpha)
       view.atmo = new THREE.Mesh(
-        this.geoMid,
+        this.geoHi,
         new THREE.ShaderMaterial({
-          vertexShader: BODY_VS, fragmentShader: ATMO_FS, side: THREE.BackSide, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false,
-          uniforms: { uAtmo: { value: atmo.c }, uLight: { value: light }, uK: { value: atmo.k }, uEdge: { value: Math.sqrt(1 - 1 / (k * k)) }, uExp: this.expUni.uExp },
+          vertexShader: BODY_VS, fragmentShader: ATMO_FS, side: THREE.BackSide, transparent: true, depthWrite: false, uniforms: uni,
+          blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.SrcAlphaFactor, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor,
         }),
       );
-      view.atmo.scale.setScalar(b.radius * k);
-      tilt.add(view.atmo);
+      view.atmo.scale.setScalar((b.radius + air.top) * 1.001); // the facets must cover the exact sphere
+      view.atmo.renderOrder = 1;
+      group.add(view.atmo);
+    }
+    if (clouded) {
+      view.cloudTex = this.bakeClouds(b);
+      uni.uCloudTex.value = view.cloudTex.texture;
+      // the cloud layer at the deck's height (shaders/cloudLayer.frag.glsl), seen from above or below
+      view.clouds = new THREE.Mesh(
+        this.geoHi,
+        new THREE.ShaderMaterial({ vertexShader: BODY_VS, fragmentShader: CLOUD_FS, side: THREE.DoubleSide, transparent: true, depthWrite: false, uniforms: { ...uni, uCloudR: { value: b.radius + air!.H * CLOUD_H } } }),
+      );
+      view.clouds.scale.setScalar((b.radius + air!.H * CLOUD_H) * 1.001);
+      view.clouds.renderOrder = 2;
+      group.add(view.clouds);
     }
     if (b.ring) {
       view.ringUni = { uColor: { value: b.ring.color }, uLight: { value: light }, uPC: { value: new THREE.Vector3() }, uPR: { value: b.radius }, uIn: { value: b.ring.inner }, uOut: { value: b.ring.outer }, uSeed: { value: b.ring.seed }, uExp: this.expUni.uExp };
@@ -522,10 +584,8 @@ export class SceneRenderer {
       const geo = pxR > 140 ? this.geoHi : pxR > 14 ? this.geoMid : this.geoLo;
       v.mesh.geometry = geo;
       v.mesh.visible = pxR > 0.6;
-      if (v.atmo) {
-        v.atmo.geometry = geo;
-        v.atmo.visible = pxR > 2;
-      }
+      if (v.atmo) v.atmo.visible = pxR > 2;
+      if (v.clouds) v.clouds.visible = pxR > 2;
       if (b.kind === 'star') {
         (v.mesh.material as THREE.ShaderMaterial).uniforms.uTime.value = simTime;
         const flux = b.L * (AU / d) * (AU / d);
@@ -544,6 +604,11 @@ export class SceneRenderer {
       uni.uCamAlt.value = d - b.radius;
       v.light!.subVectors(starPos, b.pos).normalize(); // worlds orbit, so the lit side turns
       uni.uOct.value = Math.max(4, Math.min(17, Math.round(4 + Math.log2(Math.max(pxR, 1) / 30))));
+      // the air and clouds work in camera-relative world space and the world's own frame
+      const qInvW = worldQuat(b as World).invert();
+      (uni.uAtC.value as THREE.Vector3).copy(rel);
+      (uni.uLightL.value as THREE.Vector3).copy(v.light!).applyQuaternion(qInvW);
+      (uni.uToLocal.value as THREE.Matrix3).setFromMatrix4(this.m4.makeRotationFromQuaternion(qInvW));
       // up close, LOD terrain replaces the sphere (render/Terrain.ts), fed the camera in the world's frame
       const ter = v.terrain;
       if (ter) {
@@ -552,7 +617,6 @@ export class SceneRenderer {
         if (on) {
           v.mesh.visible = false;
           ter.root.rotation.y = b.rot;
-          const qInvW = worldQuat(b as World).invert();
           ter.update(tmp2.subVectors(ship.pos, b.pos).applyQuaternion(qInvW), this.tmp3.copy(v.light!).applyQuaternion(qInvW), this.gl);
         }
       }

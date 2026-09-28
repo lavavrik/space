@@ -4,12 +4,18 @@ uniform vec3 uA; uniform vec3 uB; uniform vec3 uC; uniform vec3 uD;
 uniform vec3 uAtmo; uniform float uAtmoK; uniform float uSea; uniform float uSeed; uniform float uTime; uniform vec3 uLight;
 uniform float uExp; // exposure (render/exposure.ts)
 uniform float uCamAlt; // camera height above the mean radius (m)
+uniform vec3 uLightL;  // the sun in the world's own frame (for cloud shadows)
+uniform float uCloudH; // the cloud deck's height (m), 0 if none (render: cloud layer)
+uniform samplerCube uCloudTex; // the baked cloud pattern (clouds.glsl)
 varying vec3 vObj; varying vec3 vWN; varying vec3 vWP;
 varying float vOct; // octaves the geometry already shows (0 on the far sphere; planet.vert.glsl)
 varying float vShadow; // mountains' shadows (1 lit; planet.vert.glsl)
 varying float vHc, vMask; // the terrain h and range mask the geometry already has
+varying vec3 vHaze, vHazeT, vSun; // terrain chunks: the air's haze and the sunlight, per vertex
 #pragma farlight_noise
 #pragma farlight_noise3d
+#pragma farlight_clouds
+#pragma farlight_atmo
 #pragma farlight_terrain
 // Bump mapping from a height field H (m) over the surface, from screen-space derivatives
 // (Mikkelsen, "Bump Mapping Unparametrized Surfaces on the GPU"): tilts N by H's slope.
@@ -38,7 +44,7 @@ void main(){
   // Night side: at 0.8 % brightness the detail is invisible, so skip it (volcanic worlds glow at night)
   bool dark=clamp(ndl*1.05+0.03,0.0,1.0)<0.002&&uType!=4;
   if(dark) oct=min(oct,3);
-  vec3 col; vec3 emit=vec3(0.0); float spec=0.0; float cloud=0.0; float det=1.0;
+  vec3 col; vec3 emit=vec3(0.0); float spec=0.0; float cloud=0.0; float det=1.0; float elev=0.0;
   if(uType>=6){
     bool gas = uType==6;
     float w=fbmF(vec3(sp.x*1.2,sp.y*5.0,sp.z*1.2),min(oct,6));
@@ -60,7 +66,8 @@ void main(){
     float hc=vHc;
     float h=terrHFrom(p,int(vOct+0.5),oct,vHc,vMask);
     bool seaOn=uType==2||uType==3;
-    N=bumpN(N,terrElev(h,uSea,seaOn)-terrElev(hc,uSea,seaOn));
+    elev=terrElev(h,uSea,seaOn);
+    N=bumpN(N,elev-terrElev(hc,uSea,seaOn));
     det=1.0+0.1*tDet; // rock and soil variation at every scale (terrain.glsl)
     float h2=dark?0.0:fbmF(sp*3.1+4.0,min(max(oct-2,3),5));
     float lat=abs(p.y);
@@ -86,13 +93,7 @@ void main(){
       }
       float ice=smoothstep(0.8,0.86,lat+h*0.1);
       col=mix(col,vec3(0.93,0.95,1.0),ice); spec*=1.0-ice;
-      vec3 cp=sp*1.25+vec3(uTime*0.003,0.0,uTime*0.0017);
-      // clouds: the 4-octave warp sets their pattern, so it stays; their own detail stops at 6 octaves
-      // the clouds are painted on the ground: from below ~25 km they'd sit on the mountains, so
-      // they thin out as you descend through the cloud deck (and below 4 km cost nothing)
-      float deck=smoothstep(4e3,25e3,uCamAlt);
-      float c=dark||deck==0.0?0.0:fbmF(cp+fbmF(cp*2.0,4)*0.7,min(max(oct-1,4),6));
-      cloud=smoothstep(0.02,0.5,c)*(uType==3?0.95:0.85)*deck;
+      // (the clouds are a layer of their own at the deck's height now: render/SceneRenderer.ts)
     } else if(uType==4){
       float cr=1.0-abs(snoise(sp*3.0+h));
       float cr2=1.0-abs(snoise(sp*9.0+h2*2.0));
@@ -109,15 +110,41 @@ void main(){
   col*=mix(det,1.0,spec); // not on water
   ndl=dot(N,L);
   float diff=clamp(ndl*1.05+0.03,0.0,1.0)*vShadow;
+  // the cloud layer's shadow: the cover where the sun's ray from here crosses the deck
+  if(uCloudH>0.0&&!dark){
+    float up=dot(p,uLightL);
+    if(up>0.0){
+      float s=max(uCloudH-elev,0.0)/max(up,0.08);
+      cloud=cloudCover(textureCube(uCloudTex,normalize(p*(uRadius+elev)+uLightL*s)).r);
+      diff*=1.0-0.75*cloud;
+    }
+  }
+  // sunlight through the air (reddens toward sunset); skylight fills shadows by day
+#ifdef TERRAIN
+  vec3 sunC=vSun;
+#else
+  vec3 sunC=atSunlight(vWP,L);
+#endif
+  float sky=uAtOn>0.5?0.07*smoothstep(-0.12,0.35,ndl0):0.0;
   float diff0=clamp(ndl0*1.05+0.03,0.0,1.0);
   vec3 R=reflect(-L,N);
   float s=pow(max(dot(R,V),0.0),60.0)*0.7*spec*diff;
   // the night side is lit only by starlight: sky level (SKY_K), so it goes black against the stars
-  col=col*(diff+0.0002)+vec3(1.0,0.95,0.85)*s;
-  col=mix(col,vec3(1.0)*(diff0*0.97+0.00015),cloud);
-  float rim=pow(1.0-max(dot(N,V),0.0),3.0);
-  col+=uAtmo*uAtmoK*rim*clamp(ndl+0.25,0.0,1.0)*1.1;
-  col=mix(col,uAtmo*diff,uAtmoK*0.08);
+  col=col*(diff*sunC+sky+0.0002)+vec3(1.0,0.95,0.85)*s*sunC;
+  if(uAtOn>0.5){
+    // the air between the camera and here: haze (atmo.glsl), which also gives the limb its glow
+#ifdef TERRAIN
+    col=col*vHazeT+vHaze;
+#else
+    vec3 vd=normalize(vWP);
+    vec3 trans;
+    vec3 haze=atInscatter(vd*atSpan(vd).x,vWP,L,trans,5);
+    col=col*trans+haze;
+#endif
+  } else {
+    float rim=pow(1.0-max(dot(N,V),0.0),3.0);
+    col+=uAtmo*uAtmoK*rim*clamp(ndl+0.25,0.0,1.0)*1.1;
+  }
   col+=emit;
   gl_FragColor=vec4(col*uExp,1.0);
 }

@@ -1,3 +1,4 @@
+import { atmoOf } from './atmosphere';
 import { AP_ACC, AU, SHIP, WT } from '../constants';
 import { fmtFlow, fmtTime } from '../format';
 import { THREE } from '../lib/three';
@@ -8,7 +9,9 @@ export const ORBIT_TYPES: OrbitType[] = ['equatorial', 'polar', 'sync', 'hold'];
 
 export function minOrbitAlt(b: Body) {
   if (b.kind === 'star') return b.radius * 0.5;
-  return b.pal.atmo ? b.radius * 0.03 : Math.max(5e3, b.radius * 0.005);
+  // above the air (sim/atmosphere.ts): drag would bring a lower orbit down
+  const air = atmoOf(b);
+  return b.pal.atmo ? Math.max(b.radius * 0.03, air ? air.top : 0) : Math.max(5e3, b.radius * 0.005);
 }
 
 export function maxOrbitR(b: Body) {

@@ -1,3 +1,7 @@
+/* entry heating: a hot glow creeping in from the screen's edges (App.tsx, snapshot plasma) */
+#plasma { position: fixed; inset: 0; pointer-events: none; mix-blend-mode: screen; transition: opacity .3s;
+  background: radial-gradient(ellipse at center, transparent 45%, rgba(255, 110, 30, .35) 75%, rgba(255, 170, 80, .75) 100%); }
+
 /* Cockpit HUD: gauges (left), flight cluster (centre), target card (right) along the bottom. All
    sizes in rem, so the root font size in theme.css scales everything together. */
 #hud {

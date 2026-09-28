@@ -15,6 +15,7 @@
 varying vec3 vObj; varying vec3 vWN; varying vec3 vWP; varying float vOct;
 varying float vShadow; // 1 lit, 0 in a mountain's shadow
 varying float vHc, vMask; // the terrain h and range mask the geometry has (terrHFrom continues them)
+varying vec3 vHaze, vHazeT, vSun; // terrain: the air's haze, its transmittance, and the sunlight here (atmo.glsl), per vertex
 #if defined(TERRAIN) || defined(TERRAIN_BAKE)
 attribute vec3 aDir; attribute vec2 aGrid; attribute float aSkirt;
 uniform float uVOct, uSpacing, uSkirtD;
@@ -22,6 +23,8 @@ uniform float uGridW; // vertices per grid row (N + 1)
 #endif
 #ifdef TERRAIN
 uniform highp sampler2D uBake;
+uniform vec3 uLight;
+#pragma farlight_atmo
 #endif
 #ifdef TERRAIN_BAKE
 uniform float uSea;
@@ -102,6 +105,12 @@ void main(){
 #endif
   vec4 wp = modelMatrix * vec4(pos, 1.0);
   vWP = wp.xyz;
+#ifdef TERRAIN
+  // the air between the camera and here varies smoothly: worked out per vertex, not per pixel
+  vec3 L = normalize(uLight), vd = normalize(wp.xyz);
+  vHaze = atInscatter(vd * atSpan(vd).x, wp.xyz, L, vHazeT, 5);
+  vSun = atSunlight(wp.xyz, L);
+#endif
   vWN = normalize(mat3(modelMatrix) * n);
   gl_Position = projectionMatrix * viewMatrix * wp;
   #include <logdepthbuf_vertex>
