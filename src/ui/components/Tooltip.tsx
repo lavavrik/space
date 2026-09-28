@@ -8,17 +8,19 @@ import {
   FloatingArrow, FloatingPortal, arrow, autoUpdate, flip, offset, shift, useDismiss, useFloating, useFocus, useHover, useInteractions, useRole,
   type Placement,
 } from '@floating-ui/react';
-import { useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useState, type CSSProperties, type ReactNode } from 'react';
 
 export function Tip({ content, children, className, style, placement = 'top' }: { content: ReactNode; children: ReactNode; className?: string; style?: CSSProperties; placement?: Placement }) {
   const [open, setOpen] = useState(false);
-  const arrowRef = useRef<SVGSVGElement>(null);
+  // the arrow element as state, and the ref setters wrapped in callbacks: React's rules don't allow
+  // reading refs during render
+  const [arrowEl, setArrowEl] = useState<SVGSVGElement | null>(null);
   const { refs, floatingStyles, context } = useFloating({
     open,
     onOpenChange: setOpen,
     placement,
     whileElementsMounted: autoUpdate,
-    middleware: [offset(8), flip(), shift({ padding: 8 }), arrow({ element: arrowRef })],
+    middleware: [offset(8), flip(), shift({ padding: 8 }), arrow({ element: arrowEl })],
   });
   const { getReferenceProps, getFloatingProps } = useInteractions([
     useHover(context, { delay: { open: 120, close: 0 }, move: false }),
@@ -26,16 +28,18 @@ export function Tip({ content, children, className, style, placement = 'top' }: 
     useDismiss(context),
     useRole(context, { role: 'tooltip' }),
   ]);
+  const setReference = useCallback((el: HTMLElement | null) => refs.setReference(el), [refs]);
+  const setFloating = useCallback((el: HTMLElement | null) => refs.setFloating(el), [refs]);
   return (
     <>
-      <span ref={refs.setReference} className={className} style={style} tabIndex={0} {...getReferenceProps()}>
+      <span ref={setReference} className={className} style={style} tabIndex={0} {...getReferenceProps()}>
         {children}
       </span>
       {open && (
         <FloatingPortal>
-          <div ref={refs.setFloating} className="tip" style={floatingStyles} {...getFloatingProps()}>
+          <div ref={setFloating} className="tip" style={floatingStyles} {...getFloatingProps()}>
             {content}
-            <FloatingArrow ref={arrowRef} context={context} className="tiparrow" width={10} height={5} />
+            <FloatingArrow ref={setArrowEl} context={context} className="tiparrow" width={10} height={5} />
           </div>
         </FloatingPortal>
       )}

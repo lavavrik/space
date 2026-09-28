@@ -11,7 +11,6 @@
  * that motion (nose-first is ~6× smaller than side-on). Entry heating: the Sutton–Graves stagnation
  * heating q = k √(ρ / r_n) v³ over that cross-section, of which HEAT_SHARE ends up in the hull.
  */
-import { WT } from '../constants';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import type { Body, World } from '../types';

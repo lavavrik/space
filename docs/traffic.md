@@ -19,6 +19,7 @@ They don't collide, dock, answer hails, or use the entry corridors yet.
 
 - **Marker:** a dot a few pixels across from any distance, cyan in FTL.
 - **Engine glow:** behind the ship while it manoeuvres, orange in normal space and blue in FTL.
-- **Hull:** a 60 × 12 m hull within 200 km, pointing where it's going and lit by the star.
-- **Trail:** in FTL each ship leaves a long cyan line of where it's been. That's the last 90 s of its path, one point every 0.5 s, fading with age (`TRAIL_S`), and it keeps fading after the ship drops out.
+- **Model:** within 200 km, a small procedural ship (~60 m: tapered hull, nose cone, cockpit, twin engine pods on pylons, a fin), pointing where it's going and lit by the star.
+- **Trail:** in FTL a trail streams behind each ship: a line along its motion, as long as 30 s of travel at its current speed (`TRAIL_S`), capped at 0.5 AU (`TRAIL_MAX`). It's bright at the ship and fades to nothing at the tail, grows as the ship speeds up, and pulls back in after it drops out (eased, `TRAIL_EASE`). Your own ship gets the same trail in FTL, streaming back along your course.
+- **Flash:** a burst that swells and fades over 0.8 s where a ship enters or leaves FTL (`FLASH_S`).
 - **Label:** kind, name and distance (or "FTL") beside any ship within 500,000 km (`Overlay.ts TRAFFIC_LABEL`).

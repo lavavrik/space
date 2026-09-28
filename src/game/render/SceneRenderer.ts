@@ -133,6 +133,7 @@ export class SceneRenderer {
     uPatchPrevVP: { value: THREE.Matrix4 };
     uPatchOn: { value: number };
     uMix: { value: number };
+    uSkyExp: { value: number };
   };
   private skyGeo!: THREE.SphereGeometry;
   /** Other ships (render/Traffic.ts). */

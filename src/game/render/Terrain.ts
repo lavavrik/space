@@ -80,7 +80,7 @@ export class TerrainView {
   private readonly off: Float32Array;
 
   constructor(
-    private readonly b: World,
+    b: World,
     private readonly uni: Uniforms,
   ) {
     this.R = b.radius;

@@ -241,7 +241,7 @@ export class Game {
     updateBodies(bodies, this.simTime);
     updateStations(stations, this.simTime);
     this.cur = { sys, bodies, star: bodies[0] as CurrentSystem['star'], stations };
-    this.traffic = spawnTraffic(this.cur, this.simTime);
+    this.traffic = spawnTraffic(this.cur);
     this.frameBody = this.cur.star; // callers place the ship and then pick its frame
     this.dock = null;
     this.dockRequest = null;
