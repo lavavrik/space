@@ -643,7 +643,7 @@ export class SceneRenderer {
         (v.ringUni.uPC.value as THREE.Vector3).copy(rel);
         // up close, the ring's rocks (render/RingField.ts); the nearest ringed world has them
         v.ringUni.uNearFade.value = 0;
-        if (!ringDone && this.ringField.update(b as World, rel, b.axis, v.light!, simTime)) {
+        if (!ringDone && this.ringField.update(b as World, rel, b.axis, v.light!, simTime, pxPerRad * this.PR)) {
           ringDone = true;
           v.ringUni.uNearFade.value = this.ringField.nearFade;
         }

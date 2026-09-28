@@ -33,17 +33,25 @@ export function ringDensity(b: World, rR: number) {
   return ss(0, 0.06, t) * ss(1, 0.86, t) * Math.min(1, Math.max(0, band)) * 0.85 * ss(0.015, 0.04, Math.abs(t - 0.63));
 }
 
-/** Rock size tiers: rock radius range (m), cell size (m), how far out they're drawn (m), rocks per full cell. */
+/**
+ * Rock size tiers: rock radius range (m), cell size (m), how far out they're drawn (m), rocks per
+ * full cell, and how they're drawn: an icosphere of this subdivision (0 to 2), or −1 for a point.
+ * The points go from where the boulders stop to far out, so the disc's grey band only starts where
+ * even a 800 m rock is under a pixel.
+ */
 export interface RockTier {
   minR: number;
   maxR: number;
   cell: number;
   range: number;
   perCell: number;
+  detail: number;
 }
 export const ROCK_TIERS: RockTier[] = [
-  { minR: 2, maxR: 30, cell: 400, range: 5000, perCell: 1.3 },
-  { minR: 40, maxR: 400, cell: 4000, range: 40000, perCell: 1.1 },
+  { minR: 1.5, maxR: 10, cell: 250, range: 2500, perCell: 1.2, detail: 0 },
+  { minR: 10, maxR: 70, cell: 1000, range: 12000, perCell: 1.6, detail: 1 },
+  { minR: 70, maxR: 500, cell: 5000, range: 60000, perCell: 1.6, detail: 2 },
+  { minR: 100, maxR: 800, cell: 12000, range: 250000, perCell: 25, detail: -1 },
 ];
 
 /** Integer hash (murmur-style) of a few integers, as a uint32. */
