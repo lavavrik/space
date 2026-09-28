@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { THREE } from '../lib/three';
 import { ringDensity } from '../sim/rings';
+import { evalPlan, orbitNormal } from '../sim/orbits';
 import { homeSystem, systemsNear } from '../universe/galaxy';
 import { buildSystem } from '../universe/system';
 import type { World } from '../types';
@@ -22,4 +23,15 @@ describe('rings', () => {
     }
   });
 
+
+  it('plans ring orbits inside the ring, in its plane, going its way', () => {
+    const b = ringed[0];
+    const ship = { prop: 1e5, outfit: { slots: [], battery: { mass: 0 } } } as never;
+    const inside = evalPlan({ body: b, type: 'ring', alt: (b.ring!.inner + 0.3 * (b.ring!.outer - b.ring!.inner) - 1) * b.radius, dir: -1, curAlt: 0 }, ship);
+    expect(inside.ok).toBe(true);
+    const tooLow = evalPlan({ body: b, type: 'ring', alt: 0, dir: 1, curAlt: 0 }, ship);
+    expect(tooLow.r0).toBeCloseTo(b.ring!.inner * b.radius, -3); // clamped to the inner edge
+    const n = orbitNormal(b, 'ring', -1, new THREE.Vector3(1, 0, 0));
+    expect(n.dot(b.axis)).toBeCloseTo(1); // prograde whatever the direction setting
+  });
 });

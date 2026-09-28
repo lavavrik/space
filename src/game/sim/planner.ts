@@ -3,14 +3,15 @@ import { unitLabel } from '../avionics/catalog';
 import { AP_FTL_MIN, FTL_CHARGE_TIME } from '../constants';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
-import type { Autopilot, Body, OrbitType, Station } from '../types';
+import type { Autopilot, Body, OrbitType, Station, World } from '../types';
+import { ringDensity } from './rings';
 import { apDistance, holdPoint } from './autopilot';
 import { ftlBlocked, massLock } from './ftl';
 import { dominantBody } from './gravity';
 import { startOrbitGuide } from './guide';
 import { apLabel, defaultOrbitAlt, evalPlan, maxOrbitR, minOrbitAlt, orbitNormal } from './orbits';
 
-const ORBIT_TYPE_NAMES: Record<OrbitType, string> = { equatorial: 'equatorial', polar: 'polar', sync: 'stationary', hold: 'hold-position' };
+const ORBIT_TYPE_NAMES: Record<OrbitType, string> = { equatorial: 'equatorial', polar: 'polar', sync: 'stationary', hold: 'hold-position', ring: 'ring' };
 
 export function openPlanner(g: Game) {
   const { ship } = g;
@@ -37,10 +38,40 @@ export function adjustAlt(g: Game, f: number) {
   const p = g.planner;
   if (!p || p.type === 'sync') return;
   const b = p.body;
+  if (p.type === 'ring' && b.kind !== 'star' && b.ring) {
+    // across the ring in steps of 1 % of its width (Shift: 10 %), [ in, ] out
+    const w = (b.ring.outer - b.ring.inner) * b.radius;
+    const step = (f > 1 ? 1 : -1) * w * (Math.abs(Math.log(f)) > 0.3 ? 0.1 : 0.01);
+    p.alt = Math.min(b.ring.outer * b.radius, Math.max(b.ring.inner * b.radius, p.alt + b.radius + step)) - b.radius;
+    g.invalidateHud();
+    return;
+  }
   const lo = minOrbitAlt(b),
     hi = p.type === 'hold' ? Infinity : maxOrbitR(b) - b.radius;
   p.alt = Math.min(hi, Math.max(lo, p.alt * f));
   g.invalidateHud();
+}
+
+/**
+ * Where a ring orbit starts in the planner: your own radius if you're within the ring, else its
+ * densest band (sampled across it).
+ */
+function ringStart(b: World, r: number) {
+  const ring = b.ring!;
+  const lo = ring.inner * b.radius,
+    hi = ring.outer * b.radius;
+  if (r > lo && r < hi) return r;
+  let best = (lo + hi) / 2,
+    bestD = -1;
+  for (let k = 1; k < 100; k++) {
+    const rr = lo + ((hi - lo) * k) / 100;
+    const d = ringDensity(b, rr / b.radius);
+    if (d > bestD) {
+      bestD = d;
+      best = rr;
+    }
+  }
+  return best;
 }
 
 export function selectOrbitType(g: Game, t: OrbitType) {
@@ -51,8 +82,13 @@ export function selectOrbitType(g: Game, t: OrbitType) {
     g.showMsg(`${unitLabel(oc)} can't fly ${ORBIT_TYPE_NAMES[t]} orbits`, 'warn');
     return;
   }
+  if (t === 'ring' && (p.body.kind === 'star' || !p.body.ring)) {
+    g.showMsg(`${p.body.name} has no ring`, 'warn');
+    return;
+  }
   p.type = t;
-  if (t === 'hold') p.alt = Math.max(minOrbitAlt(p.body), p.curAlt);
+  if (t === 'ring') p.alt = ringStart(p.body as World, p.curAlt + p.body.radius) - p.body.radius;
+  else if (t === 'hold') p.alt = Math.max(minOrbitAlt(p.body), p.curAlt);
   else if (p.alt + p.body.radius > maxOrbitR(p.body)) p.alt = defaultOrbitAlt(p.body);
   g.invalidateHud();
 }

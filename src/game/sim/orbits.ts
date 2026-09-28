@@ -4,8 +4,9 @@ import { fmtFlow, fmtTime } from '../format';
 import { THREE } from '../lib/three';
 import type { Autopilot, Body, OrbitType, Planner, Ship } from '../types';
 import { deltaVLeft, shipMass } from './resources';
+import { ringDensity } from './rings';
 
-export const ORBIT_TYPES: OrbitType[] = ['equatorial', 'polar', 'sync', 'hold'];
+export const ORBIT_TYPES: OrbitType[] = ['equatorial', 'polar', 'sync', 'hold', 'ring'];
 
 export function minOrbitAlt(b: Body) {
   if (b.kind === 'star') return b.radius * 0.5;
@@ -48,6 +49,17 @@ export function evalPlan(p: Planner, ship: Ship): PlanEval {
     const parent = b.kind === 'star' ? '' : b.parent.name;
     return { r0, ok: p.type === 'hold', note: `${b.name} sits too deep in ${parent}'s gravity for a stable orbit`, period: NaN, speed: 0 };
   }
+  if (p.type === 'ring') {
+    // in the ring's plane at a radius within it, prograde with its rocks (sim/rings.ts)
+    if (!b.kind || b.kind === 'star' || !b.ring) return { r0, ok: false, note: `${b.name} has no ring`, period: NaN, speed: 0 };
+    const lo = b.ring.inner * b.radius,
+      hi = b.ring.outer * b.radius;
+    r0 = Math.min(hi, Math.max(lo, r0));
+    const dens = ringDensity(b, r0 / b.radius) / 0.85;
+    const where = dens <= 0.02 ? 'in a gap: open space' : dens < 0.35 ? 'in a sparse band' : dens < 0.7 ? 'among the rocks' : 'in a dense band';
+    const period = 2 * Math.PI * Math.sqrt(r0 ** 3 / b.mu);
+    return { r0, ok: true, note: `In the ring's plane ${where}, moving with its rocks: they drift past slowly. Inside the belt flight assist holds you against them.`, period, speed: Math.sqrt(b.mu / r0) };
+  }
   if (p.type === 'sync') {
     r0 = syncRadius(b);
     const hrs = (2 * Math.PI) / b.spin / 3600;
@@ -84,9 +96,9 @@ export function orbitNormal(b: Body, type: OrbitType, dir: number, u: THREE.Vect
     if (n.lengthSq() < 1e-8) n.set(1, 0, 0).cross(b.axis);
     return n.normalize().multiplyScalar(dir);
   }
-  return b.axis.clone().multiplyScalar(type === 'sync' ? 1 : dir);
+  return b.axis.clone().multiplyScalar(type === 'sync' || type === 'ring' ? 1 : dir); // the ring and a stationary orbit go the world's way round
 }
 
 export function apLabel(ap: Autopilot) {
-  return { equatorial: 'equatorial orbit', polar: 'polar orbit', sync: 'synchronous orbit', hold: 'holding position', rendezvous: `rendezvous with ${ap.station?.name}` }[ap.type];
+  return { equatorial: 'equatorial orbit', polar: 'polar orbit', sync: 'synchronous orbit', hold: 'holding position', ring: 'ring orbit', rendezvous: `rendezvous with ${ap.station?.name}` }[ap.type];
 }

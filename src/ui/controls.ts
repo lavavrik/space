@@ -66,7 +66,7 @@ export const GROUPS: { id: ControlGroup; title: string; keys: [string, string][]
     id: 'planner',
     title: 'ORBIT PLANNER',
     keys: [
-      ['1–4', 'orbit type'],
+      ['1–5', 'orbit type (5: ring)'],
       ['[ ]', 'altitude'],
       ['R', 'direction'],
       ['L', 'preview ring'],

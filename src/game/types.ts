@@ -157,7 +157,8 @@ export interface Gravity {
   r: number; // distance to the body's centre, m
 }
 
-export type OrbitType = 'equatorial' | 'polar' | 'sync' | 'hold';
+/** 'ring': a circular orbit in a ring's plane, moving with its rocks (sim/rings.ts). */
+export type OrbitType = 'equatorial' | 'polar' | 'sync' | 'hold' | 'ring';
 /** What the autopilot can fly: an orbit type, or a rendezvous with a station (set by the nav computer). */
 export type ApType = OrbitType | 'rendezvous';
 

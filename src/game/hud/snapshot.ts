@@ -15,9 +15,10 @@ import { apLabel, evalPlan } from '../sim/orbits';
 import { deltaVLeft, dryMass } from '../sim/resources';
 import { battCap, loadOn } from '../sim/power';
 import { MASS_LOCK_K, dropAlt, massLock } from '../sim/ftl';
+import { ringFrameOf } from '../sim/frame';
 import { AUTOSAVE_S, ago } from '../save';
 import { surfaceDist, surfaceRadius } from '../sim/terrain';
-import { surfaceLimit } from '../sim/flight';
+import { beltLimit, surfaceLimit } from '../sim/flight';
 import { TEMP, nextLimit } from '../sim/thermal';
 import { BATTERIES, MODULES, PUMP_ON_ABOVE, type BatteryModule, RADIATOR_MAX_ACC, moduleLabel, outfitMass, pumpFitted, radiatorsFitted, type Module } from '../outfit/catalog';
 import { outfitter } from '../outfit/fit';
@@ -152,7 +153,8 @@ function flight(g: Game): FlightView {
   const [mode, modeClass] = flightMode(g);
   // in hyperspace too the readout is in multiples of c (the transit speed is kept in ly/s)
   const [speed, speedUnit] = fmtSpeed(jump && jump.phase === 'tunnel' ? transitState(jump).speed * LY : g.curSpeed);
-  const unit = g.refFrame && ship.mode === 'normal' ? `${speedUnit} · REL. ${g.refFrame.name.toUpperCase()}` : speedUnit;
+  const ringF = !g.refFrame && ship.mode === 'normal' ? ringFrameOf(g) : null;
+  const unit = g.refFrame && ship.mode === 'normal' ? `${speedUnit} · REL. ${g.refFrame.name.toUpperCase()}` : ringF ? `${speedUnit} · REL. RING` : speedUnit;
   // in hyperspace: just the transit, none of the local flight readouts
   if (jump && jump.phase === 'tunnel') {
     const st = transitState(jump);
@@ -190,11 +192,14 @@ function flight(g: Game): FlightView {
     // near a surface flight assist's limit tightens with height (sim/flight.ts surfaceLimit): the
     // bar then spans 0 to the boosted limit, with the tick at the limit
     const surf = ship.fa ? surfaceLimit(g) : null;
-    const lim = surf ?? NORMAL_MAX,
-      top = surf !== null ? surf * 3 : NORMAL_BOOST;
+    // in a ring's belt, a lower limit among the rocks (sim/flight.ts beltLimit)
+    const belt = surf === null ? beltLimit(g) : null;
+    const near = surf ?? belt;
+    const lim = near ?? NORMAL_MAX,
+      top = near !== null ? near * 3 : NORMAL_BOOST;
     barFrac = Math.min(1, g.curSpeed / top);
     barMark = lim / top;
-    barLabel = ship.fa ? `${surf !== null ? 'SURFACE ' : ''}LIMIT ${fmtSpeedText(lim).toUpperCase()}` : 'FA OFF · NO LIMIT';
+    barLabel = ship.fa ? `${surf !== null ? 'SURFACE ' : belt !== null ? 'BELT ' : ''}LIMIT ${fmtSpeedText(lim).toUpperCase()}` : 'FA OFF · NO LIMIT';
     barValue = `SHIFT BOOST ${fmtSpeedText(top).toUpperCase()}`;
     barHi = !ship.fa ? undefined : boost ? 'right' : 'left';
   }
@@ -339,7 +344,7 @@ function autopilotView(g: Game): AutopilotView {
   const ap = ship.ap!;
   const b = ap.body,
     R = b.radius;
-  const label = { equatorial: 'Equatorial orbit', polar: 'Polar orbit', sync: 'Stationary orbit', hold: 'Hold position', rendezvous: 'Rendezvous' }[ap.type];
+  const label = { equatorial: 'Equatorial orbit', polar: 'Polar orbit', sync: 'Stationary orbit', hold: 'Hold position', ring: 'Ring orbit', rendezvous: 'Rendezvous' }[ap.type];
   const [mode] = flightMode(g);
   const rv = ship.pos.clone().sub(b.pos);
   const v = velRel(g, b);
@@ -567,7 +572,7 @@ function avionicsView(g: Game): AvionicsSlotView[] {
     {
       id: 'orbit', key: 'O', kind: 'ORBIT', does: 'Plan an orbit and let the autopilot fly it', ...base(orbit), status: orbitStatus, active: !!ap,
       specs: orbit ? [
-        ['ORBITS', list(...orbit.caps.types.map((x) => ({ equatorial: 'equatorial', polar: 'polar', sync: 'stationary', hold: 'hold' })[x]))],
+        ['ORBITS', list(...orbit.caps.types.map((x) => ({ equatorial: 'equatorial', polar: 'polar', sync: 'stationary', hold: 'hold', ring: 'ring' })[x]))],
         ['INSERTION', `${orbit.caps.profile.acc} m/s² braking · ${fmtSpeedText(orbit.caps.profile.radialCap)} climb`],
         ['FEATURES', list(orbit.caps.preview && 'preview ring (L)', orbit.caps.ftlLeg && 'FTL leg', orbit.caps.readouts && 'deviation readouts')],
       ] : [],
@@ -648,10 +653,10 @@ function planner(g: Game): PlannerView | null {
     types: oc ? oc.caps.types : [],
     body: `${b.name} · ${b.typeName}`,
     type: p.type,
-    alt: fmtDist(ev.r0 - b.radius) + (p.type === 'sync' ? ' (fixed)' : ''),
+    alt: fmtDist(ev.r0 - b.radius) + (p.type === 'sync' ? ' (fixed)' : p.type === 'ring' && b.kind !== 'star' && b.ring ? ` · ${Math.round(((ev.r0 / b.radius - b.ring.inner) / (b.ring.outer - b.ring.inner)) * 100)} % across the ring` : ''),
     period: isFinite(ev.period) ? fmtTime(ev.period) : 'not orbiting',
     speed: ev.speed ? fmtSpeed(ev.speed).join(' ').toLowerCase() : '0 m/s',
-    dir: p.type === 'hold' ? '—' : p.type === 'sync' ? 'with rotation (required)' : p.dir > 0 ? 'prograde (with rotation)' : 'retrograde',
+    dir: p.type === 'hold' ? '—' : p.type === 'sync' ? 'with rotation (required)' : p.type === 'ring' ? 'with the ring (required)' : p.dir > 0 ? 'prograde (with rotation)' : 'retrograde',
     note: { text: ev.note || `Autopilot flies you there${far ? ', using FTL for the long leg' : ''}.`, warn: !ev.ok || !!ev.warn },
   };
 }

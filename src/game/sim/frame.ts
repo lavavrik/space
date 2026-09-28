@@ -15,6 +15,11 @@
  *    means station-keeping. The ship and the station fall together, so gravity cancels out apart
  *    from tiny tidal effects.
  *
+ * 4. The ring frame: inside a planetary ring's belt (within RING_FRAME_MARGIN of its thickness and
+ *    span), flight assist, the speed readout and the speed limit are relative to the rocks around
+ *    you, which circle the world at the circular orbit speed where you are (sim/rings.ts). Hands off
+ *    you drift along with them and hold your height in the belt; thrust moves you among them.
+ *
  * 3. The surface frame: low over a world with terrain (below SURFACE_FRAME_ALT, fully by half of
  *    it), flight assist and the speed readout work relative to the ground, which turns with the
  *    world (up to hundreds of m/s at the equator). Hands off you hover over one spot instead of the
@@ -23,7 +28,8 @@
  */
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
-import type { Body, Station } from '../types';
+import type { Body, Station, World } from '../types';
+import { RING_HALF_THICK } from './rings';
 import { updateBodies } from './kepler';
 import { updateStations } from './stations';
 import { stationPointVelAt } from './stationGeom';
@@ -112,6 +118,21 @@ export function updateFrame(g: Game) {
   else if (prev) g.showMsg(`Left ${prev.name}'s frame`);
 }
 
+/** Beyond the belt's thickness, and inside/outside its edges, the ring frame still holds this far (m). */
+export const RING_FRAME_MARGIN = 20e3;
+
+/** The ringed world whose belt the ship is in (see 4. above), if any. */
+export function ringFrameOf(g: Game): World | null {
+  const b = g.frameBody;
+  if (b.kind === 'star' || !b.ring || g.ship.mode !== 'normal' || g.ship.landed) return null;
+  const rel = tmpR.subVectors(g.ship.pos, b.pos);
+  const h = rel.dot(b.axis);
+  if (Math.abs(h) > RING_HALF_THICK + RING_FRAME_MARGIN) return null;
+  const r = Math.sqrt(Math.max(0, rel.lengthSq() - h * h));
+  return r > b.ring.inner * b.radius - RING_FRAME_MARGIN && r < b.ring.outer * b.radius + RING_FRAME_MARGIN ? b : null;
+}
+const tmpR = new THREE.Vector3();
+
 /** Velocity of the flight-assist frame relative to the frame body (zero unless near a station). */
 const tmpF = new THREE.Vector3();
 /** 0 below 0, 1 above 1, smooth between. */
@@ -128,6 +149,14 @@ export function frameVel(g: Game, out = new THREE.Vector3()) {
   // ω × r ~15 m/s wrong and kept flight assist from ever holding still)
   if (g.inStation) return stationPointVelAt(g.inStation, g.inStationRel, out).sub(g.frameBody.vel);
   if (g.refFrame) return stationVel(g, g.refFrame, out);
+  // in a ring's belt: the rocks' circular orbit where you are (in the ring's plane, prograde)
+  const rb = ringFrameOf(g);
+  if (rb) {
+    const rel = tmpF.subVectors(g.ship.pos, rb.pos);
+    rel.addScaledVector(rb.axis, -rel.dot(rb.axis)); // in the plane
+    const r = rel.length();
+    return out.crossVectors(rb.axis, rel).multiplyScalar(Math.sqrt(rb.mu / (r * r * r))).add(rb.vel).sub(g.frameBody.vel);
+  }
   // low over a world (or on it): the ground, turning with the world (3. above)
   const b = g.ship.landed ?? g.frameBody;
   if (b.kind !== 'star' && reliefAmp(b) > 0) {

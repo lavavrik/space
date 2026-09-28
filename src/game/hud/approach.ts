@@ -54,6 +54,11 @@ function milestones(g: Game, t: Target): Raw[] {
   const b = t;
   if (b.kind !== 'star') add(b.soi - b.radius, 'GRAVITY', `Sphere of influence: ${b.name}'s gravity dominates, its frame and orbits from here`, 'info');
   add(dropAlt(b) * MASS_LOCK_K, 'MASS LOCK', "Mass lock: FTL can't be engaged closer", 'warn');
+  if (b.kind !== 'star' && b.ring) {
+    // the ring's belt (in its plane): a ring orbit (orbit planner, 5) puts you among its rocks
+    add((b.ring.outer - 1) * b.radius, 'RING', "The ring's outer edge: in its plane, a belt of rock (ring orbit: planner, 5)", 'info');
+    add((b.ring.inner - 1) * b.radius, 'RING IN', "The ring's inner edge", 'info');
+  }
   add(dropAlt(b), 'FTL DROP', 'FTL drops out here', 'ftl');
   if (b.kind === 'star') {
     add(fluxDist(b.L, ARRIVE_FLUX, b.radius) - b.radius, 'ARRIVAL', 'Where hyperjumps arrive (20× Earth’s sunlight)', 'info');

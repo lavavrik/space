@@ -12,6 +12,7 @@ import { scoopFitted } from '../outfit/catalog';
 import { fmtDist, fmtPower, fmtSpeedText } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
+import { ringFrameOf } from '../sim/frame';
 import { MASS_LOCK_K, dropAlt, ftlSpeedLimit, massLock, wellFactor } from '../sim/ftl';
 import type { Body } from '../types';
 import type { InfluencesView, Readout } from './types';
@@ -62,7 +63,8 @@ export function buildInfluences(g: Game): InfluencesView {
   const children = g.cur.bodies.filter((b): b is Exclude<Body, { kind: 'star' }> => b.kind !== 'star' && b.parent === dom);
   const next = children.map((b) => ({ b, d: ship.pos.distanceTo(b.pos) - b.soi })).sort((x, y) => x.d - y.d)[0];
   if (next) frame.push(['NEXT GRAVITY WELL', `${next.b.name} · ${fmtDist(Math.max(0, next.d))}`]);
-  frame.push(['FLIGHT ASSIST FRAME', g.refFrame ? `${g.refFrame.name} (station)` : `${g.frameBody.name}`]);
+  const ringF = !g.refFrame ? ringFrameOf(g) : null;
+  frame.push(['FLIGHT ASSIST FRAME', g.refFrame ? `${g.refFrame.name} (station)` : ringF ? `${ringF.name}'s ring (moving with its rocks)` : `${g.frameBody.name}`]);
 
   // FTL: mass lock and the well capping the drive
   const ftl: [string, string | Readout][] = [];

@@ -193,7 +193,7 @@ export function startOrbitGuide(g: Game, ap: Autopilot) {
       },
     }));
   }
-  const label = { equatorial: 'Equatorial orbit', polar: 'Polar orbit', sync: 'Stationary orbit', hold: 'Hold position', rendezvous: 'Rendezvous' }[ap.type];
+  const label = { equatorial: 'Equatorial orbit', polar: 'Polar orbit', sync: 'Stationary orbit', hold: 'Hold position', ring: 'Ring orbit', rendezvous: 'Rendezvous' }[ap.type];
   startGuide(g, {
     title: label.toUpperCase(),
     sub: `${b.name} · ${fmtDist(ap.r0 - b.radius)}${ap.period ? ' · period ' + fmtTime(ap.period) : ''}`,

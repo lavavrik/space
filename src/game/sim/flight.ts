@@ -3,7 +3,7 @@ import { fmtDist, nf0 } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import type { Body, Gravity } from '../types';
-import { frameVel, resetFrame } from './frame';
+import { frameVel, resetFrame, ringFrameOf } from './frame';
 import { dominantBody } from './gravity';
 import { dropAlt } from './ftl';
 import { lookAt } from './navigation';
@@ -37,6 +37,14 @@ export function surfaceLimit(g: Game) {
   return lim < NORMAL_MAX ? lim : null;
 }
 
+/** Inside a ring's belt, flight assist's speed limit (m/s; ×3 with boost): slow enough to pick a way among the rocks. */
+export const BELT_MAX = 800;
+
+/** Flight assist's speed limit in a ring's belt (sim/frame.ts ring frame), or null outside one. */
+export function beltLimit(g: Game) {
+  return g.ship.fa && ringFrameOf(g) ? BELT_MAX : null;
+}
+
 /** Manual flight. Gravity always acts. Flight assist damps drift on axes you are not
  *  thrusting on and holds your course against gravity while you thrust; hands-off near a
  *  body it leaves the velocity along the pull alone, so you fall unless you thrust away. Near a station it works relative to the station instead
@@ -49,8 +57,9 @@ export function manualFlight(g: Game, dt: number, grav: Gravity, inp: number[]) 
   const inside = ship.fa ? stationLimits(g) : null;
   const boost = !inside && (keys.ShiftLeft || keys.ShiftRight);
   const surf = inside || !ship.fa ? null : surfaceLimit(g);
+  const belt = inside || surf !== null ? null : beltLimit(g);
   const acc = inside ? inside.acc : boost ? NORMAL_ACC * 3 : NORMAL_ACC,
-    maxV = inside ? inside.maxV : surf !== null ? surf * (boost ? 3 : 1) : boost ? NORMAL_BOOST : NORMAL_MAX;
+    maxV = inside ? inside.maxV : surf !== null ? surf * (boost ? 3 : 1) : belt !== null ? belt * (boost ? 3 : 1) : boost ? NORMAL_BOOST : NORMAL_MAX;
   ship.vel.addScaledVector(grav.vec, dt);
   // everything below works in the local frame: the station's, or the system's
   const fv = frameVel(g);
@@ -64,7 +73,8 @@ export function manualFlight(g: Game, dt: number, grav: Gravity, inp: number[]) 
   // the travel direction stays on the nose instead of sagging toward the planet (it drifted ~36°
   // off when flying across a planet's pull toward its moon).
   const flying = inp[0] !== 0 || inp[1] !== 0 || inp[2] !== 0;
-  const w = stopping || g.refFrame || flying ? 0 : Math.min(1, Math.max(0, (grav.g - 0.02) / 0.3));
+  // (in a ring's belt, none either: you and the rocks orbit together, so it holds you among them)
+  const w = stopping || g.refFrame || flying || ringFrameOf(g) ? 0 : Math.min(1, Math.max(0, (grav.g - 0.02) / 0.3));
   const radial = gh.clone().multiplyScalar(v0.dot(gh) * w);
   const rest = v0.clone().sub(radial);
   const lv = rest.clone().applyQuaternion(g.qInv);

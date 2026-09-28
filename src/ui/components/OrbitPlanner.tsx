@@ -7,6 +7,7 @@ const TYPES: [OrbitType, string][] = [
   ['polar', 'Polar'],
   ['sync', 'Stationary'],
   ['hold', 'Hold position'],
+  ['ring', 'Ring'],
 ];
 
 /** Orbit planner (O): choose an orbit type and altitude for the autopilot. */
