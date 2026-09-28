@@ -12,6 +12,7 @@ varying vec3 vObj; varying vec3 vWN; varying vec3 vWP;
 varying float vOct; // octaves the geometry already shows (0 on the far sphere; planet.vert.glsl)
 varying float vShadow; // mountains' shadows (1 lit; planet.vert.glsl)
 varying float vHc, vMask; // the terrain h and range mask the geometry already has
+varying float vSkirt; // terrain chunks: 0 on the surface, up to 1 down a skirt (planet.vert.glsl)
 varying vec3 vHaze, vHazeT, vSun; // terrain chunks: the air's haze and the sunlight, per vertex
 varying vec3 vOffDir; // terrain chunks: direction minus the chunk centre's (terrain.glsl terrQ)
 #pragma farlight_noise
@@ -41,6 +42,20 @@ vec3 bumpN(vec3 N, float H){
 }
 void main(){
   #include <logdepthbuf_fragment>
+#ifdef TERRAIN
+  // Skirts hang below every chunk's edge to hide the cracks between detail levels. They're almost
+  // always hidden behind the ground, but they're still shaded: the log depth buffer writes depth
+  // here, which turns off the GPU's early depth test. Seen at a grazing angle through the periscope
+  // the horizon is walls of them, and the full ground shader on all of them doubled the frame time
+  // or worse. A crack only ever shows a skirt's top, just under the edge (the gap is a small part of
+  // its depth), so that keeps the full shader and the rest, far below, gets plain lit ground colour.
+  if (vSkirt > 0.5) {
+    float d0 = clamp(dot(normalize(vWN), normalize(uLight)) * 1.05 + 0.03, 0.0, 1.0);
+    vec3 c0 = mix(uA, uB, 0.5) * (d0 * vShadow * vSun + 0.0002);
+    gl_FragColor = vec4((c0 * vHazeT + vHaze) * uExp, 1.0);
+    return;
+  }
+#endif
   vec3 p=normalize(vObj);
   vec3 N=normalize(vWN); vec3 V=normalize(-vWP); vec3 L=normalize(uLight);
   float ndl=dot(N,L);

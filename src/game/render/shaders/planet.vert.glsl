@@ -13,6 +13,7 @@
 #include <common>
 #include <logdepthbuf_pars_vertex>
 varying vec3 vObj; varying vec3 vWN; varying vec3 vWP; varying float vOct;
+varying float vSkirt; // terrain chunks: 0 on the surface, up to 1 down a skirt
 varying float vShadow; // 1 lit, 0 in a mountain's shadow
 varying float vHc, vMask; // the terrain h and range mask the geometry has (terrHFrom continues them)
 varying vec3 vHaze, vHazeT, vSun; // terrain: the air's haze, its transmittance, and the sunlight here (atmo.glsl), per vertex
@@ -99,6 +100,7 @@ void main(){
   vec4 A = texelFetch(uBake, ivec2(2 * g.x, g.y), 0), B = texelFetch(uBake, ivec2(2 * g.x + 1, g.y), 0);
   vec3 pos = position + aDir * (A.w - aSkirt * uSkirtD), n = A.xyz;
   vObj = aDir;
+  vSkirt = aSkirt;
   vOffDir = position / uRadius;
   vOct = uVOct;
   vShadow = B.x;
@@ -107,6 +109,7 @@ void main(){
 #else
   vec3 pos = position, n = normal;
   vObj = position;
+  vSkirt = 0.0;
   vOct = 0.0;
   vShadow = 1.0;
   vHc = 0.0;

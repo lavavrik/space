@@ -13,7 +13,9 @@
  *   terrain state are baked once into a small float texture (planet.vert.glsl, TERRAIN_BAKE), and
  *   re-baked only when the sun has moved over it by SUN_REBAKE (the world turns). Drawing just reads
  *   it, and each pixel works out only the few octaves finer than its chunk's vertices.
- * - Skirts hang from every edge to hide the cracks where levels meet.
+ * - Skirts hang from every edge to hide the cracks where levels meet: only as deep as a crack can
+ *   be, and shaded cheaply below their top half (planet.frag.glsl), since hidden or not they're
+ *   shaded (docs/perf.md, "Terrain skirts").
  * - Chunks entirely beyond the horizon aren't drawn; unused ones are freed after a while.
  */
 import { THREE } from '../lib/three';
@@ -30,6 +32,7 @@ const MAX_BUILDS = 12; // chunk meshes built per frame at most (the rest wait a 
 const KEEP_FRAMES = 240; // free a chunk unused this long
 const SUN_REBAKE = Math.cos(0.004); // re-bake a chunk's shadows once the sun has moved ~0.2° over it
 const MAX_REBAKES = 8; // shadow re-bakes per frame
+const SKIRT_SPACINGS = 1; // skirt depth beyond the missing octaves' amplitude, in vertex spacings
 
 /** Cube faces: normal n and in-face axes u, v with u × v = n (so triangles face outward). */
 const FACES: [number, number, number][][] = [
@@ -306,7 +309,10 @@ export class TerrainView {
         ...this.uni,
         uVOct: { value: vOct },
         uSpacing: { value: spacing },
-        uSkirtD: { value: spacing * 4 + this.A * 0.6 ** vOct },
+        // deep enough to cover the crack to a coarser neighbour (the octaves it lacks, plus a slope over
+        // one spacing), no deeper: skirts are shaded even where hidden (log depth turns off the early
+        // depth test), and 4 spacings deep they doubled a grazing periscope view's frame time
+        uSkirtD: { value: spacing * SKIRT_SPACINGS + this.A * 0.6 ** vOct },
         uGridW: { value: N + 1 },
         uBake: { value: bake },
         uQc: { value: this.latticeAt(cen, 2312) },

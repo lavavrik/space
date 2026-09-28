@@ -12,6 +12,17 @@ Press **`** (backquote) or open the game with `?perf` to show the performance ov
 
 While the overlay is up, the fourth line splits GPU time by what's being drawn: terrain (the LOD chunks), planet (the far spheres), air (atmosphere shells), clouds, sky, star, stations, points (dust, markers, stars), rings, post (tone mapping), and the bakes (terrain chunk bakes, the periscope's sky patch). Each draw is tagged by its shader (`SceneRenderer.perfTag`), and each change of category starts a new timer query (`Perf.gpuSegment`). The queries themselves cost a little, and a category includes some GPU pipeline wait, so read it for where the time goes rather than exact numbers.
 
+## Terrain skirts and the periscope (2026-09-28)
+
+Landed and looking along the ground through the periscope, the frame time rose with the zoom (here 8 → 24 ms at 750×; on a 3110×1607 screen, 8 → 57 ms). Switching parts off found it: the terrain, and within it the chunk skirts (24 → 6 ms without them).
+
+- **Why:** the logarithmic depth buffer writes depth from the fragment shader, which turns off the GPU's early depth test. Every fragment is shaded whether or not it ends up hidden. Skirts hang below each chunk's edges, and at a grazing angle the magnified horizon strip is layer on layer of them behind the ground in front, all run through the full ground shader.
+- **Fix:**
+  - skirts are only as deep as a crack can be: the missing octaves' amplitude plus one vertex spacing, not four (`Terrain.ts SKIRT_SPACINGS`). A hole count on Venydes 5's mountains, with the background painted green, found the same with no skirts at all, one spacing or four;
+  - below their top half, skirts get plain lit ground colour instead of the full shader. A crack only ever shows a skirt's top; at 15 % a thin line showed through.
+- **Result:** 4–6 ms at 1×–750× in most views; 11 ms for a 1°-above-the-horizon view at 256×, where the ground itself stacks up.
+- **The GPU split:** on Apple GPUs (tile-based: a pass is drawn all at once) the per-category timer queries each measure roughly the whole pass, so every category reads about the same. Switching things off is the reliable way there.
+
 ## Measurements (2026-09-27)
 
 Start view (home planet large on screen, Milky Way behind it), with an emulated 2560×1440 CSS viewport at DPR 2 (a 4K-class screen). Each frame is rendered and forced to finish (`readPixels`), so these are CPU + GPU times.
