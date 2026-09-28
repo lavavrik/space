@@ -13,6 +13,7 @@ import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import { dominantBody } from './gravity';
 import { syncFrame } from './frame';
+import { surfaceRadius } from './terrain';
 
 export const WARP_LEVELS = [1, 10, 100, 1000, 10000, 100000];
 
@@ -75,13 +76,14 @@ function timeToImpact(g: Game) {
   if (ship.landed || vr >= 0) return Infinity;
   // falling: time to cover the altitude at the current radial speed plus gravity's pull (an
   // underestimate of the time, so it errs on the side of stopping early)
-  const h = r - b.radius,
+  const h = r - surfaceRadius(b, ship.pos),
     gAcc = b.mu / (r * r);
   return (vr + Math.sqrt(vr * vr + 2 * gAcc * h)) / gAcc;
 }
 
 const rel = new THREE.Vector3(),
-  acc = new THREE.Vector3();
+  acc = new THREE.Vector3(),
+  qSpin = new THREE.Quaternion();
 
 /**
  * Coast the ship for `dt` sim seconds relative to its frame body (which advanceBodies has already
@@ -90,7 +92,17 @@ const rel = new THREE.Vector3(),
  */
 export function railsStep(g: Game, dt: number) {
   const { ship } = g;
-  if (ship.landed) return; // resting on the ground: stays put
+  if (ship.landed) {
+    // resting on the ground: turns with the world (sim/terrain.ts), so it stays on its spot
+    const lb = ship.landed;
+    if (lb.kind !== 'star') {
+      const ang = lb.spin * dt;
+      rel.subVectors(ship.pos, lb.pos).applyAxisAngle(lb.axis, ang);
+      ship.pos.addVectors(lb.pos, rel);
+      ship.q.premultiply(qSpin.setFromAxisAngle(lb.axis, ang));
+    }
+    return;
+  }
   const b = g.frameBody;
   rel.subVectors(ship.pos, b.pos);
   const r0 = rel.length();

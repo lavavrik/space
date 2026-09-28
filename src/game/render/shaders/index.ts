@@ -18,6 +18,8 @@ import skyCubeFrag from './skyCube.frag.glsl?raw';
 import skyPointVert from './skyPoint.vert.glsl?raw';
 import skyPointFrag from './skyPoint.frag.glsl?raw';
 import stationFrag from './station.frag.glsl?raw';
+import terrainGlsl from './terrain.glsl?raw';
+import planetVert from './planet.vert.glsl?raw';
 
 // Shaders that need simplex noise and fBm mark the spot with this pragma.
 const withNoise = (src: string) => src.replace('#pragma farlight_noise', noise);
@@ -25,7 +27,10 @@ const withNoise = (src: string) => src.replace('#pragma farlight_noise', noise);
 /** Planets, moons, atmospheres, rings and stars share one vertex shader. */
 export const BODY_VS = bodyVert;
 /** Planets: exact simplex noise for coarse octaves, the 3D noise texture (uNoise3D) for fine ones. */
-export const PLANET_FS = withNoise(planetFrag).replace('#pragma farlight_noise3d', noise3d);
+const withTerrain = (src: string) => withNoise(src).replace('#pragma farlight_noise3d', noise3d).replace('#pragma farlight_terrain', terrainGlsl);
+export const PLANET_FS = withTerrain(planetFrag);
+/** Planets: the far sphere, or (with the TERRAIN define) a displaced terrain chunk (render/Terrain.ts). */
+export const PLANET_VS = withTerrain(planetVert);
 export const ATMO_FS = atmosphereFrag;
 export const STAR_FS = withNoise(starFrag);
 export const GLOW_VS = glowVert;

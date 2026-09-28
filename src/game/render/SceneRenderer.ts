@@ -5,13 +5,15 @@ import { THREE } from '../lib/three';
 import type { Body, CurrentSystem, Star, StarSystem, Station, World } from '../types';
 import { orbitPreview } from '../sim/planner';
 import { HyperspaceView } from './Hyperspace';
-import { createNoiseTexture } from './noise3d';
+import { createNoiseTexture } from '../lib/noise3d';
 import { skyColor, skyLook } from '../sim/hyperspace';
 import { CORRIDOR_LEN, corridorGeometry, hullGeometry, interiorGeometry } from './stationMesh';
 import { AUTO_EXPOSURE, AutoExposure, FLOOD_K, HEAD_K, INT_K, MAX_EXP, SKY_EXP_P, SKY_K, STAR_EXP_P, WINDOW_K } from './exposure';
 import { HdrTarget } from './hdr';
+import { TerrainView } from './Terrain';
+import { reliefAmp, terrainOffsets, worldQuat } from '../sim/terrain';
 import { padLocal, stationQuat } from '../sim/stationGeom';
-import { ATMO_FS, BODY_VS, GLOW_FS, GLOW_VS, PLANET_FS, POINT_FS, POINT_VS, RING_FS, SKYPT_FS, SKYPT_VS, SKY_BAKE_FS, SKY_CUBE_FS, SKY_VS, STAR_FS, STATION_FS, STATION_INTERIOR_FS, CORRIDOR_FS } from './shaders';
+import { ATMO_FS, BODY_VS, GLOW_FS, GLOW_VS, PLANET_FS, PLANET_VS, POINT_FS, POINT_VS, RING_FS, SKYPT_FS, SKYPT_VS, SKY_BAKE_FS, SKY_CUBE_FS, SKY_VS, STAR_FS, STATION_FS, STATION_INTERIOR_FS, CORRIDOR_FS } from './shaders';
 
 type Uniforms = Record<string, THREE.IUniform>;
 
@@ -25,11 +27,15 @@ export interface BodyView {
   ringUni?: Uniforms;
   dotColor?: THREE.Color;
   light?: THREE.Vector3; // direction to the star, shared by the surface, atmosphere and ring uniforms
+  /** LOD terrain, drawn instead of the sphere up close (render/Terrain.ts). */
+  terrain?: TerrainView;
   dist: number; // m from the ship
   pxR: number; // apparent radius in pixels
 }
 
 const MAXDOTS = 256;
+/** Apparent radius (px) above which a world with relief is drawn as LOD terrain instead of a sphere. */
+const TERRAIN_PX = 200;
 /** Face size of the baked Milky Way cube map (6 × 1024² × 4 bytes ≈ 25 MB of GPU memory). */
 const SKY_CUBE_SIZE = 1024;
 /** ms a new periscope sky patch takes to fade in over the last one (also the least time between bakes). */
@@ -88,7 +94,7 @@ export class SceneRenderer {
   private readonly geoLo = new THREE.SphereGeometry(1, 32, 16);
   private readonly plane = new THREE.PlaneGeometry(2, 2);
   private readonly box = new THREE.BoxGeometry(1, 1, 1);
-  /** Fine-octave noise for the planet shaders (see noise3d.ts). */
+  /** Fine-octave noise for the planet shaders (see lib/noise3d.ts). */
   private readonly noise3d = createNoiseTexture();
   private sysStars: THREE.Points | null = null;
   private skyCube!: THREE.WebGLCubeRenderTarget;
@@ -409,12 +415,18 @@ export class SceneRenderer {
       uAtmo: { value: atmo ? atmo.c : new THREE.Color(0, 0, 0) }, uAtmoK: { value: atmo ? atmo.k * 0.6 : 0 },
       uSea: { value: b.pal.sea }, uSeed: { value: b.seed }, uTime: { value: 0 }, uLight: { value: light }, uNoise3D: { value: this.noise3d },
       uExp: this.expUni.uExp,
+      // terrain height (sim/terrain.ts): per-octave offsets and relief amplitude
+      uTOff: { value: terrainOffsets(b.seed) }, uTerrA: { value: reliefAmp(b) }, uCamAlt: { value: 1e9 },
     };
-    const mesh = new THREE.Mesh(this.geoMid, new THREE.ShaderMaterial({ vertexShader: BODY_VS, fragmentShader: PLANET_FS, uniforms: uni }));
+    const mesh = new THREE.Mesh(this.geoMid, new THREE.ShaderMaterial({ vertexShader: PLANET_VS, fragmentShader: PLANET_FS, uniforms: uni }));
     mesh.scale.setScalar(b.radius);
     mesh.rotation.y = b.rot;
     tilt.add(mesh);
     const view: BodyView = { group, mesh, uni, light, dist: Infinity, pxR: 0 };
+    if (reliefAmp(b) > 0) {
+      view.terrain = new TerrainView(b, uni);
+      tilt.add(view.terrain.root);
+    }
     if (atmo) {
       const k = b.type >= WT.GasGiant ? 1.02 : 1.025;
       view.atmo = new THREE.Mesh(
@@ -519,8 +531,20 @@ export class SceneRenderer {
       }
       const uni = v.uni!;
       uni.uTime.value = simTime;
+      uni.uCamAlt.value = d - b.radius;
       v.light!.subVectors(starPos, b.pos).normalize(); // worlds orbit, so the lit side turns
-      uni.uOct.value = Math.max(4, Math.min(13, Math.round(4 + Math.log2(Math.max(pxR, 1) / 30))));
+      uni.uOct.value = Math.max(4, Math.min(17, Math.round(4 + Math.log2(Math.max(pxR, 1) / 30))));
+      // up close, LOD terrain replaces the sphere (render/Terrain.ts), fed the camera in the world's frame
+      const ter = v.terrain;
+      if (ter) {
+        const on = pxR > TERRAIN_PX;
+        ter.root.visible = on;
+        if (on) {
+          v.mesh.visible = false;
+          ter.root.rotation.y = b.rot;
+          ter.update(tmp2.subVectors(ship.pos, b.pos).applyQuaternion(worldQuat(b as World).invert()));
+        }
+      }
       if (v.ringUni) (v.ringUni.uPC.value as THREE.Vector3).copy(rel);
       // distant bodies as dots of reflected starlight
       if (pxR < 2.5 && nd < MAXDOTS) {

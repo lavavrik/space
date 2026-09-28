@@ -45,7 +45,7 @@ A planet filling the screen was the next bottleneck: the Earth-like shader ran a
 | Gas giant | 9.4 ms | 4.1 ms |
 | Rocky world | 12.4 ms | 4.2 ms |
 
-What changed (`shaders/planet.frag.glsl`, `shaders/noise3d.glsl`, `render/noise3d.ts`):
+What changed (`shaders/planet.frag.glsl`, `shaders/noise3d.glsl`, `lib/noise3d.ts`):
 1. **Fine octaves from a texture.** The first 3 octaves stay exact simplex noise (they set the continents and cloud patterns); finer ones read a tileable 64³ gradient-noise texture, one trilinear fetch instead of a simplex evaluation. This was the single biggest win (about 2×). Very small islands and cloud wisps differ slightly from before.
 2. **Octaves per pixel:** stop once an octave is finer than the pixel's footprint on the surface (`fwidth`), cap terrain at 10 octaves (finer adds under 0.1 % contrast), the second terrain layer at 5, and cloud detail at 6. The 4-octave cloud warp is kept, since it sets the cloud pattern.
 3. **Night side:** where a pixel is fully unlit (0.8 % ambient), skip the detail layers; volcanic worlds, which glow at night, are exempt.

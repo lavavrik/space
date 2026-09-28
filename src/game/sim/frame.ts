@@ -14,6 +14,12 @@
  *    speed readout and the speed limit work relative to the station's velocity, and "all stop"
  *    means station-keeping. The ship and the station fall together, so gravity cancels out apart
  *    from tiny tidal effects.
+ *
+ * 3. The surface frame: low over a world with terrain (below SURFACE_FRAME_ALT, fully by half of
+ *    it), flight assist and the speed readout work relative to the ground, which turns with the
+ *    world (up to hundreds of m/s at the equator). Hands off you hover over one spot instead of the
+ *    mountains sliding by, and on the ground you stay put. It fades in with height, so crossing it
+ *    never jolts the ship (sim/terrain.ts, docs/terrain.md).
  */
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
@@ -21,6 +27,10 @@ import type { Body, Station } from '../types';
 import { updateBodies } from './kepler';
 import { updateStations } from './stations';
 import { stationPointVelAt } from './stationGeom';
+import { reliefAmp } from './terrain';
+
+/** Below this height over a world with terrain, the ground becomes the reference (see 3. above). */
+export const SURFACE_FRAME_ALT = 30e3;
 
 const tmpRide = new THREE.Vector3();
 
@@ -103,6 +113,13 @@ export function updateFrame(g: Game) {
 }
 
 /** Velocity of the flight-assist frame relative to the frame body (zero unless near a station). */
+const tmpF = new THREE.Vector3();
+/** 0 below 0, 1 above 1, smooth between. */
+const smooth01 = (x: number) => {
+  const t = Math.min(1, Math.max(0, x));
+  return t * t * (3 - 2 * t);
+};
+
 export function frameVel(g: Game, out = new THREE.Vector3()) {
   // inside a station: its turning structure where the ship is (orbit + spin), so flight assist
   // holds you still against the hangar (sim/docking.ts)
@@ -110,7 +127,14 @@ export function frameVel(g: Game, out = new THREE.Vector3()) {
   // been carried with its frame body but not yet moved, ~150 m off at orbital speeds, which put
   // ω × r ~15 m/s wrong and kept flight assist from ever holding still)
   if (g.inStation) return stationPointVelAt(g.inStation, g.inStationRel, out).sub(g.frameBody.vel);
-  return g.refFrame ? stationVel(g, g.refFrame, out) : out.copy(ZERO);
+  if (g.refFrame) return stationVel(g, g.refFrame, out);
+  // low over a world (or on it): the ground, turning with the world (3. above)
+  const b = g.ship.landed ?? g.frameBody;
+  if (b.kind !== 'star' && reliefAmp(b) > 0) {
+    const w = g.ship.landed ? 1 : 1 - smooth01((g.ship.pos.distanceTo(b.pos) - b.radius) / SURFACE_FRAME_ALT * 2 - 1);
+    if (w > 0) return out.copy(b.axis).multiplyScalar(b.spin * w).cross(tmpF.subVectors(g.ship.pos, b.pos)).add(b.vel).sub(g.frameBody.vel);
+  }
+  return out.copy(ZERO);
 }
 
 /** Ship velocity relative to the current frame. */

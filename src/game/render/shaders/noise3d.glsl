@@ -1,5 +1,5 @@
 // Fast fBm for the planet shaders: the first FBM_EXACT octaves are exact simplex noise (they set the
-// continents and cloud shapes); finer ones read a tileable 3D gradient-noise texture (render/noise3d.ts),
+// continents and cloud shapes); finer ones read a tileable 3D gradient-noise texture (lib/noise3d.ts),
 // one trilinear fetch each. 1 unit of p = one lattice cell; the texture holds 8 cells per axis.
 uniform highp sampler3D uNoise3D;
 #define FBM_EXACT 3

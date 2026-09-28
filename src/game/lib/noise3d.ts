@@ -1,5 +1,5 @@
-import { mulberry32 } from '../lib/rng';
-import { THREE } from '../lib/three';
+import { mulberry32 } from './rng';
+import { THREE } from './three';
 
 /**
  * A tileable 3D gradient-noise texture (64³ texels, 8 lattice cells per axis) for the fine octaves
@@ -10,7 +10,11 @@ import { THREE } from '../lib/three';
  * Stored as noise / (4σ) in 8 bits, so the shader decodes it to unit σ-scaled noise (see
  * noise3d.glsl). Deterministic: the same texture every run.
  */
-export function createNoiseTexture(size = 64, cells = 8) {
+export const NOISE3D_SIZE = 64,
+  NOISE3D_CELLS = 8;
+
+/** The texture's bytes (also sampled on the CPU by sim/terrain.ts, so collisions match the GPU). */
+export function noise3dData(size = NOISE3D_SIZE, cells = NOISE3D_CELLS) {
   const S = size / cells;
   const rnd = mulberry32(0x5eed3d);
   const grads: number[][] = [];
@@ -58,6 +62,16 @@ export function createNoiseTexture(size = 64, cells = 8) {
   const sd = Math.sqrt(sum2 / vals.length - (sum / vals.length) ** 2);
   const data = new Uint8Array(vals.length);
   for (let i = 0; i < vals.length; i++) data[i] = Math.max(0, Math.min(255, Math.round((vals[i] / (4 * sd)) * 127.5 + 127.5)));
+  return data;
+}
+
+let cached: Uint8Array | null = null;
+/** noise3dData(), built once. */
+export const noise3dBytes = () => (cached ??= noise3dData());
+
+export function createNoiseTexture() {
+  const size = NOISE3D_SIZE;
+  const data = noise3dBytes().slice();
   const tex = new THREE.Data3DTexture(data, size, size, size);
   tex.format = THREE.RedFormat;
   tex.type = THREE.UnsignedByteType;

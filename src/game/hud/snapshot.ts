@@ -15,6 +15,7 @@ import { apLabel, evalPlan } from '../sim/orbits';
 import { deltaVLeft, dryMass } from '../sim/resources';
 import { battCap } from '../sim/power';
 import { massLock } from '../sim/ftl';
+import { surfaceRadius } from '../sim/terrain';
 import { TEMP, nextLimit } from '../sim/thermal';
 import { BATTERIES, MODULES, PUMP_ON_ABOVE, type BatteryModule, RADIATOR_MAX_ACC, moduleLabel, outfitMass, pumpFitted, radiatorsFitted, type Module } from '../outfit/catalog';
 import { outfitter } from '../outfit/fit';
@@ -190,7 +191,7 @@ function flight(g: Game): FlightView {
   if (gr && ship.mode === 'normal' && !ship.dead && (gr.body.kind !== 'star' || gr.g >= 0.02)) {
     const b = gr.body;
     const oe = orbitElements(ship, b);
-    const h = oe.r - b.radius;
+    const h = oe.r - surfaceRadius(b, ship.pos); // above the ground under you (sim/terrain.ts)
     const up = oe.vr > -0.5;
     let impact = '';
     if (oe.vr < -1 && oe.pe < b.radius && !ship.landed && !ap) impact = ` · impact ${fmtTime((oe.vr + Math.sqrt(oe.vr * oe.vr + 2 * gr.g * h)) / gr.g)}`;

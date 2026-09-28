@@ -11,9 +11,12 @@ import { closePlanner, disengageAP } from './planner';
 import { applyThrust, refillShip } from './resources';
 import { stationLimits } from './docking';
 import { TEMP } from './thermal';
+import { surfaceRadius } from './terrain';
 
 const tmp = new THREE.Vector3(),
-  tmp2 = new THREE.Vector3();
+  tmp2 = new THREE.Vector3(),
+  tmp3 = new THREE.Vector3(),
+  spinVel = new THREE.Vector3();
 
 /** Manual flight. Gravity always acts. Flight assist damps drift on axes you are not
  *  thrusting on and holds your course against gravity while you thrust; hands-off near a
@@ -78,20 +81,26 @@ export function manualFlight(g: Game, dt: number, grav: Gravity, inp: number[]) 
   if (inp[0] || inp[1] || inp[2]) ship.landed = null;
 }
 
-/** Surface contact: gentle touchdown lands you, anything faster is a crash. */
+/**
+ * Surface contact with the terrain (sim/terrain.ts): gentle touchdown lands you, anything faster is
+ * a crash. On the ground the ship turns with the world, so it stays put on the spinning surface.
+ */
 export function collide(g: Game, dt: number) {
   const { ship } = g;
   for (const b of g.cur.bodies) {
     const rel = tmp.subVectors(ship.pos, b.pos);
     const d = rel.length();
-    const min = b.radius + 30;
+    // cheap reject before sampling the terrain: above the highest peaks
+    if (d > b.radius * 1.01 + 200 && ship.landed !== b) continue;
+    const min = surfaceRadius(b, ship.pos) + 30;
     if (d >= min) {
       if (ship.landed === b && d > min + 20) ship.landed = null;
       continue;
     }
     rel.divideScalar(d);
-    // work in the body's own frame (it may not be the frame body)
+    // work in the ground's frame: the body's motion (it may not be the frame body) plus its spin
     const bv = tmp2.subVectors(b.vel, g.frameBody.vel);
+    if (b.kind !== 'star') bv.add(spinVel.copy(b.axis).multiplyScalar(b.spin).cross(tmp3.copy(rel).multiplyScalar(d)));
     ship.vel.sub(bv);
     const vin = -ship.vel.dot(rel);
     if (b.kind === 'star') {
