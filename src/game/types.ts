@@ -158,8 +158,6 @@ export interface Ship {
   throttle: number;
   /** FTL cruise control (F): the throttle holds. Off, it spools down unless you hold W. */
   cruise: boolean;
-  /** The FTL throttle has been opened since the drive engaged; only then can it spool down and drop out. */
-  ftlSpooled: boolean;
   ftlSpeed: number;
   ftlCharge: number;
   vmax: number;

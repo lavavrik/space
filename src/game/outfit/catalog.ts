@@ -158,6 +158,16 @@ export interface Outfit {
 /** The pump idles below this hull temperature (K): no point spending power to cool a cool ship. */
 export const PUMP_ON_ABOVE = 300;
 
+/**
+ * The ship you start with: the best of everything. HP-600 Tempest battery, and in the utility
+ * slots the FS-5 Maelstrom scoop, KR-25 Glacier radiators and the KH-2 Coldsink heat pump.
+ */
+export const bestOutfit = (): Outfit => ({
+  ...emptyOutfit(),
+  battery: BATTERIES[BATTERIES.length - 1],
+  slots: ['fs-5', 'kr-25', 'kh-2'].map((id) => moduleById(id)),
+});
+
 export const emptyOutfit = (): Outfit => ({ battery: STOCK_BATTERY, slots: Array(UTILITY_SLOTS).fill(null), radiatorsOut: 0, deploy: false, pumpAuto: true });
 
 export const outfitMass = (o: Outfit) => o.slots.reduce((m, x) => m + (x?.mass ?? 0), 0) + o.battery.mass - STOCK_BATTERY.mass;

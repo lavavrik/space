@@ -21,7 +21,7 @@ import { updateStations } from './sim/stations';
 import { buildStations } from './universe/stations';
 import { buildSystem } from './universe/system';
 import { TEMP, toggleRadiators, type HeatBudget } from './sim/thermal';
-import { STOCK_BATTERY, emptyOutfit } from './outfit/catalog';
+import { BATTERIES, bestOutfit } from './outfit/catalog';
 import { ZOOM_START, updatePeriscope } from './sim/periscope';
 import { startPivot } from './sim/pivot';
 import { contactLabel, radarContacts, radarSweep } from './sim/radar';
@@ -33,10 +33,10 @@ import { fitBattery, fitModule, removeModule } from './outfit/fit';
 function newShip(): Ship {
   return {
     pos: new THREE.Vector3(), vel: new THREE.Vector3(), q: new THREE.Quaternion(),
-    mode: 'normal', throttle: 0, cruise: false, ftlSpooled: false, ftlSpeed: 0, ftlCharge: 0, vmax: 0,
+    mode: 'normal', throttle: 0, cruise: false, ftlSpeed: 0, ftlCharge: 0, vmax: 0,
     fa: true, decoupled: false, travelDir: new THREE.Vector3(0, 0, -1), ap: null, landed: null, dead: null, grav: null,
-    prop: SHIP.propCap, exotic: SHIP.exoticCap, batt: STOCK_BATTERY.caps.capacity,
-    burnRate: 0, sunTrack: false, tanker: null, scoop: '', scoopRate: { prop: 0, exotic: 0 }, avionics: defaultAvionics(), temp: TEMP.start, vent: false, outfit: emptyOutfit(),
+    prop: SHIP.propCap, exotic: SHIP.exoticCap, batt: BATTERIES[BATTERIES.length - 1].caps.capacity,
+    burnRate: 0, sunTrack: false, tanker: null, scoop: '', scoopRate: { prop: 0, exotic: 0 }, avionics: defaultAvionics(), temp: TEMP.start, vent: false, outfit: bestOutfit(),
   };
 }
 

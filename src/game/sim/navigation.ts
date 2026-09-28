@@ -311,7 +311,6 @@ export function arriveAt(g: Game, sys: StarSystem, travel?: THREE.Vector3) {
   resetFrame(g, dominantBody(g.cur, ship.pos));
   ship.mode = 'ftl';
   ship.throttle = 0;
-  ship.ftlSpooled = false;
   ship.ftlSpeed = 0;
 }
 
