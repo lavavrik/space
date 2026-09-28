@@ -48,13 +48,14 @@ export interface RockTier {
 export const ROCK_TIERS: RockTier[] = [
   { minR: 1.5, maxR: 10, cell: 250, range: 2500, perCell: 1.2, detail: 0 },
   { minR: 10, maxR: 70, cell: 1000, range: 12000, perCell: 1.6, detail: 1 },
-  { minR: 70, maxR: 500, cell: 5000, range: 60000, perCell: 1.6, detail: 2 },
+  { minR: 70, maxR: 500, cell: 5000, range: 120000, perCell: 1.6, detail: 2 },
 ];
 
 /**
  * Beyond the meshes, rocks as dots generated on the GPU (render/RingField.ts): a grid of RING_GRID ×
  * RING_GRID cells centred on the camera, `perCell` candidate dots each, from `inner` to `range` (m).
- * Sizes are rock radii (m); far out they stand for clumps. The ring only turns into the disc's
+ * Sizes are rock radii (m), small enough that a dot is at most ~2 px where its field starts (bigger
+ * dots read as flat discs: rocks that big up close are meshes). The ring only turns into the disc's
  * smooth band past the last one's range.
  */
 export interface DotField {
@@ -66,8 +67,8 @@ export interface DotField {
 }
 export const RING_GRID = 256;
 export const DOT_FIELDS: DotField[] = [
-  { inner: 55e3, range: 1500e3, perCell: 10, minR: 150, maxR: 900 },
-  { inner: 1300e3, range: 12000e3, perCell: 14, minR: 400, maxR: 2500 },
+  { inner: 100e3, range: 1500e3, perCell: 12, minR: 8, maxR: 60 },
+  { inner: 1300e3, range: 12000e3, perCell: 14, minR: 60, maxR: 400 },
 ];
 
 /** Integer hash (murmur-style) of a few integers, as a uint32. */

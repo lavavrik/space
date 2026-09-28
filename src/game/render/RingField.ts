@@ -117,8 +117,10 @@ void main(){
   float along = dot(toP, L);
   float sh = (along < 0.0 && length(toP - along * L) < uPR) ? 0.0 : 1.0;
   float phase = 0.35 + 0.65 * max(dot(normalize(-p), L), 0.0); // brighter seen from the sun's side
+  // a speck: its light spread over at least a pixel (dimmer below one), never more than 2 px wide
+  // (through the periscope rocks that big would be flat discs)
   vC = uColor * (0.5 + 0.6 * rnd(s)) * sh * phase * fade * min(px * px, 1.0);
-  gl_PointSize = max(px, 1.0);
+  gl_PointSize = clamp(px, 1.0, 2.0);
   gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
   #include <logdepthbuf_vertex>
 }`;
@@ -128,7 +130,6 @@ uniform float uExp;
 varying vec3 vC;
 void main(){
   #include <logdepthbuf_fragment>
-  if (length(gl_PointCoord - 0.5) > 0.5) discard;
   gl_FragColor = vec4(vC * uExp, 1.0);
 }`;
 
@@ -359,7 +360,9 @@ export class RingField {
       // replace it around you; from well above or below it, it shows again (or you'd look down
       // through a hole of sparse boulders)
       const above = Math.max(0, Math.abs(h) - RING_HALF_THICK);
-      this.nearFade = far * 0.9 * Math.max(0, 1 - above / FADE_ABOVE);
+      // (the disc comes back beyond the first dot field: far off, its band with the specks as grain
+      // on it reads better than specks alone, which get too faint to make a band)
+      this.nearFade = DOT_FIELDS[0].range * 0.9 * Math.max(0, 1 - above / FADE_ABOVE);
       // in-plane axes fixed to the ring (not the camera, or the rocks would slide as you move)
       const e1 = new THREE.Vector3().crossVectors(n, Math.abs(n.x) < 0.9 ? X : Z).normalize();
       const e2 = new THREE.Vector3().crossVectors(n, e1);
