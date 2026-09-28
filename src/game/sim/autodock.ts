@@ -24,6 +24,11 @@
  * (docs/docking.md). Guidance is a speed profile toward each point, matched to the station's
  * structure there (orbit + spin), with thrust capped at AUTO_ACC; it uses real propellant and power.
  * Any thrust key hands control back.
+ *
+ * Getting to the hold point it never cuts through the station: if the straight line would pass
+ * within KEEP_OUT of it (the spinning hull's corners move at ~70 m/s, so any touch is fatal), it
+ * climbs out to a safe sphere around the station and flies round it toward the slot's side
+ * (clearPath).
  */
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
@@ -44,6 +49,35 @@ const AUTO_ACC = 25,
   TAU = 0.6;
 /** Braking it plans with (m/s²): well under AUTO_ACC so it always has margin. */
 const BRAKE = 8;
+/** Clearance it keeps from the station's circumscribed sphere (m), and the radius (× size, + m) of
+ * the sphere it flies round on when the station is in the way. */
+const KEEP_OUT = 150,
+  AROUND_K = 1.2,
+  AROUND_M = 250;
+/** How far ahead along the way round it aims (rad): the ship curves round rather than cutting in. */
+const AROUND_STEP = 0.5;
+
+/**
+ * Where to head for `target` from `p` (both in station coordinates, m) without passing through the
+ * station of size S: the target itself if the way is clear, else a point on a sphere round the
+ * station, a little further round toward the target's side (and out to that sphere if closer).
+ */
+export function clearPath(p: THREE.Vector3, target: THREE.Vector3, S: number) {
+  const hull = S * 0.87 + KEEP_OUT; // circumscribed sphere of the cube, plus margin
+  // closest approach of the segment p → target to the station's centre
+  const d = target.clone().sub(p);
+  const t = Math.max(0, Math.min(1, -p.dot(d) / Math.max(d.lengthSq(), 1e-9)));
+  if (p.clone().addScaledVector(d, t).length() > hull) return target;
+  const R = S * AROUND_K + AROUND_M;
+  const pn = p.clone().normalize(),
+    tn = target.clone().normalize();
+  let axis = new THREE.Vector3().crossVectors(pn, tn);
+  if (axis.lengthSq() < 1e-8) axis = new THREE.Vector3().crossVectors(pn, Math.abs(pn.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0));
+  axis.normalize();
+  const step = Math.min(pn.angleTo(tn), AROUND_STEP);
+  return pn.applyAxisAngle(axis, step).multiplyScalar(Math.max(R, p.length()));
+}
+
 /** Height above the pad it settles from (m), and the speed it settles at (m/s). */
 const SETTLE_H = 9,
   SETTLE_V = 2;
@@ -175,6 +209,8 @@ export function autodock(g: Game, dt: number, gravVec: THREE.Vector3) {
       break;
   }
 
+  // outside the station, don't fly through it on the way to the hold point
+  if (ad.phase === 'approach' || ad.phase === 'hold') target = clearPath(p, target, S);
   // guidance: along the straight line to the target at a speed we can always brake from, matched
   // to the station's structure at the ship (orbit + spin)
   const err = target.clone().sub(p);

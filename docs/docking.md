@@ -95,3 +95,7 @@ Using the mid-step position put ω × r about 15 m/s wrong, and bounced ships ou
 - Pad assignment by ship size.
 - Station services with prices.
 - Pad numbers painted on the pads (the HUD labels them).
+
+## Getting round the station
+
+The docking computer never flies through the station on its way to the hold point. If the straight line would pass within 150 m of the station's circumscribed sphere, it heads for a point on a sphere 1.2 station sizes + 250 m out, 0.5 rad further round toward the slot's side. It re-picks that point every step, so it climbs away from the hull and curves round to the front. This matters because the hull spins: its corners move at ~70 m/s, over the 35 m/s crash limit, so any touch is fatal. (`autodock.ts clearPath`; tested from starts all round a station, down to 50 m off the hull.)
