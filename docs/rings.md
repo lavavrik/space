@@ -164,7 +164,7 @@ a new ship has the ML-6 in a 6th slot, and older saves get it fitted). Shift+M t
   - A platinum-rich rock makes about 50–60,000 Cr/h under the ML-6, against about 10,000–20,000 for a
     nickel-iron one.
 - **No FTL near the belt** (`sim/ftl.ts beltLock`): the drive won't start among a ring's rocks or within 10 km of their slab (off its plane or past its edges). The rocks are far outside the world's mass lock, so before this you could jump to FTL from among them. An autopilot setting off from the belt for somewhere far (not the ring orbit itself) first climbs straight out of the slab, at 15 m/s while among the rocks and then at 300 m/s, moving with them, and takes its FTL leg once clear.
-- **The laser switches off** when the rock it's cutting is mined away.
+- **The laser switches itself off** after 3 s with nothing in its beam (`LASER_IDLE`), whatever the ship is doing. When its rock is mined away it keeps firing, into the next rock if there's one right behind, else it switches off 3 s later. (At first it switched off the moment its rock was gone.)
 - **Headlights (Shift+L) light the rocks.** They use the same lamp as on the stations
 (`shaders/headlight.glsl`): a cone along the nose with inverse-square falloff. They're about as
 bright as sunlight at 100 m, and they make rocks visible in the planet's shadow. Metal-rich rocks

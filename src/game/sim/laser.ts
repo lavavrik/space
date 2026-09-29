@@ -41,9 +41,20 @@ export interface LaserState {
   removal: number;
   metal: number;
   why: string;
+  /** Sim time the beam last hit a rock (or it was switched on): LASER_IDLE after, with nothing hit, it switches off. */
+  lastHit: number;
+  /** Sim time of the last step it fired (updateLaser runs only in normal flight: `hit` is stale otherwise). */
+  firedAt: number;
 }
 
-export const laserOff = (): LaserState => ({ on: false, end: null, hit: null, rate: 0, removal: 0, metal: 0, why: '' });
+/**
+ * On and hitting nothing for this long (s), the laser switches itself off. That also covers a rock
+ * mined away: the beam carries on into one right behind it if there is one (it used to switch off
+ * the moment its rock was gone), else it goes off this long after.
+ */
+export const LASER_IDLE = 3;
+
+export const laserOff = (): LaserState => ({ on: false, end: null, hit: null, rate: 0, removal: 0, metal: 0, why: '', lastHit: -Infinity, firedAt: -Infinity });
 
 function idHash(id: string, salt: number) {
   let h = 2166136261 ^ salt;
@@ -118,6 +129,7 @@ export function toggleLaser(g: Game) {
     return;
   }
   g.laser.on = !g.laser.on;
+  g.laser.lastHit = g.simTime;
   g.showMsg(g.laser.on ? `${unit.model} ${unit.name} on · aim the nose at a rock` : 'Mining laser off');
 }
 
@@ -132,6 +144,7 @@ export function updateLaser(g: Game) {
   L.hit = null;
   L.rate = L.removal = L.metal = 0;
   L.why = '';
+  L.firedAt = g.simTime;
   power.laserKW = 0;
   const unit = laserFitted(ship.outfit);
   if (!L.on || !unit) return;
@@ -230,10 +243,21 @@ export function mineRock(g: Game, dt: number) {
   const next = Math.cbrt(f);
   if (next < GONE) {
     minedRocks.set(key, 0);
-    // its job done: the laser switches off rather than burn on into the next rock behind it (or empty space)
-    L.on = false;
-    g.showMsg(`The ${rockLabel(L.hit.size0)} rock is mined away · laser off`);
+    // the beam carries on: into the next rock behind it, or off LASER_IDLE later (laserIdle)
+    g.showMsg(`The ${rockLabel(L.hit.size0)} rock is mined away`);
   } else minedRocks.set(key, next);
+}
+
+/** Each step: switch the laser off once it has hit nothing for LASER_IDLE (whatever the ship is doing). */
+export function laserIdle(g: Game) {
+  const L = g.laser;
+  if (L.firedAt !== g.simTime) L.hit = null; // not fired this step (docked, in FTL, under warp…): nothing hit
+  if (L.hit) L.lastHit = g.simTime;
+  else if (L.on && g.simTime - L.lastHit > LASER_IDLE) {
+    L.on = false;
+    g.power.laserKW = 0;
+    g.showMsg(`Mining laser off · nothing in the beam for ${LASER_IDLE} s`);
+  }
 }
 
 /** For the scoop (sim/resources.ts): what the laser yields this step. */

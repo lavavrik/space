@@ -417,6 +417,7 @@ function restore(g: Game, d: SaveData, sys: NonNullable<ReturnType<typeof system
   g.orbitPreview = d.settings.orbitPreview;
   g.radarVisible = d.settings.radarVisible;
   g.laser.on = !!d.settings.laser; // mining carries on after a reload
+  g.laser.lastHit = d.simTime; // (a fresh LASER_IDLE to find its rock again)
   g.shed = d.settings.shed ?? null;
   g.savedAt = d.savedAt;
 

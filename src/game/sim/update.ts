@@ -29,6 +29,7 @@ import { updateBelt } from './belt';
 import { mineRock, updateLaser } from './laser';
 import { SHORE_POWER, holdDocked, rotationCorrection, stationContact, updateDockRequest } from './docking';
 import { updateContracts } from './contracts';
+import { laserIdle } from './laser';
 
 const qa = new THREE.Quaternion();
 const AX = new THREE.Vector3(1, 0, 0),
@@ -270,6 +271,7 @@ export function update(g: Game, dt: number, realDt = dt) {
   updateScan(g, dt);
   updateNav(g, dt);
   updateContracts(g); // deliveries on docking, deadlines (sim/contracts.ts)
+  laserIdle(g); // the laser goes off after LASER_IDLE with nothing in its beam
 
   // --- nearest body
   g.nearest = null;
