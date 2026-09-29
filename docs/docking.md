@@ -76,6 +76,20 @@ Any thrust key hands control back. Time warp is blocked while it flies.
 Tested from 30 km: the WD-300 got clearance at 9.5 km and docked in 165 s. The WD-100 docked from
 7 km in 145 s after a manual request.
 
+## Traffic control (`sim/control.ts`)
+
+Every ship at a station shares its pads and its slot: yours and the others (docs/traffic.md), which fly the same code.
+
+- **Pads:** a request is granted only a pad no other ship holds, whether granted or docked on. With every pad taken, you're queued and traffic control asks again every 10 s. Before this, pads were drawn at random, so you and a freighter could be sent to the same one.
+- **The slot takes one ship at a time.**
+  - A docking computer arriving holds short until the slot is clear and it's first in line.
+  - Waiting ships queue along the slot's axis, 400 m apart beyond the hold point (`SLOT_QUEUE`), first come, first served. A point off the axis would turn with the station: a ship holding there would be flung round at ~50 m/s.
+  - One leaving waits on the hangar's axis until the slot is clear.
+  - Flying by hand, you count as in the slot while you're inside and not docked, so the others wait for you. When your pad is granted, you're told if another ship is in the slot.
+- **Nothing is booked.** Pads and the slot are read off every pilot's state whenever they're asked about, so nothing goes stale when a ship is lost, gives up or leaves.
+- **Checked:** you and four other ships were sent to Curie Port at once. All five docked one after another, about 30 s apart, with at most one in the slot at any time and never two on one pad.
+- **Sky stations** have no slot, only pads.
+
 ## Frame subtleties
 
 The ship's position and velocity are relative to its frame body (patched conics). Each step it's

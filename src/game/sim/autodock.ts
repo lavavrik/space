@@ -45,6 +45,7 @@ import { airDensityAt, airSpeedLimit } from './catapult';
 import { HANGAR_R, padOf, stationPointVelAt, stationQuat } from './stationGeom';
 import { stationAcc } from './stations';
 import { NORMAL_ACC } from '../constants';
+import { pilotName, queuePlace, slotUser, SLOT_QUEUE } from './control';
 
 export type AutoPhase = 'approach' | 'wait' | 'hold' | 'align' | 'enter' | 'descend' | 'rise' | 'exit';
 
@@ -181,6 +182,11 @@ export function autodock(g: Game, dt: number, gravVec: THREE.Vector3) {
     upL = new THREE.Vector3(0, 1, 0);
   const holdPt = sky ? new THREE.Vector3(0, 0, S * 0.87 + SKY_HOLD) : new THREE.Vector3(0, 0, S / 2 + HOLD_OUT);
   const overPad = pad.pos.clone().multiplyScalar(S).addScaledVector(pad.up, PAD_ABOVE);
+  // traffic control (sim/control.ts): may this ship use the slot now? Arriving, only if it's free
+  // and no one ahead of it in the queue; leaving, only if it's free
+  const busy = slotUser(g, st);
+  if (ad.phase === 'hold' && ad.waitSince === undefined) ad.waitSince = g.simTime;
+  const slotTurn = sky || (!busy && (ad.phase !== 'hold' || queuePlace(g, st) === 0));
   switch (ad.phase) {
     case 'approach':
       // toward the hold point, until in range to ask for a pad
@@ -193,7 +199,9 @@ export function autodock(g: Game, dt: number, gravVec: THREE.Vector3) {
       cap = 0;
       break;
     case 'hold':
-      target = holdPt;
+      // the slot busy (another ship in it, or ahead in the queue): wait on its axis, further out
+      // the further back in the queue (sim/control.ts); clear and first: to the hold point
+      target = slotTurn || sky ? holdPt : new THREE.Vector3(0, 0, S / 2 + HOLD_OUT + (1 + queuePlace(g, st)) * SLOT_QUEUE);
       cap = far ? farSpeed : unit.caps.approachSpeed;
       fwdL = new THREE.Vector3(0, 0, -1);
       upL = new THREE.Vector3(0, 1, 0);
@@ -302,12 +310,19 @@ export function autodock(g: Game, dt: number, gravVec: THREE.Vector3) {
   const vRel = ship.vel.clone().sub(vFrame).length();
   const next = (ph: AutoPhase, msg: string) => {
     ad.phase = ph;
+    ad.waitSince = undefined;
+    ad.told = false;
     g.showMsg(`Docking computer · ${msg}`);
   };
-  if (ad.phase === 'hold' && dist < 40 && vRel < 6) next('align', 'lining up with the slot');
+  // told once when it has to wait for the slot
+  if (busy && (ad.phase === 'hold' || ad.phase === 'rise') && !ad.told) {
+    ad.told = true;
+    g.showMsg(`Docking computer · holding for the slot · ${pilotName(g, busy)} is ${busy.autodock?.phase === 'exit' || busy.autodock?.phase === 'rise' ? 'coming out' : 'going in'}`);
+  }
+  if (ad.phase === 'hold' && slotTurn && dist < 40 && vRel < 6) next('align', 'lining up with the slot');
   else if (ad.phase === 'align' && dist < 40 && attErr < 0.03) next('enter', 'entering');
   else if (ad.phase === 'enter' && dist < 20 && vRel < 6) next('descend', `to pad ${padI + 1}`);
-  else if (ad.phase === 'rise' && dist < 20 && vRel < 6) next('exit', 'leaving through the slot');
+  else if (ad.phase === 'rise' && slotTurn && dist < 20 && vRel < 6) next('exit', 'leaving through the slot');
   else if (ad.phase === 'exit' && dist < 60) {
     g.autodock = null;
     g.showMsg(`Clear of ${st.name} · you have control`);

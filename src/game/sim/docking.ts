@@ -30,6 +30,7 @@ import { engageAutoLaunch, engageAutodock } from './autodock';
 import { startDockGuide } from './guide';
 import { DECK_R } from './skyGeom';
 import { HANGAR_R, PAD_R, padCount, padOf, stationPointVel, stationQuat, toLocal, toWorld, whereIsAt } from './stationGeom';
+import { freePads, pilotName, slotUser } from './control';
 
 /** Within this distance (m) of a targeted station, K asks for a pad. */
 export const DOCK_REQUEST_RANGE = 10e3;
@@ -104,6 +105,9 @@ export function dockKey(g: Game) {
 /** Traffic control answers a docking request after this long (s), give or take. */
 const REPLY_TIME = [4, 8];
 
+/** With every pad taken, traffic control asks again this often (s). */
+const PAD_RETRY = 10;
+
 /** Ask for a pad: traffic control answers after a few seconds (updateDockRequest). */
 export function requestDocking(g: Game, st: Station) {
   g.dock = null;
@@ -123,10 +127,19 @@ export function updateDockRequest(g: Game, dt: number) {
   }
   r.t -= dt;
   if (r.t > 0) return;
+  // a pad no other ship holds (sim/control.ts); all taken: wait in the queue and ask again
+  const free = freePads(g, r.station);
+  if (!free.length) {
+    r.t = PAD_RETRY;
+    if (!r.full) g.showMsg(`${r.station.name} · all ${padCount(r.station)} pads taken · you're queued, hold nearby`, 'warn');
+    r.full = true;
+    return;
+  }
   g.dockRequest = null;
-  const pad = Math.floor(Math.random() * padCount(r.station));
+  const pad = free[Math.floor(Math.random() * free.length)];
   g.dock = { station: r.station, pad, docked: false };
-  const how = r.station.sky ? ' · land on it from above' : ' · enter through the slot, matching its spin';
+  const busy = slotUser(g, r.station);
+  const how = r.station.sky ? ' · land on it from above' : busy ? ` · hold short: ${pilotName(g, busy)} is in the slot` : ' · enter through the slot, matching its spin';
   g.showMsg(`Docking granted · ${r.station.name} · pad ${pad + 1}${g.autodock ? '' : how}`);
   g.invalidateHud();
 }

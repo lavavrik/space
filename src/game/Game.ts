@@ -107,14 +107,14 @@ export class Game {
   /** Docking (sim/docking.ts): the granted pad, and whether we're on it. */
   dock: Dock | null = null;
   /** A docking request waiting for traffic control's answer (s left). */
-  dockRequest: { station: Station; t: number } | null = null;
+  dockRequest: { station: Station; t: number; full?: boolean } | null = null;
   /** The station whose hull the ship is inside this frame (slot, tunnel or hangar), if any. */
   inStation: Station | null = null;
   /** The ship's offset from that station's centre at the end of the last step (m). */
   inStationRel = new THREE.Vector3();
   /** Docking computer (sim/autodock.ts): its phase, the station and pad it's working with, and the
    *  ship's offset from that station at the end of the last step. */
-  autodock: { phase: AutoPhase } | null = null;
+  autodock: { phase: AutoPhase; waitSince?: number; told?: boolean } | null = null;
   autodockStation: Station | null = null;
   autodockPad = 0;
   /** The ascent program after a sky station's catapult (sim/catapult.ts), while it flies. */

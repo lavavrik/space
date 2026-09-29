@@ -22,7 +22,7 @@ A leg taking over 30 min is given up for another destination. A ship that crashe
 
 **Time warp:** a ship on a pad or coasting in orbit takes the warped step at once (on rails, like yours). One that's manoeuvring is stepped at most 10 × 0.1 s per frame, so under high warp it falls behind the clock (still carried with its frame body).
 
-They don't collide with each other or with you, and don't use the entry corridors' lights yet.
+At stations they go through traffic control like you (docs/docking.md): a free pad each, and the slot one ship at a time, queueing on its axis. They don't collide with each other or with you, and don't use the entry corridors' lights yet.
 
 ## Radar, targeting and scanning
 
