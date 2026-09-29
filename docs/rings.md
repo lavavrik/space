@@ -58,6 +58,11 @@ Both views read the same density across the radius: bands from two octaves of si
 - **The ring orbit's autopilot** crosses into the slab at 15 m/s (braking to that by the slab's
   edge), so the pebble or two in its way are bumps: into dense bands it arrives with at most a few
   tenths of a percent of damage. If a heavy rock sits on its spot, it steps the orbit aside.
+- **It never crosses the belt inside the slab.** Its FTL leg drops out 20 km off the ring's plane
+  (dropping out in the plane left the ship at rest against rocks orbiting at 5 km/s: a wreck on
+  arrival). Any radius change over 2 km is flown 1 km clear of the slab, on the side the ship is on.
+  It only descends into the slab once it moves with the rocks (in-plane slip under 20 m/s). Smaller
+  moves (stepping aside, the last trim) stay in the slab at 15 m/s.
 - Not with time warp on (the ship is on the rocks' orbit then), nor for other ships yet.
 
 ## Protection (`sim/belt.ts`; modules in `outfit/catalog.ts`)

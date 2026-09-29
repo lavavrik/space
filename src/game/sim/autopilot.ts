@@ -28,7 +28,12 @@ export function apGeom(ship: Ship, ap: Autopilot) {
   return { b, rv, r, up };
 }
 
-/** Where the FTL leg drops out: above the body, in the target plane, at the orbit radius. */
+/**
+ * Where the FTL leg drops out: above the body, in the target plane, at the orbit radius. For a ring
+ * orbit, RING_DROP off the plane (on the ship's side) instead: the drive drops out at rest relative
+ * to the world, and in the belt its rocks would sweep by at their orbital speed (5 km/s at Venydes 8:
+ * that was a wreck on arrival). The orbit branch then matches the rocks before going in.
+ */
 export function apInsertion(ship: Ship, ap: Autopilot): { P: THREE.Vector3; rT: number; waypoint?: boolean } {
   if (ap.type === 'rendezvous') {
     // FTL at the station: 20 km short of it, or, if it orbits below the lowest altitude FTL can
@@ -45,9 +50,11 @@ export function apInsertion(ship: Ship, ap: Autopilot): { P: THREE.Vector3; rT: 
     const w = aroundBody(ship.pos, P, b, b.radius + dropAlt(b) * 1.02);
     return w ? { P: w, rT: floor, waypoint: true } : { P, rT: P.distanceTo(b.pos) };
   }
-  const { b, up } = apGeom(ship, ap);
+  const { b, rv, up } = apGeom(ship, ap);
   const rT = b.radius + Math.max(ap.r0 - b.radius, dropAlt(b) * 1.1);
-  return { P: b.pos.clone().addScaledVector(up, rT), rT };
+  const P = b.pos.clone().addScaledVector(up, rT);
+  if (ap.type === 'ring') P.addScaledVector(ap.n!, rv.dot(ap.n!) < 0 ? -RING_DROP : RING_DROP);
+  return { P, rT };
 }
 
 /*
@@ -59,6 +66,14 @@ export function apInsertion(ship: Ship, ap: Autopilot): { P: THREE.Vector3; rT: 
 export const APPROACH_K = 0.3; // 1/s, final linear tail
 /** How fast the ring orbit's autopilot moves across the belt's slab (m/s): see the orbit branch. */
 const RING_ENTRY = 15;
+/** Where a ring orbit's autopilot crosses the ring, off its plane (m): 1 km clear of the rocks' slab. */
+const RING_OVER = RING_HALF_THICK + 1000;
+/** Radius changes up to this (m) a ring orbit makes inside the slab, at RING_ENTRY; bigger ones cross over it. */
+const RING_SHIFT = 2000;
+/** A ring orbit's FTL leg drops out this far off the ring's plane (m). */
+const RING_DROP = 20e3;
+/** A ring orbit's autopilot enters the slab only moving with the rocks: within this (m/s) of their orbit, in the plane. */
+const RING_MATCH = 20;
 /** A rendezvous holds this far from the station (m): close enough for its frame, clear of the hull. */
 export const RDV_STANDOFF = 2000;
 export const DEFAULT_PROFILE: ApproachProfile = { acc: 25, radialCap: 5000, planeCap: 3000 };
@@ -260,17 +275,34 @@ export function autopilot(g: Game, dt: number, grav: Gravity) {
     const up = u.clone().addScaledVector(n, -u.dot(n));
     if (up.lengthSq() < 1e-10) up.set(1, 0, 0).cross(n);
     up.normalize();
-    const vt = Math.sqrt(b.mu / Math.max(r, b.radius));
-    const tang = new THREE.Vector3().crossVectors(n, up);
     // climbing / descending and moving into the plane each cost twice their peak speed in Δv,
     // hence the caps; the braking profile makes them arrive at rest instead of creeping in
     const er = ap.r0 - r,
-      dn = -rv.dot(n);
-    const vr = Math.sign(er) * approachSpeed(Math.abs(er), prof.radialCap, prof.acc);
+      z = rv.dot(n); // height over the orbit's plane
+    const vt = Math.sqrt(b.mu / Math.max(r, b.radius));
+    const tang = new THREE.Vector3().crossVectors(n, up);
+    // A ring orbit never moves across the belt inside its slab: that ploughs through the rocks at
+    // up to radialCap (5 km/s; a shallow approach, arriving near the plane at another radius, was
+    // wrecked on the first boulder). Until the radius is right it holds RING_OVER above (or below)
+    // the slab, on the side it's on, and crosses over the rocks; then it comes down into the slab.
+    // A short move (stepping aside from a rock, the last trim) stays in the slab at RING_ENTRY. And
+    // it only goes in moving with the rocks (within RING_MATCH, in the plane): not from a standstill
+    // over them, as after the FTL leg.
+    const inSlab = Math.abs(z) < RING_HALF_THICK + 300;
+    const slip = vRel.clone().addScaledVector(tang, -vt).addScaledVector(n, -vRel.dot(n)).length();
+    const ringCross = ap.type === 'ring' && (Math.abs(er) > RING_SHIFT || (!inSlab && slip > RING_MATCH));
+    const zGoal = ringCross ? (z < 0 ? -1 : 1) * RING_OVER : 0;
+    const dn = zGoal - z;
+    let vr = ringCross && inSlab ? 0 : Math.sign(er) * approachSpeed(Math.abs(er), prof.radialCap, prof.acc);
+    if (ap.type === 'ring' && inSlab) vr = Math.sign(vr) * Math.min(Math.abs(vr), RING_ENTRY);
     let vn = Math.sign(dn) * approachSpeed(Math.abs(dn), prof.planeCap, prof.acc);
-    // into a ring's belt, slowly: braking to RING_ENTRY by the edge of its slab, so the pebbles met on
-    // the way in (one or two, crossing a dense band) are bumps, not hits (sim/ringContact.ts)
-    if (ap.type === 'ring') vn = Math.sign(vn) * Math.min(Math.abs(vn), Math.sqrt(RING_ENTRY * RING_ENTRY + 2 * prof.acc * Math.max(0, Math.abs(dn) - RING_HALF_THICK - 300)));
+    // through a ring's slab, slowly: RING_ENTRY inside it, and braking to that by its edge coming
+    // in, so the pebbles met on the way (one or two, crossing a dense band) are bumps, not hits
+    // (sim/ringContact.ts)
+    if (ap.type === 'ring') {
+      const cap = inSlab ? RING_ENTRY : z * dn < 0 ? Math.sqrt(RING_ENTRY * RING_ENTRY + 2 * prof.acc * (Math.abs(z) - RING_HALF_THICK - 300)) : Infinity;
+      vn = Math.sign(vn) * Math.min(Math.abs(vn), cap);
+    }
     const vCirc = tang.clone().multiplyScalar(vt); // circular velocity here (before tang is reused below)
     vDes = tang.multiplyScalar(vt).addScaledVector(up, vr).addScaledVector(n, vn);
     aFF = up
