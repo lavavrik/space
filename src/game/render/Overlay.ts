@@ -1,3 +1,5 @@
+import { threatNow } from '../sim/belt';
+import { rockLabel } from '../sim/ringRocks';
 import { occluder } from '../sim/sight';
 import { surfaceDist } from '../sim/terrain';
 import { JUMP_CHARGE_TIME, RESPAWN_TIME } from '../constants';
@@ -516,10 +518,10 @@ export class Overlay {
     const th = g.rockThreat;
     if (!th) return;
     const { ctx } = this;
-    const rel = this.tmp.copy(th.pos).addScaledVector(th.vel, g.simTime - th.t0).add(g.frameBody.pos).sub(g.ship.pos);
+    const now = threatNow(g, th);
+    const rel = this.tmp.copy(now.pos).add(g.frameBody.pos).sub(g.ship.pos);
     const d = rel.length();
-    const tLeft = Math.max(0, th.tHit - (g.simTime - th.t0));
-    const label = `ROCK ${th.size < 10 ? th.size.toFixed(1) : th.size.toFixed(0)} m · ${tLeft.toFixed(1)} s`;
+    const label = `ROCK ${rockLabel(th.size)} · ${Math.max(0, now.t).toFixed(1)} s`;
     const s = this.toScreen(g, rel);
     if (s.behind || s.x < 0 || s.x > this.W || s.y < 0 || s.y > this.H) {
       this.edgeArrow(s.v, RED, label);

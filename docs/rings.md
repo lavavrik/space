@@ -88,5 +88,11 @@ from before get them fitted.
   from 3 km: 7 of 8 runs passed it and everything else untouched; without the radar, every run hit.
   It's help, not a guarantee.
 - The impact messages give the real closing speed (the damage uses the mass-scaled one).
+- Rocks are named by their size across (twice the drawn radius): a "50 m" label on a ~100 m rock
+  read as far too small.
+- A tracked rock is carried on along its orbit (turned about the ring's axis at its rate), not in
+  a straight line: over 15 s the straight line drifted ~300 m off it, the marker slid off the rock,
+  and its stale velocity made a stationary ship look like it was closing at tens of m/s. Closing
+  slower than 2 m/s isn't a threat at all (below the scrape speed it's a harmless bump).
 
 Not yet: rocks as radar contacts or mining targets (SPACE-58), other ships feeling any of this.

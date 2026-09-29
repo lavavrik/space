@@ -25,9 +25,11 @@ import { frameVel } from './frame';
 import { grant } from './power';
 import { applyThrust } from './resources';
 import { RING_HALF_THICK, ringDensity } from './rings';
-import { ROCK_K, rocksNear, type Rock } from './ringRocks';
+import { ROCK_K, rockLabel, rockOn, rocksNear, type Rock } from './ringRocks';
 import { shipRadiusAlong } from './ringContact';
 
+/** Closing on a rock slower than this (m/s) isn't a threat: below the scrape speed, a bump. */
+const MIN_CLOSING = 2;
 export const DUST_V = 500,
   DUST_K = 0.004;
 /** The collision radar: how often it looks, how far ahead in time at most, and the layers' search reach. */
@@ -51,6 +53,19 @@ export interface RockThreat {
   /** Nudging clear (CR-5), or just warning. */
   avoiding: boolean;
 }
+
+/** A tracked rock now: where it is (planet-centred), how it moves, and seconds to its closest approach (≤ 0: passed). */
+export function threatNow(g: Game, th: RockThreat, pos = new THREE.Vector3(), vel = new THREE.Vector3()) {
+  const w = g.frameBody;
+  rockOn(w.axis, th.pos, th.vel, g.simTime - th.t0, pos, vel);
+  const rel = tmp3.subVectors(g.ship.pos, w.pos).sub(pos);
+  const u = tmp4.copy(g.ship.vel).sub(vel);
+  const uu = u.lengthSq();
+  const t = uu > 1e-9 ? -rel.dot(u) / uu : 0;
+  return { pos, vel, t, closing: Math.sqrt(uu) };
+}
+const tmp3 = new THREE.Vector3(),
+  tmp4 = new THREE.Vector3();
 
 /** Where the ship is against a ring's belt: its world, the density there, and whether it's inside the slab. */
 function beltHere(g: Game): { w: World; dens: number; inSlab: boolean; near: boolean } | null {
@@ -124,11 +139,10 @@ export function updateBelt(g: Game, dt: number, inputs: boolean) {
     const seen = new Set(all.map((t) => t.id));
     for (const th of threats.get(g) ?? []) {
       if (seen.has(th.id)) continue;
-      const rel = tmp.subVectors(ship.pos, w.pos).sub(th.pos).addScaledVector(th.vel, -(g.simTime - th.t0));
-      const u = tmp2.copy(ship.vel).sub(th.vel);
-      if (u.lengthSq() > 1e-6 && -rel.dot(u) > 0) all.push(th);
+      const now = threatNow(g, th);
+      if (now.t > 0 && now.closing > MIN_CLOSING) all.push(th);
     }
-    all.sort((a, b) => a.tHit - (g.simTime - a.t0) - (b.tHit - (g.simTime - b.t0)));
+    all.sort((a, b) => threatNow(g, a).t - threatNow(g, b).t);
     threats.set(g, all);
     g.rockThreat = all[0] ?? null; // the soonest, for the HUD
     const th = g.rockThreat;
@@ -138,8 +152,7 @@ export function updateBelt(g: Game, dt: number, inputs: boolean) {
     // are too many to announce each)
     if (th && !(th.avoiding && th.size < 10) && !((said.get(th.id) ?? -Infinity) > g.simTime - 20)) {
       said.set(th.id, g.simTime);
-      const size = th.size < 10 ? th.size.toFixed(1) : th.size.toFixed(0);
-      g.showMsg(`Collision warning · ${size} m rock in ${th.tHit.toFixed(1)} s${th.avoiding ? ' · steering clear' : ''}`, 'warn');
+      g.showMsg(`Collision warning · ${rockLabel(th.size)} rock in ${th.tHit.toFixed(1)} s${th.avoiding ? ' · steering clear' : ''}`, 'warn');
     }
   }
   // (not while you steer sideways yourself, nor while a computer flies)
@@ -171,7 +184,8 @@ function scan(g: Game, w: World, minSize: number, range: number, avoid: boolean)
       const rel = p.clone().sub(rock.pos),
         u = ship.vel.clone().sub(rock.vel);
       const uu = u.lengthSq();
-      if (uu < 1e-6) continue;
+      // (drifting into one slower than this is a harmless bump: ringContact takes care of it)
+      if (uu < MIN_CLOSING * MIN_CLOSING) continue;
       const t = -rel.dot(u) / uu;
       if (t <= 0 || t > GUARD_T) continue;
       const miss = rel.addScaledVector(u, t).length();
@@ -194,13 +208,11 @@ function nudge(g: Game, w: World, list: RockThreat[], dt: number) {
   const sum = new THREE.Vector3();
   let pending = false;
   for (const th of list) {
-    const rockNow = th.pos.clone().addScaledVector(th.vel, g.simTime - th.t0);
-    const rel = tmp.subVectors(ship.pos, w.pos).sub(rockNow);
-    const u = ship.vel.clone().sub(th.vel);
-    const uu = u.lengthSq();
-    if (uu < 1e-6) continue;
-    const t = -rel.dot(u) / uu;
-    if (t <= 0) continue; // passed it
+    const now = threatNow(g, th);
+    const rel = tmp.subVectors(ship.pos, w.pos).sub(now.pos);
+    const u = ship.vel.clone().sub(now.vel);
+    const t = now.t;
+    if (t <= 0 || now.closing < MIN_CLOSING) continue; // passed it, or only drifting
     pending = true;
     const off = rel.clone().addScaledVector(u, t); // where it passes, relative to the rock
     const need = th.size * ROCK_K + shipRadiusAlong(g, u.clone().normalize()) + NUDGE_MARGIN - off.length();

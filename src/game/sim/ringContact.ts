@@ -19,7 +19,7 @@ import { impact } from './damage';
 import { frameVel } from './frame';
 import { shipMass } from './resources';
 import { RING_HALF_THICK } from './rings';
-import { BOUNCE, ROCK_K, ROCK_SCRAPE, effectiveSpeed, rockMass, sweepRocks } from './ringRocks';
+import { BOUNCE, ROCK_K, ROCK_SCRAPE, effectiveSpeed, rockLabel, rockMass, sweepRocks } from './ringRocks';
 import { crossSection } from './thermal';
 
 /** How long a knocked-aside rock is left out of the collisions (s). */
@@ -63,9 +63,9 @@ export function ringContact(g: Game, dt: number) {
   const ms = shipMass(ship),
     mr = rockMass(rock.size);
   // damage, by the approach speed scaled for the rock's mass
-  const size = rock.size < 10 ? rock.size.toFixed(1) : rock.size.toFixed(0);
+  const size = rockLabel(rock.size);
   const h0 = ship.hull;
-  if (impact(g, effectiveSpeed(vn, mr, ms), ROCK_SCRAPE, CRASH_SPEED, `a ${size} m rock`, w, vn)) return;
+  if (impact(g, effectiveSpeed(vn, mr, ms), ROCK_SCRAPE, CRASH_SPEED, `a ${size} rock`, w, vn)) return;
   // the ship's share of (1 + e) × the closing speed along the normal
   ship.vel.addScaledVector(normal, (1 + BOUNCE) * vn * (mr / (mr + ms)));
   if (mr < ms) {
@@ -87,7 +87,7 @@ export function ringContact(g: Game, dt: number) {
     last = lastNote.get(g) ?? -Infinity;
   if (vn > 0.5 && ship.hull >= h0 - 0.01 && now - last > 3) {
     lastNote.set(g, now);
-    g.showMsg(`${mr < ms ? 'Knocked aside' : 'Bumped'} a ${size} m rock at ${vn.toFixed(1)} m/s`, 'warn');
+    g.showMsg(`${mr < ms ? 'Knocked aside' : 'Bumped'} a ${size} rock at ${vn.toFixed(1)} m/s`, 'warn');
   }
 }
 

@@ -28,6 +28,8 @@ import { unitLabel, type Computer } from '../avionics/catalog';
 import { buildInfluences } from './influences';
 import { approachView } from './approach';
 import { deflectorFitted, guardFitted } from '../outfit/catalog';
+import { threatNow } from '../sim/belt';
+import { rockLabel } from '../sim/ringRocks';
 import { HULL_WARN, heatDamageRate } from '../sim/damage';
 import { buildInfo, stationKind } from './info';
 import type { AutopilotView, AvionicsSlotView, ElectricalView, ModuleIcon, RadarView, OutfitView, FlightView, GaugeBadge, GaugeView, Lamp, NavView, GuideView, HudSnapshot, LocationView, Pill, PlannerView, Readout, SystemsView, TargetView } from './types';
@@ -238,7 +240,7 @@ function flight(g: Game): FlightView {
   if (g.autodock) pills.push({ text: `AUTO-DOCK · ${g.autodock.phase.toUpperCase()}`, kind: 'ftl' });
   if (g.ascent) pills.push({ text: 'ASCENT PROGRAM', kind: 'ftl' });
   const th = g.rockThreat;
-  if (th) pills.push({ text: `ROCK ${th.size < 10 ? th.size.toFixed(1) : th.size.toFixed(0)} m · ${Math.max(0, th.tHit - (g.simTime - th.t0)).toFixed(1)} s${th.avoiding ? ' · AVOIDING' : ''}`, kind: 'warn' });
+  if (th) pills.push({ text: `ROCK ${rockLabel(th.size)} · ${Math.max(0, threatNow(g, th).t).toFixed(1)} s${th.avoiding ? ' · AVOIDING' : ''}`, kind: 'warn' });
   if (g.dock) pills.push({ text: g.dock.docked ? `DOCKED · PAD ${g.dock.pad + 1}` : `PAD ${g.dock.pad + 1} GRANTED`, kind: g.dock.docked ? 'on' : 'ftl' });
   if (g.zoom.on) pills.push({ text: `ZOOM ${g.zoom.mag}×`, kind: 'on' });
   if (g.warp > 1) pills.push({ text: `TIME ×${g.warp.toLocaleString('en-US')}`, kind: 'warn' });

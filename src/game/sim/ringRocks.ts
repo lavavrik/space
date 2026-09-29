@@ -215,3 +215,23 @@ export function effectiveSpeed(vn: number, rock: number, ship: number) {
 }
 
 export { BOUNCE, ROCK_K, ROCK_SCRAPE };
+
+/**
+ * How a rock is named: by its size across (its long axis is twice its drawn radius, `size`), which
+ * is what you judge by eye. ("50 m" for a rock ~100 m long read as far too small.)
+ */
+export const rockLabel = (size: number) => (size < 5 ? `${(2 * size).toFixed(1)} m` : `${Math.round(2 * size)} m`);
+
+const qR = new THREE.Quaternion();
+/**
+ * A rock `dt` seconds on from (pos, vel), planet-centred: turned about the ring's axis at its orbit
+ * rate. (Carrying it on in a straight line drifted ~200 m off it in 15 s: its orbit bends by ω²r,
+ * ~2 m/s², the same as your own.)
+ */
+export function rockOn(axis: THREE.Vector3, pos: THREE.Vector3, vel: THREE.Vector3, dt: number, outPos: THREE.Vector3, outVel: THREE.Vector3) {
+  const r = Math.sqrt(Math.max(1, pos.lengthSq() - pos.dot(axis) ** 2));
+  const om = vel.length() / r;
+  qR.setFromAxisAngle(axis, om * dt);
+  outPos.copy(pos).applyQuaternion(qR);
+  outVel.copy(vel).applyQuaternion(qR);
+}
