@@ -70,3 +70,36 @@ describe('ring rock make-up', () => {
     expect(new Set(ids.map(rockIce)).size).toBeGreaterThan(150);
   });
 });
+
+describe('ring rock shapes and mining', () => {
+  it("a ray meets a rock's drawn surface between its squashed and its lumpy extent, and misses beside it", async () => {
+    const { rockRay } = await import('../sim/ringRocks');
+    const list: Rock[] = [];
+    rocksNear(w, 1, at, at, 3000, 0, list);
+    for (const rock of list.slice(0, 20)) {
+      const from = rock.pos.clone().addScaledVector(w.axis, rock.size * 5);
+      const dir = w.axis.clone().negate();
+      const t = rockRay(rock, from, dir, rock.size * 10);
+      expect(t).not.toBeNull();
+      const depth = rock.size * 5 - t!; // how far out from the centre it hit
+      expect(depth).toBeGreaterThan(rock.size * 0.2);
+      expect(depth).toBeLessThan(rock.size * 1.5);
+      const beside = from.clone().add(new THREE.Vector3().crossVectors(w.axis, rock.pos).normalize().multiplyScalar(rock.size * 1.6));
+      expect(rockRay(rock, beside, dir, rock.size * 10)).toBeNull();
+    }
+  });
+
+  it('a mined rock is smaller, and a mined-away one is gone', async () => {
+    const { minedRocks, minedKey } = await import('../sim/ringRocks');
+    const list: Rock[] = [];
+    rocksNear(w, 1, at, at, 2000, 0, list);
+    const [a, b] = list;
+    minedRocks.set(minedKey(w, a.id), 0.5);
+    minedRocks.set(minedKey(w, b.id), 0);
+    const again: Rock[] = [];
+    rocksNear(w, 1, at, at, 2000, 0, again);
+    expect(again.find((r) => r.id === a.id)!.size).toBeCloseTo(a.size * 0.5, 9);
+    expect(again.find((r) => r.id === b.id)).toBeUndefined();
+    minedRocks.clear();
+  });
+});

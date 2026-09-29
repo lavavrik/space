@@ -14,6 +14,7 @@
 import { THREE } from '../lib/three';
 import type { World } from '../types';
 import { RING_HALF_THICK, ROCK_LAYERS, ringDensity } from './rings';
+import { tnoise } from './terrain';
 
 /** The mesh layers (pebbles, rocks, boulders): the ones collisions consider. */
 export const COLLIDE_LAYERS = 3;
@@ -59,7 +60,18 @@ export interface Rock {
   layer: number;
   /** Which rock: layer, radial bin, cell round it, candidate. */
   id: string;
+  /** Its random stream after the size and tint: the GPU's draws for its shape carry on from here. */
+  shapeSeed: number;
+  /** Its size before any mining (mined rocks shrink: see `minedRocks`). */
+  size0: number;
 }
+
+/**
+ * Rocks mined down (sim/laser.ts): `${ring world}#${rock id}` → the share of its size left (0: gone).
+ * Shared with the renderer (render/RingField.ts draws them shrunk, or not at all) and saved.
+ */
+export const minedRocks = new Map<string, number>();
+export const minedKey = (w: { name: string }, id: string) => `${w.name}#${id}`;
 
 /** The ring's fixed in-plane axes, as RingField builds them. */
 export function ringAxes(n: THREE.Vector3) {
@@ -124,7 +136,12 @@ export function rocksNear(w: World, layer: number, a: THREE.Vector3, b: THREE.Ve
         const du = (st.next() - 0.5) * cell,
           u = st.next(),
           zz = (st.next() * 2 - 1) * RING_HALF_THICK;
-        const size = L.minR * Math.pow(L.maxR / L.minR, Math.pow(st.next(), 2.2));
+        const size0 = L.minR * Math.pow(L.maxR / L.minR, Math.pow(st.next(), 2.2));
+        const id = `${layer}:${gi}:${jj}:${q}`;
+        const left = minedRocks.get(minedKey(w, id)) ?? 1;
+        if (left <= 0) continue; // mined away
+        const size = size0 * left;
+        st.next(); // (its tint)
         // (j, not jj: the angle continues across the wrap, like the sweep's)
         const th = (j + u) * dth + turn;
         const rr = rb + du;
@@ -133,7 +150,7 @@ export function rocksNear(w: World, layer: number, a: THREE.Vector3, b: THREE.Ve
         const pos = new THREE.Vector3().addScaledVector(e1, rr * c).addScaledVector(e2, rr * s).addScaledVector(n, zz);
         // it orbits at its bin's rate (the whole bin turns together, as drawn)
         const vel = new THREE.Vector3().addScaledVector(e1, -rr * s * om).addScaledVector(e2, rr * c * om);
-        out.push({ pos, vel, size, layer, id: `${layer}:${gi}:${jj}:${q}` });
+        out.push({ pos, vel, size, layer, id, shapeSeed: st.s, size0 });
       }
     }
   }
@@ -234,4 +251,81 @@ export function rockOn(axis: THREE.Vector3, pos: THREE.Vector3, vel: THREE.Vecto
   qR.setFromAxisAngle(axis, om * dt);
   outPos.copy(pos).applyQuaternion(qR);
   outVel.copy(vel).applyQuaternion(qR);
+}
+
+/* ---------- a rock's exact shape (render/RingField.ts MESH_VS), for the mining laser ---------- */
+
+/**
+ * The shape the GPU draws: a unit sphere's directions pushed out by three octaves of the tiled 3D
+ * noise at a per-rock offset (1 ± ~0.5), squashed by `sc` (1 : 0.55–0.95 : 0.45–0.9, × its size)
+ * and turned by a random quaternion. The same random draws, in the same order, as MESH_VS.
+ */
+export function rockShape(rock: Rock) {
+  const st = new Stream(rock.shapeSeed);
+  const u1 = st.next(),
+    u2 = st.next() * 6.2831853,
+    u3 = st.next() * 6.2831853;
+  const q = new THREE.Quaternion(Math.sqrt(1 - u1) * Math.sin(u2), Math.sqrt(1 - u1) * Math.cos(u2), Math.sqrt(u1) * Math.sin(u3), Math.sqrt(u1) * Math.cos(u3));
+  const sc = new THREE.Vector3(1, 0.55 + 0.4 * st.next(), 0.45 + 0.45 * st.next()).multiplyScalar(rock.size);
+  const o = new THREE.Vector3(st.next(), st.next(), st.next()).multiplyScalar(8);
+  return { q, sc, o };
+}
+
+/** The shape's radius along unit direction d (mesh space): MESH_VS shape(). */
+function shapeR(d: THREE.Vector3, o: THREE.Vector3) {
+  return (
+    1 +
+    0.3 * tnoise(d.x * 0.9 + o.x, d.y * 0.9 + o.y, d.z * 0.9 + o.z) +
+    0.14 * tnoise(d.x * 2.1 + o.y, d.y * 2.1 + o.z, d.z * 2.1 + o.x) +
+    0.06 * tnoise(d.x * 4.7 + o.z, d.y * 4.7 + o.x, d.z * 4.7 + o.y)
+  );
+}
+
+const lP = new THREE.Vector3(),
+  lD = new THREE.Vector3(),
+  lQ = new THREE.Quaternion(),
+  lX = new THREE.Vector3();
+
+/**
+ * Where a ray from `from` along unit `dir` (planet-centred) first meets the rock's drawn surface, as
+ * a distance along it, up to maxT; null if it misses. Marches the star-shaped surface in the rock's
+ * mesh space, then refines by bisection.
+ */
+export function rockRay(rock: Rock, from: THREE.Vector3, dir: THREE.Vector3, maxT: number): number | null {
+  const { q, sc, o } = rockShape(rock);
+  lQ.copy(q).invert();
+  lP.copy(from).sub(rock.pos).applyQuaternion(lQ).divide(sc);
+  lD.copy(dir).applyQuaternion(lQ).divide(sc); // (not unit: t stays the world distance)
+  // the bounding sphere (the shape never reaches past 1.5)
+  const a = lD.dot(lD),
+    b = 2 * lP.dot(lD),
+    c = lP.dot(lP) - 1.5 * 1.5;
+  const disc = b * b - 4 * a * c;
+  if (disc < 0) return null;
+  const t0 = Math.max(0, (-b - Math.sqrt(disc)) / (2 * a)),
+    t1 = Math.min(maxT, (-b + Math.sqrt(disc)) / (2 * a));
+  if (t1 <= t0) return null;
+  const inside = (t: number) => {
+    lX.copy(lP).addScaledVector(lD, t);
+    const r = lX.length();
+    return r < 1e-9 || r < shapeR(lX.divideScalar(r), o);
+  };
+  const N = 48;
+  let prev = t0;
+  if (inside(t0)) return t0;
+  for (let i = 1; i <= N; i++) {
+    const t = t0 + ((t1 - t0) * i) / N;
+    if (inside(t)) {
+      let lo = prev,
+        hi = t;
+      for (let k = 0; k < 10; k++) {
+        const m = (lo + hi) / 2;
+        if (inside(m)) hi = m;
+        else lo = m;
+      }
+      return hi;
+    }
+    prev = t;
+  }
+  return null;
 }

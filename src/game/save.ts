@@ -15,6 +15,7 @@
  * way is saved as its destination: you arrive there (and meet that system's ships afresh). A lost
  * ship isn't saved (the last save stands).
  */
+import { minedRocks } from './sim/ringRocks';
 import type { Game } from './Game';
 import { THREE } from './lib/three';
 import { ALL_COMPUTERS, type Avionics } from './avionics/catalog';
@@ -117,6 +118,8 @@ export interface SaveData extends FlightSave {
   settings: { lights: boolean; orbitPreview: boolean; radarVisible: boolean };
   /** The other ships in the system (absent in older saves: they're spawned afresh). */
   traffic?: NpcSave[];
+  /** Ring rocks mined down: key → share of their size left (sim/ringRocks.ts minedRocks). */
+  mined?: [string, number][];
 }
 
 const v3 = (v: THREE.Vector3): V3 => [v.x, v.y, v.z];
@@ -215,6 +218,7 @@ export function snapshotGame(g: Game): SaveData | null {
     navMode: g.navMode,
     settings: { lights: g.lights, orbitPreview: g.orbitPreview, radarVisible: g.radarVisible },
     traffic: g.traffic.map(snapshotNpc).filter((n): n is NpcSave => !!n),
+    mined: [...minedRocks],
   };
 }
 
@@ -380,6 +384,8 @@ function restore(g: Game, d: SaveData, sys: NonNullable<ReturnType<typeof system
   const { ship } = g;
   // the clock first: loading the system puts every world and station where it is at this time
   g.simTime = d.simTime;
+  minedRocks.clear();
+  for (const [k, left] of d.mined ?? []) minedRocks.set(k, left);
   g.loadSystem(sys);
   restoreFlight(g, d);
 

@@ -19,6 +19,7 @@
 import { THREE } from '../lib/three';
 import { DISC_FROM, RING_HALF_THICK, ROCK_LAYERS, type RockLayer, ringDensity } from '../sim/rings';
 import type { World } from '../types';
+import { minedRocks } from '../sim/ringRocks';
 
 /** Above (or below) the belt by this much (m), the disc is back in full around you. */
 const FADE_ABOVE = 6000;
@@ -37,6 +38,8 @@ const ROCK_GLSL = `
 uniform sampler2D uBins;
 uniform float uK, uCell, uH, uInner, uFadeTo, uRange, uOut, uRc, uHc, uMinR, uMaxR, uSeed, uCutMin, uCutMax;
 uniform vec3 uE1, uE2, uN, uColor;
+// rocks mined down (sim/laser.ts): (radial bin, cell ÷ 4096, cell mod 4096, candidate) → share of size left
+uniform vec4 uMined[MINED_MAX]; uniform float uMinedS[MINED_MAX]; uniform int uMinedN;
 uvec3 pcg3(uvec3 v){
   v = v * 1664525u + 1013904223u;
   v.x += v.y * v.z; v.y += v.z * v.x; v.z += v.x * v.y;
@@ -75,6 +78,16 @@ bool ringRock(int id, out vec3 p, out float size, out float tint, out float fade
   float d = length(p);
   if (d > uRange || d < uInner || d < uCutMin || d > uCutMax) return false; // (cuts: which mesh draws it)
   size = uMinR * pow(uMaxR / uMinR, pow(rnd(s), 2.2));
+  // mined down: smaller, or gone
+  for (int m = 0; m < MINED_MAX; m++) {
+    if (m >= uMinedN) break;
+    vec4 e = uMined[m];
+    if (e.x == B.x && e.y == float(jj / 4096) && e.z == float(jj - (jj / 4096) * 4096) && e.w == float(q)) {
+      if (uMinedS[m] <= 0.0) return false;
+      size *= uMinedS[m];
+      break;
+    }
+  }
   tint = 0.5 + 0.6 * rnd(s);
   fade = (uFadeTo > 0.0 ? smoothstep(uInner, uFadeTo, d) : 1.0) * smoothstep(uRange, uRange * uOut, d);
   return true;
@@ -247,6 +260,29 @@ function sphereGeometry(detail: number) {
 }
 
 /** The ring and camera as the layers need them this frame. */
+/** How many mined rocks per layer the shader knows about (the nearest to the camera). */
+const MINED_MAX = 24;
+
+interface MinedRock {
+  layer: number;
+  gi: number;
+  jj: number;
+  q: number;
+  left: number;
+}
+
+/** This ring's mined rocks (sim/ringRocks.ts minedRocks), parsed from their keys. */
+function minedHere(b: World): MinedRock[] {
+  const out: MinedRock[] = [];
+  const pre = `${b.name}#`;
+  for (const [key, left] of minedRocks) {
+    if (!key.startsWith(pre)) continue;
+    const [layer, gi, jj, q] = key.slice(pre.length).split(':').map(Number);
+    out.push({ layer, gi, jj, q, left });
+  }
+  return out;
+}
+
 interface RingFrame {
   b: World;
   e1: THREE.Vector3; // in-plane axes turned so the camera is at angle 0
@@ -304,10 +340,13 @@ class Layer {
       uN: { value: new THREE.Vector3() },
       uColor: { value: new THREE.Color() },
       uPx: { value: 1 },
+      uMined: { value: Array.from({ length: MINED_MAX }, () => new THREE.Vector4()) },
+      uMinedS: { value: new Array(MINED_MAX).fill(1) },
+      uMinedN: { value: 0 },
       uCutMin: { value: lod.from },
       uCutMax: { value: lod.to },
     };
-    const defines: Record<string, number | string> = { GRID: G, WINDOW: window };
+    const defines: Record<string, number | string> = { GRID: G, WINDOW: window, MINED_MAX };
     if (lod.detail >= 1) defines.FINE = ''; // normals from the shape itself (not for the tiny far ones)
     const count = window * window * L.perCell;
     if (mesh) {
@@ -327,7 +366,7 @@ class Layer {
   }
 
   /** Fill the bin table for this frame; hides the layer if no part of it is near the ring. */
-  update(fr: RingFrame, seed: number) {
+  update(fr: RingFrame, seed: number, mined: MinedRock[]) {
     const { b, r, h } = fr;
     const L = this.L,
       G = L.grid,
@@ -366,6 +405,32 @@ class Layer {
     this.object.visible = any;
     if (!any) return;
     this.bins.needsUpdate = true;
+    // the mined rocks of this layer near the camera (the nearest MINED_MAX, by bin and cell)
+    const near: [number, MinedRock][] = [];
+    for (const m of mined) {
+      if (m.layer !== this.seedK) continue;
+      const bi = m.gi - (i0 - G / 2);
+      if (bi < 0 || bi >= G) continue;
+      const o2 = (G + bi) * 4,
+        o3 = (2 * G + bi) * 4;
+      const nth = this.data[o3] * 4096 + this.data[o3 + 1],
+        jm = this.data[o2 + 1] * 4096 + this.data[o2 + 2];
+      if (this.data[bi * 4 + 2] <= 0 || nth <= 0) continue;
+      let dj = Math.abs(m.jj - jm) % nth;
+      dj = Math.min(dj, nth - dj);
+      if (dj > G / 2) continue;
+      near.push([Math.abs(bi - G / 2) + dj, m]);
+    }
+    near.sort((a, b) => a[0] - b[0]);
+    const n = Math.min(MINED_MAX, near.length);
+    const um = this.uni.uMined.value as THREE.Vector4[],
+      us = this.uni.uMinedS.value as number[];
+    for (let k = 0; k < n; k++) {
+      const m = near[k][1];
+      um[k].set(m.gi, Math.floor(m.jj / 4096), m.jj % 4096, m.q);
+      us[k] = m.left;
+    }
+    this.uni.uMinedN.value = n;
     const u = this.uni;
     u.uRc.value = r;
     u.uHc.value = h;
@@ -451,7 +516,8 @@ export class RingField {
     this.uni.uPlanetA.value = b.albedo;
     const fr: RingFrame = { b, e1: d1, e2: d2, n, r, h, thC, t, pxPerRad };
     const seed = Math.floor(ring.seed * 1e4);
-    for (const l of this.layers) l.update(fr, seed);
+    const mined = minedHere(b);
+    for (const l of this.layers) l.update(fr, seed, mined);
     return true;
   }
 

@@ -240,6 +240,7 @@ export class Overlay {
     this.drawStations(g);
     this.drawTraffic(g);
     this.drawRockThreat(g);
+    this.drawLaserTarget(g);
     this.drawReachable(g);
     this.drawJumpDest(g);
     this.drawNavDest(g);
@@ -508,6 +509,46 @@ export class Overlay {
         }
       }
     }
+  }
+
+  /**
+   * The rock the mining laser is on (sim/laser.ts): an amber ring round it, with its size, distance,
+   * make-up and how much of it is mined away.
+   */
+  private drawLaserTarget(g: Game) {
+    const h = g.laser.hit;
+    if (!h) return;
+    const { ctx } = this;
+    const rel = this.tmp.copy(h.center).add(g.frameBody.pos).sub(g.ship.pos);
+    const s = this.toScreen(g, rel);
+    if (s.behind) return;
+    const d = rel.length();
+    const r = Math.max(14 * this.ui, ((h.size * 1.1) / d) * g.view.pxPerRad);
+    ctx.save();
+    ctx.strokeStyle = AMB + '0.8)';
+    ctx.lineWidth = 1.5 * this.ui;
+    // corner ticks, like a target's brackets
+    const k = Math.min(r * 0.5, 14 * this.ui);
+    ctx.beginPath();
+    for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      ctx.moveTo(s.x + sx * r, s.y + sy * (r - k));
+      ctx.lineTo(s.x + sx * r, s.y + sy * r);
+      ctx.lineTo(s.x + sx * (r - k), s.y + sy * r);
+    }
+    ctx.stroke();
+    const m = h.make;
+    const pct = (x: number) => (x < 0.01 ? (x * 100).toFixed(1) : Math.round(x * 100).toString());
+    const mined = 1 - (h.size / h.size0) ** 3;
+    const lines = [
+      `ROCK ${rockLabel(h.size)} · ${fmtDist(Math.max(0, h.dist))}`,
+      `ICE ${pct(m.ice)} % · SILICATE ${pct(m.rock)} % · METAL ${pct(m.metal)} %`,
+      ...(mined > 0.005 ? [`MINED ${Math.round(mined * 100)} %`] : []),
+    ];
+    ctx.font = this.font(11, MONO);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = AMB + '0.95)';
+    lines.forEach((t, i) => ctx.fillText(t, s.x + r + 8 * this.ui, s.y - r + 10 * this.ui + i * 14 * this.ui));
+    ctx.restore();
   }
 
   /**

@@ -102,8 +102,10 @@ Not yet: other ships feeling any of this.
 A mining laser in a utility slot (Tessera ML-2 Ablator: 2 MW, 600 m; ML-6 Sunspear: 6 MW, 1.5 km;
 a new ship has the ML-6 in a 6th slot, and older saves get it fitted). Shift+M turns it on.
 
-- **Aim with the nose.** The beam fires along it; the first rock in its path within range is hit
-  (the same rocks as drawn). Its ice boils off, the fuel scoop catches the vapour, and it's cracked
+- **Aim with the nose.** The beam fires along it; the first rock in its path within range is hit,
+  against the exact shape it's drawn with (`ringRocks.ts rockShape/rockRay`: the GPU's orientation,
+  elongation and lumpy noise, from the same random draws and the same noise texture, marched along
+  the beam): a sphere let the beam pass through a rock's long end, or stop short of its narrow side. Its ice boils off, the fuel scoop catches the vapour, and it's cracked
   into propellant (the H₂ gauge says "Laser mining a 96 m rock · 94 % ice").
 - **Yield:** 60 kg/s per MW of beam, × the rock's ice fraction (from its id, like its shape: a
   giant's ring rocks are 90–99 % water ice), × a range factor (full out to a third of the range,
@@ -119,4 +121,14 @@ a new ship has the ML-6 in a 6th slot, and older saves get it fitted). Shift+M t
   Display-referred, out of the exposure meter.
 - **Order:** it fires after the ship's move each step: mid-step the ship lags the rocks by its
   orbital motion (~700 m a frame round a giant), and a beam from there missed.
+- **The target:** the rock the beam is on gets amber brackets with its size, distance, make-up
+  (water ice 90–99 %, the rest silicate grit and a trace of metal: a hash of its id) and how much of
+  it is mined away.
+- **Rocks shrink.** The beam breaks up and scatters 2,000 kg of rock for every kg of propellant the
+  scoop catches (most of what it frees is lost), so a rock loses mass and shrinks (size ∝ ∛mass):
+  a 70 m rock lasts ~3½ minutes under the ML-6 (it filled a tank from 53 t on the way), ~100 m about
+  8, pebbles a blink. Below 12 % of its size it's gone. Mined rocks are kept (`minedRocks`, saved
+  with the game) by ring and rock id: the collisions, the radar and the laser see them shrunk or
+  gone, and the renderer is told the nearest 24 per layer (`uMined`), which it draws shrunk or not
+  at all.
 - Metals (stony and metallic rocks, cargo) wait for a hold and an economy (SPACE-51).
