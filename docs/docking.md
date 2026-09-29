@@ -76,6 +76,10 @@ Any thrust key hands control back. Time warp is blocked while it flies.
 Tested from 30 km: the WD-300 got clearance at 9.5 km and docked in 165 s. The WD-100 docked from
 7 km in 145 s after a manual request.
 
+## FTL beside a station (`sim/ftl.ts`)
+
+In FTL, the drive drops out 100 km short of any station its course runs toward (`STATION_DROP`), matched to its orbit. A station you're already within 100 km of when the drive engages is ignored until you've left its 100 km zone (`Ship.ftlLeaving`). Before, a course out that ran past the station you'd just left dropped you straight back out. Under the autopilot that meant charge, engage, drop, charge again, over and over.
+
 ## Traffic control (`sim/control.ts`)
 
 Every ship at a station shares its pads and its slot: yours and the others (docs/traffic.md), which fly the same code.

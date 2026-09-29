@@ -201,6 +201,8 @@ export interface Ship {
   cruise: boolean;
   ftlSpeed: number;
   ftlCharge: number;
+  /** Stations the FTL drive started out beside: they don't drop it out until it's left their bubble (sim/ftl.ts). */
+  ftlLeaving?: string[];
   vmax: number;
   fa: boolean; // flight assist
   /** Decoupled (V): turning doesn't change where you're going, in normal space or FTL. */

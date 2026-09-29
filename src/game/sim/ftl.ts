@@ -170,6 +170,7 @@ export function engageFTL(g: Game) {
   }
   ship.exotic -= SHIP.ftlChargeKg;
   ship.mode = 'ftl';
+  ship.ftlLeaving = g.cur.stations.filter((st) => st.pos.distanceTo(ship.pos) < STATION_DROP).map((st) => st.name);
   ship.tanker = null;
   const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(ship.q);
   ship.travelDir.copy(fwd); // the drive always spins up along the nose
@@ -243,6 +244,13 @@ function stationAhead(g: Game, step: number) {
   const dir = ship.travelDir;
   for (const st of g.cur.stations) {
     const rel = tmpS.subVectors(st.pos, ship.pos);
+    // one you started out from (in its bubble when the drive engaged) doesn't stop you until you've
+    // left its bubble: the course out often runs past it, and it dropped you straight back out
+    // (under the autopilot: charge, drop, charge again, over and over)
+    if (ship.ftlLeaving?.includes(st.name)) {
+      if (rel.length() > STATION_DROP * 1.02) ship.ftlLeaving = ship.ftlLeaving.filter((n) => n !== st.name);
+      continue;
+    }
     const along = rel.dot(dir);
     if (along <= 0) continue; // behind: moving away
     const d2 = rel.lengthSq(),
