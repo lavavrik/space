@@ -22,6 +22,9 @@ It opens on docking, and on loading a game that was docked, in place of whatever
   - leaving (launch; lift off or the catapult at a sky station).
 - **Contracts:** the station's job board and your jobs. Shift+J while docked opens this tab.
 - **Outfitting:** refit the utility slots and the battery from its catalogue. Shift+U while docked opens this tab.
+  - The battery and the 7 slots are tiles: a drawing of what's fitted (`ui/components/ModuleArt.tsx`: line art per kind), the slot and the module's name.
+  - Click a tile to open it below: the fitted module as a full card (drawing, name, maker, what it does, specs), and, alongside a station, every module it could take as cards grouped by kind, each with its price and "fit" or "replace with this".
+  - Nothing is listed until you pick a tile. (At first every slot listed the whole catalogue as bare buttons.)
 
 It opens on Trading when there's metal in the hold, otherwise on Services.
 

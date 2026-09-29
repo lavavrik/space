@@ -639,10 +639,33 @@ function outfitView(g: Game): OutfitView {
   const bSpecs = (b: BatteryModule) => `${fmtEnergy(b.caps.capacity)} · ${fmtPower(b.caps.maxKW)} out (${b.caps.maxKW / b.caps.capacity}C) · ${fmtPower(b.caps.chargeKW)} in · ${fmtMass(b.mass)}`;
   return {
     station: st?.name ?? null,
-    battery: { unit: moduleLabel(o.battery), specs: bSpecs(o.battery), options: st ? BATTERIES.map((b) => ({ id: b.id, unit: moduleLabel(b), specs: `${b.blurb} · ${bSpecs(b)} · ${fmtCr(fitPrice(st, b.price))}`, current: b === o.battery })) : [] },
+    battery: {
+      id: o.battery.id,
+      unit: moduleLabel(o.battery),
+      maker: o.battery.maker,
+      blurb: o.battery.blurb,
+      specs: bSpecs(o.battery),
+      options: st ? BATTERIES.map((b) => ({ id: b.id, unit: moduleLabel(b), kind: 'BATTERY', icon: 'battery' as const, maker: b.maker, blurb: b.blurb, specs: bSpecs(b), price: fmtCr(fitPrice(st, b.price)), current: b === o.battery })) : [],
+    },
     hint: 'Modules are fitted while docked at a station (target one, K for a pad, land on it)',
-    slots: o.slots.map((m) => (m ? { unit: moduleLabel(m), blurb: m.blurb, specs: specsOf(m), empty: false, icon: m.kind } : { unit: 'empty', blurb: '', specs: '', empty: true, icon: 'empty' as const })),
-    catalogue: st ? MODULES.map((m) => ({ id: m.id, unit: moduleLabel(m), kind: { radiator: 'RADIATORS', heatpump: 'HEAT PUMP', scoop: 'FUEL SCOOP', deflector: 'DEFLECTOR', guard: 'COLLISION RADAR', laser: 'MINING LASER', fuelcell: 'FUEL CELL' }[m.kind], blurb: m.blurb, specs: `${specsOf(m)} · ${fmtCr(fitPrice(st, m.price))}` })) : [],
+    slots: o.slots.map((m) =>
+      m
+        ? { id: m.id, unit: moduleLabel(m), maker: m.maker, blurb: m.blurb, specs: specsOf(m), empty: false, icon: m.kind }
+        : { id: null, unit: 'empty', maker: '', blurb: '', specs: '', empty: true, icon: 'empty' as const },
+    ),
+    catalogue: st
+      ? MODULES.map((m) => ({
+          id: m.id,
+          unit: moduleLabel(m),
+          kind: { radiator: 'RADIATORS', heatpump: 'HEAT PUMP', scoop: 'FUEL SCOOP', deflector: 'DEFLECTOR', guard: 'COLLISION RADAR', laser: 'MINING LASER', fuelcell: 'FUEL CELL' }[m.kind],
+          icon: m.kind,
+          maker: m.maker,
+          blurb: m.blurb,
+          specs: specsOf(m),
+          price: fmtCr(fitPrice(st, m.price)),
+          current: false,
+        }))
+      : [],
     radiators: {
       fitted: rads.length > 0,
       out: o.radiatorsOut,

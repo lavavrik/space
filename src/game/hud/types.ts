@@ -185,13 +185,27 @@ export interface RadarView {
 /** Outfit panel (Shift+U): the utility slots, the thermal hardware's state, and fitting at a station. */
 export interface OutfitView {
   station: string | null; // the station that can fit modules right now
-  battery: { unit: string; specs: string; options: { id: string; unit: string; specs: string; current: boolean }[] };
+  battery: { id: string; unit: string; maker: string; blurb: string; specs: string; options: OutfitCard[] };
   hint: string; // how to get to one, when not alongside
-  slots: { unit: string; blurb: string; specs: string; empty: boolean; icon: ModuleIcon }[];
-  catalogue: { id: string; unit: string; kind: string; blurb: string; specs: string }[];
+  slots: { id: string | null; unit: string; maker: string; blurb: string; specs: string; empty: boolean; icon: ModuleIcon }[];
+  /** What the station fits (empty when not alongside one): every module, grouped by `kind` in the panel. */
+  catalogue: OutfitCard[];
   radiators: { fitted: boolean; out: number; deploying: boolean; status: string };
   pump: { fitted: boolean; auto: boolean; status: string };
   mass: string;
+}
+
+/** A module or battery on offer, as a card: what it is, what it does, and its price here. */
+export interface OutfitCard {
+  id: string;
+  unit: string; // "FC-150 Hearth"
+  kind: string; // "FUEL CELL"
+  icon: ModuleIcon;
+  maker: string;
+  blurb: string;
+  specs: string;
+  price: string;
+  current: boolean; // (batteries: the fitted one)
 }
 
 /** Navigation computer panel (M): the route to the destination, planned or being flown. */

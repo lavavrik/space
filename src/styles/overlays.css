@@ -315,3 +315,25 @@
 .jbar { margin: .15rem 0 .1rem; }
 .jbar i { background: rgba(255, 215, 120, .85); }
 .jbar.done i { background: #8fe08a; }
+
+/* outfit: the slots as tiles (a drawing, the slot, what's in it); a picked one opens cards below */
+.otiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(7.2rem, 1fr)); gap: .35rem; }
+.otile { pointer-events: auto; cursor: pointer; display: flex; flex-direction: column; align-items: flex-start; gap: .15rem; padding: .45rem .5rem .5rem; background: rgba(255, 165, 58, .04); border: 1px solid var(--amber-faint); color: var(--amber); font: inherit; text-align: left; min-width: 0; }
+.otile:hover { border-color: var(--amber-dim); background: rgba(255, 165, 58, .09); }
+.otile.cur { border-color: var(--amber); background: rgba(255, 165, 58, .14); }
+.otile .otslot { font-size: .68rem; letter-spacing: .16em; color: var(--amber-dim); }
+.otile b { font-weight: 500; font-size: .85rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.otile.empty b { color: var(--amber-dim); }
+.otile.empty .mart { color: var(--amber-dim); }
+.mart { color: var(--amber); flex: none; }
+.opick { display: flex; flex-direction: column; gap: .35rem; border-top: 1px solid var(--amber-faint); padding-top: .45rem; }
+.okind { display: flex; flex-direction: column; gap: .3rem; }
+.okind .isec { margin-top: .2rem; }
+.ocard { display: flex; gap: .6rem; padding: .45rem .5rem; border: 1px solid var(--amber-faint); background: rgba(255, 165, 58, .03); }
+.octext { display: flex; flex-direction: column; gap: .1rem; min-width: 0; flex: 1; }
+.octop { display: flex; justify-content: space-between; align-items: baseline; gap: .5rem; }
+.octop b { font-weight: 600; color: var(--text); }
+.ocprice { color: var(--amber); font-size: .88rem; white-space: nowrap; }
+.ocmaker { font-size: .72rem; letter-spacing: .12em; color: var(--amber-dim); text-transform: uppercase; }
+.ocblurb { font-size: .86rem; color: var(--text); line-height: 1.35; }
+.ocspecs { font-size: .8rem; color: var(--amber-dim); line-height: 1.35; }
