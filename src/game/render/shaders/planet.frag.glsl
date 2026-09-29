@@ -20,6 +20,7 @@ varying vec3 vOffDir; // terrain chunks: direction minus the chunk centre's (ter
 #pragma farlight_clouds
 #pragma farlight_atmo
 #pragma farlight_terrain
+#pragma farlight_city
 // Bump mapping from a height field H (m) over the surface, from screen-space derivatives
 // (Mikkelsen, "Bump Mapping Unparametrized Surfaces on the GPU"): tilts N by H's slope.
 vec3 bumpN(vec3 N, float H){
@@ -69,8 +70,10 @@ void main(){
   int oct=min(uOct,int(clamp(log2(0.5/(1.6*fw))/1.02+1.0,3.0,float(T_OCT_MAX))));
   // Night side: at 0.8 % brightness the detail is invisible, so skip it (volcanic worlds glow at night)
   bool dark=clamp(ndl*1.05+0.03,0.0,1.0)<0.002&&uType!=4;
-  if(dark) oct=min(oct,3);
+  // (a populated world keeps its coastlines at night: that's where its lights are)
+  if(dark) oct=min(oct,uCity>0.5?8:3);
   vec3 col; vec3 emit=vec3(0.0); float spec=0.0; float cloud=0.0; float det=1.0; float elev=0.0;
+  float pop=0.0; // population density, for the city lights (cityLights.glsl)
   if(uType>=6){
     bool gas = uType==6;
     float w=fbmF(vec3(sp.x*1.2,sp.y*5.0,sp.z*1.2),min(oct,6));
@@ -115,6 +118,7 @@ void main(){
         col=mix(uB,uA,dep); spec=1.0;
       } else {
         float e=h-uSea;
+        if(uCity>0.5) pop=cityPop(p,e,lat);
         col=mix(uC,uD,smoothstep(0.12,0.55,e+h2*0.12)); // lowlands green, highlands and ranges rock
         col=mix(col,uC*0.7+vec3(0.18,0.15,0.08),smoothstep(0.2,0.6,h2)*0.3);
         col=mix(col,vec3(0.9),smoothstep(0.62,0.75,e)); // snow on the high peaks (mountain ranges raise h)
@@ -164,6 +168,15 @@ void main(){
   float s=pow(max(dot(R,V),0.0),60.0)*0.7*spec*diff;
   // the night side is lit only by starlight: sky level (SKY_K), so it goes black against the stars
   col=col*(diff*sunC+sky+0.0002)+vec3(1.0,0.95,0.85)*s*sunC;
+  // city lights, coming on as the sun sets (dimmed like the ground by the air above them, below)
+  if(pop>0.0){
+    float night=smoothstep(0.1,-0.08,ndl0);
+    if(night>0.0){
+      float white;
+      float lights=cityLights(p,pop,fw,white);
+      col+=mix(vec3(1.0,0.62,0.3),vec3(1.0,0.88,0.7),white)*lights*night*uCityK;
+    }
+  }
   if(uAtOn>0.5){
     // the air between the camera and here: haze (atmo.glsl), which also gives the limb its glow
 #ifdef TERRAIN

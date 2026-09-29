@@ -46,6 +46,8 @@ export const FLOOD_K = AUTO_EXPOSURE ? lit(30) : 0.28,
 export const HEAD_K = (AUTO_EXPOSURE ? lit(1.3e6 / 100 ** 2) : 1.8) * 100 ** 2;
 /** Lit windows (~200 cd/m²) against their old display level. */
 export const WINDOW_K = AUTO_EXPOSURE ? 0.18 : 1;
+/** City lights on a world's night side (render/shaders/cityLights.glsl), at their brightest. */
+export const CITY_K = AUTO_EXPOSURE ? 0.1 : 0.9;
 /** The sky (Milky Way, stars, distant worlds as dots) against sunlit surfaces. */
 export const SKY_K = AUTO_EXPOSURE ? 0.025 : 1;
 

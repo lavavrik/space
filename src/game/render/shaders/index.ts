@@ -24,6 +24,7 @@ import skyStationFrag from './skyStation.frag.glsl?raw';
 import terrainGlsl from './terrain.glsl?raw';
 import atmoGlsl from './atmo.glsl?raw';
 import cloudsGlsl from './clouds.glsl?raw';
+import cityGlsl from './cityLights.glsl?raw';
 import cloudLayerFrag from './cloudLayer.frag.glsl?raw';
 import cloudBakeFrag from './cloudBake.frag.glsl?raw';
 import planetVert from './planet.vert.glsl?raw';
@@ -36,7 +37,7 @@ const withNoise = (src: string) => src.replace('#pragma farlight_noise', noise);
 export const BODY_VS = bodyVert;
 /** Planets: exact simplex noise for coarse octaves, the 3D noise texture (uNoise3D) for fine ones. */
 const withTerrain = (src: string) =>
-  withNoise(src).replace('#pragma farlight_noise3d', noise3d).replace('#pragma farlight_terrain', terrainGlsl).replace('#pragma farlight_atmo', atmoGlsl).replace('#pragma farlight_clouds', cloudsGlsl);
+  withNoise(src).replace('#pragma farlight_noise3d', noise3d).replace('#pragma farlight_terrain', terrainGlsl).replace('#pragma farlight_atmo', atmoGlsl).replace('#pragma farlight_clouds', cloudsGlsl).replace('#pragma farlight_city', cityGlsl);
 export const PLANET_FS = withTerrain(planetFrag);
 /** Planets: the far sphere, or (with the TERRAIN define) a displaced terrain chunk (render/Terrain.ts). */
 export const PLANET_VS = withTerrain(planetVert);

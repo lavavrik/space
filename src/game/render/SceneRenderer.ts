@@ -8,7 +8,7 @@ import { HyperspaceView } from './Hyperspace';
 import { createNoiseTexture } from '../lib/noise3d';
 import { skyColor, skyLook } from '../sim/hyperspace';
 import { CORRIDOR_GROW, CORRIDOR_M, corridorGeometry, corridorLights, hullGeometry, interiorGeometry } from './stationMesh';
-import { AUTO_EXPOSURE, AutoExposure, FLOOD_K, HEAD_K, INT_K, MAX_EXP, SKY_EXP_P, SKY_K, STAR_EXP_P, WINDOW_K } from './exposure';
+import { AUTO_EXPOSURE, AutoExposure, CITY_K, FLOOD_K, HEAD_K, INT_K, MAX_EXP, SKY_EXP_P, SKY_K, STAR_EXP_P, WINDOW_K } from './exposure';
 import { HdrTarget } from './hdr';
 import { TerrainView } from './Terrain';
 import { TrafficView } from './Traffic';
@@ -521,6 +521,8 @@ export class SceneRenderer {
       uAtBeta: { value: airBeta(b) }, uAtSunI: { value: 45 }, uAtOn: { value: air ? 1 : 0 },
       uLightL: { value: new THREE.Vector3(0, 1, 0) }, uCloudH: { value: clouded ? air!.H * CLOUD_H : 0 },
       uToLocal: { value: new THREE.Matrix3() }, uCloudTex: { value: null },
+      // populated worlds light up at night (shaders/cityLights.glsl)
+      uCity: { value: b.type === WT.EarthLike ? 1 : 0 }, uCityK: { value: CITY_K },
     };
     const mesh = new THREE.Mesh(this.geoMid, new THREE.ShaderMaterial({ vertexShader: PLANET_VS, fragmentShader: PLANET_FS, uniforms: uni }));
     mesh.scale.setScalar(b.radius);

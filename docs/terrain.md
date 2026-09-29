@@ -54,6 +54,29 @@ The old shader chain `sp = 1.6·dir + seedOffset`, multiplied by 2.03 per octave
 - **ALT** on the HUD is height above the ground under you.
 - **Surface speed limit** (`flight.ts surfaceLimit`): with flight assist on, speed against the ground is capped at 0.2 × height per second, never below 8 m/s (4 km/s at 20 km, 200 m/s at 1 km). It covers falling as well, so a hands-off or full-thrust dive eases down and touches down at ~8 m/s instead of hitting the ground. Shift triples it. The HUD bar shows it as SURFACE LIMIT.
 
+## City lights (`render/shaders/cityLights.glsl`)
+
+Earth-like worlds are populated: their night side lights up (`uCity`, set in SceneRenderer for
+`WT.EarthLike`). The lights fade in past the terminator, are dimmed by the air above them like the
+ground, and are drawn by the planet shader on both the far sphere and the terrain chunks.
+
+- **Where people live** (`cityPop`): land, not the high ranges or the ice caps, three times as
+  crowded along the coasts, in broad settled regions with wilderness between (two noise octaves).
+  So the planet shader keeps up to 8 terrain octaves at night on these worlds (3 elsewhere):
+  the coastlines are where the lights are.
+- **What they look like**, far to near, each layer fading in as its detail grows past a few pixels
+  (and left out while it's smaller, which is the filtering): ragged fractal urban areas (fBm), four
+  levels of city blobs (~500 km to ~8 km cells) making bright cities with towns round them, a web
+  of main roads (ridged noise, ~25 to ~3 km), four levels of scattered specks (~8 km to ~125 m
+  cells) that a lit area breaks into, a street grid ~200 m apart turned per district, and sparse
+  villages and farms in the countryside. Each layer averages 1 over its own scale (constants from
+  Monte Carlo), so the brightness holds as the detail resolves.
+- **Brightness**: rolled off at 1.3 (× `CITY_K`), just under where the tone map turns everything
+  flat white; above that every city was the same beige disc.
+- The look was tuned against a numpy replica of the shader rendering 20 km, 1 km, 250 m and 40 m
+  per pixel side by side: much faster than in the game. Cascades of pure blobs looked like polka
+  dots up close; noise alone looked like fog; the mix above reads like night photos from orbit.
+
 ## Not yet
 
 - Shadows are per vertex: finer relief (bump-mapped) shades itself but casts nothing.
