@@ -14,7 +14,7 @@ import { advanceBodies, frameVel, relVel, ringFrameOf, syncFrame, updateFrame } 
 import { maybeFtlLeg } from './planner';
 import { updateScan } from './scanner';
 import { updateNav } from './navroute';
-import { scoop, shipMass, solarPower } from './resources';
+import { scoop, shipMass, solarPower, turnThrust } from './resources';
 import { crossSection, updateThermal } from './thermal';
 import { battCap, beginPower, grant, settleBattery } from './power';
 import { railsStep, stopWarp, warpBlocked } from './timewarp';
@@ -104,8 +104,13 @@ export function update(g: Game, dt: number, realDt = dt) {
     // the attitude thrusters bring the turn rate there (and back to rest) at ANG_ACC, less if heavy
     const acc = ANG_ACC * zs * Math.min(1.5, ANG_REF_MASS / shipMass(ship)) * realDt;
     const av = g.angVel;
-    const toward = (w: number, want: number) => w + Math.max(-acc, Math.min(acc, want - w));
-    av.set(toward(av.x, wp), toward(av.y, wy), toward(av.z, wr));
+    const step = (w: number, want: number) => Math.max(-acc, Math.min(acc, want - w));
+    const dx = step(av.x, wp),
+      dy = step(av.y, wy),
+      dz = step(av.z, wr);
+    // the attitude thrusters pay for it (sim/resources.ts turnThrust), and deliver only what they can
+    const got = turnThrust(g, Math.hypot(dx, dy, dz), realDt);
+    av.set(av.x + dx * got, av.y + dy * got, av.z + dz * got);
     const pitch = av.x * realDt,
       yaw = av.y * realDt,
       roll = av.z * realDt;

@@ -159,3 +159,25 @@ export function refillShip(g: Game) {
   ship.batt = battCap(ship);
   g.warned = {};
 }
+
+/**
+ * Metres of linear Δv the attitude thrusters spend per rad/s of change in the ship's turn rate: its
+ * moment of inertia (a 60 × 12 m cylinder, I ≈ M L² / 12 ≈ M × 300 m²) over the thrusters' lever arm
+ * (~30 m, at the ends): I / (M r) ≈ 10 m. At this ship's exhaust velocity a full 1 rad/s spin-up and
+ * stop costs ~15 kg.
+ */
+const TURN_K = 10;
+
+const turnT = new THREE.Vector3();
+
+/**
+ * Pay for changing the turn rate by `dw` (rad/s) this step: propellant and power, through the
+ * thrusters (so off, out of propellant or short of power they can't, or only partly). Returns the
+ * share of the change they delivered (0–1).
+ */
+export function turnThrust(g: Game, dw: number, dt: number) {
+  if (dw < 1e-9) return 1;
+  turnT.set(TURN_K * dw, 0, 0);
+  applyThrust(g, turnT, dt);
+  return turnT.x / (TURN_K * dw);
+}

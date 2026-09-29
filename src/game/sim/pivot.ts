@@ -9,6 +9,7 @@
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import { galPos } from './navigation';
+import { turnThrust } from './resources';
 
 /**
  * The turn has mass: it spins up at PIVOT_ACC, cruises at up to PIVOT_RATE, and brakes at PIVOT_ACC
@@ -81,7 +82,9 @@ export function updatePivot(g: Game, realDt: number, steered: boolean) {
   const k = 1 / Math.max(1, Math.sqrt(g.zoom.cur));
   const brake = Math.sqrt(2 * PIVOT_ACC * k * ang);
   const wantRate = Math.min(PIVOT_RATE * k, brake);
-  g.pivotRate = wantRate > g.pivotRate ? Math.min(wantRate, g.pivotRate + PIVOT_ACC * k * realDt) : wantRate;
+  const next = wantRate > g.pivotRate ? Math.min(wantRate, g.pivotRate + PIVOT_ACC * k * realDt) : wantRate;
+  // spinning up and braking are the attitude thrusters' work: paid for, and only as far as they can
+  g.pivotRate += (next - g.pivotRate) * turnThrust(g, Math.abs(next - g.pivotRate), realDt);
   const step = Math.min(ang, g.pivotRate * realDt);
   ship.q.rotateTowards(want, step).normalize();
 }
