@@ -204,7 +204,7 @@ export class PerfMonitor {
     const info = this.renderer.info;
     const db = this.renderer.getContext();
 
-    ctx.font = '11px "Share Tech Mono", ui-monospace, monospace';
+    ctx.font = '11px "Chakra Petch", system-ui, sans-serif';
     ctx.textBaseline = 'top';
     ctx.fillStyle = '#ffe6c7';
     ctx.fillText(`${(1000 / Math.max(avg, 0.01)).toFixed(0)} FPS   ${avg.toFixed(1)} ms   p95 ${p95.toFixed(1)}   max ${worst.toFixed(1)}`, 8, 6);

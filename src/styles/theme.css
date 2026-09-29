@@ -1,6 +1,9 @@
 /* Colour tokens, page base and the two full-screen canvases. */
 :root {
   color-scheme: dark;
+  /* one typeface for everything: no monospace anywhere (numbers keep their width with tabular
+     digits, below, instead) */
+  --ui-font: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
   --amber: #ffa53a;
   --amber-dim: rgba(255, 165, 58, .58);
   --amber-faint: rgba(255, 165, 58, .2);
@@ -17,10 +20,14 @@ html { font-size: clamp(14px, 0.42vw + 8px, 22px); }
 [hidden] { display: none !important; }
 html, body { height: 100%; margin: 0; background: var(--void); overflow: hidden; }
 body {
-  font-family: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
+  font-family: var(--ui-font);
   color: var(--amber);
   user-select: none;
   -webkit-user-select: none;
 }
 #gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; }
 #ov { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+
+/* digits all one width, so readouts don't jitter as they change: what the monospace font was for.
+   (!important: the `font` shorthand in many rules would otherwise reset it) */
+*, *::before, *::after { font-variant-numeric: tabular-nums !important; }

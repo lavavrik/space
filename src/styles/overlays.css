@@ -35,7 +35,7 @@
 .kbrow { display: flex; gap: 2px; }
 .kc {
   flex: none; height: 1.583rem; display: grid; place-items: center; box-sizing: border-box;
-  font: 0.833rem "Share Tech Mono", ui-monospace, monospace; color: rgba(255, 230, 199, .28);
+  font: 0.833rem var(--ui-font); color: rgba(255, 230, 199, .28);
   border: 1px solid rgba(255, 165, 58, .12); border-radius: 2px; overflow: hidden; white-space: nowrap;
 }
 .kc.gap { border-color: transparent; }
@@ -54,7 +54,7 @@
 .kgroup.ship .kgt, .kgroup.ship kbd { color: var(--g-ship); }
 .kgroup.planner .kgt, .kgroup.planner kbd { color: var(--g-planner); }
 #help kbd {
-  font-family: "Share Tech Mono", ui-monospace, monospace; color: var(--text);
+  font-family: var(--ui-font); color: var(--text);
   font-size: 0.917rem; white-space: nowrap;
 }
 #help span { color: var(--amber-dim); }
@@ -73,7 +73,7 @@
 .aventry:hover { border-color: var(--amber-dim); background: rgba(255, 165, 58, .07); }
 .aventry:disabled { cursor: default; opacity: .5; }
 .aventry kbd {
-  font: 1rem "Share Tech Mono", ui-monospace, monospace; color: var(--text); flex: none;
+  font: 1rem var(--ui-font); color: var(--text); flex: none;
   width: 1.7rem; height: 1.7rem; display: grid; place-items: center; border: 1px solid var(--amber-dim);
 }
 .avslot.busy .aventry kbd { border-color: var(--cyan); color: var(--cyan); }
@@ -81,9 +81,9 @@
 .avkind { font-size: .75rem; letter-spacing: .16em; color: var(--amber); }
 .avunit { font-size: 1.1rem; font-weight: 700; letter-spacing: .04em; color: var(--text); }
 .avdoes { font-size: .85rem; color: var(--text); opacity: .75; }
-.avstatus { font: .85rem "Share Tech Mono", ui-monospace, monospace; color: var(--amber-dim); margin-top: .1rem; }
+.avstatus { font: .85rem var(--ui-font); color: var(--amber-dim); margin-top: .1rem; }
 .avslot.busy .avstatus { color: var(--cyan); }
-.avspecs { font: .8rem "Share Tech Mono", ui-monospace, monospace; color: var(--amber-dim); line-height: 1.4; padding-left: 2.5rem; }
+.avspecs { font: .8rem var(--ui-font); color: var(--amber-dim); line-height: 1.4; padding-left: 2.5rem; }
 
 /* influences panel (B) */
 #influences { display: flex; flex-direction: column; gap: .15rem; }
@@ -103,7 +103,7 @@
 .oslot .avspecs { padding-left: 0; }
 .obtns { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .2rem; }
 .obtn {
-  pointer-events: auto; cursor: pointer; font: .8rem "Share Tech Mono", ui-monospace, monospace; color: var(--text);
+  pointer-events: auto; cursor: pointer; font: .8rem var(--ui-font); color: var(--text);
   background: none; border: 1px solid var(--amber-dim); padding: .15rem .45rem; align-self: flex-start;
 }
 .obtn:hover { background: rgba(255, 165, 58, .1); }
@@ -123,7 +123,7 @@
 }
 
 /* electrical schematic (U): wires carry power; dashes march the way it flows */
-.esch { width: 100%; height: auto; flex: none; display: block; margin: .2rem 0 .3rem; font-family: "Share Tech Mono", ui-monospace, monospace; }
+.esch { width: 100%; height: auto; flex: none; display: block; margin: .2rem 0 .3rem; font-family: var(--ui-font); }
 .esch .ebus { stroke: var(--amber); stroke-width: 3; stroke-linecap: round; }
 .esch .ew { fill: none; stroke: var(--amber-faint); stroke-dasharray: 2 4; }
 .esch .ew.on { stroke: #a8e68c; stroke-dasharray: 7 5; animation: eflow .9s linear infinite; }
@@ -161,9 +161,9 @@
 .avtile.busy .avicon { color: var(--cyan); }
 .avtile .avtext { display: flex; flex-direction: column; min-width: 0; }
 .avtile .avkind { display: flex; align-items: center; gap: .35rem; font-size: .72rem; letter-spacing: .16em; color: var(--amber); }
-.avtile .avkind kbd { position: absolute; top: .45rem; right: .5rem; font: .72rem "Share Tech Mono", ui-monospace, monospace; color: var(--text); border: 1px solid var(--amber-dim); padding: 0 .25rem; letter-spacing: 0; } /* hotkey pinned to the tile's top-right */
+.avtile .avkind kbd { position: absolute; top: .45rem; right: .5rem; font: .72rem var(--ui-font); color: var(--text); border: 1px solid var(--amber-dim); padding: 0 .25rem; letter-spacing: 0; } /* hotkey pinned to the tile's top-right */
 .avtile .avunit { padding-right: 1.6rem; font-size: .98rem; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.avtile .avstatus { font: .78rem "Share Tech Mono", ui-monospace, monospace; color: var(--amber-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 0; }
+.avtile .avstatus { font: .78rem var(--ui-font); color: var(--amber-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 0; }
 .avtile.busy .avstatus { color: var(--cyan); }
 .avmods { display: flex; gap: .25rem; margin-top: .1rem; font-size: .95rem; color: var(--amber); }
 .avmod { display: flex; }
@@ -184,12 +184,12 @@
 /* radar window (Shift+Y) */
 /* the scope stays put; only the contact list scrolls */
 #leftcol > #radar { display: flex; flex-direction: column; gap: .35rem; overflow: hidden; }
-.rdhead { display: flex; justify-content: space-between; align-items: center; font: .85rem "Share Tech Mono", ui-monospace, monospace; color: var(--amber-dim); }
+.rdhead { display: flex; justify-content: space-between; align-items: center; font: .85rem var(--ui-font); color: var(--amber-dim); }
 .rdhead .obtn { display: inline-flex; align-items: center; gap: .3rem; }
 .rdscope { width: 70%; align-self: center; aspect-ratio: 1; flex: none; height: auto; }
 .rdring { fill: none; stroke: var(--amber-faint); stroke-width: .8; }
 .rdaxis { stroke: rgba(255, 165, 58, .08); stroke-width: .6; }
-.rdlab { font: 6px "Share Tech Mono", monospace; fill: var(--amber-dim); }
+.rdlab { font: 6px var(--ui-font); fill: var(--amber-dim); }
 .rdship { fill: var(--amber); }
 .rddot { fill: var(--text); pointer-events: auto; cursor: pointer; }
 .rddot.below { fill-opacity: .45; }
@@ -208,7 +208,7 @@
 .rdname span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rdname .unk { color: var(--amber-dim); font-style: italic; }
 .rdkind { width: .55rem; height: .55rem; border-radius: 50%; flex: none; display: inline-block; }
-.rddist { font: .82rem "Share Tech Mono", ui-monospace, monospace; color: var(--amber-dim); }
+.rddist { font: .82rem var(--ui-font); color: var(--amber-dim); }
 .rdok { color: var(--amber); text-align: center; width: 1.5rem; }
 .rdrow .obtn { display: inline-flex; align-items: center; gap: .25rem; }
 #radar > * { flex-shrink: 0; }
@@ -238,14 +238,14 @@
 .cgrow { display: grid; grid-template-columns: .7rem 1fr auto; column-gap: .45rem; align-items: center; font-size: .9rem; }
 .cgrow .cgsw { width: .6rem; height: .6rem; grid-row: span 2; }
 .cgrow .cgname { color: var(--amber); letter-spacing: .05em; }
-.cgrow b { font: 400 .95rem "Share Tech Mono", ui-monospace, monospace; color: var(--text); text-align: right; }
-.cgrow .cgprice { font: .8rem "Share Tech Mono", ui-monospace, monospace; color: var(--amber-dim); }
+.cgrow b { font: 400 .95rem var(--ui-font); color: var(--text); text-align: right; }
+.cgrow .cgprice { font: .8rem var(--ui-font); color: var(--amber-dim); }
 .cgrow .obtn { grid-column: 2 / 4; justify-self: end; padding-top: 0; padding-bottom: 0; }
 .cgrow.empty { opacity: .45; }
 /* the radar's metal-rich finds (sim/prospect.ts), coloured as their markers in the view */
 .rdpros { display: flex; flex-direction: column; gap: .1rem; border-bottom: 1px solid var(--amber-faint); padding-bottom: .35rem; }
 .rdprow { display: grid; grid-template-columns: .55rem 1fr auto; column-gap: .45rem; align-items: center; font-size: .88rem; color: var(--text); }
-.rdprow .rdworth { grid-column: 2 / 4; font: .78rem "Share Tech Mono", ui-monospace, monospace; color: var(--amber-dim); }
+.rdprow .rdworth { grid-column: 2 / 4; font: .78rem var(--ui-font); color: var(--amber-dim); }
 .rdkind.pr-nickel-iron { background: rgb(200, 190, 175); }
 .rdkind.pr-cobalt-rich { background: rgb(110, 160, 255); }
 .rdkind.pr-platinum-rich { background: rgb(255, 215, 120); }
@@ -258,7 +258,7 @@
 .job.metal { border-left-color: rgba(255, 215, 120, .35); }
 .jtop { display: flex; justify-content: space-between; align-items: baseline; }
 .jkind { font-size: .75rem; letter-spacing: .18em; color: var(--amber-dim); }
-.jtop b { font: 400 .95rem "Share Tech Mono", ui-monospace, monospace; color: var(--text); }
+.jtop b { font: 400 .95rem var(--ui-font); color: var(--text); }
 .jtitle { color: var(--amber); font-size: .92rem; }
 .jsub { font-size: .8rem; color: var(--amber-dim); line-height: 1.35; }
 
@@ -273,8 +273,8 @@
 .trrow { display: grid; grid-template-columns: .7rem 1fr auto; column-gap: .45rem; align-items: center; font-size: .9rem; }
 .trrow .cgsw { width: .6rem; height: .6rem; grid-row: span 2; }
 .trrow .trname { color: var(--amber); }
-.trrow b { font: 400 .95rem "Share Tech Mono", ui-monospace, monospace; color: var(--text); text-align: right; }
-.trrow .trprice { font: .8rem "Share Tech Mono", ui-monospace, monospace; color: var(--amber-dim); }
+.trrow b { font: 400 .95rem var(--ui-font); color: var(--text); text-align: right; }
+.trrow .trprice { font: .8rem var(--ui-font); color: var(--amber-dim); }
 .trrow .obtn { grid-column: 2 / 4; justify-self: end; padding-top: 0; padding-bottom: 0; }
 .trrow.empty { opacity: .45; }
 .trup { color: #8fe08a; }
@@ -286,8 +286,8 @@
 .svhead { display: flex; align-items: center; gap: .4rem; font-size: .8rem; letter-spacing: .18em; text-transform: uppercase; color: var(--amber); }
 .svhead svg { font-size: 1.1rem; }
 .svline { display: flex; justify-content: space-between; align-items: baseline; gap: .5rem; font-size: .88rem; color: var(--amber-dim); }
-.svline b { font: 400 .92rem "Share Tech Mono", ui-monospace, monospace; color: var(--text); }
-.svbig { font: 400 1.15rem "Share Tech Mono", ui-monospace, monospace; color: var(--text); }
-.svcr { display: inline-flex; align-items: center; gap: .3rem; font: 400 .95rem "Share Tech Mono", ui-monospace, monospace; color: var(--text); }
+.svline b { font: 400 .92rem var(--ui-font); color: var(--text); }
+.svbig { font: 400 1.15rem var(--ui-font); color: var(--text); }
+.svcr { display: inline-flex; align-items: center; gap: .3rem; font: 400 .95rem var(--ui-font); color: var(--text); }
 .svfill .svto { opacity: .35; }
 .svslider { pointer-events: auto; width: 100%; accent-color: var(--amber); margin: 0; }

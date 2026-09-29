@@ -25,7 +25,7 @@ const AMB = 'rgba(255,165,58,',
   CYA = 'rgba(127,220,255,',
   MINT = 'rgba(115,255,178,', // stations (matches STATION_RGB in SceneRenderer)
   RED = 'rgba(255,91,70,'; // warnings (the mass lock's way out)
-const MONO = '"Share Tech Mono", monospace';
+/** The HUD's one typeface (no monospace: see styles/theme.css). */
 const SANS = '"Chakra Petch", system-ui, sans-serif';
 
 /** 2D canvas drawn over the 3D view: reticle, markers, labels, and full-screen effects. */
@@ -94,7 +94,7 @@ export class Overlay {
       ctx.stroke();
       const c = pts.reduce((a, p) => ({ x: a.x + p.x / 4, y: a.y + p.y / 4 }), { x: 0, y: 0 });
       ctx.fillStyle = MINT + '0.9)';
-      ctx.font = this.font(12, MONO);
+      ctx.font = this.font(12, SANS);
       ctx.textAlign = 'center';
       ctx.fillText('SLOT', c.x, Math.min(...pts.map((p) => p.y)) - 8 * this.ui);
     }
@@ -111,7 +111,7 @@ export class Overlay {
       ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
       ctx.stroke();
       ctx.fillStyle = AMB + '0.95)';
-      ctx.font = this.font(12, MONO);
+      ctx.font = this.font(12, SANS);
       ctx.textAlign = 'center';
       ctx.fillText(label, s.x, s.y - r - 6 * this.ui);
     }
@@ -151,7 +151,7 @@ export class Overlay {
       ctx.stroke();
     }
     ctx.fillStyle = AMB + 0.9 * a + ')';
-    ctx.font = this.font(13, MONO);
+    ctx.font = this.font(13, SANS);
     ctx.textAlign = 'center';
     const fov = g.fov;
     ctx.fillText(`PERISCOPE ${Math.round(z)}×  ·  FIELD ${fov < 1 ? (fov * 60).toFixed(1) + '′' : fov.toFixed(1) + '°'}`, cx, Math.max(14 * this.ui, cy - R - 10 * this.ui)); // above the field, clear of the flight panel
@@ -192,7 +192,7 @@ export class Overlay {
     ctx.fill();
     ctx.restore();
     ctx.fillStyle = color + '0.85)';
-    ctx.font = this.font(11, MONO);
+    ctx.font = this.font(11, SANS);
     ctx.textAlign = 'center';
     ctx.fillText(label, x, y + 22);
   }
@@ -282,7 +282,7 @@ export class Overlay {
     ctx.fillRect(0, 0, W, H);
     ctx.textAlign = 'center';
     ctx.fillStyle = CYA + '0.9)';
-    ctx.font = this.font(12, MONO);
+    ctx.font = this.font(12, SANS);
     ctx.fillText(`${j.dest.name.toUpperCase()} · ${st.left.toFixed(2)} LY TO GO`, cx, cy - Math.min(W, H) * 0.3);
   }
 
@@ -301,7 +301,7 @@ export class Overlay {
     ctx.font = this.font(15, SANS);
     ctx.fillText(reason, cx, cy + 4);
     ctx.fillStyle = `rgba(255,165,58,${0.8 * k})`;
-    ctx.font = this.font(12, MONO);
+    ctx.font = this.font(12, SANS);
     ctx.fillText(`RESTORING SHIP IN ${Math.max(0, t).toFixed(1)} S`, cx, cy + 34);
   }
 
@@ -324,7 +324,7 @@ export class Overlay {
     const { ctx } = this;
     this.drawExitMarker(s.x, s.y);
     ctx.fillStyle = RED + '0.85)';
-    ctx.font = this.font(10, MONO);
+    ctx.font = this.font(10, SANS);
     ctx.textAlign = 'center';
     ctx.fillText(label, s.x, s.y + 26);
   }
@@ -410,7 +410,7 @@ export class Overlay {
   private drawBodies(g: Game) {
     const { ctx, W, H } = this;
     const { ship } = g;
-    ctx.font = this.font(11, MONO);
+    ctx.font = this.font(11, SANS);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
     for (const b of g.cur.bodies) {
@@ -473,7 +473,7 @@ export class Overlay {
    */
   private drawStations(g: Game) {
     const { ctx, W, H } = this;
-    ctx.font = this.font(11, MONO);
+    ctx.font = this.font(11, SANS);
     ctx.textAlign = 'center';
     for (const st of g.cur.stations) {
       const view = this.scene.stationViews.get(st);
@@ -559,7 +559,7 @@ export class Overlay {
       `METAL: NI-FE ${pct(m.mix.nife)} % · CO ${pct(m.mix.cobalt)} % · PGM ${pct(m.mix.pgm)} %`,
       ...(mined > 0.005 ? [`MINED ${Math.round(mined * 100)} %`] : []),
     ];
-    ctx.font = this.font(11, MONO);
+    ctx.font = this.font(11, SANS);
     ctx.textAlign = 'left';
     ctx.fillStyle = AMB + '0.95)';
     lines.forEach((t, i) => ctx.fillText(t, s.x + r + 8 * this.ui, s.y - r + 10 * this.ui + i * 14 * this.ui));
@@ -593,7 +593,7 @@ export class Overlay {
     ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
     ctx.stroke();
     ctx.fillStyle = RED + '0.95)';
-    ctx.font = this.font(12, MONO);
+    ctx.font = this.font(12, SANS);
     ctx.textAlign = 'center';
     ctx.fillText(label, s.x, s.y - r - 7 * this.ui);
     ctx.restore();
@@ -609,7 +609,7 @@ export class Overlay {
     if (!finds.length) return;
     const { ctx, W, H } = this;
     ctx.save();
-    ctx.font = this.font(10, MONO);
+    ctx.font = this.font(10, SANS);
     ctx.textAlign = 'left';
     ctx.lineWidth = 1.5 * this.ui;
     for (const [i, p] of finds.entries()) {
@@ -642,7 +642,7 @@ export class Overlay {
    */
   private drawTraffic(g: Game) {
     const { ctx, W, H } = this;
-    ctx.font = this.font(10, MONO);
+    ctx.font = this.font(10, SANS);
     for (const npc of g.traffic) {
       const isT = npc === g.target;
       if (!isT && !known(g, npc)) continue;
@@ -708,7 +708,7 @@ export class Overlay {
     const { ctx } = this;
     const gp = galPos(g);
     const dir = this.tmp;
-    ctx.font = this.font(10, MONO);
+    ctx.font = this.font(10, SANS);
     ctx.textAlign = 'center';
     const occ = occluders(g);
     for (const s of reachable(g)) {
@@ -739,7 +739,7 @@ export class Overlay {
     if (!pts.length) return;
     const { ctx, W, H } = this;
     const gp = galPos(g);
-    ctx.font = this.font(11, MONO);
+    ctx.font = this.font(11, SANS);
     ctx.textAlign = 'center';
     pts.forEach((p, i) => {
       const dir = p.pos.clone().sub(gp);
@@ -806,10 +806,10 @@ export class Overlay {
     const lx = left ? bx - 14 : bx + 14;
     ctx.textAlign = left ? 'right' : 'left';
     ctx.fillStyle = CYA + '1)';
-    ctx.font = this.font(12, MONO);
+    ctx.font = this.font(12, SANS);
     ctx.fillText(`${best.name} · ${best.star.spec}`, lx, by - 4);
     ctx.fillStyle = CYA + '0.75)';
-    ctx.font = this.font(11, MONO);
+    ctx.font = this.font(11, SANS);
     const dist = `${best.pos.distanceTo(gp).toFixed(1)} ly${from ? ` · ${best.pos.distanceTo(from.pos).toFixed(1)} ly from ${from.name}` : ''}`;
     ctx.fillText(`${dist} · click to add`, lx, by + 12);
   }

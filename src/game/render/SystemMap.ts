@@ -19,7 +19,8 @@ const AMB = 'rgba(255,176,64,',
   MINT = 'rgba(115,255,178,',
   CYA = 'rgba(127,220,255,',
   RED = 'rgba(255,91,70,';
-const MONO = '"JetBrains Mono", ui-monospace, monospace';
+/** The HUD's one typeface (no monospace: see styles/theme.css). */
+const FONT = '"Chakra Petch", system-ui, sans-serif';
 const FOV = 50;
 
 /** What the map is doing (Game.map). */
@@ -242,7 +243,7 @@ export class SystemMap {
     // bodies first, then the orbits over them, hidden where they pass behind one (orbits drawn
     // first were painted over by the discs even where they ran in front)
     this.occluders = [];
-    ctx.font = `${11 * ui}px ${MONO}`;
+    ctx.font = `${11 * ui}px ${FONT}`;
     ctx.textAlign = 'left';
     // labels: first come, first placed; one that would overlap a placed one is left out (the star
     // and planets are drawn first, so crowded moons and stations give way to them)
@@ -348,10 +349,10 @@ export class SystemMap {
     // title, scale and hints
     const focusName = m.focus === 'ship' ? 'your ship' : m.focus.name;
     ctx.fillStyle = AMB + '0.95)';
-    ctx.font = `${13 * ui}px ${MONO}`;
+    ctx.font = `${13 * ui}px ${FONT}`;
     ctx.textAlign = 'center';
     ctx.fillText(`SYSTEM MAP · ${g.cur.sys.name.toUpperCase()} · CENTRED ON ${focusName.toUpperCase()}`, W / 2, 26 * ui);
-    ctx.font = `${11 * ui}px ${MONO}`;
+    ctx.font = `${11 * ui}px ${FONT}`;
     ctx.fillStyle = AMB + '0.6)';
     ctx.fillText(`view ${fmtDist(m.dist)} out · drag to turn · wheel to zoom · click to target and centre · Shift+O closes`, W / 2, 44 * ui);
     // a scale bar: the biggest round length under 160 px

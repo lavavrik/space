@@ -4,7 +4,7 @@ import type { Readout } from '../../game/hud/types';
 const cx = (...names: (string | false | null | undefined)[]) => names.filter(Boolean).join(' ');
 export { cx };
 
-/** A label on the left and a monospace value on the right. */
+/** A label on the left and a value on the right. */
 export function Row({ label, value }: { label: string; value: string | Readout }) {
   const r = typeof value === 'string' ? { text: value } : value;
   return (
