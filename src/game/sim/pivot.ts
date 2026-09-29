@@ -10,9 +10,13 @@ import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import { galPos } from './navigation';
 
-/** Turn rate: the remaining angle shrinks by this factor per second (and at least PIVOT_MIN_RATE rad/s). */
-const PIVOT_EASE = 5,
-  PIVOT_MIN_RATE = 0.02;
+/**
+ * The turn has mass: it spins up at PIVOT_ACC, cruises at up to PIVOT_RATE, and brakes at PIVOT_ACC
+ * to arrive at rest (the most it can turn at while still stopping in the angle left: √(2 α θ)).
+ * It used to ease exponentially, fastest at the start: a ship with no mass, snapping round.
+ */
+const PIVOT_ACC = 1.2, // rad/s²
+  PIVOT_RATE = 1.0; // rad/s
 /** Close enough (rad): about 1″, well below a pixel even at 1,000× zoom. */
 const PIVOT_DONE = 5e-6;
 
@@ -34,6 +38,7 @@ export function startPivot(g: Game) {
     return;
   }
   g.pivot = true;
+  g.pivotRate = 0;
   g.ship.sunTrack = false; // it would turn the ship back toward the star
 }
 
@@ -50,6 +55,7 @@ export function updatePivot(g: Game, realDt: number, steered: boolean) {
   const dir = aimDir(g);
   if (steered || !dir || g.ship.ap?.phase === 'transfer' || g.jump || g.dock?.docked || g.ship.landed) {
     g.pivot = false;
+    g.pivotRate = 0;
     return;
   }
   const { ship } = g;
@@ -60,8 +66,14 @@ export function updatePivot(g: Game, realDt: number, steered: boolean) {
   if (ang < PIVOT_DONE) {
     ship.q.copy(want);
     g.pivot = false;
+    g.pivotRate = 0;
     return;
   }
-  const step = Math.max(ang * (1 - Math.exp(-PIVOT_EASE * realDt)), PIVOT_MIN_RATE * realDt);
+  // (zoomed in, the periscope's field is small: a slower, finer turn, as manual steering does)
+  const k = 1 / Math.max(1, Math.sqrt(g.zoom.cur));
+  const brake = Math.sqrt(2 * PIVOT_ACC * k * ang);
+  const wantRate = Math.min(PIVOT_RATE * k, brake);
+  g.pivotRate = wantRate > g.pivotRate ? Math.min(wantRate, g.pivotRate + PIVOT_ACC * k * realDt) : wantRate;
+  const step = Math.min(ang, g.pivotRate * realDt);
   ship.q.rotateTowards(want, step).normalize();
 }

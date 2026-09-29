@@ -130,6 +130,9 @@ function pilotFor(game: Game): Game {
     apConfirm: 0,
     orbitPreview: false,
     pivot: false,
+    pivotRate: 0,
+    steerUp: null,
+    steerQ: new THREE.Quaternion(),
     hudT: 0,
   };
   for (const k in own) Object.defineProperty(c, k, { value: own[k], writable: true, enumerable: true });

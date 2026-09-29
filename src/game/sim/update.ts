@@ -95,10 +95,16 @@ export function update(g: Game, dt: number, realDt = dt) {
       ship.sunTrack = false;
       g.showMsg('Sun tracking off · manual steering');
     }
+    // (something else turned the ship since steering last did: the pivot, an autopilot, docking...)
+    const turnedElsewhere = !ship.q.equals(g.steerQ);
     ship.q.multiply(qa.setFromAxisAngle(AY, yaw)).multiply(qa.setFromAxisAngle(AX, pitch)).multiply(qa.setFromAxisAngle(AZ, roll)).normalize();
+    if (roll !== 0 || turnedElsewhere || !g.steerUp) g.steerUp = new THREE.Vector3(0, 1, 0).applyQuaternion(ship.q);
+    else if (pitch !== 0 || yaw !== 0) lockRoll(g);
     // middle-click pivot (sim/pivot.ts); a deliberate mouse move or steering key takes over, jitter doesn't
     const steered = Math.abs(mdx) + Math.abs(mdy) > 2 || keys.ArrowUp || keys.ArrowDown || keys.ArrowLeft || keys.ArrowRight || keys.KeyQ || keys.KeyE;
     updatePivot(g, realDt, !!steered);
+    if (g.pivot) g.steerUp = new THREE.Vector3(0, 1, 0).applyQuaternion(ship.q);
+    g.steerQ.copy(ship.q);
   }
   g.qInv.copy(ship.q).invert();
   g.fwd.set(0, 0, -1).applyQuaternion(ship.q);
@@ -309,3 +315,34 @@ function updateTanker(g: Game, dt: number) {
     g.showMsg(prop < q.prop - 1 ? `Tanker docked · ${fmtCr(cost)} · out of credits: tanks part-filled` : `Tanker docked · tanks and battery full · ${fmtCr(cost)}`, prop < q.prop - 1 ? 'warn' : '');
   }
 }
+
+/**
+ * Manual steering never rolls the ship: only Q/E do. Turning by the mouse or the arrows is a yaw and
+ * a pitch about the ship's own axes each frame, and a loop of those adds up to a roll (circling the
+ * mouse slowly screwed the horizon round). So while you steer, the ship's top is held to a reference
+ * "up" (Game.steerUp, its part across the nose). Q/E move the reference; anything else that turns
+ * the ship (the pivot, autopilots, docking, sun tracking) re-seeds it from where it left the ship;
+ * looking straight along it (a pitch over the top) re-seeds it too, since there's no "up" to keep.
+ */
+function lockRoll(g: Game) {
+  const { ship } = g;
+  const ref = g.steerUp!;
+  lrNose.set(0, 0, -1).applyQuaternion(ship.q);
+  lrWant.copy(ref).addScaledVector(lrNose, -ref.dot(lrNose));
+  if (lrWant.lengthSq() < 0.02) {
+    ref.set(0, 1, 0).applyQuaternion(ship.q); // looking along it: nothing to hold to
+    return;
+  }
+  lrWant.normalize();
+  // the ship's axes with its top on the reference, the nose unchanged: x = up × back
+  lrBack.copy(lrNose).negate();
+  lrX.crossVectors(lrWant, lrBack).normalize();
+  lrM.makeBasis(lrX, lrWant, lrBack);
+  ship.q.setFromRotationMatrix(lrM).normalize();
+}
+
+const lrNose = new THREE.Vector3(),
+  lrWant = new THREE.Vector3(),
+  lrBack = new THREE.Vector3(),
+  lrX = new THREE.Vector3(),
+  lrM = new THREE.Matrix4();

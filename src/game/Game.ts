@@ -132,6 +132,15 @@ export class Game {
   radarVisible = false;
   /** Turning to face the target (middle mouse button; sim/pivot.ts). */
   pivot = false;
+  /** The pivot's turn rate (rad/s): it spins up and brakes (sim/pivot.ts). */
+  pivotRate = 0;
+  /**
+   * Manual steering's reference "up" (sim/update.ts): mouse and arrow turns keep the ship's roll
+   * against it, only Q/E change it; null until steering first uses it.
+   */
+  steerUp: THREE.Vector3 | null = null;
+  /** The orientation manual steering last left the ship in (anything else turning it re-seeds steerUp). */
+  steerQ = new THREE.Quaternion();
   /** Periscope (sim/periscope.ts): up or not, the magnification set, and the current (eased) one. */
   zoom = { on: false, mag: ZOOM_START, cur: 1 };
   /** Vertical field of view (degrees) right now: FOV narrowed by the periscope. */
