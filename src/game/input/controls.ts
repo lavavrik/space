@@ -23,19 +23,21 @@ export function onPress(g: Game, code: string) {
   if (code === 'Backquote') g.perf.toggle(); // performance overlay, available any time
   g.invalidateHud();
   if (code === 'Tab') g.helpVisible = !g.helpVisible;
-  // info (I), avionics (U), outfit (Shift+U), influences (B), radar (Shift+Y) and cargo (Shift+I)
-  // share the left column: opening one closes the others
+  // info (I), avionics (U), outfit (Shift+U), influences (B), radar (Shift+Y), cargo (Shift+I) and
+  // contracts (Shift+J) share the left column: opening one closes the others
   const shift = !!(keys.ShiftLeft || keys.ShiftRight);
-  if (code === 'KeyU' || code === 'KeyI' || code === 'KeyB' || (code === 'KeyY' && shift)) {
+  if (code === 'KeyU' || code === 'KeyI' || code === 'KeyB' || ((code === 'KeyY' || code === 'KeyJ') && shift)) {
     const outfit = code === 'KeyU' && shift,
       radar = code === 'KeyY',
-      cargo = code === 'KeyI' && shift;
-    const was = outfit ? g.outfitVisible : radar ? g.radarVisible : cargo ? g.cargoVisible : { KeyU: g.avionicsVisible, KeyI: g.infoVisible, KeyB: g.influencesVisible }[code as 'KeyU' | 'KeyI' | 'KeyB'];
-    g.avionicsVisible = g.infoVisible = g.influencesVisible = g.outfitVisible = g.radarVisible = g.cargoVisible = false;
+      cargo = code === 'KeyI' && shift,
+      jobs = code === 'KeyJ';
+    const was = outfit ? g.outfitVisible : radar ? g.radarVisible : cargo ? g.cargoVisible : jobs ? g.contractsVisible : { KeyU: g.avionicsVisible, KeyI: g.infoVisible, KeyB: g.influencesVisible }[code as 'KeyU' | 'KeyI' | 'KeyB'];
+    g.avionicsVisible = g.infoVisible = g.influencesVisible = g.outfitVisible = g.radarVisible = g.cargoVisible = g.contractsVisible = false;
     g.jettisonArm = null;
     if (outfit) g.outfitVisible = !was;
     else if (radar) g.radarVisible = !was;
     else if (cargo) g.cargoVisible = !was;
+    else if (jobs) g.contractsVisible = !was;
     else if (code === 'KeyU') g.avionicsVisible = !was;
     if (code === 'KeyB') g.influencesVisible = !was;
     if (code === 'KeyI' && !cargo) {
@@ -44,8 +46,8 @@ export function onPress(g: Game, code: string) {
     }
     // ship stats, outfit and influences are clicked through (entries, refit buttons, body names):
     // free the cursor on opening (checked after every toggle above, or B was never seen as open)
-    if (g.avionicsVisible || g.outfitVisible || g.influencesVisible || g.radarVisible || g.cargoVisible) document.exitPointerLock?.();
-    if (radar || cargo) return; // Shift+Y and Shift+I are only their windows
+    if (g.avionicsVisible || g.outfitVisible || g.influencesVisible || g.radarVisible || g.cargoVisible || g.contractsVisible) document.exitPointerLock?.();
+    if (radar || cargo || jobs) return; // Shift+Y, Shift+I and Shift+J are only their windows (J alone is FTL)
   }
   if ((g.jump && g.jump.phase !== 'charge') || ship.dead) return;
 

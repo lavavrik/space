@@ -41,6 +41,7 @@ export const GROUPS: { id: ControlGroup; title: string; keys: [string, string][]
       ['Y', 'scan target'],
       ['I', 'target info'],
       ['⇧I', 'cargo & tanks'],
+      ['⇧J', 'contracts: the job board'],
       ['⇧N', 'object names on / off'],
       ['⇧P', 'sound on / off'],
       ['B', 'influences'],

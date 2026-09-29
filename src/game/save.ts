@@ -19,6 +19,7 @@ import { minedRocks } from './sim/ringRocks';
 import { START_CREDITS } from './sim/economy';
 import type { Game } from './Game';
 import type { Switchable } from './sim/power';
+import type { Contract } from './sim/contracts';
 import { THREE } from './lib/three';
 import { ALL_COMPUTERS, type Avionics } from './avionics/catalog';
 import { UTILITY_SLOTS, batteryById, bestOutfit, moduleById } from './outfit/catalog';
@@ -61,6 +62,7 @@ export interface ShipSave {
   temp: number;
   hull?: number;
   cargo?: Ship['cargo'];
+  crates?: Ship['crates'];
   vent: boolean;
   sunTrack: boolean;
   landed: string | null;
@@ -125,6 +127,9 @@ export interface SaveData extends FlightSave {
   mined?: [string, number][];
   /** Your credits (absent in older saves: you start with START_CREDITS). */
   credits?: number;
+  /** Your contracts, and the board jobs taken or done (sim/contracts.ts; absent in older saves). */
+  contracts?: Contract[];
+  contractsSeen?: string[];
 }
 
 const v3 = (v: THREE.Vector3): V3 => [v.x, v.y, v.z];
@@ -155,6 +160,7 @@ function snapshotFlight(c: Game): FlightSave {
       temp: ship.temp,
       hull: ship.hull,
       cargo: { ...ship.cargo },
+      crates: { ...ship.crates },
       vent: ship.vent,
       sunTrack: ship.sunTrack,
       landed: ship.landed?.name ?? null,
@@ -225,6 +231,8 @@ export function snapshotGame(g: Game): SaveData | null {
     traffic: g.traffic.map(snapshotNpc).filter((n): n is NpcSave => !!n),
     mined: [...minedRocks],
     credits: g.credits,
+    contracts: g.contracts,
+    contractsSeen: [...g.contractsSeen],
   };
 }
 
@@ -320,7 +328,7 @@ function restoreFlight(c: Game, f: FlightSave) {
     dock: unit(s.avionics.dock) as Avionics['dock'],
   };
   Object.assign(ship, {
-    prop: s.prop, exotic: s.exotic, batt: s.batt, temp: s.temp, hull: s.hull ?? 1, cargo: { ...(s.cargo ?? {}) }, vent: s.vent, sunTrack: s.sunTrack,
+    prop: s.prop, exotic: s.exotic, batt: s.batt, temp: s.temp, hull: s.hull ?? 1, cargo: { ...(s.cargo ?? {}) }, crates: { ...(s.crates ?? {}) }, vent: s.vent, sunTrack: s.sunTrack,
     fa: s.fa, decoupled: s.decoupled, cruise: s.cruise, throttle: s.throttle, ftlSpeed: s.ftlSpeed, mode: s.mode,
     ftlCharge: 0, tanker: null, dead: null,
   });
@@ -391,6 +399,8 @@ function restore(g: Game, d: SaveData, sys: NonNullable<ReturnType<typeof system
   // the clock first: loading the system puts every world and station where it is at this time
   g.simTime = d.simTime;
   g.credits = d.credits ?? START_CREDITS;
+  g.contracts = d.contracts ?? [];
+  g.contractsSeen = new Set(d.contractsSeen ?? []);
   minedRocks.clear();
   for (const [k, left] of d.mined ?? []) minedRocks.set(k, left);
   g.loadSystem(sys);

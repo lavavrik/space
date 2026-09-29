@@ -8,6 +8,7 @@ interface Actions {
   sell: () => void;
   outfit: () => void;
   cargo: () => void;
+  contracts: () => void;
   launch: () => void;
   catapult: () => void;
 }
@@ -41,6 +42,9 @@ export function DockedPanel({ d, act }: { d: NonNullable<HudSnapshot['docked']>;
             sell the hold · {d.cargo}
           </button>
         )}
+        <button type="button" className="obtn" onClick={act.contracts}>
+          job board (⇧J)
+        </button>
         <button type="button" className="obtn" onClick={act.cargo}>
           cargo (⇧I)
         </button>

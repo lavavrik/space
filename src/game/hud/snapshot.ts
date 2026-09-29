@@ -31,11 +31,12 @@ import { deflectorFitted, guardFitted, laserFitted } from '../outfit/catalog';
 import { threatNow } from '../sim/belt';
 import { rockLabel } from '../sim/ringRocks';
 import { liveProspects, prospectNow } from '../sim/prospect';
+import { MAX_ACTIVE, board, canDeliverMetal, cantTake, reach, type Contract } from '../sim/contracts';
 import { CARGO_CAP, COMMODITIES, cargoMass, cargoValue, fmtCr, refuelQuote, repairQuote, sellPrice, type Commodity } from '../sim/economy';
 import { fitPrice } from '../outfit/fit';
 import { HULL_WARN, heatDamageRate } from '../sim/damage';
 import { buildInfo, stationKind } from './info';
-import type { CargoView, AutopilotView, AvionicsSlotView, ElectricalView, ModuleIcon, RadarView, OutfitView, FlightView, GaugeBadge, GaugeView, Lamp, NavView, GuideView, HudSnapshot, LocationView, Pill, PlannerView, Readout, SystemsView, TargetView } from './types';
+import type { ContractsView, JobView, CargoView, AutopilotView, AvionicsSlotView, ElectricalView, ModuleIcon, RadarView, OutfitView, FlightView, GaugeBadge, GaugeView, Lamp, NavView, GuideView, HudSnapshot, LocationView, Pill, PlannerView, Readout, SystemsView, TargetView } from './types';
 
 const tmp = new THREE.Vector3();
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
@@ -61,6 +62,7 @@ export function buildSnapshot(g: Game): HudSnapshot {
     outfit: g.outfitVisible ? outfitView(g) : null,
     radar: g.radarVisible ? radarView(g) : null,
     cargo: g.cargoVisible ? cargoView(g) : null,
+    contracts: g.contractsVisible ? contractsView(g) : null,
     docked: g.dock?.docked
       ? {
           station: g.dock.station.name,
@@ -375,6 +377,39 @@ function cargoGauge(g: Game): GaugeView {
   return { label: 'CARGO', value: `${fmtMass(kg)} / ${fmtMass(CARGO_CAP)}`, frac: kg / CARGO_CAP, sub: { text: `${fmtCr(g.credits)}${what}` } };
 }
 
+/** The contracts window (Shift+J): the board at the station you're docked at, and your jobs. */
+function contractsView(g: Game): ContractsView {
+  const st = g.dock?.docked ? g.dock.station : null;
+  const kg = (x: number) => (x >= 1000 ? `${(x / 1000).toFixed(1)} t` : `${Math.round(x)} kg`);
+  const job = (c: Contract, mine: boolean): JobView => {
+    const left = mine ? c.deadline - g.simTime : c.allow;
+    const elsewhere = c.to.sys !== g.cur.sys.id;
+    const title = c.kind === 'haul' ? `Haul ${kg(c.kg)} of ${c.what}` : c.kind === 'courier' ? `Courier · ${c.what}` : `Wanted · ${kg(c.kg)} of ${c.what}`;
+    const route = c.kind === 'metal' ? `to ${c.to.station}${elsewhere ? `, ${c.to.sysName}` : ''}` : `to ${c.to.station}${elsewhere ? `, ${c.to.sysName}` : ''} · ${reach(g, c)}`;
+    const have = c.kind === 'metal' ? g.ship.cargo[c.commodity!] ?? 0 : 0;
+    return {
+      id: c.id,
+      kind: c.kind,
+      title,
+      route,
+      client: c.client,
+      reward: fmtCr(c.reward),
+      time: { text: mine ? `${fmtTime(Math.max(0, left))} left` : `${fmtTime(left)} to do it`, warn: mine && left < 300 },
+      note: mine ? (c.kind === 'metal' ? `${kg(Math.min(have, c.kg))} of ${kg(c.kg)} in the hold` : null) : cantTake(g, c),
+      canDeliver: mine && canDeliverMetal(g, c),
+      canPlot: mine && !(st && st.name === c.to.station && !elsewhere),
+      armed: g.abandonArm?.id === c.id,
+    };
+  };
+  return {
+    station: st?.name ?? null,
+    board: st ? board(g, st).map((c) => job(c, false)) : [],
+    mine: g.contracts.map((c) => job(c, true)),
+    max: MAX_ACTIVE,
+    credits: fmtCr(g.credits),
+  };
+}
+
 /**
  * The cargo window (Shift+I): each metal in the hold with its value (at the docked station's
  * prices, else list), the tanks, and what the load costs in Δv.
@@ -408,6 +443,7 @@ function cargoView(g: Game): CargoView {
     dv: kg > 0.5 ? `${fmtSpeedText(dv)} · ${fmtSpeedText(dv0 - dv)} less than empty` : fmtSpeedText(dv),
     mining: lz.on && lz.metal > 0.01 ? `Laser catching ${lz.metal.toFixed(1)} kg/s of metal` : null,
     docked: !!st,
+    crates: g.contracts.filter((c) => c.kind === 'haul' && g.ship.crates[c.id]).map((c) => ({ what: c.what, mass: fmtMass(g.ship.crates[c.id]), to: c.to.station })),
     armed: g.jettisonArm?.c ?? null,
   };
 }

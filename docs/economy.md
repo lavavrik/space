@@ -50,6 +50,27 @@ batteries 4k/12k/25k/60k.
   - Below: the tanks, the ship's mass, and Δv left, with how much less that is than with an empty hold.
   - While the laser cuts: its metal catch per second.
 
+## Contracts (`sim/contracts.ts`; window: Shift+J, or "job board" when docked)
+
+Every station has a job board of 4 offers. It's the same for anyone who looks for 30 minutes of sim time (a hash of the station and the period), then a new one comes up. A job you've taken or finished isn't offered again on that board.
+
+| Job | What | Pay | Time |
+|---|---|---|---|
+| **Haul** | 5–60 t of crates to another station: in this system (60 %) or one within 15 ly | 1,500 + 1,500/AU + 40/t in system; 4,000 + 1,200/ly + 60/t to another | 20 min + 5 min/AU, or 25 min + 5 min/ly |
+| **Courier** | a data packet (no mass) to a station in another system | 3,000 + 1,500/ly | 10 min + 2.5 min/ly: tight |
+| **Metal order** | this station wants an amount of one metal (up to 2 t of platinum, 15 t of cobalt, 80 t of nickel-iron) | 2–3× its list price + 500 | 2–4 h |
+
+- **Holding jobs:** you can have up to 3 at once.
+  - Haul crates go in the hold (`Ship.crates`). They count in the ship's mass and use its room, so a haul needs space.
+- **Getting paid:**
+  - Hauls and courier runs pay when you dock at the destination.
+  - Metal orders are handed over from the hold with "deliver", docked at the station that asked, once you have enough.
+- **Finding the way:** "plot route" targets the station if it's in this system. If it's elsewhere, the nav computer plans a route to it (jumps, then a rendezvous), ready to engage in the nav panel.
+- **Failing:** a job past its deadline fails. Its crates are taken back and you pay 25 % of its reward, as far as your credits go. Abandoning (a second click) costs the same. You get a warning 5 minutes before a deadline.
+- **Losing the ship** loses the crates, so hauls fail. Courier runs and metal orders carry on.
+- **Scale:** a job pays about what 10–30 minutes of mining would. A platinum order can pay ~50,000 Cr, but you have to find and mine a platinum-rich rock first.
+- Jobs and the board history are saved.
+
 ## Not yet
 
 Buying and hauling commodities between stations (supply and demand), ship purchases, fines or

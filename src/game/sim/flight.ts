@@ -14,6 +14,7 @@ import { stationLimits } from './docking';
 import { TEMP } from './thermal';
 import { altitudeAt, reliefAmp, surfaceRadius } from './terrain';
 import { RING_HALF_THICK } from './rings';
+import { shipLost } from './contracts';
 
 const tmp = new THREE.Vector3(),
   tmp2 = new THREE.Vector3(),
@@ -235,7 +236,9 @@ export function respawn(g: Game) {
   ship.temp = TEMP.start;
   ship.hull = 1;
   const lost = Object.values(ship.cargo).some((kg) => (kg ?? 0) > 1);
+  shipLost(g); // contract crates went down with it: those hauls fail (sim/contracts.ts)
   ship.cargo = {}; // (the hold went down with the ship)
+  ship.crates = {};
   ship.vent = false; // the replacement comes with the same modules, stowed
   ship.outfit.deploy = false;
   ship.outfit.radiatorsOut = 0;

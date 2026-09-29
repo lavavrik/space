@@ -46,6 +46,15 @@ export function CargoPanel({ v, act }: { v: CargoView; act: Actions }) {
           </div>
         ))}
       </div>
+      {v.crates.map((c) => (
+        <div key={c.what + c.to} className="cgrow">
+          <i className="cgsw cg-crate" />
+          <span className="cgname">Crates · {c.what}</span>
+          <b>{c.mass}</b>
+          <span className="cgprice">contract · to {c.to}</span>
+          <b />
+        </div>
+      ))}
       <div className="sub">
         <span>WORTH {v.where.toUpperCase()}</span>
         <span>{v.total}</span>

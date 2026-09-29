@@ -223,6 +223,8 @@ export interface Ship {
   temp: number; // K, hull temperature (see sim/thermal.ts)
   hull: number; // structural integrity, 0–1 (0: lost; sim/damage.ts)
   cargo: Partial<Record<'nife' | 'cobalt' | 'pgm', number>>; // kg in the hold (sim/economy.ts)
+  /** Contract crates in the hold: job id → kg (sim/contracts.ts). They count in its mass and room. */
+  crates: Record<string, number>;
   vent: boolean; // venting hydrogen to cool the hull (R)
   outfit: Outfit; // modules in the utility slots (see outfit/catalog.ts)
   /** Power switches for loads that have no switch of their own (sim/power.ts; headlights and the heat pump do). */

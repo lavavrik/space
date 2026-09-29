@@ -14,6 +14,7 @@
 import type { Game } from '../Game';
 import { SHIP } from '../constants';
 import type { Station } from '../types';
+import { holdMass } from './resources';
 
 export const START_CREDITS = 25_000;
 /** The hold (kg). Its load counts in the ship's mass (sim/resources.ts dryMass). */
@@ -109,7 +110,8 @@ export function buyRepair(g: Game) {
 /** A commodity's price at a station (Cr/kg). */
 export const sellPrice = (st: Station | null, c: Commodity) => COMMODITIES[c].price * stationFactor(st, c);
 
-export const cargoMass = (g: Game) => (Object.values(g.ship.cargo) as number[]).reduce((a, b) => a + b, 0);
+/** Everything in the hold (kg): metal and contract crates (sim/contracts.ts). */
+export const cargoMass = (g: Game) => holdMass(g.ship);
 
 /** What the hold would fetch here. */
 export function cargoValue(g: Game, st: Station | null) {

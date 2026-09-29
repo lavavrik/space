@@ -10,7 +10,7 @@ import { fmtDist } from './format';
 import { Overlay } from './render/Overlay';
 import { defaultAvionics, type ComputerKind } from './avionics/catalog';
 import { PerfMonitor } from './debug/Perf';
-import { addNavResult, engageRoute, removeNavPoint, requestCancelRoute, type NavFinal, type NavMode, type Route } from './sim/navroute';
+import { addNavFinal, addNavResult, engageRoute, removeNavPoint, replan, requestCancelRoute, type NavFinal, type NavMode, type Route } from './sim/navroute';
 import { SceneRenderer } from './render/SceneRenderer';
 import type { Guide } from './sim/guide';
 import { pickAt, placeAtHome } from './sim/navigation';
@@ -18,6 +18,7 @@ import { closePlanner, openPlanner, requestDisengage } from './sim/planner';
 import { update } from './sim/update';
 import { ShipAudio } from './audio/ShipAudio';
 import type { Prospect } from './sim/prospect';
+import { PENALTY, abandon, accept, board, deliverMetal, destSystem, type Contract } from './sim/contracts';
 import type { Body, CurrentSystem, Jump, Message, MsgKind, Planner, Power, Ship, StarSystem, Station, Target } from './types';
 import { systemsNear } from './universe/galaxy';
 import { updateBodies } from './sim/kepler';
@@ -35,7 +36,7 @@ import { catapultLaunch, type Ascent } from './sim/catapult';
 import type { RockThreat } from './sim/belt';
 import { laserOff, type LaserState } from './sim/laser';
 import { mapClosed, type MapState } from './render/SystemMap';
-import { START_CREDITS, buyFuel, buyRepair, jettison, sellCargo, sellOne, type Commodity } from './sim/economy';
+import { START_CREDITS, buyFuel, buyRepair, fmtCr, jettison, sellCargo, sellOne, type Commodity } from './sim/economy';
 import type { AutoPhase } from './sim/autodock';
 import { fitBattery, fitModule, removeModule } from './outfit/fit';
 import { AUTOSAVE_S, clearSave, loadGame, saveGame } from './save';
@@ -47,7 +48,7 @@ export function newShip(): Ship {
     pos: new THREE.Vector3(), vel: new THREE.Vector3(), q: new THREE.Quaternion(),
     mode: 'normal', throttle: 0, cruise: false, ftlSpeed: 0, ftlCharge: 0, vmax: 0,
     fa: true, decoupled: false, travelDir: new THREE.Vector3(0, 0, -1), ap: null, landed: null, dead: null, grav: null,
-    hull: 1, cargo: {}, prop: SHIP.propCap, exotic: SHIP.exoticCap, batt: BATTERIES[BATTERIES.length - 1].caps.capacity,
+    hull: 1, cargo: {}, crates: {}, prop: SHIP.propCap, exotic: SHIP.exoticCap, batt: BATTERIES[BATTERIES.length - 1].caps.capacity,
     burnRate: 0, sunTrack: false, tanker: null, scoop: '', scoopRate: { prop: 0, exotic: 0 }, avionics: defaultAvionics(), temp: TEMP.start, vent: false, outfit: bestOutfit(),
     breakers: { thrust: true, ftl: true, charge: true, radar: true, shield: true, guard: true },
   };
@@ -131,6 +132,12 @@ export class Game {
   radar: { sweep: number; seen: Set<string>; rocks: Prospect[] } = { sweep: 0, seen: new Set(), rocks: [] };
   /** Headlights (Shift+L): a floodlight cone along the nose (render/shaders/headlight.glsl). */
   lights = true;
+  /** Your contracts (sim/contracts.ts), the board jobs you've taken or finished (not offered again), and the contracts window (Shift+J). */
+  contracts: Contract[] = [];
+  contractsSeen = new Set<string>();
+  contractsVisible = false;
+  /** Abandoning a job: waiting for the second click (s left). */
+  abandonArm: { id: string; t: number } | null = null;
   /** Cargo window (Shift+I), in the left column; and a jettison waiting for its second click (s left). */
   cargoVisible = false;
   jettisonArm: { c: Commodity; t: number } | null = null;
@@ -419,9 +426,59 @@ export class Game {
     this.invalidateHud();
   }
 
+  /** The contracts window (Shift+J, or the docked panel's button): opens it in the left column. */
+  openContracts() {
+    this.avionicsVisible = this.infoVisible = this.influencesVisible = this.outfitVisible = this.radarVisible = this.cargoVisible = false;
+    this.contractsVisible = true;
+    this.invalidateHud();
+  }
+  /** Contracts window: take a job off the board, deliver metal, abandon (twice), plot the way there. */
+  acceptJob(id: string) {
+    const st = this.dock?.docked ? this.dock.station : null;
+    const c = st && board(this, st).find((x) => x.id === id);
+    if (c) accept(this, c);
+    this.invalidateHud();
+  }
+  deliverJob(id: string) {
+    const c = this.contracts.find((x) => x.id === id);
+    if (c) deliverMetal(this, c);
+    this.invalidateHud();
+  }
+  abandonJob(id: string) {
+    const c = this.contracts.find((x) => x.id === id);
+    if (c && this.abandonArm?.id === id) {
+      this.abandonArm = null;
+      abandon(this, c);
+    } else if (c) {
+      this.abandonArm = { id, t: 3 };
+      this.showMsg(`Abandon it? Click again · the penalty is ${fmtCr(c.reward * PENALTY)}`, 'warn');
+    }
+    this.invalidateHud();
+  }
+  plotJob(id: string) {
+    const c = this.contracts.find((x) => x.id === id);
+    if (!c) return;
+    if (c.to.sys === this.cur.sys.id) {
+      const st = this.cur.stations.find((s) => s.name === c.to.station);
+      if (st) {
+        this.target = st;
+        this.showMsg(`Target · ${st.name} · the autopilot's rendezvous takes you there (O)`);
+      }
+    } else {
+      const sys = destSystem(c);
+      if (!sys || this.route?.running) return this.showMsg('The nav computer is flying a route · cancel it first (M)', 'warn');
+      addNavFinal(this, sys, 'station', c.to.station);
+      this.navPanel = true;
+      document.exitPointerLock?.();
+      replan(this);
+      this.showMsg(`Route to ${c.to.station}, ${c.to.sysName} · Enter in the nav panel (M) to fly it`);
+    }
+    this.invalidateHud();
+  }
+
   /** The docked panel's cargo button: the cargo window (as Shift+I). */
   openCargo() {
-    this.avionicsVisible = this.infoVisible = this.influencesVisible = this.outfitVisible = this.radarVisible = false;
+    this.avionicsVisible = this.infoVisible = this.influencesVisible = this.outfitVisible = this.radarVisible = this.contractsVisible = false;
     this.cargoVisible = true;
     this.invalidateHud();
   }
@@ -558,6 +615,7 @@ export class Game {
       this.saveT = AUTOSAVE_S;
       this.saveNow();
     }
+    if (this.abandonArm && (this.abandonArm.t -= dt) <= 0) this.abandonArm = null;
     if (this.jettisonArm && (this.jettisonArm.t -= dt) <= 0) {
       this.jettisonArm = null;
       this.invalidateHud();

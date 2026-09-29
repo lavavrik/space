@@ -230,6 +230,7 @@
 .cg-nife { background: #b7aa98 !important; }
 .cg-cobalt { background: #5b8cff !important; }
 .cg-pgm { background: #f3e2a8 !important; }
+.cg-crate { background: var(--amber-dim); }
 .cglist { display: flex; flex-direction: column; gap: .15rem; margin: .2rem 0; }
 .cgrow { display: grid; grid-template-columns: .7rem 1fr auto; column-gap: .45rem; align-items: center; font-size: .9rem; }
 .cgrow .cgsw { width: .6rem; height: .6rem; grid-row: span 2; }
@@ -245,3 +246,15 @@
 .rdkind.pr-nickel-iron { background: rgb(200, 190, 175); }
 .rdkind.pr-cobalt-rich { background: rgb(110, 160, 255); }
 .rdkind.pr-platinum-rich { background: rgb(255, 215, 120); }
+
+/* contracts window (Shift+J): jobs as small cards */
+#leftcol > #contracts { display: flex; flex-direction: column; gap: .35rem; }
+#contracts > * { flex-shrink: 0; }
+.job { border-left: 2px solid var(--amber-faint); padding: .15rem 0 .25rem .5rem; display: flex; flex-direction: column; gap: .1rem; }
+.job.courier { border-left-color: var(--cyan-faint); }
+.job.metal { border-left-color: rgba(255, 215, 120, .35); }
+.jtop { display: flex; justify-content: space-between; align-items: baseline; }
+.jkind { font-size: .75rem; letter-spacing: .18em; color: var(--amber-dim); }
+.jtop b { font: 400 .95rem "Share Tech Mono", ui-monospace, monospace; color: var(--text); }
+.jtitle { color: var(--amber); font-size: .92rem; }
+.jsub { font-size: .8rem; color: var(--amber-dim); line-height: 1.35; }

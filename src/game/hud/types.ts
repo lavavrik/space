@@ -286,6 +286,7 @@ export interface HudSnapshot {
   outfit: OutfitView | null;
   radar: RadarView | null;
   cargo: CargoView | null;
+  contracts: ContractsView | null;
   /** Docked at a station: its name, the pad, and what the station is doing for the ship. */
   docked: { station: string; pad: number; notes: string[]; sky: boolean; hullFull: boolean; tanksFull: boolean; credits: string; refuel: string; repair: string; cargo: string | null } | null;
   nav: NavView | null;
@@ -318,6 +319,35 @@ export interface CargoView {
   /** The laser's metal catch right now, if it's cutting. */
   mining: string | null;
   docked: boolean;
+  /** Contract crates in the hold (sim/contracts.ts): what, how much, and where they're going. */
+  crates: { what: string; mass: string; to: string }[];
   /** A jettison waiting for its second click. */
   armed: 'nife' | 'cobalt' | 'pgm' | null;
+}
+
+/** A job, on the board or yours (sim/contracts.ts). */
+export interface JobView {
+  id: string;
+  kind: 'haul' | 'courier' | 'metal';
+  title: string; // "Haul 24 t of optics"
+  route: string; // "to Newton Orbital · 1.20 AU" or "to Kepler Hub, Arden · 6.3 ly"
+  client: string;
+  reward: string;
+  /** Time allowed (board) or left (yours), and whether it's getting short. */
+  time: { text: string; warn: boolean };
+  /** Board: why it can't be taken. Yours: metal progress ("12.3 t of 20 t in the hold"). */
+  note: string | null;
+  canDeliver: boolean;
+  /** Its destination is elsewhere: the nav computer can plot it. */
+  canPlot: boolean;
+  armed: boolean; // abandoning: waiting for the second click
+}
+
+/** The contracts window (Shift+J): the board where you're docked, and your jobs. */
+export interface ContractsView {
+  station: string | null;
+  board: JobView[];
+  mine: JobView[];
+  max: number;
+  credits: string;
 }
