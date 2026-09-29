@@ -4,6 +4,7 @@ import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import { airDensityAt, airSpeedLimit } from './catapult';
 import { stationAcc } from './stations';
+import { RING_HALF_THICK } from './rings';
 import type { ApproachProfile } from '../avionics/catalog';
 import type { Autopilot, Body, Gravity, Ship, Station } from '../types';
 import { atmoOf } from './atmosphere';
@@ -56,6 +57,8 @@ export function apInsertion(ship: Ship, ap: Autopilot): { P: THREE.Vector3; rT: 
  * computer (see avionics/catalog.ts); DEFAULT_PROFILE is the HX-8200's.
  */
 export const APPROACH_K = 0.3; // 1/s, final linear tail
+/** How fast the ring orbit's autopilot moves across the belt's slab (m/s): see the orbit branch. */
+const RING_ENTRY = 15;
 /** A rendezvous holds this far from the station (m): close enough for its frame, clear of the hull. */
 export const RDV_STANDOFF = 2000;
 export const DEFAULT_PROFILE: ApproachProfile = { acc: 25, radialCap: 5000, planeCap: 3000 };
@@ -264,7 +267,10 @@ export function autopilot(g: Game, dt: number, grav: Gravity) {
     const er = ap.r0 - r,
       dn = -rv.dot(n);
     const vr = Math.sign(er) * approachSpeed(Math.abs(er), prof.radialCap, prof.acc);
-    const vn = Math.sign(dn) * approachSpeed(Math.abs(dn), prof.planeCap, prof.acc);
+    let vn = Math.sign(dn) * approachSpeed(Math.abs(dn), prof.planeCap, prof.acc);
+    // into a ring's belt, slowly: braking to RING_ENTRY by the edge of its slab, so the pebbles met on
+    // the way in (one or two, crossing a dense band) are bumps, not hits (sim/ringContact.ts)
+    if (ap.type === 'ring') vn = Math.sign(vn) * Math.min(Math.abs(vn), Math.sqrt(RING_ENTRY * RING_ENTRY + 2 * prof.acc * Math.max(0, Math.abs(dn) - RING_HALF_THICK - 300)));
     const vCirc = tang.clone().multiplyScalar(vt); // circular velocity here (before tang is reused below)
     vDes = tang.multiplyScalar(vt).addScaledVector(up, vr).addScaledVector(n, vn);
     aFF = up

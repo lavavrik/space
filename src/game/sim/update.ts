@@ -23,6 +23,7 @@ import { updateRadar } from './radar';
 import { autodock } from './autodock';
 import { ascent, stopAscent } from './catapult';
 import { updateDamage } from './damage';
+import { ringContact } from './ringContact';
 import { SHORE_POWER, holdDocked, rotationCorrection, stationContact, updateDockRequest } from './docking';
 
 const qa = new THREE.Quaternion();
@@ -167,6 +168,7 @@ export function update(g: Game, dt: number, realDt = dt) {
       ship.pos.addScaledVector(ship.vel, dt);
       collide(g, dt);
       stationContact(g);
+      ringContact(g, dt); // the ring's rocks (sim/ringContact.ts)
       g.curSpeed = relVel(g).length();
     } else if (apSteering) {
       ftlTransfer(g, dt);

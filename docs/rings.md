@@ -35,4 +35,30 @@ Both views read the same density across the radius: bands from two octaves of si
 - **Belt speed limit:** 800 m/s (2,400 m/s with boost) while flight assist is on in a belt (`flight.ts BELT_MAX`), slow enough to pick a way among the rocks; the speed bar says BELT LIMIT.
 - **Approach strip:** a ringed world's ring edges are marked (RING, RING IN).
 
-Not yet: collisions with the rocks, and rocks as radar contacts or mining targets (SPACE-56).
+## Collisions (`sim/ringRocks.ts`, `sim/ringContact.ts`)
+
+- **The same rocks on the CPU.** `rocksNear` is an exact replica of the GPU generator: the same
+  integer hash (pcg3) and random stream (PCG-RXS-M-XS) in 32-bit maths, float32 rounding where the
+  GPU rounds, the same bins, cells and wrap. Checked by pointing the camera at a predicted 70 m rock
+  from 350 m: it was dead centre, the right size. Only the three mesh layers count (pebbles, rocks,
+  boulders); the speck layers are the same boulders far away.
+- **Sweep.** Each step, the ship's path is swept against the rocks round it (each rock's own orbital
+  motion over the step taken out): the earliest touch wins. ~0.05 ms a step, at any speed up to
+  tens of km/s.
+- **The ship's size** is its cross-section along its motion through the rocks: ~6 m across
+  nose-first, ~15 m side-on. Crossing 25 km of a dense band nose-first at up to 800 m/s met nothing;
+  side-on at 100 m/s, one pebble in 2 km (11 %).
+- **Damage** is the closing speed scaled by the reduced mass (`effectiveSpeed`: a 2 m pebble counts
+  ~0.35 of its speed, a boulder like the ground), through `sim/damage.ts` (scrape 3 m/s, a whole
+  hull at 150 m/s). Rocks are 1,500 kg/m³, half an ellipsoid's worth of their size.
+- **Response.** A rock lighter than the ship is knocked aside: the ship keeps going, less the
+  momentum it gave up, and that rock is left out for 2 minutes (it can't really move: it's drawn
+  from a hash; without this the ship stopped against a pebble and hit it again and again). A
+  heavier one bounces the ship back to where it touched, with 30 % of the closing speed.
+- **The ring orbit's autopilot** crosses into the slab at 15 m/s (braking to that by the slab's
+  edge), so the pebble or two in its way are bumps: into dense bands it arrives with at most a few
+  tenths of a percent of damage. If a heavy rock sits on its spot, it steps the orbit aside.
+- Not with time warp on (the ship is on the rocks' orbit then), nor for other ships yet.
+
+Not yet: dust erosion, protection (SPACE-57: deflector, warning radar), rocks as radar contacts or
+mining targets (SPACE-58).
