@@ -9,7 +9,7 @@ import type { ApproachProfile } from '../avionics/catalog';
 import type { Autopilot, Body, Gravity, Ship, Station } from '../types';
 import { atmoOf } from './atmosphere';
 import { velRel } from './frame';
-import { dropAlt, dropFTL, ftlSpeedLimit, ftlUpkeep, massLock } from './ftl';
+import { beltLock, dropAlt, dropFTL, ftlSpeedLimit, ftlUpkeep, massLock } from './ftl';
 import { minOrbitAlt } from './orbits';
 import { applyThrust } from './resources';
 
@@ -342,6 +342,20 @@ export function autopilot(g: Game, dt: number, grav: Gravity) {
     // over there), in its frame, then expressed relative to the autopilot body
     vDes = ul.multiplyScalar(CLIMB_OUT_V / rl).add(lock.vel).sub(b.vel);
     aFF = grav.vec.clone().negate();
+  }
+  // Setting off from a ring's belt for somewhere far (not the ring orbit itself): FTL can't start near
+  // its rocks (sim/ftl.ts beltLock), so first straight out of the slab, off the ring's plane, slowly
+  // while among the rocks (RING_ENTRY), then quicker, moving with them; the FTL leg starts once clear.
+  // (Flying the whole way on thrusters would plough across the belt at km/s.)
+  const belt = beltLock(g);
+  if (belt && ap.type !== 'ring' && ship.avionics.orbit?.caps.ftlLeg && apDistance(ship, ap) > 2 * AP_FTL_MIN) {
+    const rw = ship.pos.clone().sub(belt.pos);
+    const h = rw.dot(belt.axis);
+    const inSlab = Math.abs(h) < RING_HALF_THICK + 300;
+    const rr = Math.sqrt(Math.max(1, rw.lengthSq() - h * h));
+    const around = belt.axis.clone().cross(rw.clone().addScaledVector(belt.axis, -h)).normalize().multiplyScalar(Math.sqrt(belt.mu / rr));
+    vDes = belt.axis.clone().multiplyScalar((h < 0 ? -1 : 1) * (inSlab ? RING_ENTRY : 300)).add(around).add(belt.vel).sub(b.vel);
+    aFF = grav.vec.clone().negate().addScaledVector(rw.addScaledVector(belt.axis, -h), -belt.mu / (rr * rr * rr));
   }
   const err = vDes.sub(vRel);
   const a = err.clone().divideScalar(AP_TAU).add(aFF);

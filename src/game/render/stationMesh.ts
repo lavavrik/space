@@ -9,7 +9,7 @@
  * Built once and shared by every station.
  */
 import { THREE } from '../lib/three';
-import { HANGAR_R, HANGAR_Z0, HANGAR_Z1, SLOT_H, SLOT_W, TUNNEL_Z } from '../sim/stationGeom';
+import { CORRIDOR_M, HANGAR_R, HANGAR_Z0, HANGAR_Z1, SLOT_H, SLOT_W, TUNNEL_Z } from '../sim/stationGeom';
 
 type V3 = [number, number, number];
 
@@ -106,8 +106,8 @@ function mergeInto(a: THREE.BufferGeometry, b: THREE.BufferGeometry) {
 }
 
 /** Length of the entry corridor in front of the slot (m), and how much wider it is at the far end. */
-export const CORRIDOR_M = 5000,
-  CORRIDOR_GROW = 4;
+export const CORRIDOR_GROW = 4;
+export { CORRIDOR_M };
 /** Approach lights along each of the corridor's four edges. */
 const CORRIDOR_LIGHTS = 25;
 

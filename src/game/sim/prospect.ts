@@ -74,10 +74,19 @@ export function prospect(g: Game): Prospect[] {
   return found.sort((a, b) => b.perHour - a.perHour).slice(0, PROSPECT_MAX);
 }
 
-/** The finds still there (not mined away) in the belt you're in. */
+/** Finds further than this (m) are dropped: twice the sweep's reach, well past where they were worth it. */
+export const PROSPECT_FORGET = 2 * PROSPECT_FAR;
+
+/**
+ * The finds still worth marking: in the belt you're in, not mined away, and within PROSPECT_FORGET
+ * (they stayed marked forever otherwise, until the next sweep). The rest are forgotten for good.
+ */
 export function liveProspects(g: Game) {
   const w = g.frameBody as World;
-  return g.radar.rocks.filter((p) => p.world === w.name && (minedRocks.get(minedKey(w, p.id)) ?? 1) > 0);
+  const at = g.ship.pos.clone().sub(w.pos);
+  const now = new THREE.Vector3();
+  g.radar.rocks = g.radar.rocks.filter((p) => p.world === w.name && (minedRocks.get(minedKey(w, p.id)) ?? 1) > 0 && prospectNow(g, p, now).distanceTo(at) < PROSPECT_FORGET);
+  return g.radar.rocks;
 }
 
 /** Where a find is now (planet-centred). */

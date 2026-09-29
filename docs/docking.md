@@ -124,6 +124,18 @@ The docking computer never flies through the station on its way to the hold poin
   300 m/s.
 - It was checked over 50 runs: all five orbital stations, five directions each, both engaged
   from 20 km and handed over from a rendezvous at 5 km. Every run docked.
+- **It flies the whole corridor.**
+  - It lines up at the corridor's mouth, 5 km out on the slot's axis (`CORRIDOR_M`, now in `sim/stationGeom.ts`), and flies all the way in. Before, it lined up 600 m from the slot and cut in from the side.
+  - Down the corridor it goes at up to its approach speed, braking to its inside speed by the slot. Going out, it flies to the mouth.
+  - A ship already inside the corridor lines up where it is instead of backing out.
+  - Ships waiting for the slot queue beyond the mouth.
+- **Its nose stays on the slot.** Anywhere on the corridor's line (in it, or beyond its mouth, within its width) the ship faces the slot. It used to point along its way, and turned right round to back up to a queue spot, then back.
+- **Waiting for clearance, it holds still.**
+  - It holds the spot where it asked, in world axes relative to the station, not a point fixed in the turning station. Before, it re-aimed at wherever it had got to each frame and drifted in.
+  - On the way it brakes to arrive at the request range nearly at rest.
+  - If it's still fast when it asks (handed over from a rendezvous at ~500 m/s), it stops at up to 100 m/s².
+  - Its reference, the ship's offset from the station, is now set when it engages. The first step used a stale one, near the station's centre, and flew at the station.
+  - Checked over 50 runs: every orbital station, 5 directions each. All docked, with ~110 m of drift while waiting when K is pressed from afar, and ~1.7 km (braking from 500 m/s) when handed over from a rendezvous.
 - **When the ship is lost, the computers stand down.** The docking computer, its guide and the
   pivot used to carry on flying the replacement ship.
 

@@ -42,7 +42,7 @@ import type { Station } from '../types';
 import { DOCK_REQUEST_RANGE, requestDocking } from './docking';
 import { applyThrust } from './resources';
 import { airDensityAt, airSpeedLimit } from './catapult';
-import { HANGAR_R, padOf, stationPointVelAt, stationQuat } from './stationGeom';
+import { CORRIDOR_M, HANGAR_R, padOf, stationPointVelAt, stationQuat } from './stationGeom';
 import { stationAcc } from './stations';
 import { NORMAL_ACC } from '../constants';
 import { pilotName, queuePlace, slotUser, SLOT_QUEUE } from './control';
@@ -57,6 +57,8 @@ const APPROACH_NEAR = 3000,
 /** Thrust the computer allows itself (m/s²), and how quickly it corrects velocity (s). */
 const AUTO_ACC = 25,
   TAU = 0.6;
+/** How hard it stops (m/s²) when it's asked for a pad while still moving fast. */
+const WAIT_BRAKE = 100;
 /** Braking it plans with (m/s²): well under AUTO_ACC so it always has margin. */
 const BRAKE = 8;
 /** Clearance it keeps from the station's circumscribed sphere (m), and the radius (× size, + m) of
@@ -113,6 +115,10 @@ export function engageAutodock(g: Game, st: Station) {
   g.ship.sunTrack = false;
   g.autodock = { phase: g.dock ? 'hold' : g.dockRequest ? 'wait' : 'approach' };
   g.autodockStation = st;
+  // its reference, the ship's offset from the station, is otherwise only kept while it flies: fresh
+  // now, or its first step works from a stale one (latched as the spot to wait at, it was near the
+  // station's centre, and it flew at the station)
+  g.dockRel.subVectors(g.ship.pos, st.pos);
   const how = g.dock ? `pad ${g.dock.pad + 1}` : g.dockRequest ? 'waiting for clearance' : 'will request clearance on approach';
   g.showMsg(`${unit.model} ${unit.name} · docking at ${st.name} · ${how} · thrust keys take over`);
 }
@@ -123,6 +129,7 @@ export function engageAutoLaunch(g: Game, st: Station, pad: number) {
   if (!unit?.caps.launch) return;
   g.autodock = { phase: 'rise' };
   g.autodockStation = st;
+  g.dockRel.subVectors(g.ship.pos, st.pos);
   g.autodockPad = pad;
 }
 
@@ -153,6 +160,7 @@ export function autodock(g: Game, dt: number, gravVec: THREE.Vector3) {
     } else ad.phase = 'approach';
   } else if (ad.phase === 'wait' || ad.phase === 'approach') {
     ad.phase = 'hold'; // the pad came through
+    ad.waitAt = undefined;
     g.showMsg(`Docking computer · to ${st.name}, pad ${g.dock!.pad + 1}`);
   }
   const d = g.dock;
@@ -180,7 +188,16 @@ export function autodock(g: Game, dt: number, gravVec: THREE.Vector3) {
   // (lined up with the slot) or toward the axis (over the pad)
   let fwdL = new THREE.Vector3(0, 0, -1),
     upL = new THREE.Vector3(0, 1, 0);
-  const holdPt = sky ? new THREE.Vector3(0, 0, S * 0.87 + SKY_HOLD) : new THREE.Vector3(0, 0, S / 2 + HOLD_OUT);
+  // The corridor (render/stationMesh.ts): CORRIDOR_M out along the axis from the slot. The ship
+  // lines up at its mouth and flies it all the way in (it used to line up only HOLD_OUT from the
+  // slot and cut in from the side); one already in it lines up where it is. `onLane`: in the
+  // corridor, or on its line beyond the mouth, where the nose stays on the slot (pointing along its
+  // way it turned round backing up to a queue spot, then back).
+  const mouthZ = S / 2 + CORRIDOR_M;
+  const laneR = (z: number) => S * 0.5 + 0.35 * Math.min(Math.max(0, z - S / 2), CORRIDOR_M);
+  const onLane = !sky && p.z > S / 2 && Math.hypot(p.x, p.y) < laneR(p.z);
+  if (ad.phase === 'hold' && ad.entryZ === undefined) ad.entryZ = onLane && p.z < mouthZ ? Math.max(p.z, S / 2 + HOLD_OUT) : mouthZ;
+  const holdPt = sky ? new THREE.Vector3(0, 0, S * 0.87 + SKY_HOLD) : new THREE.Vector3(0, 0, ad.entryZ ?? mouthZ);
   const overPad = pad.pos.clone().multiplyScalar(S).addScaledVector(pad.up, PAD_ABOVE);
   // traffic control (sim/control.ts): may this ship use the slot now? Arriving, only if it's free
   // and no one ahead of it in the queue; leaving, only if it's free
@@ -189,19 +206,24 @@ export function autodock(g: Game, dt: number, gravVec: THREE.Vector3) {
   const slotTurn = sky || (!busy && (ad.phase !== 'hold' || queuePlace(g, st) === 0));
   switch (ad.phase) {
     case 'approach':
-      // toward the hold point, until in range to ask for a pad
+      // toward the hold point, until in range to ask for a pad: braking to arrive there nearly at
+      // rest, since it then holds that spot while it waits (arriving at speed it braked on for km
+      // past it, drifting in toward the station while it waited)
       target = holdPt;
-      cap = far ? farSpeed : unit.caps.approachSpeed;
+      cap = Math.min(far ? farSpeed : unit.caps.approachSpeed, 20 + Math.sqrt(2 * BRAKE * Math.max(0, p.length() - DOCK_REQUEST_RANGE * 0.9)));
       break;
     case 'wait':
-      // hold still against the station while traffic control answers
-      target = p.clone();
-      cap = 0;
+      // hold the spot it was at when it asked, against the station, while traffic control answers
+      // (re-aiming at wherever it had got to each frame let it drift in; kept in world axes, since
+      // a point fixed in the turning station off its axis would be flung round)
+      if (!ad.waitAt) ad.waitAt = rel.clone();
+      target = ad.waitAt.clone().applyQuaternion(qInv);
+      cap = unit.caps.approachSpeed;
       break;
     case 'hold':
       // the slot busy (another ship in it, or ahead in the queue): wait on its axis, further out
       // the further back in the queue (sim/control.ts); clear and first: to the hold point
-      target = slotTurn || sky ? holdPt : new THREE.Vector3(0, 0, S / 2 + HOLD_OUT + (1 + queuePlace(g, st)) * SLOT_QUEUE);
+      target = slotTurn || sky ? holdPt : new THREE.Vector3(0, 0, mouthZ + (1 + queuePlace(g, st)) * SLOT_QUEUE);
       cap = far ? farSpeed : unit.caps.approachSpeed;
       fwdL = new THREE.Vector3(0, 0, -1);
       upL = new THREE.Vector3(0, 1, 0);
@@ -214,7 +236,8 @@ export function autodock(g: Game, dt: number, gravVec: THREE.Vector3) {
       break;
     case 'enter':
       target = sky ? overPad : new THREE.Vector3(0, 0, axisZ);
-      cap = unit.caps.insideSpeed;
+      // down the corridor at up to the approach speed, braking to the inside speed by the slot
+      cap = sky ? unit.caps.insideSpeed : Math.min(unit.caps.approachSpeed, Math.sqrt(unit.caps.insideSpeed ** 2 + 2 * BRAKE * Math.max(0, p.z - S / 2 - 200)));
       fwdL = new THREE.Vector3(0, 0, -1);
       upL = new THREE.Vector3(0, 1, 0);
       break;
@@ -232,8 +255,9 @@ export function autodock(g: Game, dt: number, gravVec: THREE.Vector3) {
       upL = pad.up.clone();
       break;
     case 'exit':
-      target = holdPt;
-      cap = unit.caps.insideSpeed;
+      // out to the corridor's mouth (a sky deck: its hold point); faster once clear of the slot
+      target = sky ? holdPt : new THREE.Vector3(0, 0, mouthZ);
+      cap = !sky && p.z > S / 2 + 200 ? unit.caps.approachSpeed : unit.caps.insideSpeed;
       fwdL = new THREE.Vector3(0, 0, 1);
       upL = new THREE.Vector3(0, 1, 0);
       break;
@@ -281,6 +305,9 @@ export function autodock(g: Game, dt: number, gravVec: THREE.Vector3) {
     const room = Math.max(1, out - (S * 0.87 + KEEP_OUT));
     if (closing > 0) acc = Math.min(NORMAL_ACC, Math.max(AUTO_ACC, (1.5 * closing * closing) / (2 * room)));
   }
+  // waiting for clearance and still moving fast (handed over from a rendezvous at ~500 m/s): stop
+  // hard, so the spot it holds is near where it asked (at AUTO_ACC it slid ~5 km on before stopping)
+  if (ad.phase === 'wait' && ship.vel.clone().sub(vFrame).length() > 50) acc = Math.max(acc, WAIT_BRAKE);
   if (T.length() > acc) T.setLength(acc);
   T.multiplyScalar(dt);
   applyThrust(g, T, dt);
@@ -290,7 +317,7 @@ export function autodock(g: Game, dt: number, gravVec: THREE.Vector3) {
   // On the way to the hold point the nose points where it's going (at the station while waiting for
   // clearance), not strafing; only the last FACE_SLOT metres turn it to the slot's orientation.
   let fwdW: THREE.Vector3, upW: THREE.Vector3;
-  const cruising = ad.phase === 'approach' || ad.phase === 'wait' || (ad.phase === 'hold' && dist > FACE_SLOT);
+  const cruising = !onLane && (ad.phase === 'approach' || ad.phase === 'wait' || (ad.phase === 'hold' && dist > FACE_SLOT));
   if (cruising) {
     const way = ad.phase === 'wait' || target.distanceTo(p) < 1 ? p.clone().negate() : target.clone().sub(p);
     fwdW = toWorld(way).normalize();
@@ -312,6 +339,7 @@ export function autodock(g: Game, dt: number, gravVec: THREE.Vector3) {
     ad.phase = ph;
     ad.waitSince = undefined;
     ad.told = false;
+    ad.waitAt = undefined;
     g.showMsg(`Docking computer · ${msg}`);
   };
   // told once when it has to wait for the slot

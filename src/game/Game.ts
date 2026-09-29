@@ -116,7 +116,7 @@ export class Game {
   inStationRel = new THREE.Vector3();
   /** Docking computer (sim/autodock.ts): its phase, the station and pad it's working with, and the
    *  ship's offset from that station at the end of the last step. */
-  autodock: { phase: AutoPhase; waitSince?: number; told?: boolean } | null = null;
+  autodock: { phase: AutoPhase; waitSince?: number; told?: boolean; waitAt?: THREE.Vector3; entryZ?: number } | null = null;
   autodockStation: Station | null = null;
   autodockPad = 0;
   /** The ascent program after a sky station's catapult (sim/catapult.ts), while it flies. */

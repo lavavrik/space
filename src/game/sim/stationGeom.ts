@@ -23,6 +23,8 @@ export const SLOT_W = 0.4,
   SLOT_H = 0.12;
 /** The tunnel from the slot (front face, z = 0.5) back to the hangar's front wall. */
 export const TUNNEL_Z = 0.4;
+/** The entry corridor's length in front of the slot, along the spin axis (m): drawn by render/stationMesh.ts, flown by the docking computer. */
+export const CORRIDOR_M = 5000;
 export const HANGAR_R = 0.42,
   HANGAR_Z0 = -0.42,
   HANGAR_Z1 = TUNNEL_Z;

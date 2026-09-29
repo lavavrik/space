@@ -160,8 +160,10 @@ a new ship has the ML-6 in a 6th slot, and older saves get it fitted). Shift+M t
     tonnes, above everything else.
   - The finds are marked in the view (numbered diamonds coloured by metal) and listed in the radar
     window with Cr/h and Cr/kg.
+  - A find is dropped once it's mined away, when a new sweep replaces the list, or when you're more than 80 km from it (twice the sweep's reach). Before that last rule they stayed marked for as long as you were near that planet.
   - A platinum-rich rock makes about 50–60,000 Cr/h under the ML-6, against about 10,000–20,000 for a
     nickel-iron one.
+- **No FTL near the belt** (`sim/ftl.ts beltLock`): the drive won't start among a ring's rocks or within 10 km of their slab (off its plane or past its edges). The rocks are far outside the world's mass lock, so before this you could jump to FTL from among them. An autopilot setting off from the belt for somewhere far (not the ring orbit itself) first climbs straight out of the slab, at 15 m/s while among the rocks and then at 300 m/s, moving with them, and takes its FTL leg once clear.
 - **The laser switches off** when the rock it's cutting is mined away.
 - **Headlights (Shift+L) light the rocks.** They use the same lamp as on the stations
 (`shaders/headlight.glsl`): a cone along the nose with inverse-square falloff. They're about as

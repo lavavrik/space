@@ -183,7 +183,9 @@
 
 /* radar window (Shift+Y) */
 /* the scope stays put; only the contact list scrolls */
-#leftcol > #radar { display: flex; flex-direction: column; gap: .35rem; overflow: hidden; }
+/* the whole window scrolls (scope, metal-rich rocks, contacts): with only the contact list scrolling,
+   the rocks section below the scope was cut off */
+#leftcol > #radar { display: flex; flex-direction: column; gap: .35rem; }
 .rdhead { display: flex; justify-content: space-between; align-items: center; font: .85rem var(--ui-font); color: var(--amber-dim); }
 .rdhead .obtn { display: inline-flex; align-items: center; gap: .3rem; }
 .rdscope { width: 70%; align-self: center; aspect-ratio: 1; flex: none; height: auto; }
@@ -212,7 +214,7 @@
 .rdok { color: var(--amber); text-align: center; width: 1.5rem; }
 .rdrow .obtn { display: inline-flex; align-items: center; gap: .25rem; }
 #radar > * { flex-shrink: 0; }
-#radar > .rdlist { flex-shrink: 1; }
+#radar > .rdlist { overflow-y: visible; flex: none; }
 /* controls panel footer: save status and "new game" */
 .savebar { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .5rem; padding-bottom: .4rem; border-bottom: 1px solid var(--amber-faint); font-size: .7rem; opacity: .85; }
 .obtn.warn { color: var(--red); border-color: var(--red); }

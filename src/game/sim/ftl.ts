@@ -7,6 +7,7 @@ import { THREE } from '../lib/three';
 import type { Body, Ship } from '../types';
 import { FRAME_ENTER, stationVel, stationWithin } from './frame';
 import { apLabel } from './orbits';
+import { RING_HALF_THICK } from './rings';
 
 /** How strongly a body's gravity well slows the FTL drive. */
 export function wellFactor(b: Body) {
@@ -26,6 +27,25 @@ export function massLock(g: Game) {
   for (const b of g.cur.bodies) {
     const alt = b.pos.distanceTo(g.ship.pos) - b.radius;
     if (alt < dropAlt(b) * MASS_LOCK_K) return b;
+  }
+  return null;
+}
+
+/** Within this of a ring belt's slab (m, off its plane or past its edges), the FTL drive won't start. */
+export const BELT_FTL_CLEAR = 10e3;
+
+/**
+ * The world whose ring belt is too close for the FTL drive to start (among its rocks, or within
+ * BELT_FTL_CLEAR of their slab), if any. A ring's rocks are well outside its world's mass lock, so
+ * without this you could jump to FTL from among them.
+ */
+export function beltLock(g: Game) {
+  for (const b of g.cur.bodies) {
+    if (b.kind === 'star' || !b.ring) continue;
+    const rel = g.ship.pos.clone().sub(b.pos);
+    const h = rel.dot(b.axis);
+    const r = Math.sqrt(Math.max(0, rel.lengthSq() - h * h));
+    if (Math.abs(h) < RING_HALF_THICK + BELT_FTL_CLEAR && r > b.ring.inner * b.radius - BELT_FTL_CLEAR && r < b.ring.outer * b.radius + BELT_FTL_CLEAR) return b;
   }
   return null;
 }
@@ -126,6 +146,11 @@ export function toggleFTL(g: Game) {
     g.showMsg(`Mass-locked by ${lock.name} · climb above ${fmtDist(dropAlt(lock) * MASS_LOCK_K)}`, 'warn');
     return;
   }
+  const belt = beltLock(g);
+  if (belt) {
+    g.showMsg(`Too close to ${belt.name}'s ring belt for FTL · get ${fmtDist(BELT_FTL_CLEAR)} clear of its rocks`, 'warn');
+    return;
+  }
   const blocked = ftlBlocked(ship);
   if (blocked) {
     g.showMsg(blocked, 'warn');
@@ -199,9 +224,9 @@ export function chargeFTL(g: Game, dt: number) {
     g.power.left += kw;
     g.power.chargeKW = 0;
     g.power.ftlShort = 0;
-    if (!massLock(g)) engageFTL(g);
+    if (!massLock(g) && !beltLock(g)) engageFTL(g);
     else if (ship.ap) ship.ap.phase = 'insert';
-    else g.showMsg('FTL aborted · mass-locked', 'warn');
+    else g.showMsg(beltLock(g) ? 'FTL aborted · too close to a ring belt' : 'FTL aborted · mass-locked', 'warn');
   }
 }
 

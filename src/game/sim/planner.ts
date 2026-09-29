@@ -6,7 +6,7 @@ import { THREE } from '../lib/three';
 import type { Autopilot, Body, OrbitType, Station, World } from '../types';
 import { ringDensity } from './rings';
 import { apDistance, holdPoint } from './autopilot';
-import { ftlBlocked, massLock } from './ftl';
+import { beltLock, ftlBlocked, massLock } from './ftl';
 import { dominantBody } from './gravity';
 import { startOrbitGuide } from './guide';
 import { apLabel, defaultOrbitAlt, evalPlan, maxOrbitR, minOrbitAlt, orbitNormal } from './orbits';
@@ -160,7 +160,7 @@ export function engageRendezvous(g: Game, st: Station) {
  */
 export function ftlWorthwhile(g: Game, ap: Autopilot) {
   if (!g.ship.avionics.orbit?.caps.ftlLeg) return false; // basic units fly it all on thrusters
-  return apDistance(g.ship, ap) > AP_FTL_MIN && !massLock(g) && !ftlBlocked(g.ship);
+  return apDistance(g.ship, ap) > AP_FTL_MIN && !massLock(g) && !beltLock(g) && !ftlBlocked(g.ship);
 }
 
 /**
