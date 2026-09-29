@@ -1,6 +1,8 @@
 /*
  * Pivot (middle mouse button): turn the ship to point its nose exactly at the target (or, with no
- * target, the jump destination star), keeping its current roll. The turn eases in fast and settles
+ * target, the jump destination star) by the shortest turn, so it never rolls: roll is Q/E's alone.
+ * (It used to keep the top as close as it could to where it was, which rolled the ship on the way
+ * round.) Not while docked or landed: the ship is held on the pad or sits on its gear. The turn eases in fast and settles
  * precisely; it keeps tracking a moving target until it's centred to within PIVOT_DONE, and any
  * manual steering takes over. Through the periscope it's the easy way to centre something tiny.
  */
@@ -14,15 +16,17 @@ const PIVOT_EASE = 5,
 /** Close enough (rad): about 1″, well below a pixel even at 1,000× zoom. */
 const PIVOT_DONE = 5e-6;
 
-const m = new THREE.Matrix4(),
-  want = new THREE.Quaternion(),
-  up = new THREE.Vector3(),
-  eye = new THREE.Vector3();
+const want = new THREE.Quaternion(),
+  nose = new THREE.Vector3();
 
 /** Middle click: start turning toward the target. */
 export function startPivot(g: Game) {
   if (g.jump) {
     g.showMsg('Hyperdrive is charging · it holds the nose on the destination', 'warn');
+    return;
+  }
+  if (g.dock?.docked || g.ship.landed) {
+    g.showMsg(g.dock?.docked ? 'Docked · the ship is held on the pad' : 'Landed · lift off to turn the ship', 'warn');
     return;
   }
   if (!g.target && !g.jumpDest) {
@@ -44,15 +48,14 @@ function aimDir(g: Game) {
 export function updatePivot(g: Game, realDt: number, steered: boolean) {
   if (!g.pivot) return;
   const dir = aimDir(g);
-  if (steered || !dir || g.ship.ap?.phase === 'transfer' || g.jump) {
+  if (steered || !dir || g.ship.ap?.phase === 'transfer' || g.jump || g.dock?.docked || g.ship.landed) {
     g.pivot = false;
     return;
   }
   const { ship } = g;
-  up.set(0, 1, 0).applyQuaternion(ship.q);
-  // lookAt points the object's −z along target − eye, keeping `up` as close as it can
-  m.lookAt(eye.set(0, 0, 0), dir, up);
-  want.setFromRotationMatrix(m);
+  // the shortest turn from the nose to the aim: about an axis across both, so no roll about the nose
+  nose.set(0, 0, -1).applyQuaternion(ship.q);
+  want.setFromUnitVectors(nose, dir).multiply(ship.q);
   const ang = ship.q.angleTo(want);
   if (ang < PIVOT_DONE) {
     ship.q.copy(want);
