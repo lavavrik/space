@@ -160,6 +160,6 @@ a new ship has the ML-6 in a 6th slot, and older saves get it fitted). Shift+M t
     tonnes, above everything else.
   - The finds are marked in the view (numbered diamonds coloured by metal) and listed in the radar
     window with Cr/h and Cr/kg.
-  - A platinum-rich rock makes about 50–60,000 Cr/h under the ML-6, against about 7,000 for a
+  - A platinum-rich rock makes about 50–60,000 Cr/h under the ML-6, against about 10,000–20,000 for a
     nickel-iron one.
 - **The laser switches off** when the rock it's cutting is mined away.
