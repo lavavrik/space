@@ -16,7 +16,7 @@ import { updateScan } from './scanner';
 import { updateNav } from './navroute';
 import { scoop, shipMass, solarPower, turnThrust } from './resources';
 import { crossSection, updateThermal } from './thermal';
-import { battCap, beginPower, grant, settleBattery } from './power';
+import { battCap, beginPower, grant, loadShed, settleBattery } from './power';
 import { railsStep, stopWarp, warpBlocked } from './timewarp';
 import { updatePivot } from './pivot';
 import { updateRadar } from './radar';
@@ -255,6 +255,7 @@ export function update(g: Game, dt: number, realDt = dt) {
   power.shore = g.dock?.docked ? SHORE_POWER : 0;
   power.draw = SHIP.baseLoad + power.thrustKW + power.ftlKW + power.chargeKW + power.pumpKW + power.radarKW + power.lightsKW + power.shieldKW + power.guardKW + power.laserKW;
   settleBattery(g, dt);
+  loadShed(g);
   if (ship.batt > 1) g.warned.batt = false;
   updateThermal(g, dt, inTunnel);
   updateDamage(g, dt); // (heat wear; impacts are taken where they happen)

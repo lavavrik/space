@@ -133,6 +133,8 @@ export class Game {
   /** Cargo window (Shift+I), in the left column; and a jettison waiting for its second click (s left). */
   cargoVisible = false;
   jettisonArm: { c: Commodity; t: number } | null = null;
+  /** Loads switched off by load shedding (sim/power.ts loadShed), to switch back on; null while the battery's fine. */
+  shed: Switchable[] | null = null;
   /** Radar window (Shift+Y), in the left column. */
   radarVisible = false;
   /** Turning to face the target (middle mouse button; sim/pivot.ts). */

@@ -18,6 +18,7 @@
 import { minedRocks } from './sim/ringRocks';
 import { START_CREDITS } from './sim/economy';
 import type { Game } from './Game';
+import type { Switchable } from './sim/power';
 import { THREE } from './lib/three';
 import { ALL_COMPUTERS, type Avionics } from './avionics/catalog';
 import { UTILITY_SLOTS, batteryById, bestOutfit, moduleById } from './outfit/catalog';
@@ -117,7 +118,8 @@ export interface SaveData extends FlightSave {
   navPoints: string[];
   navFinal: Game['navFinal'];
   navMode: NavMode;
-  settings: { lights: boolean; orbitPreview: boolean; radarVisible: boolean };
+  /** laser: firing (absent in older saves: off); shed: loads load shedding switched off (sim/power.ts). */
+  settings: { lights: boolean; orbitPreview: boolean; radarVisible: boolean; laser?: boolean; shed?: Switchable[] | null };
   /** The other ships in the system (absent in older saves: they're spawned afresh). */
   traffic?: NpcSave[];
   /** Ring rocks mined down: key → share of their size left (sim/ringRocks.ts minedRocks). */
@@ -221,7 +223,7 @@ export function snapshotGame(g: Game): SaveData | null {
     navPoints: g.navPoints.map((s) => s.id),
     navFinal: g.navFinal,
     navMode: g.navMode,
-    settings: { lights: g.lights, orbitPreview: g.orbitPreview, radarVisible: g.radarVisible },
+    settings: { lights: g.lights, orbitPreview: g.orbitPreview, radarVisible: g.radarVisible, laser: g.laser.on, shed: g.shed },
     traffic: g.traffic.map(snapshotNpc).filter((n): n is NpcSave => !!n),
     mined: [...minedRocks],
     credits: g.credits,
@@ -406,6 +408,8 @@ function restore(g: Game, d: SaveData, sys: NonNullable<ReturnType<typeof system
   g.lights = d.settings.lights;
   g.orbitPreview = d.settings.orbitPreview;
   g.radarVisible = d.settings.radarVisible;
+  g.laser.on = !!d.settings.laser; // mining carries on after a reload
+  g.shed = d.settings.shed ?? null;
   g.savedAt = d.savedAt;
 
   // saved mid-jump: the jump completes (and the next system's ships are met afresh)

@@ -76,11 +76,44 @@ export function loadOn(g: Game, id: Switchable) {
   return g.ship.breakers[id];
 }
 
-export function toggleLoad(g: Game, id: Switchable) {
-  const on = !loadOn(g, id);
+function setLoad(g: Game, id: Switchable, on: boolean) {
   if (id === 'lights') g.lights = on;
   else if (id === 'laser') g.laser.on = on;
   else if (id === 'pump') g.ship.outfit.pumpAuto = on;
   else g.ship.breakers[id] = on;
+}
+
+export function toggleLoad(g: Game, id: Switchable) {
+  const on = !loadOn(g, id);
+  setLoad(g, id, on);
   g.showMsg(`${SWITCH_NAMES[id]} ${on ? 'on' : 'off'}`, on ? '' : 'warn');
+}
+
+/**
+ * Load shedding: when the battery falls below SHED_BELOW of its capacity (in flight), everything
+ * but life support, the thrusters and the FTL drive (and its charging) is switched off, so what's
+ * left goes to getting home. What it switched off comes back on once the battery is over
+ * RESTORE_ABOVE (or docked, on shore power). It acts only as the battery crosses the line: a load
+ * you switch back on by hand while it's low stays on.
+ *
+ * (That includes the heat pump and the belt's deflector and collision radar: the hull can heat
+ * up, and a belt is no place to be caught with a flat battery.)
+ */
+export const SHED_BELOW = 0.1;
+export const RESTORE_ABOVE = 0.3;
+const SHEDDABLE: Switchable[] = ['laser', 'lights', 'radar', 'shield', 'guard', 'pump'];
+
+export function loadShed(g: Game) {
+  const { ship } = g;
+  const f = ship.batt / battCap(ship);
+  if (!g.shed && f < SHED_BELOW && !g.dock?.docked) {
+    g.shed = SHEDDABLE.filter((id) => loadOn(g, id));
+    for (const id of g.shed) setLoad(g, id, false);
+    if (g.shed.length) g.showMsg(`Battery under ${SHED_BELOW * 100} % · switched off ${g.shed.map((id) => SWITCH_NAMES[id].toLowerCase()).join(', ')} · life support, thrusters and FTL only`, 'warn');
+  } else if (g.shed && (f > RESTORE_ABOVE || g.dock?.docked)) {
+    const back = g.shed.filter((id) => !loadOn(g, id));
+    for (const id of back) setLoad(g, id, true);
+    g.shed = null;
+    if (back.length) g.showMsg(`Battery at ${Math.round(f * 100)} % · switched back on: ${back.map((id) => SWITCH_NAMES[id].toLowerCase()).join(', ')}`);
+  }
 }

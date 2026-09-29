@@ -29,6 +29,22 @@ Ship stats (U) draws the bus as a schematic, and every load you can switch off h
 
 The switches are saved with the ship. Later they may become power shares instead of on/off, to direct a weak bus where it matters.
 
+## Load shedding (`loadShed`)
+
+In flight, when the battery drops below 10 %, everything except life support, the thrusters and the
+FTL drive (with its charging) is switched off:
+- the mining laser and headlights;
+- the radar;
+- the belt's deflector and collision radar;
+- the heat pump.
+
+A message lists what went off. Those loads come back on above 30 % or when docked. Loads that were
+already off stay off.
+
+It acts only when the battery crosses the line, so a load you switch back on by hand while the
+battery is low stays on. The trade-off: the hull may heat up without the pump, and the belt
+protection is off.
+
 ## Battery
 
 The battery settles each frame after the loads:

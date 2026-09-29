@@ -23,7 +23,7 @@ The universe comes from seeds, so a save holds only what you changed:
 | **A hyperjump** | in transit, it's saved as its destination: on load you arrive there (and meet that system's ships afresh). While it's still charging, it isn't saved (you're back where you were). |
 | **What you know** | scan progress, radar contacts, the target (a world or station), a selected star, nav waypoints, the final stop and the route mode |
 | **Other ships** | every ship in the system (sim/traffic.ts): its name and class, its captain's task (docked, launching, travelling, docking, in orbit), where it is and is going, how long it's been at it, its trail, and the same flight state as yours above (they fly on the same code, so they're saved the same way: `snapshotFlight` / `restoreFlight` work on the game or on a ship's pilot context). Saves from before this have no ships in them; those systems spawn theirs afresh. |
-| **Settings** | headlights, orbit preview, radar window |
+| **Settings** | headlights, orbit preview, radar window, the mining laser (on, it keeps mining after a reload), loads switched off by load shedding |
 
 Not saved: a running nav route (its waypoints are kept; engage it again from the nav panel, M), a tanker on its way, the orbit planner, a scan in progress, time warp.
 
