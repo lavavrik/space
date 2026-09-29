@@ -31,6 +31,7 @@ import { toggleScan } from './sim/scanner';
 import { dockKey, launch, refuelDocked, type Dock } from './sim/docking';
 import { catapultLaunch, type Ascent } from './sim/catapult';
 import type { RockThreat } from './sim/belt';
+import { laserOff, type LaserState } from './sim/laser';
 import { repairDocked } from './sim/damage';
 import type { AutoPhase } from './sim/autodock';
 import { fitBattery, fitModule, removeModule } from './outfit/fit';
@@ -59,7 +60,7 @@ export class Game {
   /** Systems around the current one that a jump could reach (with a margin for moving within it). */
   nearby: StarSystem[] = [];
   readonly ship = newShip();
-  readonly power: Power = { solar: 0, shore: 0, cos: 0, shadow: null, draw: 0, net: 0, thrustKW: 0, ftlKW: 0, chargeKW: 0, pumpKW: 0, radarKW: 0, lightsKW: 0, shieldKW: 0, guardKW: 0, burn: 0, flux: 0, cap: 0, left: 0, limited: null, curtailed: 0, ftlShort: 0 };
+  readonly power: Power = { solar: 0, shore: 0, cos: 0, shadow: null, draw: 0, net: 0, thrustKW: 0, ftlKW: 0, chargeKW: 0, pumpKW: 0, radarKW: 0, lightsKW: 0, shieldKW: 0, guardKW: 0, laserKW: 0, burn: 0, flux: 0, cap: 0, left: 0, limited: null, curtailed: 0, ftlShort: 0 };
   /**
    * One selection at a time: a body or station (target) or a star to jump to (jumpDest). Setting
    * either clears the other. A hyperjump in progress keeps its own destination (jump.dest).
@@ -119,6 +120,8 @@ export class Game {
   erosion = 0;
   rockThreat: RockThreat | null = null;
   nudging = false;
+  /** The mining laser (sim/laser.ts): on or off, and what its beam is doing. */
+  laser: LaserState = laserOff();
   dockRel = new THREE.Vector3();
   /** Radar (sim/radar.ts): seconds left of the sweep in progress (0 = idle), and every object it
    *  has found (scan keys, so per system). */

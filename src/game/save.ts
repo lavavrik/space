@@ -20,8 +20,8 @@ import { THREE } from './lib/three';
 import { ALL_COMPUTERS, type Avionics } from './avionics/catalog';
 import { UTILITY_SLOTS, batteryById, bestOutfit, moduleById } from './outfit/catalog';
 
-/** The outfit's save format: 2 added utility slots 4 and 5 (belt protection). */
-const OUTFIT_REV = 2;
+/** The outfit's save format: 2 added utility slots 4 and 5 (belt protection), 3 slot 6 (mining laser). */
+const OUTFIT_REV = 3;
 import type { ApType, Npc, Ship, Target } from './types';
 import { systemById } from './universe/galaxy';
 import { resetFrame } from './sim/frame';
@@ -290,13 +290,14 @@ function restoreFlight(c: Game, f: FlightSave) {
   const s = f.ship;
   const batt = batteryById(s.outfit.battery);
   if (batt) ship.outfit.battery = batt;
-  // saves from before slots 4 and 5 (rev 1) get them fitted as on a new ship: the belt protection
-  // modules they came with (a save may already list them, empty, if written in between)
+  // slots added since a save was written come fitted as on a new ship: 4 and 5 (rev 2: belt
+  // protection), 6 (rev 3: the mining laser). (A save may already list them, empty, if written in between.)
   const stock = bestOutfit().slots;
-  const old = (s.outfit.rev ?? 1) < 2;
+  const rev = s.outfit.rev ?? 1;
+  const firstNew = rev < 2 ? 3 : rev < 3 ? 5 : UTILITY_SLOTS;
   ship.outfit.slots = Array.from({ length: UTILITY_SLOTS }, (_, i) => {
     const id = s.outfit.slots[i];
-    return id ? moduleById(id) : old && i >= 3 ? stock[i] : null;
+    return id ? moduleById(id) : i >= firstNew ? stock[i] : null;
   });
   ship.outfit.radiatorsOut = s.outfit.radiatorsOut;
   ship.outfit.deploy = s.outfit.deploy;

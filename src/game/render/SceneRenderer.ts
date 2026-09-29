@@ -17,6 +17,7 @@ import { hasCraters, reliefAmp, terrainOffsets, worldQuat } from '../sim/terrain
 import { atmoOf } from '../sim/atmosphere';
 import { PAD_R, padLocal, stationQuat } from '../sim/stationGeom';
 import { SKY_PAD_COUNT, skyPadLocal } from '../sim/skyGeom';
+import { LaserView } from './Laser';
 import { skyStationGeometry } from './skyMesh';
 import { occluder } from '../sim/sight';
 import { populated } from '../sim/population';
@@ -148,6 +149,8 @@ export class SceneRenderer {
   private skyGeo!: THREE.SphereGeometry;
   /** Other ships (render/Traffic.ts). */
   private readonly trafficView = new TrafficView();
+  /** The mining laser's beam and plume (render/Laser.ts). */
+  private readonly laserView = new LaserView();
   /** A ring's rocks up close (render/RingField.ts). */
   private readonly ringField: RingField;
   private readonly hyper = new HyperspaceView(() => this.pointsMaterial(), this.expUni.uStarExp);
@@ -184,6 +187,7 @@ export class SceneRenderer {
     this.ring.visible = false;
     this.scene.add(this.ring);
     this.scene.add(this.trafficView.group);
+    this.scene.add(this.laserView.group);
     this.ringField = new RingField(this.expUni.uExp, this.noise3d);
     this.scene.add(this.ringField.group);
 
@@ -761,6 +765,7 @@ export class SceneRenderer {
 
     this.updateDust(g);
     this.trafficView.update(g, this.PR);
+    this.laserView.update(g, this.PR);
     this.ringField.group.visible = ringDone;
     this.updateRing(g);
 
@@ -900,6 +905,7 @@ export class SceneRenderer {
     }
     this.noise3d.dispose();
     this.trafficView.dispose();
+    this.laserView.dispose();
     this.hdr.dispose();
     this.exposure.dispose();
     for (const geo of [this.geoHi, this.geoMid, this.geoLo, this.plane, this.box]) geo.dispose();

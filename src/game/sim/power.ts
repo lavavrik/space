@@ -27,7 +27,7 @@ export function busCapacity(g: Game) {
 export function beginPower(g: Game) {
   const { power } = g;
   // last frame's loads stay readable (HUD) until the next frame starts
-  power.thrustKW = power.ftlKW = power.chargeKW = power.burn = power.shieldKW = power.guardKW = 0;
+  power.thrustKW = power.ftlKW = power.chargeKW = power.burn = power.shieldKW = power.guardKW = power.laserKW = 0;
   power.cap = busCapacity(g);
   power.left = Math.max(0, power.cap - SHIP.baseLoad);
   power.limited = null;
@@ -63,14 +63,15 @@ export function settleBattery(g: Game, dt: number) {
  * drops out if running, drive charging pauses (FTL and hyperdrive), the radar can't sweep.
  * (Later these could be set to a share of their draw instead, to direct power where it matters.)
  */
-export type Switchable = Breaker | 'lights' | 'pump';
+export type Switchable = Breaker | 'lights' | 'pump' | 'laser';
 
 export const SWITCH_NAMES: Record<Switchable, string> = {
-  thrust: 'Thrusters', ftl: 'FTL drive', charge: 'Drive charging', radar: 'Radar', shield: 'Deflector', guard: 'Collision radar', lights: 'Headlights', pump: 'Heat pump',
+  thrust: 'Thrusters', ftl: 'FTL drive', charge: 'Drive charging', radar: 'Radar', shield: 'Deflector', guard: 'Collision radar', lights: 'Headlights', pump: 'Heat pump', laser: 'Mining laser',
 };
 
 export function loadOn(g: Game, id: Switchable) {
   if (id === 'lights') return g.lights;
+  if (id === 'laser') return g.laser.on;
   if (id === 'pump') return g.ship.outfit.pumpAuto;
   return g.ship.breakers[id];
 }
@@ -78,6 +79,7 @@ export function loadOn(g: Game, id: Switchable) {
 export function toggleLoad(g: Game, id: Switchable) {
   const on = !loadOn(g, id);
   if (id === 'lights') g.lights = on;
+  else if (id === 'laser') g.laser.on = on;
   else if (id === 'pump') g.ship.outfit.pumpAuto = on;
   else g.ship.breakers[id] = on;
   g.showMsg(`${SWITCH_NAMES[id]} ${on ? 'on' : 'off'}`, on ? '' : 'warn');

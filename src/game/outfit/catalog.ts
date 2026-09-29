@@ -21,7 +21,7 @@
  * Physics in sim/thermal.ts; numbers in docs/thermal.md.
  */
 
-export type ModuleKind = 'radiator' | 'heatpump' | 'scoop' | 'deflector' | 'guard';
+export type ModuleKind = 'radiator' | 'heatpump' | 'scoop' | 'deflector' | 'guard' | 'laser';
 
 interface ModuleBase {
   id: string;
@@ -89,7 +89,20 @@ export interface GuardModule extends ModuleBase {
   };
 }
 
-export type Module = RadiatorModule | HeatPumpModule | ScoopModule | DeflectorModule | GuardModule;
+/**
+ * Mining laser (sim/laser.ts): aimed along the nose at a rock of a ring's belt, it boils off the
+ * rock's ice; the fuel scoop catches the vapour and it's cracked into propellant. Its whole draw
+ * ends up as heat in the hull, like every other load.
+ */
+export interface LaserModule extends ModuleBase {
+  kind: 'laser';
+  caps: {
+    kw: number; // beam power drawn from the bus
+    range: number; // m: full yield out to a third of it, none past it
+  };
+}
+
+export type Module = RadiatorModule | HeatPumpModule | ScoopModule | DeflectorModule | GuardModule | LaserModule;
 
 /** Most thrust (m/s², ~3 g) deployed radiators can take; more is capped while they're out. */
 export const RADIATOR_MAX_ACC = 30;
@@ -145,6 +158,16 @@ export const MODULES: Module[] = [
     caps: { minSize: 1.5, range: 8000, avoid: true, kw: 250 },
   },
   {
+    id: 'ml-2', kind: 'laser', maker: 'Tessera Shielding', model: 'ML-2', name: 'Ablator', mass: 1500,
+    blurb: 'Mining laser: boils ice off ring rocks for the fuel scoop to catch. 2 MW, out to 600 m',
+    caps: { kw: 2000, range: 600 },
+  },
+  {
+    id: 'ml-6', kind: 'laser', maker: 'Tessera Shielding', model: 'ML-6', name: 'Sunspear', mass: 3000,
+    blurb: 'Mining laser: 6 MW, out to 1.5 km. Three times the ice, and three times the heat',
+    caps: { kw: 6000, range: 1500 },
+  },
+  {
     id: 'kh-2', kind: 'heatpump', maker: 'Kelvin Dynamics', model: 'KH-2', name: 'Coldsink', mass: 1200,
     blurb: 'Runs the radiator loop up to 250 K hotter than the hull; draws up to 2 MW. Needs radiators',
     caps: { maxKW: 2000, lift: 250 },
@@ -190,7 +213,7 @@ export const moduleById = (id: string) => MODULES.find((m) => m.id === id) ?? nu
 export const moduleLabel = (m: Module | BatteryModule) => `${m.model} ${m.name}`;
 
 /** Utility slots on the default hull. */
-export const UTILITY_SLOTS = 5;
+export const UTILITY_SLOTS = 6;
 
 /** What's fitted and the state of the deployable hardware. */
 export interface Outfit {
@@ -209,12 +232,12 @@ export const PUMP_ON_ABOVE = 300;
 /**
  * The ship you start with: the best of everything. HP-600 Tempest battery, and in the utility
  * slots the FS-5 Maelstrom scoop, KR-25 Glacier radiators, the KH-2 Coldsink heat pump, the MD-8
- * Bulwark deflector and the CR-5 Warden collision radar.
+ * Bulwark deflector, the CR-5 Warden collision radar and the ML-6 Sunspear mining laser.
  */
 export const bestOutfit = (): Outfit => ({
   ...emptyOutfit(),
   battery: BATTERIES[BATTERIES.length - 1],
-  slots: ['fs-5', 'kr-25', 'kh-2', 'md-8', 'cr-5'].map((id) => moduleById(id)),
+  slots: ['fs-5', 'kr-25', 'kh-2', 'md-8', 'cr-5', 'ml-6'].map((id) => moduleById(id)),
 });
 
 export const emptyOutfit = (): Outfit => ({ battery: STOCK_BATTERY, slots: Array(UTILITY_SLOTS).fill(null), radiatorsOut: 0, deploy: false, pumpAuto: true });
@@ -232,3 +255,4 @@ export const scoopFitted = (o: Outfit) =>
 /** The fitted deflector and collision radar (the best of each, if more than one). */
 export const deflectorFitted = (o: Outfit) => o.slots.filter((x): x is DeflectorModule => x?.kind === 'deflector').sort((a, b) => b.caps.block - a.caps.block)[0] ?? null;
 export const guardFitted = (o: Outfit) => o.slots.filter((x): x is GuardModule => x?.kind === 'guard').sort((a, b) => a.caps.minSize - b.caps.minSize)[0] ?? null;
+export const laserFitted = (o: Outfit) => o.slots.filter((x): x is LaserModule => x?.kind === 'laser').sort((a, b) => b.caps.kw - a.caps.kw)[0] ?? null;

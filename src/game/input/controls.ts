@@ -1,6 +1,7 @@
 import { TANKER_TIME } from '../constants';
 import { dockKey } from '../sim/docking';
 import { catapultLaunch } from '../sim/catapult';
+import { toggleLaser } from '../sim/laser';
 import { stopAutodock } from '../sim/autodock';
 import { togglePeriscope, wheelZoom } from '../sim/periscope';
 import { changeWarp, stopWarp } from '../sim/timewarp';
@@ -175,6 +176,11 @@ export function onPress(g: Game, code: string) {
       toggleCruise(g);
       break;
     case 'KeyM':
+      // Shift+M: the mining laser (sim/laser.ts); M: the navigation computer
+      if (keys.ShiftLeft || keys.ShiftRight) {
+        toggleLaser(g);
+        break;
+      }
       g.navPanel = !g.navPanel;
       if (g.navPanel) document.exitPointerLock?.(); // search box, buttons, clicking stars to add them
       if (g.navPanel) {

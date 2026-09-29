@@ -27,7 +27,7 @@ import { RADAR_RANGE, SWEEP, contactLabel, radarClass, radarContacts } from '../
 import { unitLabel, type Computer } from '../avionics/catalog';
 import { buildInfluences } from './influences';
 import { approachView } from './approach';
-import { deflectorFitted, guardFitted } from '../outfit/catalog';
+import { deflectorFitted, guardFitted, laserFitted } from '../outfit/catalog';
 import { threatNow } from '../sim/belt';
 import { rockLabel } from '../sim/ringRocks';
 import { HULL_WARN, heatDamageRate } from '../sim/damage';
@@ -239,6 +239,8 @@ function flight(g: Game): FlightView {
   const pills: Pill[] = [];
   if (g.autodock) pills.push({ text: `AUTO-DOCK · ${g.autodock.phase.toUpperCase()}`, kind: 'ftl' });
   if (g.ascent) pills.push({ text: 'ASCENT PROGRAM', kind: 'ftl' });
+  const lz = g.laser;
+  if (lz.on) pills.push({ text: lz.rate > 0 ? `LASER · +${lz.rate.toFixed(0)} kg/s` : `LASER · ${lz.hit ? lz.why || 'no yield' : lz.why || 'firing'}`.toUpperCase(), kind: lz.rate > 0 ? 'on' : 'warn' });
   const th = g.rockThreat;
   if (th) pills.push({ text: `ROCK ${rockLabel(th.size)} · ${Math.max(0, threatNow(g, th).t).toFixed(1)} s${th.avoiding ? ' · AVOIDING' : ''}`, kind: 'warn' });
   if (g.dock) pills.push({ text: g.dock.docked ? `DOCKED · PAD ${g.dock.pad + 1}` : `PAD ${g.dock.pad + 1} GRANTED`, kind: g.dock.docked ? 'on' : 'ftl' });
@@ -471,7 +473,9 @@ function outfitView(g: Game): OutfitView {
         ? `lift ${m.caps.lift} K · up to ${fmtPower(m.caps.maxKW)} · ${fmtMass(m.mass)}`
         : m.kind === 'deflector'
           ? `stops ${Math.round(m.caps.block * 100)} % of dust erosion · ${fmtPower(m.caps.kw)} while working · ${fmtMass(m.mass)}`
-          : m.kind === 'guard'
+          : m.kind === 'laser'
+            ? `${fmtPower(m.caps.kw)} beam · out to ${fmtDist(m.caps.range)} · ${fmtMass(m.mass)}`
+            : m.kind === 'guard'
             ? `rocks ${m.caps.minSize} m and up · ${fmtDist(m.caps.range)} ahead · ${m.caps.avoid ? 'steers clear' : 'warns'} · ${fmtPower(m.caps.kw)} · ${fmtMass(m.mass)}`
             : `${m.caps.exotic ? 'H₂ + exotic' : 'H₂ only'} · ${m.caps.rate}× intake · ${fmtMass(m.mass)}`;
   const h = g.heat;
@@ -483,7 +487,7 @@ function outfitView(g: Game): OutfitView {
     battery: { unit: moduleLabel(o.battery), specs: bSpecs(o.battery), options: st ? BATTERIES.map((b) => ({ id: b.id, unit: moduleLabel(b), specs: `${b.blurb} · ${bSpecs(b)}`, current: b === o.battery })) : [] },
     hint: 'Modules are fitted while docked at a station (target one, K for a pad, land on it)',
     slots: o.slots.map((m) => (m ? { unit: moduleLabel(m), blurb: m.blurb, specs: specsOf(m), empty: false, icon: m.kind } : { unit: 'empty', blurb: '', specs: '', empty: true, icon: 'empty' as const })),
-    catalogue: st ? MODULES.map((m) => ({ id: m.id, unit: moduleLabel(m), kind: { radiator: 'RADIATORS', heatpump: 'HEAT PUMP', scoop: 'FUEL SCOOP', deflector: 'DEFLECTOR', guard: 'COLLISION RADAR' }[m.kind], blurb: m.blurb, specs: specsOf(m) })) : [],
+    catalogue: st ? MODULES.map((m) => ({ id: m.id, unit: moduleLabel(m), kind: { radiator: 'RADIATORS', heatpump: 'HEAT PUMP', scoop: 'FUEL SCOOP', deflector: 'DEFLECTOR', guard: 'COLLISION RADAR', laser: 'MINING LASER' }[m.kind], blurb: m.blurb, specs: specsOf(m) })) : [],
     radiators: {
       fitted: rads.length > 0,
       out: o.radiatorsOut,
@@ -524,7 +528,7 @@ function electricalView(g: Game): ElectricalView {
   const lim = power.limited;
   const limitOf = (id: string) => {
     if (!lim) return null;
-    const is = { charge: /charging/, thrust: /thrusters/, ftl: /FTL drive/, pump: /heat pump/, radar: /^radar/, shield: /deflector/, guard: /collision radar/ }[id];
+    const is = { charge: /charging/, thrust: /thrusters/, ftl: /FTL drive/, pump: /heat pump/, radar: /^radar/, shield: /deflector/, guard: /collision radar/, laser: /mining laser/ }[id];
     return is?.test(lim.what) ? lim.frac : null;
   };
   const net = power.net;
@@ -556,6 +560,7 @@ function electricalView(g: Game): ElectricalView {
       { id: 'pump', name: 'HEAT PUMP', kw: power.pumpKW, limited: limitOf('pump'), sw: pumpFitted(ship.outfit) ? 'pump' : null, on: loadOn(g, 'pump') },
       { id: 'radar', name: 'RADAR', kw: power.radarKW, limited: limitOf('radar'), sw: 'radar', on: loadOn(g, 'radar') },
       { id: 'shield', name: 'DEFLECTOR', kw: power.shieldKW, limited: limitOf('shield'), sw: deflectorFitted(ship.outfit) ? 'shield' : null, on: loadOn(g, 'shield') },
+      { id: 'laser', name: 'MINING LASER', kw: power.laserKW, limited: limitOf('laser'), sw: laserFitted(ship.outfit) ? 'laser' : null, on: loadOn(g, 'laser') },
       { id: 'guard', name: 'COLLISION RADAR', kw: power.guardKW, limited: limitOf('guard'), sw: guardFitted(ship.outfit) ? 'guard' : null, on: loadOn(g, 'guard') },
     ],
     rows,

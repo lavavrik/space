@@ -57,3 +57,16 @@ describe('ring rocks (CPU replica of the GPU generator)', () => {
     expect(effectiveSpeed(100, rockMass(300), ship)).toBeGreaterThan(99);
   });
 });
+
+describe('ring rock make-up', () => {
+  it('is 90–99 % water ice, the same for the same rock', async () => {
+    const { rockIce } = await import('../sim/laser');
+    const ids = Array.from({ length: 200 }, (_, i) => `1:${1000 + i}:${i * 7}:0`);
+    for (const id of ids) {
+      expect(rockIce(id)).toBeGreaterThanOrEqual(0.9);
+      expect(rockIce(id)).toBeLessThanOrEqual(0.99);
+      expect(rockIce(id)).toBe(rockIce(id));
+    }
+    expect(new Set(ids.map(rockIce)).size).toBeGreaterThan(150);
+  });
+});

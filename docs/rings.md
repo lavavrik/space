@@ -95,4 +95,28 @@ from before get them fitted.
   and its stale velocity made a stationary ship look like it was closing at tens of m/s. Closing
   slower than 2 m/s isn't a threat at all (below the scrape speed it's a harmless bump).
 
-Not yet: rocks as radar contacts or mining targets (SPACE-58), other ships feeling any of this.
+Not yet: other ships feeling any of this.
+
+## Mining (`sim/laser.ts`, `render/Laser.ts`)
+
+A mining laser in a utility slot (Tessera ML-2 Ablator: 2 MW, 600 m; ML-6 Sunspear: 6 MW, 1.5 km;
+a new ship has the ML-6 in a 6th slot, and older saves get it fitted). Shift+M turns it on.
+
+- **Aim with the nose.** The beam fires along it; the first rock in its path within range is hit
+  (the same rocks as drawn). Its ice boils off, the fuel scoop catches the vapour, and it's cracked
+  into propellant (the H₂ gauge says "Laser mining a 96 m rock · 94 % ice").
+- **Yield:** 60 kg/s per MW of beam, × the rock's ice fraction (from its id, like its shape: a
+  giant's ring rocks are 90–99 % water ice), × a range factor (full out to a third of the range,
+  none at it). The ML-6 at 300 m: ~340 kg/s, an empty tank in ~6 minutes. Tuned to be worth doing,
+  not from the physics (really 6 MW would boil ~2 kg/s).
+- **Needs** a fuel scoop to catch the plume, and to hold still against the rock (under 50 m/s; the
+  ring frame's flight assist does that hands off). The LASER pill says what it's yielding, or why not.
+- **Costs:** its draw is a load on the bus (MINING LASER in the power schematic, switchable), mostly
+  from the battery (the ML-6 empties a full HP-600 in ~6 minutes; the panels give 1.5 MW at most),
+  and it all ends up as heat in the hull (+3.5 K/min in sunlight: radiators out help).
+- **On screen:** the beam from under the nose (a camera-facing ribbon, never under ~2 px), a
+  flickering white-hot spot where it hits, and a plume of vapour thrown off along the surface.
+  Display-referred, out of the exposure meter.
+- **Order:** it fires after the ship's move each step: mid-step the ship lags the rocks by its
+  orbital motion (~700 m a frame round a giant), and a beam from there missed.
+- Metals (stony and metallic rocks, cargo) wait for a hold and an economy (SPACE-51).

@@ -1,3 +1,4 @@
+import { laserYield } from './laser';
 import { AU, SCOOP_FLUX_FULL, SCOOP_FLUX_MIN, SHIP, WT } from '../constants';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
@@ -126,6 +127,12 @@ export function scoop(g: Game, dt: number) {
       return b.kind === 'star' ? b.L * (AU / (alt + b.radius)) ** 2 >= SCOOP_FLUX_MIN : b.type >= WT.GasGiant && alt < b.radius * 0.05;
     });
     if (!anyZone) g.warned.noScoop = g.warned.ftlScoop = false;
+  }
+  // the mining laser's plume, caught by the scoop (sim/laser.ts)
+  const lz = laserYield(g);
+  if (lz) {
+    dp += lz.rate * dt;
+    ship.scoop = lz.what;
   }
   const landed = ship.landed;
   if (landed && landed.kind !== 'star' && ([WT.EarthLike, WT.Ocean, WT.Icy] as number[]).includes(landed.type)) {

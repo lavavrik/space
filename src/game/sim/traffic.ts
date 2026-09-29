@@ -45,6 +45,7 @@ import { battCap, beginPower } from './power';
 import { engageAutopilot, engageRendezvous, maybeFtlLeg } from './planner';
 import { padCount } from './stationGeom';
 import { ascent, catapultLaunch } from './catapult';
+import { laserOff } from './laser';
 import { railsStep } from './timewarp';
 
 export type { Npc };
@@ -119,6 +120,7 @@ function pilotFor(game: Game): Game {
     erosion: 0,
     rockThreat: null,
     nudging: false,
+    laser: laserOff(),
     dockRel: new THREE.Vector3(),
     qInv: new THREE.Quaternion(),
     fwd: new THREE.Vector3(),

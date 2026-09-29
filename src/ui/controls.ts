@@ -59,6 +59,7 @@ export const GROUPS: { id: ControlGroup; title: string; keys: [string, string][]
       [', .', 'time warp'],
       ['K', 'dock / launch'],
       ['⇧K', 'fuel tanker'],
+      ['⇧M', 'mining laser on / off'],
       ['Tab', 'hide controls'],
       ['`', 'performance'],
     ],

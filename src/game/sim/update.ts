@@ -25,6 +25,7 @@ import { ascent, stopAscent } from './catapult';
 import { updateDamage } from './damage';
 import { ringContact } from './ringContact';
 import { updateBelt } from './belt';
+import { updateLaser } from './laser';
 import { SHORE_POWER, holdDocked, rotationCorrection, stationContact, updateDockRequest } from './docking';
 
 const qa = new THREE.Quaternion();
@@ -134,6 +135,9 @@ export function update(g: Game, dt: number, realDt = dt) {
   if (!ship.ap) g.apPanel = false;
 
   if (g.warp > 1 || g.dock?.docked || ship.mode !== 'normal') {
+    g.laser.end = g.laser.hit = null;
+    g.laser.rate = 0;
+    g.power.laserKW = 0;
     g.rockThreat = null;
     g.nudging = false;
   }
@@ -169,12 +173,16 @@ export function update(g: Game, dt: number, realDt = dt) {
         /* flown by the ascent program */
       } else if (ship.ap && ship.ap.phase === 'insert') autopilot(g, dt, grav);
       else manualFlight(g, dt, grav, inp);
-      updateBelt(g, dt, inp[0] !== 0 || inp[1] !== 0); // (sideways input: the pilot is steering) // ring dust, the deflector, the collision radar's nudge (sim/belt.ts)
+      // ring dust, the deflector, the collision radar's nudge (sim/belt.ts; sideways input: the pilot is steering)
+      updateBelt(g, dt, inp[0] !== 0 || inp[1] !== 0);
       updateAero(g, dt, (u) => crossSection(g, u), shipMass(ship)); // drag and entry heating
       ship.pos.addScaledVector(ship.vel, dt);
       collide(g, dt);
       stationContact(g);
       ringContact(g, dt); // the ring's rocks (sim/ringContact.ts)
+      // the mining laser's beam (sim/laser.ts; its yield goes in with the scoop's). After the move:
+      // mid-step the ship lags the rocks by its orbital motion (~700 m a frame round a giant)
+      updateLaser(g);
       g.curSpeed = relVel(g).length();
     } else if (apSteering) {
       ftlTransfer(g, dt);
@@ -198,7 +206,7 @@ export function update(g: Game, dt: number, realDt = dt) {
   // no sunlight inside a station; docked, the station's shore power stands in for the panels
   power.solar = inTunnel || g.inStation ? 0 : solarPower(g);
   power.shore = g.dock?.docked ? SHORE_POWER : 0;
-  power.draw = SHIP.baseLoad + power.thrustKW + power.ftlKW + power.chargeKW + power.pumpKW + power.radarKW + power.lightsKW + power.shieldKW + power.guardKW;
+  power.draw = SHIP.baseLoad + power.thrustKW + power.ftlKW + power.chargeKW + power.pumpKW + power.radarKW + power.lightsKW + power.shieldKW + power.guardKW + power.laserKW;
   settleBattery(g, dt);
   if (ship.batt > 1) g.warned.batt = false;
   updateThermal(g, dt, inTunnel);
