@@ -19,11 +19,19 @@ import { turnThrust } from './resources';
  */
 const PIVOT_ACC = 0.4, // rad/s²: ~23°/s² (1.2 at first felt no different from before on small turns)
   PIVOT_RATE = 0.8; // rad/s
-/** Close enough (rad): about 1″, well below a pixel even at 1,000× zoom. */
-const PIVOT_DONE = 5e-6;
+/**
+ * Close enough to lock (rad): 0.1°. From there it follows the target exactly. (Waiting to be within
+ * 1″ never happened with a moving target: the braking turn always arrives where it was, a little
+ * behind where it is.) Through the periscope, the same share of the field: ÷ the magnification.
+ */
+const PIVOT_LOCK = 2e-3;
 
 const want = new THREE.Quaternion(),
-  nose = new THREE.Vector3();
+  nose = new THREE.Vector3(),
+  ff = new THREE.Quaternion(),
+  ffGot = new THREE.Quaternion(),
+  ID = new THREE.Quaternion(),
+  omega = new THREE.Vector3();
 
 /** Middle click: start turning toward the target. */
 export function startPivot(g: Game) {
@@ -42,12 +50,23 @@ export function startPivot(g: Game) {
   g.pivot = true;
   g.pivotRate = 0;
   g.pivotLocked = false;
+  g.pivotPrevDir = null;
+  g.lockOmega.set(0, 0, 0);
   g.ship.sunTrack = false; // it would turn the ship back toward the star
 }
 
-/** Unit direction from the ship to what we're pivoting to (world), or null. */
-function aimDir(g: Game) {
-  if (g.target) return g.target.pos.clone().sub(g.ship.pos).normalize();
+/**
+ * Unit direction from the ship to what we're pivoting to (world), or null. For a target, where it
+ * will be relative to the ship at the end of this step (`dt` s on): the ship turns before anything
+ * moves, and aiming at where it was left the nose a frame behind (~80″ on a station crossing the sky).
+ */
+function aimDir(g: Game, dt: number) {
+  const t = g.target;
+  if (t) {
+    const at = t.pos.clone().addScaledVector(t.vel, dt);
+    const me = g.ship.pos.clone().addScaledVector(g.ship.vel, dt).addScaledVector(g.frameBody.vel, dt);
+    return at.sub(me).normalize();
+  }
   if (g.jumpDest) return g.jumpDest.pos.clone().sub(galPos(g)).normalize(); // stars: direction only
   return null;
 }
@@ -55,31 +74,56 @@ function aimDir(g: Game) {
 /** Each frame (real time), after manual steering: turn toward the aim point. */
 export function updatePivot(g: Game, realDt: number, steered: boolean) {
   if (!g.pivot) return;
-  const dir = aimDir(g);
+  const dir = aimDir(g, realDt * g.warp);
   // (sun tracking turns the ship its own way: switching it on ends the pivot, and its lock)
   if (steered || !dir || g.ship.sunTrack || g.ship.ap?.phase === 'transfer' || g.jump || g.dock?.docked || g.ship.landed) {
     if (g.pivotLocked && steered) g.showMsg('Lock released');
     g.pivot = g.pivotLocked = false;
     g.pivotRate = 0;
+    g.pivotPrevDir = null;
+    g.lockOmega.set(0, 0, 0);
     return;
   }
   const { ship } = g;
+  const k = 1 / Math.max(1, Math.sqrt(g.zoom.cur));
+  // Follow the target's own motion across the sky (feed-forward: the turn from where it was last
+  // frame to where it is), then close what's left with the braking turn below. Without it, the
+  // braking turn always arrived where a moving target had been, and through the periscope it never
+  // caught up. The follow turn is the attitude thrusters' work too: what it costs is the change in its
+  // rate (a target drifting steadily across the sky needs a steady turn: next to nothing).
+  if (g.pivotPrevDir && realDt > 0) {
+    ff.setFromUnitVectors(g.pivotPrevDir, dir);
+    const s2 = Math.sqrt(Math.max(0, 1 - ff.w * ff.w));
+    const a = 2 * Math.acos(Math.min(1, ff.w));
+    omega.set(ff.x, ff.y, ff.z).multiplyScalar(s2 > 1e-12 ? a / s2 / realDt : 0);
+    if (omega.length() < PIVOT_RATE * 2) {
+      const got = turnThrust(g, omega.distanceTo(g.lockOmega), realDt);
+      g.lockOmega.lerp(omega, got);
+      ship.q.premultiply(ffGot.slerpQuaternions(ID, ff, got)).normalize();
+    }
+  }
+  g.pivotPrevDir = (g.pivotPrevDir ?? new THREE.Vector3()).copy(dir);
   // the shortest turn from the nose to the aim: about an axis across both, so no roll about the nose
   nose.set(0, 0, -1).applyQuaternion(ship.q);
   want.setFromUnitVectors(nose, dir).multiply(ship.q);
   const ang = ship.q.angleTo(want);
-  if (ang < PIVOT_DONE) {
-    // on it: stay locked, following it
+  if (g.pivotLocked) {
+    // locked: take up the last of it (what the follow turn left: a hair)
+    if (ang < PIVOT_LOCK * k * 3) {
+      ship.q.copy(want);
+      return;
+    }
+    g.pivotLocked = false; // it jumped (a new target, say): turn onto it again
+  }
+  if (ang < PIVOT_LOCK * k) {
+    // on it: lock, and follow it from now on
     ship.q.copy(want);
     g.pivotRate = 0;
-    if (!g.pivotLocked) {
-      g.pivotLocked = true;
-      g.showMsg(`Locked on ${g.target?.name ?? g.jumpDest?.name ?? 'the target'} · steer to break away`);
-    }
+    g.pivotLocked = true;
+    g.showMsg(`Locked on ${g.target?.name ?? g.jumpDest?.name ?? 'the target'} · steer to break away`);
     return;
   }
-  // (zoomed in, the periscope's field is small: a slower, finer turn, as manual steering does)
-  const k = 1 / Math.max(1, Math.sqrt(g.zoom.cur));
+  // (zoomed in, the periscope's field is small: a slower, finer turn, as manual steering does: k)
   const brake = Math.sqrt(2 * PIVOT_ACC * k * ang);
   const wantRate = Math.min(PIVOT_RATE * k, brake);
   const next = wantRate > g.pivotRate ? Math.min(wantRate, g.pivotRate + PIVOT_ACC * k * realDt) : wantRate;

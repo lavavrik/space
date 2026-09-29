@@ -136,6 +136,10 @@ export class Game {
   pivotRate = 0;
   /** The pivot reached its target and is holding the nose on it (sim/pivot.ts). */
   pivotLocked = false;
+  /** While locked, the turn rate (rad/s, world axes) following the target takes (sim/pivot.ts). */
+  lockOmega = new THREE.Vector3();
+  /** The pivot's aim direction last frame (to follow a moving target's own motion). */
+  pivotPrevDir: THREE.Vector3 | null = null;
   /** The ship's turn rate under manual steering (rad/s: pitch, yaw, roll about its own axes; sim/update.ts). */
   angVel = new THREE.Vector3();
   /**

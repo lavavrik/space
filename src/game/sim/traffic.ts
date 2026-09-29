@@ -132,6 +132,8 @@ function pilotFor(game: Game): Game {
     pivot: false,
     pivotRate: 0,
     pivotLocked: false,
+    lockOmega: new THREE.Vector3(),
+    pivotPrevDir: null,
     angVel: new THREE.Vector3(),
     steerUp: null,
     steerQ: new THREE.Quaternion(),
