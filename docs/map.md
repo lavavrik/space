@@ -10,10 +10,14 @@ darkened screen; the flight HUD steps aside (only the messages stay). The game k
   arc out to the sphere of influence if not); the autopilot's target orbit (dashed); your target
   (red brackets) and a dotted line to it.
 - **Moving round:** drag to turn the view round its focus, the wheel to zoom (10 km to ~1,000 AU),
-  click something to target it and centre on it (the view eases across and frames it). It opens
+  click something to target it and make it the view's centre (the view eases across; the zoom stays). It opens
   centred on your ship, framing the world you're near.
 - **Precision:** everything is projected on the CPU in double precision, relative to the camera,
   so the view holds at any scale (a GPU scene at these distances would need its own rebasing).
+- **Orbits at every zoom:** each is sampled finely where it passes the view's centre (steps from
+  1/200 of the view there, growing ×1.25 up to 2° on the far side), and lines are clipped at a near
+  plane rather than dropped. A fixed 160-point ellipse missed its own world by tens of thousands of
+  km zoomed in (the chords' sag), so orbits seemed to vanish at some zooms.
 - **Labels** respect Shift+N; where they'd overlap, the first placed wins (the star and planets are
   drawn first). A scale bar (bottom right) gives a round length at the focus's distance.
 

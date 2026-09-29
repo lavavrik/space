@@ -21,8 +21,6 @@ const AMB = 'rgba(255,176,64,',
   RED = 'rgba(255,91,70,';
 const MONO = '"JetBrains Mono", ui-monospace, monospace';
 const FOV = 50;
-/** Samples round a closed orbit. */
-const ORBIT_N = 160;
 
 /** What the map is doing (Game.map). */
 export interface MapState {
@@ -54,6 +52,8 @@ export class SystemMap {
   private readonly right = V();
   private readonly up = V();
   private f = 1;
+  /** The near plane (m in front of the camera). */
+  private near = 1;
   private cx = 0;
   private cy = 0;
 
@@ -111,12 +111,10 @@ export class SystemMap {
     m.from = cur;
     m.ease = 0;
     m.focus = best.t;
+    // (the zoom stays as it is: the view just moves its centre there)
     if (best.t !== 'ship') {
       g.target = best.t;
       g.showMsg(`Target · ${best.t.name}`);
-      // frame what was picked: a world a few radii across, a station or ship a few km
-      const size = best.t.kind === 'station' ? 5e3 : best.t.kind === 'ship' ? 2e3 : best.t.radius * 6;
-      if (m.dist > size * 50 || m.dist < size) m.dist = Math.max(size, 1e4);
     }
     return true;
   }
@@ -133,23 +131,63 @@ export class SystemMap {
     return true;
   }
 
-  /** A polyline through world points (skipping stretches behind the camera). */
+  /**
+   * A polyline through world points, clipped at a near plane in front of the camera (a segment that
+   * runs behind it is cut where it crosses, not dropped: an orbit passing close by the camera kept
+   * vanishing in pieces).
+   */
   private path(pts: THREE.Vector3[], stroke: string, width = 1, dash: number[] = []) {
     const { ctx } = this;
     ctx.strokeStyle = stroke;
     ctx.lineWidth = width * this.ui();
     ctx.setLineDash(dash.map((d) => d * this.ui()));
     ctx.beginPath();
-    const s = { x: 0, y: 0, z: 0 };
+    const near = this.near;
     let pen = false;
+    let px = 0,
+      py = 0,
+      pz = 0,
+      have = false;
+    const put = (x: number, y: number, z: number, move: boolean) => {
+      const sx = this.cx + (x / z) * this.f,
+        sy = this.cy - (y / z) * this.f;
+      if (move) ctx.moveTo(sx, sy);
+      else ctx.lineTo(sx, sy);
+    };
     for (const p of pts) {
-      if (!this.project(p, s)) {
-        pen = false;
-        continue;
+      const vx = p.x - this.cam.x,
+        vy = p.y - this.cam.y,
+        vz = p.z - this.cam.z;
+      const x = vx * this.right.x + vy * this.right.y + vz * this.right.z,
+        y = vx * this.up.x + vy * this.up.y + vz * this.up.z,
+        z = vx * this.fwd.x + vy * this.fwd.y + vz * this.fwd.z;
+      if (have) {
+        const inA = pz > near,
+          inB = z > near;
+        if (inA && inB) {
+          if (!pen) put(px, py, pz, true);
+          put(x, y, z, false);
+          pen = true;
+        } else if (inA || inB) {
+          // crosses the near plane: cut it there
+          const t = (near - pz) / (z - pz);
+          const cxp = px + (x - px) * t,
+            cyp = py + (y - py) * t;
+          if (inA) {
+            if (!pen) put(px, py, pz, true);
+            put(cxp, cyp, near, false);
+            pen = false;
+          } else {
+            put(cxp, cyp, near, true);
+            put(x, y, z, false);
+            pen = true;
+          }
+        } else pen = false;
       }
-      if (pen) ctx.lineTo(s.x, s.y);
-      else ctx.moveTo(s.x, s.y);
-      pen = true;
+      px = x;
+      py = y;
+      pz = z;
+      have = true;
     }
     ctx.stroke();
     ctx.setLineDash([]);
@@ -182,6 +220,7 @@ export class SystemMap {
     this.cx = W / 2;
     this.cy = H / 2;
     this.f = H / 2 / Math.tan((FOV * Math.PI) / 360);
+    this.near = m.dist * 1e-4;
 
     ctx.save();
     ctx.fillStyle = 'rgba(2,4,8,0.9)';
@@ -190,29 +229,28 @@ export class SystemMap {
     const { cur } = g;
 
     // orbits: every world round its parent (moons only once their orbit is a few pixels across)
+    // (every orbit, at every zoom: each sampled finely where it passes the view's centre, so it runs
+    // through its world even zoomed right in, where a fixed 160-point ellipse's chords missed it by
+    // tens of thousands of km and the orbit seemed to vanish)
     for (const b of cur.bodies) {
       if (b.kind === 'star' || !known(g, b)) continue;
-      const span = this.px(b.parent.pos, b.orb.a);
-      if (span < 4) continue;
       const a = b.kind === 'moon' ? 0.28 : 0.4;
-      this.path(ellipse(b.parent.pos, b.orb.a, b.orb.e, b.orb.P, b.orb.Q), AMB + a + ')', b === g.target ? 1.6 : 1);
+      this.path(ellipse(b.parent.pos, b.orb.a, b.orb.e, b.orb.P, b.orb.Q, fp, m.dist), AMB + a + ')', b === g.target ? 1.6 : 1);
       // rings
-      if (b.ring && this.px(b.pos, b.radius * b.ring.outer) > 3) {
-        for (const r of [b.ring.inner, b.ring.outer]) this.path(circle(b.pos, b.radius * r, b.axis), 'rgba(210,190,150,0.35)');
-      }
+      if (b.ring) for (const r of [b.ring.inner, b.ring.outer]) this.path(circle(b.pos, b.radius * r, b.axis, fp, m.dist), 'rgba(210,190,150,0.35)');
     }
     // station orbits
     for (const st of cur.stations) {
-      if (st.sky || !known(g, st) || this.px(st.parent.pos, st.a) < 6) continue;
-      this.path(ellipse(st.parent.pos, st.a, st.e, st.P, st.Q), MINT + (st === g.target ? '0.7)' : '0.3)'));
+      if (st.sky || !known(g, st)) continue;
+      this.path(ellipse(st.parent.pos, st.a, st.e, st.P, st.Q, fp, m.dist), MINT + (st === g.target ? '0.7)' : '0.3)'));
     }
     // your orbit round the world you're in the sphere of influence of
     const fb = g.frameBody;
-    const mine = shipOrbit(g.ship.pos.clone().sub(fb.pos), g.ship.vel.clone(), fb.mu, fb.kind === 'star' ? Infinity : fb.soi, fb);
+    const mine = shipOrbit(g.ship.pos.clone().sub(fb.pos), g.ship.vel.clone(), fb.mu, fb.kind === 'star' ? Infinity : fb.soi, fb, m.dist);
     if (mine) this.path(mine, CYA + '0.85)', 1.4);
     // the autopilot's target orbit (dashed)
     const ap = g.ship.ap;
-    if (ap && ap.n && ap.type !== 'hold' && ap.type !== 'rendezvous') this.path(circle(ap.body.pos, ap.r0, ap.n), CYA + '0.6)', 1.2, [6, 5]);
+    if (ap && ap.n && ap.type !== 'hold' && ap.type !== 'rendezvous') this.path(circle(ap.body.pos, ap.r0, ap.n, fp, m.dist), CYA + '0.6)', 1.2, [6, 5]);
     // a line to the target and to the navigation computer's destination
     if (g.target && g.target.pos) this.path([g.ship.pos, g.target.pos], RED + '0.35)', 1, [3, 6]);
 
@@ -320,22 +358,38 @@ export class SystemMap {
   }
 }
 
-/** A closed Kepler orbit round `c`: periapsis along P, 90° ahead along Q. */
-function ellipse(c: THREE.Vector3, a: number, e: number, P: THREE.Vector3, Q: THREE.Vector3) {
-  const pts: THREE.Vector3[] = [];
+/**
+ * A closed Kepler orbit round `c` (periapsis along P, 90° ahead along Q), sampled finely near where it
+ * passes closest to `focus` and more coarsely away from it: steps growing geometrically from a
+ * fraction of the view's size (`view`, m) there to ~2° on the far side. Accurate at any zoom for a
+ * couple of hundred points.
+ */
+function ellipse(c: THREE.Vector3, a: number, e: number, P: THREE.Vector3, Q: THREE.Vector3, focus: THREE.Vector3, view: number) {
   const b = a * Math.sqrt(Math.max(0, 1 - e * e));
-  for (let i = 0; i <= ORBIT_N; i++) {
-    const E = (i / ORBIT_N) * Math.PI * 2;
-    pts.push(c.clone().addScaledVector(P, a * (Math.cos(E) - e)).addScaledVector(Q, b * Math.sin(E)));
+  const at = (E: number) => c.clone().addScaledVector(P, a * (Math.cos(E) - e)).addScaledVector(Q, b * Math.sin(E));
+  // the anomaly nearest the focus (its direction in the orbit's plane)
+  const rel = focus.clone().sub(c);
+  const E0 = Math.atan2(rel.dot(Q) / Math.max(b, 1), rel.dot(P) / a + e);
+  // the first step: ~1/200 of the view, as an angle round this orbit
+  let step = Math.min(Math.PI / 90, Math.max(1e-9, view / 200 / a));
+  const offs = [0];
+  let o = 0;
+  while (o < Math.PI) {
+    o = Math.min(Math.PI, o + step);
+    offs.push(o);
+    step = Math.min(Math.PI / 90, step * 1.25);
   }
+  const pts: THREE.Vector3[] = [];
+  for (let i = offs.length - 1; i > 0; i--) pts.push(at(E0 - offs[i]));
+  for (const d of offs) pts.push(at(E0 + d));
   return pts;
 }
 
-/** A circle of radius r round `c` in the plane with normal n. */
-function circle(c: THREE.Vector3, r: number, n: THREE.Vector3) {
+/** A circle of radius r round `c` in the plane with normal n (sampled as `ellipse`). */
+function circle(c: THREE.Vector3, r: number, n: THREE.Vector3, focus: THREE.Vector3, view: number) {
   const u = new THREE.Vector3().crossVectors(n, Math.abs(n.x) < 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1)).normalize();
   const v = new THREE.Vector3().crossVectors(n, u);
-  return ellipse(c, r, 0, u, v);
+  return ellipse(c, r, 0, u, v, focus, view);
 }
 
 /**
@@ -343,7 +397,7 @@ function circle(c: THREE.Vector3, r: number, n: THREE.Vector3) {
  * ellipse if bound, else the escape arc out to the sphere of influence. Null if it's barely moving
  * against the body (a degenerate straight fall).
  */
-function shipOrbit(r: THREE.Vector3, v: THREE.Vector3, mu: number, soi: number, b: Body) {
+function shipOrbit(r: THREE.Vector3, v: THREE.Vector3, mu: number, soi: number, b: Body, view: number) {
   const h = new THREE.Vector3().crossVectors(r, v);
   if (h.length() < 1e-6) return null;
   const rl = r.length();
@@ -362,12 +416,39 @@ function shipOrbit(r: THREE.Vector3, v: THREE.Vector3, mu: number, soi: number, 
     const c = (p / rMax - 1) / e;
     if (c > -1 && c < 1) nuMax = Math.min(nuMax, Math.acos(c));
   }
-  for (let i = 0; i <= ORBIT_N * 2; i++) {
-    const nu = -nuMax + (2 * nuMax * i) / (ORBIT_N * 2);
-    const rr = p / (1 + e * Math.cos(nu));
-    if (rr <= 0 || rr > (Number.isFinite(soi) ? soi * 1.01 : Infinity)) continue;
-    pts.push(b.pos.clone().addScaledVector(P, rr * Math.cos(nu)).addScaledVector(Q, rr * Math.sin(nu)));
+  // sampled finely round where the ship is (as `ellipse`), coarser away from it
+  const nu0 = Math.atan2(r.dot(Q), r.dot(P));
+  let step = Math.min(Math.PI / 90, Math.max(1e-9, view / 200 / rl));
+  const offs = [0];
+  let o = 0;
+  while (o < 2 * nuMax) {
+    o = Math.min(2 * nuMax, o + step);
+    offs.push(o);
+    step = Math.min(Math.PI / 90, step * 1.25);
   }
+  const at = (nu: number) => {
+    const rr = p / (1 + e * Math.cos(nu));
+    if (rr <= 0 || rr > (Number.isFinite(soi) ? soi * 1.01 : Infinity)) return null;
+    return b.pos.clone().addScaledVector(P, rr * Math.cos(nu)).addScaledVector(Q, rr * Math.sin(nu));
+  };
+  // both ways from the ship: all round if bound; out to the ends of the arc if not
+  const inRange = (nu: number) => e < 1 || Math.abs(nu) <= nuMax;
+  const back: THREE.Vector3[] = [],
+    fwd: THREE.Vector3[] = [];
+  for (const d of offs) {
+    if (e < 1 && d > Math.PI) break;
+    const nf = nu0 + d,
+      nb = nu0 - d;
+    if (inRange(nf)) {
+      const q = at(nf);
+      if (q) fwd.push(q);
+    }
+    if (d > 0 && inRange(nb)) {
+      const q = at(nb);
+      if (q) back.push(q);
+    }
+  }
+  pts.push(...back.reverse(), ...fwd);
   return pts;
 }
 
