@@ -101,8 +101,9 @@ export function manualFlight(g: Game, dt: number, grav: Gravity, inp: number[]) 
       continue;
     }
     if (inp[c] !== 0) arr[c] += inp[c] * acc * dt;
-    // decoupled: no damping, so you keep drifting whichever way the nose points
-    else if (ship.fa && !ship.decoupled) arr[c] -= Math.sign(arr[c]) * Math.min(Math.abs(arr[c]), acc * 0.7 * dt);
+    // decoupled: no damping, so you keep drifting whichever way the nose points; nor while the
+    // collision radar nudges you clear of a rock (sim/belt.ts)
+    else if (ship.fa && !ship.decoupled && !g.nudging) arr[c] -= Math.sign(arr[c]) * Math.min(Math.abs(arr[c]), acc * 0.7 * dt);
   }
   lv.set(arr[0], arr[1], arr[2]);
   // after a boost, flight assist bleeds speed back down to the normal limit

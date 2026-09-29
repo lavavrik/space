@@ -27,7 +27,7 @@ export function busCapacity(g: Game) {
 export function beginPower(g: Game) {
   const { power } = g;
   // last frame's loads stay readable (HUD) until the next frame starts
-  power.thrustKW = power.ftlKW = power.chargeKW = power.burn = 0;
+  power.thrustKW = power.ftlKW = power.chargeKW = power.burn = power.shieldKW = power.guardKW = 0;
   power.cap = busCapacity(g);
   power.left = Math.max(0, power.cap - SHIP.baseLoad);
   power.limited = null;
@@ -66,7 +66,7 @@ export function settleBattery(g: Game, dt: number) {
 export type Switchable = Breaker | 'lights' | 'pump';
 
 export const SWITCH_NAMES: Record<Switchable, string> = {
-  thrust: 'Thrusters', ftl: 'FTL drive', charge: 'Drive charging', radar: 'Radar', lights: 'Headlights', pump: 'Heat pump',
+  thrust: 'Thrusters', ftl: 'FTL drive', charge: 'Drive charging', radar: 'Radar', shield: 'Deflector', guard: 'Collision radar', lights: 'Headlights', pump: 'Heat pump',
 };
 
 export function loadOn(g: Game, id: Switchable) {

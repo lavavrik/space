@@ -28,13 +28,13 @@ export function impactDamage(v: number, scrape: number, fatal: number) {
 }
 
 /**
- * Take an impact at `v` m/s against `what` (for the messages). Returns true if it destroyed the
- * ship (the caller stops handling the contact).
+ * Take an impact at `v` m/s against `what` (for the messages; `shown` is the speed to report, if
+ * `v` is an effective one). Returns true if it destroyed the ship (the caller stops handling the contact).
  */
-export function impact(g: Game, v: number, scrape: number, fatal: number, what: string, body: Body): boolean {
+export function impact(g: Game, v: number, scrape: number, fatal: number, what: string, body: Body, shown = v): boolean {
   const d = impactDamage(v, scrape, fatal);
   if (d <= 0) return false;
-  return hurt(g, d, `Hit ${what} at ${v.toFixed(0)} m/s`, body);
+  return hurt(g, d, `Hit ${what} at ${shown.toFixed(0)} m/s`, body);
 }
 
 /** Take `d` of damage; destroyed (true) if it's more than what's left. */

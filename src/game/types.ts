@@ -232,7 +232,7 @@ export interface Ship {
 }
 
 /** Loads on the power bus that can be switched off in the schematic (sim/power.ts). */
-export type Breaker = 'thrust' | 'ftl' | 'charge' | 'radar';
+export type Breaker = 'thrust' | 'ftl' | 'charge' | 'radar' | 'shield' | 'guard';
 
 /** Per-frame power bookkeeping. */
 export interface Power {
@@ -248,6 +248,8 @@ export interface Power {
   pumpKW: number; // heat pump (set by sim/thermal.ts for the next frame)
   radarKW: number; // radar, while it's on (sim/radar.ts)
   lightsKW: number; // headlights, while they're on
+  shieldKW: number; // magnetic deflector, while it works (sim/belt.ts)
+  guardKW: number; // collision radar, near a ring's belt (sim/belt.ts)
   burn: number;
   cap: number; // kW the bus can supply this frame: solar + the battery's discharge limit (sim/power.ts)
   left: number; // kW not yet granted this frame

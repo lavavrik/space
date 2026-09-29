@@ -18,7 +18,10 @@
 import type { Game } from './Game';
 import { THREE } from './lib/three';
 import { ALL_COMPUTERS, type Avionics } from './avionics/catalog';
-import { batteryById, moduleById } from './outfit/catalog';
+import { UTILITY_SLOTS, batteryById, bestOutfit, moduleById } from './outfit/catalog';
+
+/** The outfit's save format: 2 added utility slots 4 and 5 (belt protection). */
+const OUTFIT_REV = 2;
 import type { ApType, Npc, Ship, Target } from './types';
 import { systemById } from './universe/galaxy';
 import { resetFrame } from './sim/frame';
@@ -57,7 +60,7 @@ export interface ShipSave {
   vent: boolean;
   sunTrack: boolean;
   landed: string | null;
-  outfit: { battery: string; slots: (string | null)[]; radiatorsOut: number; deploy: boolean; pumpAuto: boolean };
+  outfit: { battery: string; slots: (string | null)[]; radiatorsOut: number; deploy: boolean; pumpAuto: boolean; rev?: number };
   avionics: Record<keyof Avionics, string | null>;
   breakers?: Ship['breakers']; // (absent in older saves: all on)
   ap: {
@@ -149,6 +152,7 @@ function snapshotFlight(c: Game): FlightSave {
       outfit: {
         battery: ship.outfit.battery.id,
         slots: ship.outfit.slots.map((m) => m?.id ?? null),
+        rev: OUTFIT_REV,
         radiatorsOut: ship.outfit.radiatorsOut,
         deploy: ship.outfit.deploy,
         pumpAuto: ship.outfit.pumpAuto,
@@ -286,7 +290,14 @@ function restoreFlight(c: Game, f: FlightSave) {
   const s = f.ship;
   const batt = batteryById(s.outfit.battery);
   if (batt) ship.outfit.battery = batt;
-  ship.outfit.slots = s.outfit.slots.map((id) => (id ? moduleById(id) : null));
+  // saves from before slots 4 and 5 (rev 1) get them fitted as on a new ship: the belt protection
+  // modules they came with (a save may already list them, empty, if written in between)
+  const stock = bestOutfit().slots;
+  const old = (s.outfit.rev ?? 1) < 2;
+  ship.outfit.slots = Array.from({ length: UTILITY_SLOTS }, (_, i) => {
+    const id = s.outfit.slots[i];
+    return id ? moduleById(id) : old && i >= 3 ? stock[i] : null;
+  });
   ship.outfit.radiatorsOut = s.outfit.radiatorsOut;
   ship.outfit.deploy = s.outfit.deploy;
   ship.outfit.pumpAuto = s.outfit.pumpAuto;

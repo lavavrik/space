@@ -65,7 +65,7 @@ export function ringContact(g: Game, dt: number) {
   // damage, by the approach speed scaled for the rock's mass
   const size = rock.size < 10 ? rock.size.toFixed(1) : rock.size.toFixed(0);
   const h0 = ship.hull;
-  if (impact(g, effectiveSpeed(vn, mr, ms), ROCK_SCRAPE, CRASH_SPEED, `a ${size} m rock`, w)) return;
+  if (impact(g, effectiveSpeed(vn, mr, ms), ROCK_SCRAPE, CRASH_SPEED, `a ${size} m rock`, w, vn)) return;
   // the ship's share of (1 + e) × the closing speed along the normal
   ship.vel.addScaledVector(normal, (1 + BOUNCE) * vn * (mr / (mr + ms)));
   if (mr < ms) {

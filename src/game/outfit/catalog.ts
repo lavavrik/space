@@ -21,7 +21,7 @@
  * Physics in sim/thermal.ts; numbers in docs/thermal.md.
  */
 
-export type ModuleKind = 'radiator' | 'heatpump' | 'scoop';
+export type ModuleKind = 'radiator' | 'heatpump' | 'scoop' | 'deflector' | 'guard';
 
 interface ModuleBase {
   id: string;
@@ -61,7 +61,35 @@ export interface ScoopModule extends ModuleBase {
   };
 }
 
-export type Module = RadiatorModule | HeatPumpModule | ScoopModule;
+/**
+ * Magnetic deflector (belt protection, sim/belt.ts): a field round the hull that turns aside the
+ * charged dust of a ring's belt, cutting the erosion it causes at speed. It works (and draws power)
+ * only while there's dust to deflect: in a belt, faster than DUST_V through it.
+ */
+export interface DeflectorModule extends ModuleBase {
+  kind: 'deflector';
+  caps: {
+    block: number; // share of the erosion it stops (0–1)
+    kw: number; // power while it works
+  };
+}
+
+/**
+ * Collision-warning radar (sim/belt.ts): tracks rocks ahead in a ring's belt and warns of any on a
+ * collision course; the better one also nudges the ship clear (while flight assist is on and you're
+ * not thrusting). It runs (and draws power) while you're in or near a belt.
+ */
+export interface GuardModule extends ModuleBase {
+  kind: 'guard';
+  caps: {
+    minSize: number; // m: the smallest rock it tracks (radius)
+    range: number; // m: how far ahead it looks
+    avoid: boolean; // nudges you clear
+    kw: number;
+  };
+}
+
+export type Module = RadiatorModule | HeatPumpModule | ScoopModule | DeflectorModule | GuardModule;
 
 /** Most thrust (m/s², ~3 g) deployed radiators can take; more is capped while they're out. */
 export const RADIATOR_MAX_ACC = 30;
@@ -95,6 +123,26 @@ export const MODULES: Module[] = [
     id: 'fs-5', kind: 'scoop', maker: 'Aerodyne Fuel Systems', model: 'FS-5', name: 'Maelstrom', mass: 5500,
     blurb: 'Twice the intake of the FS-3: hydrogen and exotic matter',
     caps: { exotic: true, rate: 2 },
+  },
+  {
+    id: 'md-4', kind: 'deflector', maker: 'Tessera Shielding', model: 'MD-4', name: 'Aegis', mass: 2500,
+    blurb: 'Magnetic field against ring dust: cuts the erosion by 90 %. Draws 800 kW while it works',
+    caps: { block: 0.9, kw: 800 },
+  },
+  {
+    id: 'md-8', kind: 'deflector', maker: 'Tessera Shielding', model: 'MD-8', name: 'Bulwark', mass: 4000,
+    blurb: 'A stronger field: cuts the erosion by 98 %. Draws 1.5 MW while it works',
+    caps: { block: 0.98, kw: 1500 },
+  },
+  {
+    id: 'cr-2', kind: 'guard', maker: 'Tessera Shielding', model: 'CR-2', name: 'Sentinel', mass: 600,
+    blurb: 'Collision warning in ring belts: rocks of 10 m and up on a collision course, 5 km ahead',
+    caps: { minSize: 10, range: 5000, avoid: false, kw: 150 },
+  },
+  {
+    id: 'cr-5', kind: 'guard', maker: 'Tessera Shielding', model: 'CR-5', name: 'Warden', mass: 900,
+    blurb: 'Tracks every rock, pebbles too (1.5 km ahead; bigger ones 8 km), and nudges you clear (with flight assist on)',
+    caps: { minSize: 1.5, range: 8000, avoid: true, kw: 250 },
   },
   {
     id: 'kh-2', kind: 'heatpump', maker: 'Kelvin Dynamics', model: 'KH-2', name: 'Coldsink', mass: 1200,
@@ -142,7 +190,7 @@ export const moduleById = (id: string) => MODULES.find((m) => m.id === id) ?? nu
 export const moduleLabel = (m: Module | BatteryModule) => `${m.model} ${m.name}`;
 
 /** Utility slots on the default hull. */
-export const UTILITY_SLOTS = 3;
+export const UTILITY_SLOTS = 5;
 
 /** What's fitted and the state of the deployable hardware. */
 export interface Outfit {
@@ -160,12 +208,13 @@ export const PUMP_ON_ABOVE = 300;
 
 /**
  * The ship you start with: the best of everything. HP-600 Tempest battery, and in the utility
- * slots the FS-5 Maelstrom scoop, KR-25 Glacier radiators and the KH-2 Coldsink heat pump.
+ * slots the FS-5 Maelstrom scoop, KR-25 Glacier radiators, the KH-2 Coldsink heat pump, the MD-8
+ * Bulwark deflector and the CR-5 Warden collision radar.
  */
 export const bestOutfit = (): Outfit => ({
   ...emptyOutfit(),
   battery: BATTERIES[BATTERIES.length - 1],
-  slots: ['fs-5', 'kr-25', 'kh-2'].map((id) => moduleById(id)),
+  slots: ['fs-5', 'kr-25', 'kh-2', 'md-8', 'cr-5'].map((id) => moduleById(id)),
 });
 
 export const emptyOutfit = (): Outfit => ({ battery: STOCK_BATTERY, slots: Array(UTILITY_SLOTS).fill(null), radiatorsOut: 0, deploy: false, pumpAuto: true });
@@ -179,3 +228,7 @@ export const radiatorArea = (o: Outfit) => radiatorsFitted(o).reduce((a, r) => a
 /** The fitted fuel scoop with the best intake, if any (one is enough; a second adds nothing). */
 export const scoopFitted = (o: Outfit) =>
   o.slots.filter((x): x is ScoopModule => x?.kind === 'scoop').sort((a, b) => Number(b.caps.exotic) - Number(a.caps.exotic) || b.caps.rate - a.caps.rate)[0] ?? null;
+
+/** The fitted deflector and collision radar (the best of each, if more than one). */
+export const deflectorFitted = (o: Outfit) => o.slots.filter((x): x is DeflectorModule => x?.kind === 'deflector').sort((a, b) => b.caps.block - a.caps.block)[0] ?? null;
+export const guardFitted = (o: Outfit) => o.slots.filter((x): x is GuardModule => x?.kind === 'guard').sort((a, b) => a.caps.minSize - b.caps.minSize)[0] ?? null;

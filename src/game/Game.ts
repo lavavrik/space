@@ -30,6 +30,7 @@ import { contactLabel, radarContacts, radarSweep } from './sim/radar';
 import { toggleScan } from './sim/scanner';
 import { dockKey, launch, refuelDocked, type Dock } from './sim/docking';
 import { catapultLaunch, type Ascent } from './sim/catapult';
+import type { RockThreat } from './sim/belt';
 import { repairDocked } from './sim/damage';
 import type { AutoPhase } from './sim/autodock';
 import { fitBattery, fitModule, removeModule } from './outfit/fit';
@@ -44,7 +45,7 @@ export function newShip(): Ship {
     fa: true, decoupled: false, travelDir: new THREE.Vector3(0, 0, -1), ap: null, landed: null, dead: null, grav: null,
     hull: 1, prop: SHIP.propCap, exotic: SHIP.exoticCap, batt: BATTERIES[BATTERIES.length - 1].caps.capacity,
     burnRate: 0, sunTrack: false, tanker: null, scoop: '', scoopRate: { prop: 0, exotic: 0 }, avionics: defaultAvionics(), temp: TEMP.start, vent: false, outfit: bestOutfit(),
-    breakers: { thrust: true, ftl: true, charge: true, radar: true },
+    breakers: { thrust: true, ftl: true, charge: true, radar: true, shield: true, guard: true },
   };
 }
 
@@ -58,7 +59,7 @@ export class Game {
   /** Systems around the current one that a jump could reach (with a margin for moving within it). */
   nearby: StarSystem[] = [];
   readonly ship = newShip();
-  readonly power: Power = { solar: 0, shore: 0, cos: 0, shadow: null, draw: 0, net: 0, thrustKW: 0, ftlKW: 0, chargeKW: 0, pumpKW: 0, radarKW: 0, lightsKW: 0, burn: 0, flux: 0, cap: 0, left: 0, limited: null, curtailed: 0, ftlShort: 0 };
+  readonly power: Power = { solar: 0, shore: 0, cos: 0, shadow: null, draw: 0, net: 0, thrustKW: 0, ftlKW: 0, chargeKW: 0, pumpKW: 0, radarKW: 0, lightsKW: 0, shieldKW: 0, guardKW: 0, burn: 0, flux: 0, cap: 0, left: 0, limited: null, curtailed: 0, ftlShort: 0 };
   /**
    * One selection at a time: a body or station (target) or a star to jump to (jumpDest). Setting
    * either clears the other. A hyperjump in progress keeps its own destination (jump.dest).
@@ -114,6 +115,10 @@ export class Game {
   autodockPad = 0;
   /** The ascent program after a sky station's catapult (sim/catapult.ts), while it flies. */
   ascent: Ascent | null = null;
+  /** In a ring's belt (sim/belt.ts): hull wear from its dust (per s), the rock on a collision course, and whether the radar is nudging you clear this step. */
+  erosion = 0;
+  rockThreat: RockThreat | null = null;
+  nudging = false;
   dockRel = new THREE.Vector3();
   /** Radar (sim/radar.ts): seconds left of the sweep in progress (0 = idle), and every object it
    *  has found (scan keys, so per system). */

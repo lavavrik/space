@@ -237,6 +237,7 @@ export class Overlay {
     this.drawBodies(g);
     this.drawStations(g);
     this.drawTraffic(g);
+    this.drawRockThreat(g);
     this.drawReachable(g);
     this.drawJumpDest(g);
     this.drawNavDest(g);
@@ -505,6 +506,38 @@ export class Overlay {
         }
       }
     }
+  }
+
+  /**
+   * The collision radar's threat (sim/belt.ts): a red ring round the rock on a collision course, with
+   * its size and the time to contact (an edge arrow when it's off screen).
+   */
+  private drawRockThreat(g: Game) {
+    const th = g.rockThreat;
+    if (!th) return;
+    const { ctx } = this;
+    const rel = this.tmp.copy(th.pos).addScaledVector(th.vel, g.simTime - th.t0).add(g.frameBody.pos).sub(g.ship.pos);
+    const d = rel.length();
+    const tLeft = Math.max(0, th.tHit - (g.simTime - th.t0));
+    const label = `ROCK ${th.size < 10 ? th.size.toFixed(1) : th.size.toFixed(0)} m · ${tLeft.toFixed(1)} s`;
+    const s = this.toScreen(g, rel);
+    if (s.behind || s.x < 0 || s.x > this.W || s.y < 0 || s.y > this.H) {
+      this.edgeArrow(s.v, RED, label);
+      return;
+    }
+    const r = Math.max(10 * this.ui, ((th.size * 0.8) / d) * g.view.pxPerRad + 6 * this.ui);
+    const blink = 0.55 + 0.45 * Math.sin(performance.now() / 90);
+    ctx.save();
+    ctx.strokeStyle = RED + blink.toFixed(2) + ')';
+    ctx.lineWidth = 2 * this.ui;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = RED + '0.95)';
+    ctx.font = this.font(12, MONO);
+    ctx.textAlign = 'center';
+    ctx.fillText(label, s.x, s.y - r - 7 * this.ui);
+    ctx.restore();
   }
 
   /**

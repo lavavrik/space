@@ -27,6 +27,7 @@ import { RADAR_RANGE, SWEEP, contactLabel, radarClass, radarContacts } from '../
 import { unitLabel, type Computer } from '../avionics/catalog';
 import { buildInfluences } from './influences';
 import { approachView } from './approach';
+import { deflectorFitted, guardFitted } from '../outfit/catalog';
 import { HULL_WARN, heatDamageRate } from '../sim/damage';
 import { buildInfo, stationKind } from './info';
 import type { AutopilotView, AvionicsSlotView, ElectricalView, ModuleIcon, RadarView, OutfitView, FlightView, GaugeBadge, GaugeView, Lamp, NavView, GuideView, HudSnapshot, LocationView, Pill, PlannerView, Readout, SystemsView, TargetView } from './types';
@@ -236,6 +237,8 @@ function flight(g: Game): FlightView {
   const pills: Pill[] = [];
   if (g.autodock) pills.push({ text: `AUTO-DOCK · ${g.autodock.phase.toUpperCase()}`, kind: 'ftl' });
   if (g.ascent) pills.push({ text: 'ASCENT PROGRAM', kind: 'ftl' });
+  const th = g.rockThreat;
+  if (th) pills.push({ text: `ROCK ${th.size < 10 ? th.size.toFixed(1) : th.size.toFixed(0)} m · ${Math.max(0, th.tHit - (g.simTime - th.t0)).toFixed(1)} s${th.avoiding ? ' · AVOIDING' : ''}`, kind: 'warn' });
   if (g.dock) pills.push({ text: g.dock.docked ? `DOCKED · PAD ${g.dock.pad + 1}` : `PAD ${g.dock.pad + 1} GRANTED`, kind: g.dock.docked ? 'on' : 'ftl' });
   if (g.zoom.on) pills.push({ text: `ZOOM ${g.zoom.mag}×`, kind: 'on' });
   if (g.warp > 1) pills.push({ text: `TIME ×${g.warp.toLocaleString('en-US')}`, kind: 'warn' });
@@ -353,8 +356,8 @@ function hullGauge(g: Game): GaugeView {
 function integrityGauge(g: Game): GaugeView {
   const h = g.ship.hull;
   const heat = heatDamageRate(g.ship.temp);
-  const text = heat > 0 ? `weakening ${(heat * 6000).toFixed(0)} %/min from heat` : h >= 0.999 ? 'sound' : g.dock?.docked ? 'repair in the docked panel' : 'dock at a station to repair';
-  return { label: 'INTEGRITY', value: `${Math.round(h * 100)} %`, frac: h, sub: { text, warn: heat > 0 || h <= HULL_WARN } };
+  const text = heat > 0 ? `weakening ${(heat * 6000).toFixed(0)} %/min from heat` : g.erosion > 1e-6 ? `ring dust wearing it ${(g.erosion * 6000).toFixed(g.erosion < 1e-3 ? 2 : 1)} %/min` : h >= 0.999 ? 'sound' : g.dock?.docked ? 'repair in the docked panel' : 'dock at a station to repair';
+  return { label: 'INTEGRITY', value: `${Math.round(h * 100)} %`, frac: h, sub: { text, warn: heat > 0 || g.erosion > 1e-6 || h <= HULL_WARN } };
 }
 
 function autopilotView(g: Game): AutopilotView {
@@ -464,7 +467,11 @@ function outfitView(g: Game): OutfitView {
       ? `${fmtArea(2 * m.caps.area)} radiating · ${m.caps.deployTime} s to deploy · ${fmtMass(m.mass)}`
       : m.kind === 'heatpump'
         ? `lift ${m.caps.lift} K · up to ${fmtPower(m.caps.maxKW)} · ${fmtMass(m.mass)}`
-        : `${m.caps.exotic ? 'H₂ + exotic' : 'H₂ only'} · ${m.caps.rate}× intake · ${fmtMass(m.mass)}`;
+        : m.kind === 'deflector'
+          ? `stops ${Math.round(m.caps.block * 100)} % of dust erosion · ${fmtPower(m.caps.kw)} while working · ${fmtMass(m.mass)}`
+          : m.kind === 'guard'
+            ? `rocks ${m.caps.minSize} m and up · ${fmtDist(m.caps.range)} ahead · ${m.caps.avoid ? 'steers clear' : 'warns'} · ${fmtPower(m.caps.kw)} · ${fmtMass(m.mass)}`
+            : `${m.caps.exotic ? 'H₂ + exotic' : 'H₂ only'} · ${m.caps.rate}× intake · ${fmtMass(m.mass)}`;
   const h = g.heat;
   const rads = radiatorsFitted(o);
   const pump = pumpFitted(o);
@@ -474,7 +481,7 @@ function outfitView(g: Game): OutfitView {
     battery: { unit: moduleLabel(o.battery), specs: bSpecs(o.battery), options: st ? BATTERIES.map((b) => ({ id: b.id, unit: moduleLabel(b), specs: `${b.blurb} · ${bSpecs(b)}`, current: b === o.battery })) : [] },
     hint: 'Modules are fitted while docked at a station (target one, K for a pad, land on it)',
     slots: o.slots.map((m) => (m ? { unit: moduleLabel(m), blurb: m.blurb, specs: specsOf(m), empty: false, icon: m.kind } : { unit: 'empty', blurb: '', specs: '', empty: true, icon: 'empty' as const })),
-    catalogue: st ? MODULES.map((m) => ({ id: m.id, unit: moduleLabel(m), kind: { radiator: 'RADIATORS', heatpump: 'HEAT PUMP', scoop: 'FUEL SCOOP' }[m.kind], blurb: m.blurb, specs: specsOf(m) })) : [],
+    catalogue: st ? MODULES.map((m) => ({ id: m.id, unit: moduleLabel(m), kind: { radiator: 'RADIATORS', heatpump: 'HEAT PUMP', scoop: 'FUEL SCOOP', deflector: 'DEFLECTOR', guard: 'COLLISION RADAR' }[m.kind], blurb: m.blurb, specs: specsOf(m) })) : [],
     radiators: {
       fitted: rads.length > 0,
       out: o.radiatorsOut,
@@ -515,7 +522,7 @@ function electricalView(g: Game): ElectricalView {
   const lim = power.limited;
   const limitOf = (id: string) => {
     if (!lim) return null;
-    const is = { charge: /charging/, thrust: /thrusters/, ftl: /FTL drive/, pump: /heat pump/, radar: /radar/ }[id];
+    const is = { charge: /charging/, thrust: /thrusters/, ftl: /FTL drive/, pump: /heat pump/, radar: /^radar/, shield: /deflector/, guard: /collision radar/ }[id];
     return is?.test(lim.what) ? lim.frac : null;
   };
   const net = power.net;
@@ -546,6 +553,8 @@ function electricalView(g: Game): ElectricalView {
       { id: 'charge', name: g.jump?.phase === 'charge' ? 'HYPERDRIVE CHARGING' : 'DRIVE CHARGING', kw: power.chargeKW, limited: limitOf('charge'), sw: 'charge', on: loadOn(g, 'charge') },
       { id: 'pump', name: 'HEAT PUMP', kw: power.pumpKW, limited: limitOf('pump'), sw: pumpFitted(ship.outfit) ? 'pump' : null, on: loadOn(g, 'pump') },
       { id: 'radar', name: 'RADAR', kw: power.radarKW, limited: limitOf('radar'), sw: 'radar', on: loadOn(g, 'radar') },
+      { id: 'shield', name: 'DEFLECTOR', kw: power.shieldKW, limited: limitOf('shield'), sw: deflectorFitted(ship.outfit) ? 'shield' : null, on: loadOn(g, 'shield') },
+      { id: 'guard', name: 'COLLISION RADAR', kw: power.guardKW, limited: limitOf('guard'), sw: guardFitted(ship.outfit) ? 'guard' : null, on: loadOn(g, 'guard') },
     ],
     rows,
   };

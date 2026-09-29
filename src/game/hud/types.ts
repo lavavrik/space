@@ -123,7 +123,7 @@ export interface InfluencesView {
 }
 
 /** Icon per kind of module (see ui/components/icons.ts). */
-export type ModuleIcon = 'battery' | 'scoop' | 'radiator' | 'heatpump' | 'empty';
+export type ModuleIcon = 'battery' | 'scoop' | 'radiator' | 'heatpump' | 'deflector' | 'guard' | 'empty';
 
 /** One fitted computer in the avionics panel (U). */
 export interface AvionicsSlotView {

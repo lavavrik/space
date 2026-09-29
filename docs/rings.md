@@ -60,5 +60,33 @@ Both views read the same density across the radius: bands from two octaves of si
   tenths of a percent of damage. If a heavy rock sits on its spot, it steps the orbit aside.
 - Not with time warp on (the ship is on the rocks' orbit then), nor for other ships yet.
 
-Not yet: dust erosion, protection (SPACE-57: deflector, warning radar), rocks as radar contacts or
-mining targets (SPACE-58).
+## Protection (`sim/belt.ts`; modules in `outfit/catalog.ts`)
+
+Two more utility slots (5 now) carry belt protection; a new ship has the best of each, and saves
+from before get them fitted.
+
+- **Dust erosion.** Inside the belt's slab, faster than 500 m/s through the rocks' frame, the hull
+  wears at 0.004 × density × ((v − 500) / 1 km/s)³ per second (the dust's energy flux goes as v³):
+  ~0.3–0.6 %/min cruising at the belt limit (800 m/s) in a dense band, ~6 % crossing the 3 km slab
+  at 3 km/s, fatal across it at orbital speeds. The integrity gauge says when dust is wearing it.
+- **Magnetic deflector** (Tessera Shielding MD-4 Aegis: stops 90 %, 800 kW; MD-8 Bulwark: 98 %,
+  1.5 MW): draws its power only while there's dust to stop. Measured at 800 m/s in a dense band:
+  0.295 %/min without, 0.006 %/min with the MD-8. A load in the power schematic (DEFLECTOR), with a
+  switch.
+- **Collision radar** (CR-2 Sentinel: rocks 10 m and up, 5 km ahead, warns; CR-5 Warden: every
+  rock, pebbles 1.5 km ahead and bigger ones 8 km, and steers you clear): near a belt, every 0.25 s
+  it looks along your motion through the rocks for any on a collision course (closest approach
+  within touching + 30 m, up to 30 s ahead). The soonest is marked on the HUD (a blinking red ring
+  with its size and seconds to contact; an edge arrow off screen) and in a ROCK pill, and a new
+  one of 10 m or more is announced. A tracked rock stays tracked until it's passed. A load in the
+  power schematic (COLLISION RADAR), with a switch.
+- **Steering clear** (CR-5, flight assist on, not while you steer sideways or a computer flies):
+  every threat pulls toward its own way clear (the short way, across the relative motion), weighted
+  by how far short it is and how soon; the ship is pushed at 200 m/s² along the sum until each will
+  miss by 15 m. Flight assist leaves the sideways drift alone until the rocks are passed (it used
+  to damp the nudge straight back out). Flying at a 40–70 m rock at the belt limit, thrust held,
+  from 3 km: 7 of 8 runs passed it and everything else untouched; without the radar, every run hit.
+  It's help, not a guarantee.
+- The impact messages give the real closing speed (the damage uses the mass-scaled one).
+
+Not yet: rocks as radar contacts or mining targets (SPACE-58), other ships feeling any of this.
