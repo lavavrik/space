@@ -55,7 +55,8 @@ function aimDir(g: Game) {
 export function updatePivot(g: Game, realDt: number, steered: boolean) {
   if (!g.pivot) return;
   const dir = aimDir(g);
-  if (steered || !dir || g.ship.ap?.phase === 'transfer' || g.jump || g.dock?.docked || g.ship.landed) {
+  // (sun tracking turns the ship its own way: switching it on ends the pivot, and its lock)
+  if (steered || !dir || g.ship.sunTrack || g.ship.ap?.phase === 'transfer' || g.jump || g.dock?.docked || g.ship.landed) {
     if (g.pivotLocked && steered) g.showMsg('Lock released');
     g.pivot = g.pivotLocked = false;
     g.pivotRate = 0;

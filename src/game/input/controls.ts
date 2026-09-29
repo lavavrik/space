@@ -149,7 +149,7 @@ export function onPress(g: Game, code: string) {
         break;
       }
       ship.sunTrack = !ship.sunTrack;
-      g.showMsg(ship.sunTrack ? 'Sun tracking on · turning panels to the star (steer to cancel)' : 'Sun tracking off');
+      g.showMsg(ship.sunTrack ? `Sun tracking on · turning panels to the star (steer to cancel)${g.pivot ? ' · target lock released' : ''}` : 'Sun tracking off');
       break;
     case 'KeyK':
       // K is docking (request, docking computer, launch); Shift+K calls a tanker, or docked at a sky
