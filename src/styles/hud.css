@@ -160,3 +160,4 @@
 .tdist span { font: .95rem "Share Tech Mono", ui-monospace, monospace; color: var(--amber); }
 #target.none .tname { color: var(--amber-dim); font-size: 1.1rem; }
 .tscan { font-size: .8rem; letter-spacing: .14em; color: var(--cyan); margin-top: .15rem; }
+.gicon { font-size: 1.05em; color: var(--amber-dim); margin-right: -.1rem; }

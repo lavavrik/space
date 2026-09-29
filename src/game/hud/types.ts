@@ -79,6 +79,8 @@ export interface GaugeBadge {
 /** One ship gauge: label, value, fill, and a one-line detail. */
 export interface GaugeView {
   label: string;
+  /** An icon before the label (ui/components/icons.ts RESOURCE_ICONS). */
+  icon?: 'prop' | 'exotic' | 'cargo';
   value: string;
   frac: number;
   variant?: 'ftl' | 'batt' | 'heat';
@@ -304,6 +306,10 @@ export interface HudSnapshot {
     trade: { id: 'nife' | 'cobalt' | 'pgm'; name: string; have: string; price: string; vs: { text: string; up: boolean }; value: string; empty: boolean }[];
     jobs: ContractsView | null;
     outfit: OutfitView | null;
+    /** Services: each fuel (kg now and full, this station's Cr/kg) and your credits, for the refuel sliders; the hull. */
+    fuels: { id: 'prop' | 'exotic'; name: string; haveKg: number; capKg: number; price: number }[];
+    creditsN: number;
+    hull: { pct: string; frac: number };
   } | null;
   nav: NavView | null;
   guide: GuideView | null;
@@ -366,4 +372,6 @@ export interface ContractsView {
   mine: JobView[];
   max: number;
   credits: string;
+  /** Time to the next board. */
+  refresh: string;
 }

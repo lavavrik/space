@@ -2,7 +2,8 @@ import {
   Anchor, ArrowsOutCardinal, BatteryWarning, Binoculars, Broadcast, Crosshair, Fan, Funnel, Gauge, Headlights, Hourglass, Lightning,
   LightningSlash, Fire, Lock, PlugsConnected, ShieldCheck, SolarPanel, Snowflake, SteeringWheel, Sun, ThermometerHot, Wind, type Icon,
 } from '@phosphor-icons/react';
-import type { ApproachView, FlightView, GaugeBadge as GaugeBadgeView, Lamp, LampId, LocationView, SystemsView, TargetView } from '../../game/hud/types';
+import { RESOURCE_ICONS } from './icons';
+import type { GaugeView, ApproachView, FlightView, GaugeBadge as GaugeBadgeView, Lamp, LampId, LocationView, SystemsView, TargetView } from '../../game/hud/types';
 import { Bar, Panel, cx } from './primitives';
 import { Tip } from './Tooltip';
 
@@ -37,6 +38,11 @@ function GaugeBadge({ icon, title, warn }: GaugeBadgeView) {
   );
 }
 
+function GaugeIcon({ icon }: { icon: NonNullable<GaugeView['icon']> }) {
+  const I = RESOURCE_ICONS[icon];
+  return <I weight="duotone" className="gicon" />;
+}
+
 /** Bottom left: three gauges with one line of detail each, and a note when something needs attention. */
 export function ShipGauges({ s }: { s: SystemsView }) {
   return (
@@ -45,6 +51,7 @@ export function ShipGauges({ s }: { s: SystemsView }) {
         <div key={gv.label} className="gauge">
           <div className="gtop">
             <span>
+              {gv.icon && <GaugeIcon icon={gv.icon} />}
               {gv.label}
               {gv.badges?.map((b) => <GaugeBadge key={b.icon} {...b} />)}
             </span>

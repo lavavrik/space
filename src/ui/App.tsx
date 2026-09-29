@@ -51,7 +51,7 @@ export function App() {
                 d={hud.docked}
                 act={{
                   tab: (t) => game!.setStationTab(t),
-                  refuel: () => game!.refuelDocked(),
+                  buyFuel: (f, kg) => game!.buyFuel(f, kg),
                   repair: () => game!.repairDocked(),
                   sell: (c) => game!.sellOne(c),
                   sellAll: () => game!.sellCargo(),

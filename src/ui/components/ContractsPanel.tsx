@@ -1,3 +1,4 @@
+import { Coins } from '@phosphor-icons/react';
 import type { ContractsView, JobView } from '../../game/hud/types';
 import { Panel, cx } from './primitives';
 
@@ -51,7 +52,9 @@ export function ContractsBody({ v, act }: { v: ContractsView; act: ContractActio
         <span>
           YOUR JOBS {v.mine.length} / {v.max}
         </span>
-        <span>{v.credits}</span>
+        <span className="svcr">
+          <Coins weight="duotone" /> {v.credits}
+        </span>
       </div>
       {v.mine.length === 0 && <div className="ohint">None · take one from a station's board (dock, then ⇧J)</div>}
       {v.mine.map((j) => (
@@ -76,6 +79,7 @@ export function ContractsBody({ v, act }: { v: ContractsView; act: ContractActio
         <>
           <div className="sub">
             <span>BOARD · {v.station.toUpperCase()}</span>
+            <span>new jobs in {v.refresh}</span>
           </div>
           {v.board.length === 0 && <div className="ohint">Nothing on offer until the next board (every 30 min)</div>}
           {v.board.map((j) => (

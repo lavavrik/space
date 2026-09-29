@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SHIP } from '../constants';
 import type { Game } from '../Game';
-import { CARGO_CAP, buyFuel, buyRepair, cargoMass, jettison, refuelQuote, sellCargo, sellOne, sellPrice, stationFactor, stowMetal } from '../sim/economy';
+import { CARGO_CAP, buyFuelTo, fuelPrice, buyFuel, buyRepair, cargoMass, jettison, refuelQuote, sellCargo, sellOne, sellPrice, stationFactor, stowMetal } from '../sim/economy';
 import type { Station } from '../types';
 
 const station = (name: string) => ({ name }) as Station;
@@ -78,5 +78,19 @@ describe('economy', () => {
     stowMetal(g, 1000, { nife: 0.8, cobalt: 0.1, pgm: 0.1 });
     expect(g.ship.cargo.pgm).toBeCloseTo(100);
     expect(g.ship.cargo.nife).toBeCloseTo(800);
+  });
+
+  it('buys one fuel up to a level, leaving the other, as far as the credits go', () => {
+    const g = fake(1_000_000);
+    buyFuelTo(g, 'prop', 50_000);
+    expect(g.ship.prop).toBeCloseTo(50_000);
+    expect(g.ship.exotic).toBe(0);
+    expect(g.credits).toBeCloseTo(1_000_000 - 50_000 * fuelPrice(g.dock!.station, 'prop'));
+    buyFuelTo(g, 'prop', 40_000); // below what's in the tank: nothing
+    expect(g.ship.prop).toBeCloseTo(50_000);
+    const poor = fake(600);
+    buyFuelTo(poor, 'exotic', SHIP.exoticCap);
+    expect(poor.credits).toBeCloseTo(0);
+    expect(poor.ship.exotic).toBeCloseTo(600 / fuelPrice(poor.dock!.station, 'exotic'));
   });
 });

@@ -37,7 +37,7 @@ import { catapultLaunch, type Ascent } from './sim/catapult';
 import type { RockThreat } from './sim/belt';
 import { laserOff, type LaserState } from './sim/laser';
 import { mapClosed, type MapState } from './render/SystemMap';
-import { START_CREDITS, buyFuel, buyRepair, fmtCr, jettison, sellCargo, sellOne, type Commodity } from './sim/economy';
+import { START_CREDITS, buyFuel, buyFuelTo, buyRepair, fmtCr, type Fuel, jettison, sellCargo, sellOne, type Commodity } from './sim/economy';
 import type { AutoPhase } from './sim/autodock';
 import { fitBattery, fitModule, removeModule } from './outfit/fit';
 import { AUTOSAVE_S, clearSave, loadGame, saveGame } from './save';
@@ -397,6 +397,11 @@ export class Game {
       this.jettisonArm = null;
       jettison(this, c);
     } else this.jettisonArm = { c, t: 3 };
+    this.invalidateHud();
+  }
+  /** Station window: buy one fuel up to a level (kg). */
+  buyFuel(f: Fuel, toKg: number) {
+    buyFuelTo(this, f, toKg);
     this.invalidateHud();
   }
   sellCargo() {

@@ -1,3 +1,4 @@
+import { Atom, Coins, Drop } from '@phosphor-icons/react';
 import type { CargoView } from '../../game/hud/types';
 import { Panel, Row, cx } from './primitives';
 
@@ -72,7 +73,9 @@ export function CargoPanel({ v, act }: { v: CargoView; act: Actions }) {
       {v.tanks.map((t) => (
         <div key={t.name} className="gauge">
           <div className="sub">
-            <span>{t.name.toUpperCase()}</span>
+            <span className="svcr">
+              {t.kind === 'prop' ? <Drop weight="duotone" /> : <Atom weight="duotone" />} {t.name.toUpperCase()}
+            </span>
             <span>{t.value}</span>
           </div>
           <div className={cx('bar', t.kind === 'exotic' && 'ftl')}>
@@ -83,7 +86,12 @@ export function CargoPanel({ v, act }: { v: CargoView; act: Actions }) {
       <div className="sep" />
       <Row label="Ship mass" value={v.mass} />
       <Row label="Δv left" value={v.dv} />
-      <Row label="Credits" value={v.credits} />
+      <div className="svline">
+        <span>Credits</span>
+        <span className="svcr">
+          <Coins weight="duotone" /> {v.credits}
+        </span>
+      </div>
     </Panel>
   );
 }

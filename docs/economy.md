@@ -14,11 +14,28 @@ Code: `sim/economy.ts`; prices in `outfit/catalog.ts` (modules) and `PRICE`/`COM
 
 It opens on docking, and on loading a game that was docked, in place of whatever was in the left column. It has four tabs:
 - **Trading:** the metal in your hold at this station's prices, each marked against the list price (±20 %, a hash of the station: worth shopping round). Sell one metal or all of it.
-- **Services:** refuel, repair, and leave (launch; lift off or the catapult at a sky station).
+- **Services**, in groups ruled off from each other:
+  - credits;
+  - hydrogen and exotic matter, each bought on its own up to a level picked on a slider (the cost shows as you drag), or filled up;
+  - the hull and its repair;
+  - the station (shore power, cooling);
+  - leaving (launch; lift off or the catapult at a sky station).
 - **Contracts:** the station's job board and your jobs. Shift+J while docked opens this tab.
 - **Outfitting:** refit the utility slots and the battery from its catalogue. Shift+U while docked opens this tab.
 
 It opens on Trading when there's metal in the hold, otherwise on Services.
+
+Every tab has the same width: the left column keeps the scrollbar's room whether a tab scrolls or not (`scrollbar-gutter: stable`).
+
+Icons (Phosphor, `ui/components/icons.ts RESOURCE_ICONS`):
+- hydrogen is a drop (it's stored liquid);
+- exotic matter is an atom;
+- credits are coins;
+- the hold is a crate.
+
+They appear on the ship gauges, in the cargo, contracts and station windows.
+
+Job boards show the time a job gives you once taken ("35 min to deliver once taken"), not a countdown, plus when the next board comes. Your own jobs count down.
 
 ## Services (the station window's Services tab, with the price at this station)
 

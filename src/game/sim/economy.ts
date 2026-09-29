@@ -91,6 +91,32 @@ export function buyFuel(g: Game) {
   g.showMsg(prop < q.prop - 1 || exotic < q.exotic - 0.01 ? `${st.name} · bought what ${fmtCr(spent)} would buy · out of credits` : `${st.name} · tanks filled · ${fmtCr(spent)}`, prop < q.prop - 1 ? 'warn' : '');
 }
 
+/** What each fuel is called, holds and costs here (Cr/kg). */
+export const FUELS = {
+  prop: { name: 'hydrogen', cap: SHIP.propCap },
+  exotic: { name: 'exotic matter', cap: SHIP.exoticCap },
+} as const;
+export type Fuel = keyof typeof FUELS;
+export const fuelPrice = (st: Station | null, f: Fuel) => PRICE[f] * stationFactor(st, f);
+
+/**
+ * Buy one fuel up to `toKg` (the station window's slider), as far as your credits go. The other
+ * fuel isn't touched: fill the hydrogen for a long burn, or just enough exotic matter for a jump.
+ */
+export function buyFuelTo(g: Game, f: Fuel, toKg: number) {
+  if (!g.dock?.docked) return;
+  const st = g.dock.station;
+  const have = g.ship[f],
+    want = Math.min(FUELS[f].cap, toKg) - have;
+  if (want <= (f === 'prop' ? 1 : 0.01)) return;
+  const p = fuelPrice(st, f);
+  const kg = Math.min(want, g.credits / p);
+  g.credits -= kg * p;
+  g.ship[f] += kg;
+  const amount = f === 'prop' ? `${(kg / 1000).toFixed(1)} t` : `${kg.toFixed(1)} kg`;
+  g.showMsg(kg < want - 1e-6 ? `${st.name} · ${amount} of ${FUELS[f].name}, all your credits would buy` : `${st.name} · ${amount} of ${FUELS[f].name} · ${fmtCr(kg * p)}`, kg < want - 1e-6 ? 'warn' : '');
+}
+
 /** What repairing the hull fully costs here. */
 export const repairQuote = (g: Game, st: Station | null) => (1 - g.ship.hull) * 100 * PRICE.repair * stationFactor(st, 'repair');
 

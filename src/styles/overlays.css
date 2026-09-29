@@ -117,6 +117,9 @@
 #leftcol > .pan {
   pointer-events: auto; flex: 0 1 auto; min-height: 0; overflow-y: auto;
   scrollbar-width: thin; scrollbar-color: var(--amber-faint) transparent;
+  /* the scrollbar's room kept whether it's needed or not: the station window's tabs (short ones
+     don't scroll, long ones do) kept the same outer width but their contents jumped by its width */
+  scrollbar-gutter: stable;
 }
 
 /* electrical schematic (U): wires carry power; dashes march the way it flows */
@@ -276,3 +279,15 @@
 .trrow.empty { opacity: .45; }
 .trup { color: #8fe08a; }
 .trdown { color: var(--red); }
+/* the station window's Services tab: groups, each ruled off, with an icon and a title */
+.svgroups { display: flex; flex-direction: column; }
+.svgroup { display: flex; flex-direction: column; gap: .25rem; padding: .45rem 0; border-top: 1px solid var(--amber-faint); }
+.svgroup:first-child { border-top: 0; padding-top: .1rem; }
+.svhead { display: flex; align-items: center; gap: .4rem; font-size: .8rem; letter-spacing: .18em; text-transform: uppercase; color: var(--amber); }
+.svhead svg { font-size: 1.1rem; }
+.svline { display: flex; justify-content: space-between; align-items: baseline; gap: .5rem; font-size: .88rem; color: var(--amber-dim); }
+.svline b { font: 400 .92rem "Share Tech Mono", ui-monospace, monospace; color: var(--text); }
+.svbig { font: 400 1.15rem "Share Tech Mono", ui-monospace, monospace; color: var(--text); }
+.svcr { display: inline-flex; align-items: center; gap: .3rem; font: 400 .95rem "Share Tech Mono", ui-monospace, monospace; color: var(--text); }
+.svfill .svto { opacity: .35; }
+.svslider { pointer-events: auto; width: 100%; accent-color: var(--amber); margin: 0; }

@@ -32,8 +32,8 @@ import { deflectorFitted, guardFitted, laserFitted } from '../outfit/catalog';
 import { threatNow } from '../sim/belt';
 import { rockLabel } from '../sim/ringRocks';
 import { liveProspects, prospectNow } from '../sim/prospect';
-import { MAX_ACTIVE, board, canDeliverMetal, cantTake, reach, type Contract } from '../sim/contracts';
-import { CARGO_CAP, COMMODITIES, cargoMass, cargoValue, fmtCr, refuelQuote, repairQuote, sellPrice, type Commodity } from '../sim/economy';
+import { BOARD_S, MAX_ACTIVE, board, canDeliverMetal, cantTake, reach, type Contract } from '../sim/contracts';
+import { FUELS, fuelPrice, CARGO_CAP, COMMODITIES, cargoMass, cargoValue, fmtCr, refuelQuote, repairQuote, sellPrice, type Commodity } from '../sim/economy';
 import { fitPrice } from '../outfit/fit';
 import { HULL_WARN, heatDamageRate } from '../sim/damage';
 import { buildInfo, stationKind } from './info';
@@ -83,6 +83,9 @@ export function buildSnapshot(g: Game): HudSnapshot {
           trade: tradeRows(g, g.dock.station),
           jobs: g.stationTab === 'contracts' ? contractsView(g) : null,
           outfit: g.stationTab === 'outfit' ? outfitView(g) : null,
+          fuels: (['prop', 'exotic'] as const).map((id) => ({ id, name: id === 'prop' ? 'Hydrogen' : 'Exotic matter', haveKg: g.ship[id], capKg: FUELS[id].cap, price: fuelPrice(g.dock!.station, id) })),
+          creditsN: g.credits,
+          hull: { pct: `${Math.round(g.ship.hull * 100)} %`, frac: g.ship.hull },
           tanksFull: g.ship.prop >= SHIP.propCap - 1 && g.ship.exotic >= SHIP.exoticCap - 0.01,
         }
       : null,
@@ -315,6 +318,7 @@ function systems(g: Game): SystemsView {
     gauges: [
       {
         label: 'H₂',
+        icon: 'prop',
         value: fmtMass(ship.prop),
         frac: ship.prop / SHIP.propCap,
         sub: {
@@ -324,6 +328,7 @@ function systems(g: Game): SystemsView {
       },
       {
         label: 'EXOTIC',
+        icon: 'exotic',
         value: fmtMass(ship.exotic),
         frac: ship.exotic / SHIP.exoticCap,
         variant: 'ftl',
@@ -379,7 +384,7 @@ function cargoGauge(g: Game): GaugeView {
   const kg = cargoMass(g);
   const c = g.ship.cargo;
   const what = kg > 0.5 ? ` · ${(Object.keys(COMMODITIES) as Commodity[]).filter((k) => (c[k] ?? 0) > 0.5).map((k) => `${COMMODITIES[k].name.toLowerCase()} ${fmtMass(c[k]!)}`).join(', ')}` : '';
-  return { label: 'CARGO', value: `${fmtMass(kg)} / ${fmtMass(CARGO_CAP)}`, frac: kg / CARGO_CAP, sub: { text: `${fmtCr(g.credits)}${what}` } };
+  return { label: 'CARGO', icon: 'cargo', value: `${fmtMass(kg)} / ${fmtMass(CARGO_CAP)}`, frac: kg / CARGO_CAP, sub: { text: `${fmtCr(g.credits)}${what}` } };
 }
 
 /** The station window's Trading tab: each metal, what you hold, this station's price against the list price, and what it fetches. */
@@ -417,7 +422,9 @@ function contractsView(g: Game): ContractsView {
       route,
       client: c.client,
       reward: fmtCr(c.reward),
-      time: { text: mine ? `${fmtTime(Math.max(0, left))} left` : `${fmtTime(left)} to do it`, warn: mine && left < 300 },
+      // yours: the live countdown; on the board: the time you'd get once you take it (not a clock:
+      // shown as a countdown it looked stuck)
+      time: { text: mine ? `${fmtTime(Math.max(0, left))} left` : `${Math.round(left / 60)} min to deliver once taken`, warn: mine && left < 300 },
       note: mine ? (c.kind === 'metal' ? `${kg(Math.min(have, c.kg))} of ${kg(c.kg)} in the hold` : null) : cantTake(g, c),
       canDeliver: mine && canDeliverMetal(g, c),
       canPlot: mine && !(st && st.name === c.to.station && !elsewhere),
@@ -430,6 +437,7 @@ function contractsView(g: Game): ContractsView {
     mine: g.contracts.map((c) => job(c, true)),
     max: MAX_ACTIVE,
     credits: fmtCr(g.credits),
+    refresh: fmtTime(BOARD_S - (g.simTime % BOARD_S)),
   };
 }
 
@@ -475,7 +483,7 @@ function cargoView(g: Game): CargoView {
 function integrityGauge(g: Game): GaugeView {
   const h = g.ship.hull;
   const heat = heatDamageRate(g.ship.temp);
-  const text = heat > 0 ? `weakening ${(heat * 6000).toFixed(0)} %/min from heat` : g.erosion > 1e-6 ? `ring dust wearing it ${(g.erosion * 6000).toFixed(g.erosion < 1e-3 ? 2 : 1)} %/min` : h >= 0.999 ? 'sound' : g.dock?.docked ? 'repair in the docked panel' : 'dock at a station to repair';
+  const text = heat > 0 ? `weakening ${(heat * 6000).toFixed(0)} %/min from heat` : g.erosion > 1e-6 ? `ring dust wearing it ${(g.erosion * 6000).toFixed(g.erosion < 1e-3 ? 2 : 1)} %/min` : h >= 0.999 ? 'sound' : g.dock?.docked ? 'repair: station window, Services' : 'dock at a station to repair';
   return { label: 'INTEGRITY', value: `${Math.round(h * 100)} %`, frac: h, sub: { text, warn: heat > 0 || g.erosion > 1e-6 || h <= HULL_WARN } };
 }
 
