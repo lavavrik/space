@@ -5,7 +5,8 @@ import { THREE } from '../lib/three';
 import { maxOrbitR, minOrbitAlt, syncRadius } from '../sim/orbits';
 import { stationState } from '../sim/stations';
 import { atmoOf } from '../sim/atmosphere';
-import { elevationLocal } from '../sim/terrain';
+import { elevationLocal, hasSea } from '../sim/terrain';
+import { populated, population } from '../sim/population';
 import type { Body, Station, StarSystem, World } from '../types';
 import { HOME_ID } from './galaxy';
 import { findHome } from './system';
@@ -68,6 +69,8 @@ const SKY_KINDS = ['Skyport', 'Highport', 'Aerie', 'Sky Dock', 'Cloudport'];
 const SKY_SIZE: [number, number] = [900, 1300];
 /** Height above the ground under it (m). */
 const SKY_ALT: [number, number] = [10e3, 20e3];
+/** Spots tried for a sky station (the best one wins). */
+const SKY_TRIES = 64;
 
 function buildSkyStations(sys: StarSystem, bodies: Body[], home: Body | undefined, used: Set<string>, out: Station[]) {
   const g = mulberry32(sys.seed ^ 0x5c1e57a7);
@@ -82,10 +85,24 @@ function buildSkyStations(sys: StarSystem, bodies: Body[], home: Body | undefine
 }
 
 function makeSkyStation(b: World, g: Rng, used: Set<string>): Station {
-  // somewhere between the polar circles (the world's own frame has its spin axis along +y)
-  const lat = Math.asin(rr(g, -0.8, 0.8)),
-    lon = g() * 2 * Math.PI;
-  const dir = new THREE.Vector3(Math.cos(lat) * Math.cos(lon), Math.sin(lat), Math.cos(lat) * Math.sin(lon));
+  // somewhere between the polar circles (the world's own frame has its spin axis along +y): over
+  // land where there's a sea, and on a populated world over its busiest spot of SKY_TRIES (above
+  // the city lights, sim/population.ts)
+  // (the tries draw from their own stream, seeded by the two draws a single spot used to take, so
+  // every station kept its name and size)
+  const pg = mulberry32((Math.floor(g() * 2 ** 32) ^ Math.floor(g() * 2 ** 31)) >>> 0);
+  let dir = new THREE.Vector3(),
+    best = -1;
+  for (let i = 0; i < SKY_TRIES; i++) {
+    const lat = Math.asin(rr(pg, -0.8, 0.8)),
+      lon = pg() * 2 * Math.PI;
+    const d = new THREE.Vector3(Math.cos(lat) * Math.cos(lon), Math.sin(lat), Math.cos(lat) * Math.sin(lon));
+    const score = populated(b) ? population(b, d.x, d.y, d.z) : hasSea(b) ? (elevationLocal(b, d.x, d.y, d.z) > 0 ? 1 : 0) : 1;
+    if (score > best) {
+      best = score;
+      dir = d;
+    }
+  }
   const alt = rr(g, SKY_ALT[0], SKY_ALT[1]);
   // over the ground, not the mean radius: a mountain range under it doesn't bring it closer
   const r = b.radius + elevationLocal(b, dir.x, dir.y, dir.z) + alt;

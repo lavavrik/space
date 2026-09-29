@@ -118,7 +118,8 @@ changed nothing that was there. Geometry: `sim/skyGeom.ts`; mesh: `render/skyMes
 
 - **Where:** fixed in the world's own frame (`Station.sky`: a direction and a radius), at 10–20 km
   over the ground under it (not the mean radius: a mountain range under it doesn't bring it
-  closer). Each step it's placed with the world's rotation, and its velocity is the world's plus
+  closer). The spot is the best of 64 tries: on populated worlds the busiest (sim/population.ts,
+  the same density the city lights use), elsewhere over land if there's a sea. Each step it's placed with the world's rotation, and its velocity is the world's plus
   ω × r (`sim/stations.ts`). Its Kepler fields are placeholders (a = its radius, n = the day).
 - **Shape** (units of the deck's diameter, 0.9–1.3 km; +z up): a deck disc 30 m thick with its top
   at z = 0; a control tower with a lit cab and a red beacon; a tapering keel underneath and four

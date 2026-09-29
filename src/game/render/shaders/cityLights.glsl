@@ -1,6 +1,6 @@
 // City lights on the night side of populated worlds (docs/terrain.md, "City lights").
 //
-// Where people live (cityPop): land, not the high mountains or the ice caps, most of all along the
+// Where people live (cityPop, mirrored by sim/population.ts: keep them in step): land, not the high mountains or the ice caps, most of all along the
 // coasts, in a few broad settled regions (low-frequency noise) with wilderness between.
 //
 // What the lights look like (cityLights), from far to near, each part fading in as its detail grows

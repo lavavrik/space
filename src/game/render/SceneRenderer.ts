@@ -18,6 +18,8 @@ import { atmoOf } from '../sim/atmosphere';
 import { PAD_R, padLocal, stationQuat } from '../sim/stationGeom';
 import { SKY_PAD_COUNT, skyPadLocal } from '../sim/skyGeom';
 import { skyStationGeometry } from './skyMesh';
+import { occluder } from '../sim/sight';
+import { populated } from '../sim/population';
 import { ATMO_FS, BODY_VS, GLOW_FS, GLOW_VS, PLANET_FS, PLANET_VS, POINT_FS, POINT_VS, RING_FS, SKYPT_FS, SKYPT_VS, SKY_BAKE_FS, SKY_CUBE_FS, SKY_FS, SKY_VS, STAR_FS, STATION_FS, SKY_STATION_FS, STATION_INTERIOR_FS, CLOUD_BAKE_FS, CLOUD_FS, CORRIDOR_FS, CORRIDOR_LIGHT_FS, CORRIDOR_LIGHT_VS } from './shaders';
 
 type Uniforms = Record<string, THREE.IUniform>;
@@ -436,8 +438,9 @@ export class SceneRenderer {
   }
 
   /** Far off, a station is a mint beacon dot: add it to the dots (at index nd) if it's small enough. */
-  private stationDot(v: { pxR: number }, rel: THREE.Vector3, dPos: Float32Array, dCol: Float32Array, dSize: Float32Array, nd: number) {
-    if (v.pxR >= 2.5 || nd >= MAXDOTS) return false;
+  private stationDot(v: { pxR: number }, rel: THREE.Vector3, dPos: Float32Array, dCol: Float32Array, dSize: Float32Array, nd: number, hidden: boolean) {
+    // (not through the world it's behind: the HUD's crossed square marks it instead)
+    if (v.pxR >= 2.5 || nd >= MAXDOTS || hidden) return false;
     const a = v.pxR < 1.2 ? 1 : (2.5 - v.pxR) / 1.3;
     dPos.set([rel.x, rel.y, rel.z], nd * 3);
     dCol.set([STATION_RGB.r * a, STATION_RGB.g * a, STATION_RGB.b * a], nd * 3);
@@ -522,7 +525,7 @@ export class SceneRenderer {
       uLightL: { value: new THREE.Vector3(0, 1, 0) }, uCloudH: { value: clouded ? air!.H * CLOUD_H : 0 },
       uToLocal: { value: new THREE.Matrix3() }, uCloudTex: { value: null },
       // populated worlds light up at night (shaders/cityLights.glsl)
-      uCity: { value: b.type === WT.EarthLike ? 1 : 0 }, uCityK: { value: CITY_K },
+      uCity: { value: populated(b) ? 1 : 0 }, uCityK: { value: CITY_K },
     };
     const mesh = new THREE.Mesh(this.geoMid, new THREE.ShaderMaterial({ vertexShader: PLANET_VS, fragmentShader: PLANET_FS, uniforms: uni }));
     mesh.scale.setScalar(b.radius);
@@ -723,7 +726,7 @@ export class SceneRenderer {
         (v.uni.uUp.value as THREE.Vector3).subVectors(st.pos, st.parent.pos).normalize();
         (v.uni.uLight.value as THREE.Vector3).subVectors(starPos, st.pos).normalize();
         v.uni.uPad.value = dk && dk.station === st && !dk.docked ? dk.pad : -1;
-        if (this.stationDot(v, rel, dPos, dCol, dSize, nd)) nd++;
+        if (this.stationDot(v, rel, dPos, dCol, dSize, nd, !!occluder(g.cur.bodies, ship.pos, st.pos))) nd++;
         continue;
       }
       if (!v.inner || !v.innerUni || !v.corridor || !v.corridorUni || !v.lights || !v.lightsUni) continue;
@@ -751,7 +754,7 @@ export class SceneRenderer {
       const pd = w.length();
       (v.uni.uPlanetDir.value as THREE.Vector3).copy(w).divideScalar(pd);
       v.uni.uPlanetSize.value = Math.cos(Math.asin(Math.min(1, par.radius / pd)));
-      if (this.stationDot(v, rel, dPos, dCol, dSize, nd)) nd++;
+      if (this.stationDot(v, rel, dPos, dCol, dSize, nd, !!occluder(g.cur.bodies, ship.pos, st.pos))) nd++;
     }
     dotGeo.setDrawRange(0, nd);
     dotGeo.attributes.position.needsUpdate = dotGeo.attributes.aColor.needsUpdate = dotGeo.attributes.aSize.needsUpdate = true;

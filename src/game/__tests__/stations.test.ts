@@ -7,7 +7,8 @@ import { stationAcc, stationState } from '../sim/stations';
 import { atmoOf } from '../sim/atmosphere';
 import { skyWhereIs } from '../sim/skyGeom';
 import { padCount, padOf, stationQuat } from '../sim/stationGeom';
-import { altitudeAt } from '../sim/terrain';
+import { altitudeAt, elevationLocal, hasSea } from '../sim/terrain';
+import { populated, population } from '../sim/population';
 import { homeSystem, systemsNear } from '../universe/galaxy';
 import { buildStations } from '../universe/stations';
 import { buildSystem, findHome } from '../universe/system';
@@ -136,5 +137,13 @@ describe('sky stations', () => {
     expect(skyWhereIs(new THREE.Vector3(0, 0, 0.08), 0.008)).toBe('wall'); // the tower
     expect(skyWhereIs(new THREE.Vector3(0, 0, -0.2), 0.008)).toBe('wall'); // the keel
     expect(skyWhereIs(new THREE.Vector3(0.3, 0, -0.2), 0.008)).toBe('outside'); // under the deck, beside the keel
+  });
+
+  it('hang over the cities on populated worlds, and over land where there is a sea', () => {
+    for (const { st } of skies) {
+      const { dir } = st.sky!;
+      if (populated(st.parent)) expect(population(st.parent, dir.x, dir.y, dir.z)).toBeGreaterThan(0.3);
+      else if (hasSea(st.parent)) expect(elevationLocal(st.parent, dir.x, dir.y, dir.z)).toBeGreaterThan(0);
+    }
   });
 });

@@ -14,6 +14,7 @@
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import { FLASH_S, easeTrail, type Npc } from '../sim/traffic';
+import { occluder } from '../sim/sight';
 
 const MAX_SHIPS = 16;
 /** Turns the model (nose +z) to a ship's attitude (nose −z). */
@@ -183,6 +184,12 @@ export class TrafficView {
     const npcs: Npc[] = g.traffic.slice(0, MAX_SHIPS);
     npcs.forEach((npc, i) => {
       const v = this.view(i);
+      // behind a world: nothing of it shows (its dot and trail would draw over the world)
+      if (occluder(g.cur.bodies, ship.pos, npc.pos)) {
+        v.hull.visible = v.trail.visible = false;
+        return;
+      }
+      v.trail.visible = true;
       const rel = this.tmp.subVectors(npc.pos, ship.pos);
       // hull: its ship's attitude (sim/traffic.ts flies it on the player's flight code)
       v.hull.visible = rel.length() < 200e3;

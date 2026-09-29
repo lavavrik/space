@@ -1,3 +1,4 @@
+import { occluder } from '../sim/sight';
 import { surfaceDist } from '../sim/terrain';
 import { JUMP_CHARGE_TIME, RESPAWN_TIME } from '../constants';
 import { fmtDist } from '../format';
@@ -489,6 +490,15 @@ export class Overlay {
       if (isT) this.drawScanArc(g, s.x, s.y, r + 10);
       if (r < H * 0.4) {
         ctx.strokeRect(s.x - r, s.y - r, 2 * r, 2 * r);
+        // on the far side of a world: crossed out, so you know it isn't the lights you see there
+        if (occluder(g.cur.bodies, g.ship.pos, st.pos)) {
+          ctx.beginPath();
+          ctx.moveTo(s.x - r, s.y - r);
+          ctx.lineTo(s.x + r, s.y + r);
+          ctx.moveTo(s.x + r, s.y - r);
+          ctx.lineTo(s.x - r, s.y + r);
+          ctx.stroke();
+        }
         if (isT || d < st.parent.radius * 25) {
           ctx.fillStyle = MINT + '0.95)';
           ctx.fillText(isT ? label.toUpperCase() : stName, s.x, s.y - r - 7);
@@ -508,6 +518,7 @@ export class Overlay {
     for (const npc of g.traffic) {
       const isT = npc === g.target;
       if (!isT && !known(g, npc)) continue;
+      if (occluder(g.cur.bodies, g.ship.pos, npc.pos)) continue; // behind a world: not seen at all
       const rel = this.tmp.subVectors(npc.pos, g.ship.pos);
       const d = rel.length();
       const s = this.toScreen(g, rel);
