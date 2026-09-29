@@ -73,7 +73,7 @@ export function settleBattery(g: Game, dt: number) {
 export type Switchable = Breaker | 'lights' | 'pump' | 'laser';
 
 export const SWITCH_NAMES: Record<Switchable, string> = {
-  fuelcell: 'Fuel cell', electrolysis: 'Electrolyser',
+  fuelcell: 'Fuel cell', electrolysis: 'Electrolyser', cryo: 'Cryocoolers',
   thrust: 'Thrusters', ftl: 'FTL drive', charge: 'Drive charging', radar: 'Radar', shield: 'Deflector', guard: 'Collision radar', lights: 'Headlights', pump: 'Heat pump', laser: 'Mining laser',
 };
 
@@ -109,7 +109,7 @@ export function toggleLoad(g: Game, id: Switchable) {
  */
 export const SHED_BELOW = 0.1;
 export const RESTORE_ABOVE = 0.3;
-const SHEDDABLE: Switchable[] = ['laser', 'lights', 'radar', 'shield', 'guard', 'pump', 'electrolysis'];
+const SHEDDABLE: Switchable[] = ['laser', 'lights', 'radar', 'shield', 'guard', 'pump', 'electrolysis', 'cryo'];
 
 export function loadShed(g: Game) {
   const { ship } = g;

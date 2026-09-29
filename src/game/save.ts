@@ -63,6 +63,7 @@ export interface ShipSave {
   temp: number;
   hull?: number;
   o2?: number;
+  water?: number;
   cargo?: Ship['cargo'];
   crates?: Ship['crates'];
   vent: boolean;
@@ -162,6 +163,7 @@ function snapshotFlight(c: Game): FlightSave {
       temp: ship.temp,
       hull: ship.hull,
       o2: ship.o2,
+      water: ship.water,
       cargo: { ...ship.cargo },
       crates: { ...ship.crates },
       vent: ship.vent,
@@ -332,7 +334,7 @@ function restoreFlight(c: Game, f: FlightSave) {
     dock: unit(s.avionics.dock) as Avionics['dock'],
   };
   Object.assign(ship, {
-    prop: s.prop, exotic: s.exotic, batt: s.batt, temp: s.temp, hull: s.hull ?? 1, o2: s.o2 ?? SHIP.o2Cap, cargo: { ...(s.cargo ?? {}) }, crates: { ...(s.crates ?? {}) }, vent: s.vent, sunTrack: s.sunTrack,
+    prop: s.prop, exotic: s.exotic, batt: s.batt, temp: s.temp, hull: s.hull ?? 1, o2: s.o2 ?? SHIP.o2Cap, water: s.water ?? 0, cargo: { ...(s.cargo ?? {}) }, crates: { ...(s.crates ?? {}) }, vent: s.vent, sunTrack: s.sunTrack,
     fa: s.fa, decoupled: s.decoupled, cruise: s.cruise, throttle: s.throttle, ftlSpeed: s.ftlSpeed, mode: s.mode,
     ftlCharge: 0, tanker: null, dead: null,
   });

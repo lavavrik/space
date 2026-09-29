@@ -159,6 +159,7 @@ export function refillShip(g: Game) {
   ship.prop = SHIP.propCap;
   ship.exotic = SHIP.exoticCap;
   ship.o2 = SHIP.o2Cap;
+  ship.water = 0;
   ship.batt = battCap(ship);
   g.warned = {};
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { SHIP } from '../constants';
 import type { Game } from '../Game';
 import { BATTERIES, emptyOutfit, moduleById } from '../outfit/catalog';
-import { ELECTROLYSIS_KWH, FC_KWH, LIFE_O2, O2_PER_H2, breathe, fuelCellOffer, gatherO2, settleFuelCell } from '../sim/oxygen';
+import { FC_KWH, H2_IN_WATER, LIFE_O2, O2_PER_H2, SPLIT_KWH, WATER_PER_H2, breathe, cryo, fuelCellOffer, gatherO2, settleFuelCell } from '../sim/oxygen';
 
 /** Just what oxygen touches: a stock-battery ship with an FC-150. */
 function fake(batt: number): Game {
@@ -10,8 +10,8 @@ function fake(batt: number): Game {
   outfit.battery = BATTERIES[0]; // 200 kWh
   outfit.slots[0] = moduleById('fc-150');
   return {
-    ship: { batt, prop: 50_000, o2: SHIP.o2Cap, outfit, mode: 'normal', breakers: { fuelcell: true, electrolysis: true } },
-    power: { solar: 0, shore: 0, draw: 100, fcOn: false, fcOffer: 0, fcKW: 0, electrolysisKW: 0, left: 1000, limited: null },
+    ship: { batt, prop: 50_000, o2: SHIP.o2Cap, water: 0, temp: 290, outfit, mode: 'normal', breakers: { fuelcell: true, electrolysis: true, cryo: true } },
+    power: { solar: 0, shore: 0, draw: 100, fcOn: false, fcOffer: 0, fcKW: 0, electrolysisKW: 0, cryoKW: 0, left: 1000, limited: null },
     aero: { body: null, rho: 0, speed: 0 },
     dock: null,
     warned: {},
@@ -55,14 +55,40 @@ describe('oxygen', () => {
     expect(breathe(g, 1)).toBe(true);
   });
 
-  it('splits oxygen from water on spare power, never from a battery under half', () => {
-    const g = fake(150);
-    g.ship.o2 = 0;
-    const rate = gatherO2(g, 3600, true);
-    expect(g.power.electrolysisKW).toBe(300);
-    expect(rate * 3600).toBeCloseTo(300 / ELECTROLYSIS_KWH);
+  it('the fuel cell keeps its water; the electrolyser splits it back on spare power, never from a battery under half or while the cell runs', () => {
+    const g = fake(20);
+    fuelCellOffer(g);
+    settleFuelCell(g, 3600, 150);
+    const h2 = 150 / FC_KWH;
+    expect(g.ship.water).toBeCloseTo(h2 * WATER_PER_H2);
+    // the cell is still on: no splitting
+    expect(gatherO2(g, 3600, false)).toBe(0);
+    const s = fake(150);
+    s.ship.o2 = 0;
+    s.ship.water = 1000;
+    const rate = gatherO2(s, 3600, false);
+    expect(s.power.electrolysisKW).toBe(300);
+    const split = 300 / SPLIT_KWH;
+    expect(1000 - s.ship.water).toBeCloseTo(split);
+    expect(rate * 3600).toBeCloseTo(split * (1 - H2_IN_WATER));
+    expect(s.ship.prop - 50_000).toBeCloseTo(split * H2_IN_WATER);
     const low = fake(80);
     low.ship.o2 = 0;
-    expect(gatherO2(low, 3600, true)).toBe(0);
+    low.ship.water = 1000;
+    expect(gatherO2(low, 3600, false)).toBe(0);
+  });
+
+  it('the cryocoolers hold the tanks cold for ~7 kW; switched off, they boil off slowly', () => {
+    const g = fake(150);
+    const boil = cryo(g, 86400);
+    expect(g.power.cryoKW).toBeGreaterThan(5);
+    expect(g.power.cryoKW).toBeLessThan(10);
+    expect(boil.prop).toBe(0);
+    g.ship.breakers.cryo = false;
+    const p0 = g.ship.prop;
+    cryo(g, 86400);
+    const perDay = p0 - g.ship.prop;
+    expect(perDay).toBeGreaterThan(5); // ~16 kg of hydrogen a day at a 290 K hull
+    expect(perDay).toBeLessThan(40);
   });
 });

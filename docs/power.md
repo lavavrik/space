@@ -44,8 +44,16 @@ The ship carries a 2 t tank of liquid oxygen (LOX, at 90 K, 1.14 kg/L), with its
   - At 150 kW it burns 8.2 kg of H₂ and 65 kg of O₂ an hour, so a full tank lasts ~31 hours. The hydrogen barely registers; the oxygen is the limit.
 - **Oxygen comes from:**
   - Stations: 0.3 Cr/kg, on the Services tab's slider (a full tank ~600 Cr).
-  - Water, split by the electrolyser (a load on the schematic, switchable and shed at a low battery). It runs while water is coming in (the laser boiling ice off a rock, or mining ice on the ground) and there's room in the tank, on spare power only, never from a battery under half. Splitting water costs 6.3 kWh per kg of oxygen (~50 kWh per kg of hydrogen), so its 300 kW makes ~48 kg an hour: plenty to breathe, slow for a fuel cell. Burning oxygen you split yourself gives back only ~2.3 kWh of each 6.3 you spent.
+  - Water, split by the electrolyser (below).
   - Air: skimming an Earth-like world's atmosphere with the fuel scoop catches its oxygen (23 % of air by mass), in proportion to the air's density and your speed through it. The richest pickings are low and fast, where the entry heating is too.
+- **Water and the regenerative loop:**
+  - A 3 t water tank takes the fuel cell's exhaust (9 kg of water per kg of H₂ burned) and ice while mining (2 kg/s while the laser boils a rock or you mine ice on the ground).
+  - The electrolyser (300 kW, a load on the schematic) splits it back into hydrogen, to the propellant, and oxygen, at 5.56 kWh per kg of water (~50 kWh per kg of H₂). That's ~48 kg of O₂ an hour.
+  - It runs on spare power only: never from a battery under half, and never while the fuel cell runs (the two would feed each other).
+  - So fuel cell plus electrolyser is a regenerative fuel cell: spare sunlight stored as H₂ + O₂ and burned back when power runs short. The round trip is ~37 % (18.3 kWh back of every 50 spent), as real ones manage. Heavy, lossy, but large storage.
+- **Cryocoolers** (a load, ~7 kW, switchable and shed at a low battery) keep the liquid hydrogen (20 K) and oxygen (90 K) cold.
+  - They pump out the heat leaking in through the tanks' insulation from the hull: ~80 W into the LH₂ tank and ~4 W into the LOX at a 290 K hull, more the hotter it gets. Pumping heat out at 20 K takes ~90 W of power per W.
+  - What they can't hold off boils off and is vented: ~16 kg a day with them off at 290 K. You're warned, and the O₂ gauge shows it.
 - (The scoop's hydrogen from ice isn't charged the electrolysis energy it would really need. The propellant yields were tuned for play before oxygen existed. Oxygen is charged in full.)
 
 ## Load shedding (`loadShed`)

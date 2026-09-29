@@ -10,9 +10,17 @@
  *     each; the rest is heat in the hull. Automatic: it starts when the battery falls below FC_ON
  *     and stops once it's back over FC_OFF, covering the loads and recharging the battery as far as
  *     its rating goes. It has its own switch (the power schematic).
- *   - Electrolyser: splitting water costs ELECTROLYSIS_KWH per kg of oxygen won (~50 kWh per kg of
- *     hydrogen). It runs while there's water coming in (the laser boiling ice, or mining ice on the
- *     ground) and room in the tank, on spare power only: never taking the battery below half.
+ *   - Water tank (SHIP.waterCap): filled by the fuel cell's exhaust (WATER_PER_H2 kg per kg of
+ *     hydrogen it burns) and by ice (the laser boiling it off a rock, or mined on the ground, at
+ *     WATER_INTAKE).
+ *   - Electrolyser: splits that water back into hydrogen (to the propellant) and oxygen, at
+ *     SPLIT_KWH per kg of water (~50 kWh per kg of hydrogen), on spare power only: never from a
+ *     battery under half, and never while the fuel cell runs (they'd feed each other). With the fuel
+ *     cell that's a regenerative fuel cell: spare sunlight stored as H₂ + O₂ and burned back when
+ *     power runs short, at ~37 % round trip (18.3 kWh back of each 50 spent, as real ones).
+ *   - Cryocoolers keep the liquid hydrogen (20 K) and oxygen (90 K) cold against the heat leaking in
+ *     from the hull (more the hotter it is), drawing CRYO_* power; what they can't hold off (switched
+ *     off, or short of power) boils off and is vented.
  *   - Air: skimming an Earth-like world's atmosphere with the fuel scoop, its oxygen (O2_IN_AIR of
  *     the air by mass) is caught and liquefied: in proportion to the air's density and your speed
  *     through it, so the richest pickings are low and fast, where the heating is too.
@@ -37,9 +45,24 @@ export const FC_EFF = 0.55,
 /** It starts below this share of the battery and stops over this. */
 export const FC_ON = 0.3,
   FC_OFF = 0.8;
-/** Electrolysis: kWh per kg of oxygen split from water; the electrolyser's rating (kW). */
-export const ELECTROLYSIS_KWH = 6.3,
-  ELECTROLYSER_KW = 300;
+/** The electrolyser's rating (kW). */
+export const ELECTROLYSER_KW = 300;
+/** Electrolysis: kWh per kg of water split (≈ 50 kWh per kg of hydrogen); its hydrogen share (the rest is oxygen). */
+export const SPLIT_KWH = 5.56,
+  H2_IN_WATER = 0.112;
+/** Water from the fuel cell per kg of hydrogen burned (H₂ + ½O₂ → H₂O); ice taken in while mining (kg/s). */
+export const WATER_PER_H2 = 1 + O2_PER_H2,
+  WATER_INTAKE = 2;
+/**
+ * Heat leaking into the tanks through their insulation (W per K of hull over the liquid), the liquid's
+ * temperature (K), its heat of vaporization (J/kg), and the cryocooler's share of Carnot efficiency:
+ * the big LH₂ tank leaks ~80 W at a 290 K hull, which takes ~7 kW to pump out at 20 K; the LOX tank
+ * ~4 W, ~50 W to pump out.
+ */
+const CRYO = {
+  prop: { leak: 0.3, T: 20, latent: 446e3, carnot: 0.15 },
+  o2: { leak: 0.02, T: 90, latent: 213e3, carnot: 0.2 },
+} as const;
 /** Oxygen's share of air by mass. */
 export const O2_IN_AIR = 0.23;
 /** The scoop's intake for air (m², × the scoop's rate). */
@@ -88,6 +111,8 @@ export function settleFuelCell(g: Game, dt: number, offer: number) {
   kw *= scale;
   ship.prop = Math.max(0, ship.prop - h2 * scale);
   ship.o2 = Math.max(0, ship.o2 - h2 * scale * O2_PER_H2);
+  // its exhaust is water, kept for splitting back later (any over the tank's room is vented)
+  ship.water = Math.min(SHIP.waterCap, ship.water + h2 * scale * WATER_PER_H2);
   power.fcKW = kw;
   return kw;
 }
@@ -112,29 +137,66 @@ export function waterIn(g: Game) {
 }
 
 /**
- * Each step: oxygen won from water (the laser's ice, or ice mined on the ground: `water`), by the
- * electrolyser on spare power, and from the air of an Earth-like world with the scoop. Returns the
- * kg/s coming in, for the HUD.
+ * Each step: water taken in (ice, while mining: `water`), split by the electrolyser on spare power
+ * into hydrogen and oxygen, and oxygen from the air of an Earth-like world with the scoop. Returns
+ * the kg/s of oxygen coming in, for the HUD. (The electrolyser asks the bus last: whatever's left.)
  */
 export function gatherO2(g: Game, dt: number, water: boolean) {
   const { ship, power } = g;
   power.electrolysisKW = 0;
-  if (dt <= 0 || ship.o2 >= SHIP.o2Cap) return 0;
-  let kg = 0;
-  if (water && loadOn(g, 'electrolysis') && ship.batt > battCap(ship) * 0.5) {
-    // spare power only: what's left on the bus after everything else (it asks last), and not from
-    // a battery under half
-    const kw = grant(g, ELECTROLYSER_KW, 'electrolyser');
+  if (dt <= 0) return 0;
+  if (water) ship.water = Math.min(SHIP.waterCap, ship.water + WATER_INTAKE * dt);
+  let o2 = 0;
+  const room = ship.o2 < SHIP.o2Cap - 0.01 || ship.prop < SHIP.propCap - 0.1;
+  if (ship.water > 0.01 && room && loadOn(g, 'electrolysis') && ship.batt > battCap(ship) * 0.5 && !power.fcOn) {
+    // (asking only for what the water left can use)
+    const kw = grant(g, Math.min(ELECTROLYSER_KW, (ship.water * SPLIT_KWH * 3600) / dt), 'electrolyser');
+    const w = Math.min(ship.water, (kw * dt) / 3600 / SPLIT_KWH);
     power.electrolysisKW = kw;
-    kg += (kw * dt) / 3600 / ELECTROLYSIS_KWH;
+    ship.water -= w;
+    ship.prop = Math.min(SHIP.propCap, ship.prop + w * H2_IN_WATER);
+    o2 += w * (1 - H2_IN_WATER);
   }
   const unit = scoopFitted(ship.outfit);
   const air = g.aero;
   if (unit && ship.mode === 'normal' && air.body && air.body.type === WT.EarthLike && air.rho > 0) {
-    kg += O2_IN_AIR * air.rho * air.speed * AIR_INTAKE * unit.caps.rate * dt;
+    o2 += O2_IN_AIR * air.rho * air.speed * AIR_INTAKE * unit.caps.rate * dt;
   }
-  kg = Math.min(kg, SHIP.o2Cap - ship.o2);
-  ship.o2 += kg;
-  if (kg > 0) g.warned.o2 = false;
-  return kg / dt;
+  o2 = Math.min(o2, SHIP.o2Cap - ship.o2);
+  ship.o2 += o2;
+  if (o2 > 0) g.warned.o2 = false;
+  return o2 / dt;
+}
+
+/**
+ * Each step (before the loads are summed): the cryocoolers pump out the heat leaking into the LH₂
+ * and LOX tanks from the hull. What they can't (switched off, or granted less than they ask) boils
+ * off and is vented. Returns kg/s boiling off, per tank.
+ */
+export function cryo(g: Game, dt: number) {
+  const { ship, power } = g;
+  const T = Math.max(ship.temp, 30);
+  let ask = 0;
+  const leak = { prop: 0, o2: 0 };
+  for (const k of ['prop', 'o2'] as const) {
+    const c = CRYO[k];
+    if (ship[k] <= 0) continue;
+    leak[k] = c.leak * Math.max(0, T - c.T); // W
+    ask += leak[k] / (c.carnot * (c.T / Math.max(1, T - c.T))) / 1000; // kW of input at that COP
+  }
+  const kw = loadOn(g, 'cryo') && ask > 0 ? grant(g, ask, 'cryocoolers') : 0;
+  power.cryoKW = kw;
+  const short = ask > 0 ? 1 - kw / ask : 0;
+  const boil = { prop: 0, o2: 0 };
+  if (short > 0.5 && !g.warned.boil) {
+    g.warned.boil = true;
+    g.showMsg(`Cryocoolers ${loadOn(g, 'cryo') ? 'short of power' : 'off'} · the liquid hydrogen and oxygen are boiling off`, 'warn');
+  } else if (short < 0.1) g.warned.boil = false;
+  if (short > 1e-6 && dt > 0) {
+    for (const k of ['prop', 'o2'] as const) {
+      boil[k] = (short * leak[k]) / CRYO[k].latent;
+      ship[k] = Math.max(0, ship[k] - boil[k] * dt);
+    }
+  }
+  return boil;
 }

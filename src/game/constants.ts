@@ -33,6 +33,7 @@ export const SHIP = {
   ve: 200e3, // exhaust velocity, m/s (specific impulse ≈ 20,400 s)
   exoticCap: 100, // kg of exotic matter for the FTL drive and hyperdrive
   o2Cap: 2000, // kg of liquid oxygen: life support and the fuel cell (sim/oxygen.ts)
+  waterCap: 3000, // kg of water: the fuel cell's exhaust and ice, for splitting back (sim/oxygen.ts)
   solarRated: 250, // kW with panels facing a Sun-like star from 1 AU
   solarMax: 1500, // kW the power bus can take
   baseLoad: 40, // kW for life support and avionics

@@ -352,7 +352,7 @@ export interface CargoView {
   total: string;
   where: string;
   credits: string;
-  tanks: { name: string; value: string; frac: number; kind: 'prop' | 'exotic' | 'o2' }[];
+  tanks: { name: string; value: string; frac: number; kind: 'prop' | 'exotic' | 'o2' | 'water' }[];
   /** What the load costs in flight: ship mass and Δv left, and how much the hold takes off it. */
   mass: string;
   dv: string;

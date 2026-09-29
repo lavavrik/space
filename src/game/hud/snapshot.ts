@@ -365,15 +365,17 @@ function o2Gauge(g: Game): GaugeView {
   const { ship, power } = g;
   const fcO2 = (power.fcKW / FC_KWH) * O2_PER_H2; // kg/h
   const days = o2Days(ship.o2);
-  const text =
-    ship.o2Rate > 1e-4
+  const boiling = ship.boil.o2 + ship.boil.prop > 0;
+  const text = boiling
+    ? `cryocoolers off · boiling off ${((ship.boil.prop + ship.boil.o2) * 86400).toFixed(0)} kg/day of LH₂ + LOX`
+    : ship.o2Rate > 1e-4
       ? `+${ship.o2Rate * 3600 < 100 ? (ship.o2Rate * 3600).toFixed(1) : Math.round(ship.o2Rate * 3600)} kg/h ${power.electrolysisKW > 0.5 ? `split from water (${fmtPower(power.electrolysisKW)})` : 'from the air'}`
       : power.fcKW > 0.5
         ? `fuel cell burning ${fcO2.toFixed(0)} kg/h · ${fmtTime((ship.o2 / fcO2) * 3600)} left`
         : g.dock?.docked
           ? "breathing the station's air"
           : `life support · ${days > 60 ? `${Math.round(days)} days` : fmtTime(days * 86400)} of breathing`;
-  return { label: 'O₂', icon: 'o2', value: fmtMass(ship.o2), frac: ship.o2 / SHIP.o2Cap, variant: 'o2', sub: { text, warn: days < 3 } };
+  return { label: 'O₂', icon: 'o2', value: fmtMass(ship.o2), frac: ship.o2 / SHIP.o2Cap, variant: 'o2', sub: { text, warn: days < 3 || boiling } };
 }
 
 /**
@@ -495,6 +497,7 @@ function cargoView(g: Game): CargoView {
       { name: 'Hydrogen', value: `${fmtMass(ship.prop)} / ${fmtMass(SHIP.propCap)}`, frac: ship.prop / SHIP.propCap, kind: 'prop' },
       { name: 'Exotic matter', value: `${fmtMass(ship.exotic)} / ${fmtMass(SHIP.exoticCap)}`, frac: ship.exotic / SHIP.exoticCap, kind: 'exotic' },
       { name: 'Oxygen', value: `${fmtMass(ship.o2)} / ${fmtMass(SHIP.o2Cap)}`, frac: ship.o2 / SHIP.o2Cap, kind: 'o2' },
+      { name: 'Water (to split)', value: `${fmtMass(ship.water)} / ${fmtMass(SHIP.waterCap)}`, frac: ship.water / SHIP.waterCap, kind: 'water' },
     ],
     mass: fmtMass(dry + ship.prop),
     dv: kg > 0.5 ? `${fmtSpeedText(dv)} · ${fmtSpeedText(dv0 - dv)} less than empty` : fmtSpeedText(dv),
@@ -706,7 +709,7 @@ function electricalView(g: Game): ElectricalView {
   const lim = power.limited;
   const limitOf = (id: string) => {
     if (!lim) return null;
-    const is = { charge: /charging/, thrust: /thrusters/, ftl: /FTL drive/, pump: /heat pump/, radar: /^radar/, shield: /deflector/, guard: /collision radar/, laser: /mining laser/, electrolysis: /electrolyser/ }[id];
+    const is = { charge: /charging/, thrust: /thrusters/, ftl: /FTL drive/, pump: /heat pump/, radar: /^radar/, shield: /deflector/, guard: /collision radar/, laser: /mining laser/, electrolysis: /electrolyser/, cryo: /cryocoolers/ }[id];
     return is?.test(lim.what) ? lim.frac : null;
   };
   const net = power.net;
@@ -746,7 +749,8 @@ function electricalView(g: Game): ElectricalView {
       { id: 'shield', name: 'DEFLECTOR', kw: power.shieldKW, limited: limitOf('shield'), sw: deflectorFitted(ship.outfit) ? 'shield' : null, on: loadOn(g, 'shield') },
       { id: 'laser', name: 'MINING LASER', kw: power.laserKW, limited: limitOf('laser'), sw: laserFitted(ship.outfit) ? 'laser' : null, on: loadOn(g, 'laser') },
       { id: 'guard', name: 'COLLISION RADAR', kw: power.guardKW, limited: limitOf('guard'), sw: guardFitted(ship.outfit) ? 'guard' : null, on: loadOn(g, 'guard') },
-      { id: 'electrolysis', name: 'ELECTROLYSER (O₂)', kw: power.electrolysisKW, limited: limitOf('electrolysis'), sw: 'electrolysis', on: loadOn(g, 'electrolysis') },
+      { id: 'cryo', name: 'CRYOCOOLERS', kw: power.cryoKW, limited: limitOf('cryo'), sw: 'cryo', on: loadOn(g, 'cryo') },
+      { id: 'electrolysis', name: 'ELECTROLYSER', kw: power.electrolysisKW, limited: limitOf('electrolysis'), sw: 'electrolysis', on: loadOn(g, 'electrolysis') },
     ],
     rows,
   };
