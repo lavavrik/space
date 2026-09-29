@@ -27,10 +27,13 @@ export function fmtSpeed(v: number): [string, string] {
 /** Speed as one lower-case string, e.g. "1.25 km/s". */
 export const fmtSpeedText = (v: number) => fmtSpeed(v).join(' ').toLowerCase();
 
+/**
+ * A flow (kg/s), always in kg/s so a readout doesn't jump units as it changes (a small burn in kg/h
+ * next to a bigger one in kg/s read as a thousandfold spike): 0.47, 12.3, 1,200.
+ */
 export function fmtFlow(kgs: number) {
-  if (kgs < 0.01) return '0 kg/s';
-  if (kgs < 1) return `${(kgs * 3600).toFixed(0)} kg/h`;
-  return `${kgs < 100 ? kgs.toFixed(1) : nf0.format(kgs)} kg/s`;
+  if (kgs < 0.005) return '0 kg/s';
+  return `${kgs < 1 ? kgs.toFixed(2) : kgs < 100 ? kgs.toFixed(1) : nf0.format(kgs)} kg/s`;
 }
 
 export function fmtMass(kg: number) {

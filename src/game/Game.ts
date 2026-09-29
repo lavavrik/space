@@ -142,6 +142,8 @@ export class Game {
   pivotPrevDir: THREE.Vector3 | null = null;
   /** The ship's turn rate under manual steering (rad/s: pitch, yaw, roll about its own axes; sim/update.ts). */
   angVel = new THREE.Vector3();
+  /** The mouse's turn-rate demand, smoothed (rad/s: pitch, yaw). */
+  mouseRate = new THREE.Vector3();
   /**
    * Manual steering's reference "up" (sim/update.ts): mouse and arrow turns keep the ship's roll
    * against it, only Q/E change it; null until steering first uses it.

@@ -28,7 +28,8 @@ describe('formatting', () => {
     expect(fmtTime(Infinity)).toBe('—');
     expect(fmtMass(120e3)).toBe('120.0 t');
     expect(fmtMass(2.5)).toBe('2.50 kg');
-    expect(fmtFlow(0.5)).toBe('1800 kg/h');
+    expect(fmtFlow(0.5)).toBe('0.50 kg/s'); // (always kg/s: no jumping units)
+    expect(fmtFlow(1200)).toBe('1,200 kg/s');
     expect(fmtFlow(24.3)).toBe('24.3 kg/s');
     expect(fmtPower(6000)).toBe('6.00 MW');
     expect(fmtPower(40)).toBe('40 kW');

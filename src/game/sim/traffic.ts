@@ -135,6 +135,7 @@ function pilotFor(game: Game): Game {
     lockOmega: new THREE.Vector3(),
     pivotPrevDir: null,
     angVel: new THREE.Vector3(),
+    mouseRate: new THREE.Vector3(),
     steerUp: null,
     steerQ: new THREE.Quaternion(),
     hudT: 0,

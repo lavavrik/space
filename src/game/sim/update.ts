@@ -40,6 +40,8 @@ const MOUSE_SENS = 0.0021;
  * e.g. with a full hold), and stop it again at the same rate when you let go. It used to turn exactly
  * as the mouse moved: no resistance at all.
  */
+/** The mouse's turn-rate demand is smoothed over this (s). */
+const MOUSE_SMOOTH = 0.12;
 const ANG_ACC = 3,
   ANG_REF_MASS = 200e3;
 /** Under time warp in a ring's belt, drift slower than this (m/s) against the rocks is snapped to their orbit. */
@@ -90,9 +92,14 @@ export function update(g: Game, dt: number, realDt = dt) {
     // through the periscope, steering slows by the magnification so a target can be held
     const zs = 1 / g.zoom.cur;
     // the turn rate asked for (rad/s): the mouse's motion this frame, the arrows, Q/E
+    // (the mouse's rate, smoothed over MOUSE_SMOOTH: a hand's motion comes in uneven per-frame steps,
+    // and chasing each one kept the attitude thrusters firing ~30 kg/s through a steady turn)
     const inv = realDt > 1e-4 ? 1 / realDt : 0;
-    let wp = -mdy * MOUSE_SENS * zs * inv,
-      wy = -mdx * MOUSE_SENS * zs * inv,
+    const mk = 1 - Math.exp(-realDt / MOUSE_SMOOTH);
+    g.mouseRate.x += (-mdy * MOUSE_SENS * zs * inv - g.mouseRate.x) * mk;
+    g.mouseRate.y += (-mdx * MOUSE_SENS * zs * inv - g.mouseRate.y) * mk;
+    let wp = g.mouseRate.x,
+      wy = g.mouseRate.y,
       wr = 0;
     const kr = (ship.mode === 'ftl' ? 0.8 : 1.1) * zs;
     if (keys.ArrowUp) wp += kr;
