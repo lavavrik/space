@@ -18,6 +18,9 @@ darkened screen; the flight HUD steps aside (only the messages stay). The game k
   1/200 of the view there, growing ×1.25 up to 2° on the far side), and lines are clipped at a near
   plane rather than dropped. A fixed 160-point ellipse missed its own world by tens of thousands of
   km zoomed in (the chords' sag), so orbits seemed to vanish at some zooms.
+- **Depth:** world discs are drawn first, then the orbits over them; a point of a line that falls
+  on a disc and lies deeper than the world's centre is skipped (pen lifted), so an orbit passes in
+  front of its world and hides behind it.
 - **Labels** respect Shift+N; where they'd overlap, the first placed wins (the star and planets are
   drawn first). A scale bar (bottom right) gives a round length at the focus's distance.
 

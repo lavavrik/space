@@ -54,6 +54,8 @@ export class SystemMap {
   private f = 1;
   /** The near plane (m in front of the camera). */
   private near = 1;
+  /** Discs drawn this frame (screen centre, radius in px, depth): orbits behind them are hidden. */
+  private occluders: { x: number; y: number; r: number; z: number }[] = [];
   private cx = 0;
   private cy = 0;
 
@@ -148,11 +150,20 @@ export class SystemMap {
       py = 0,
       pz = 0,
       have = false;
+    // behind a disc: within it on screen, and deeper than its centre
+    const hidden = (sx: number, sy: number, z: number) => this.occluders.some((o) => z > o.z && (sx - o.x) ** 2 + (sy - o.y) ** 2 < o.r * o.r);
+    let wasHidden = false;
     const put = (x: number, y: number, z: number, move: boolean) => {
       const sx = this.cx + (x / z) * this.f,
         sy = this.cy - (y / z) * this.f;
-      if (move) ctx.moveTo(sx, sy);
+      const h = hidden(sx, sy, z);
+      if (h) {
+        wasHidden = true;
+        return;
+      }
+      if (move || wasHidden) ctx.moveTo(sx, sy);
       else ctx.lineTo(sx, sy);
+      wasHidden = false;
     };
     for (const p of pts) {
       const vx = p.x - this.cam.x,
@@ -228,6 +239,38 @@ export class SystemMap {
     const s = { x: 0, y: 0, z: 0 };
     const { cur } = g;
 
+    // bodies first, then the orbits over them, hidden where they pass behind one (orbits drawn
+    // first were painted over by the discs even where they ran in front)
+    this.occluders = [];
+    ctx.font = `${11 * ui}px ${MONO}`;
+    ctx.textAlign = 'left';
+    // labels: first come, first placed; one that would overlap a placed one is left out (the star
+    // and planets are drawn first, so crowded moons and stations give way to them)
+    const placed: [number, number, number, number][] = [];
+    const label = (x: number, y: number, t: string, col: string) => {
+      if (!g.showNames) return;
+      const lx = x + 7 * ui,
+        ly = y - 6 * ui,
+        w = ctx.measureText(t).width,
+        h = 12 * ui;
+      if (placed.some(([ax, ay, aw, ah]) => lx < ax + aw && lx + w > ax && ly - h < ay && ly > ay - ah)) return;
+      placed.push([lx, ly, w, h]);
+      ctx.fillStyle = col;
+      ctx.fillText(t, lx, ly);
+    };
+    for (const b of cur.bodies) {
+      if (!known(g, b) && b.kind !== 'star') continue;
+      if (!this.project(b.pos, s)) continue;
+      if (b.kind === 'moon' && this.px(b.parent.pos, b.orb.a) < 12 && b !== g.target) continue;
+      const r = Math.max(b.kind === 'star' ? 5 : 2.5, (b.radius / s.z) * this.f);
+      ctx.fillStyle = bodyColor(b);
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, Math.min(r, H), 0, Math.PI * 2);
+      ctx.fill();
+      if (r > 3) this.occluders.push({ x: s.x, y: s.y, r, z: s.z });
+      this.picks.push({ x: s.x, y: s.y, t: b });
+      label(s.x + Math.min(r, 40) - 4 * ui, s.y, b.name, b.kind === 'star' ? 'rgba(255,240,200,0.9)' : AMB + (b.kind === 'moon' ? '0.6)' : '0.85)'));
+    }
     // orbits: every world round its parent (moons only once their orbit is a few pixels across)
     // (every orbit, at every zoom: each sampled finely where it passes the view's centre, so it runs
     // through its world even zoomed right in, where a fixed 160-point ellipse's chords missed it by
@@ -254,35 +297,6 @@ export class SystemMap {
     // a line to the target and to the navigation computer's destination
     if (g.target && g.target.pos) this.path([g.ship.pos, g.target.pos], RED + '0.35)', 1, [3, 6]);
 
-    // bodies
-    ctx.font = `${11 * ui}px ${MONO}`;
-    ctx.textAlign = 'left';
-    // labels: first come, first placed; one that would overlap a placed one is left out (the star
-    // and planets are drawn first, so crowded moons and stations give way to them)
-    const placed: [number, number, number, number][] = [];
-    const label = (x: number, y: number, t: string, col: string) => {
-      if (!g.showNames) return;
-      const lx = x + 7 * ui,
-        ly = y - 6 * ui,
-        w = ctx.measureText(t).width,
-        h = 12 * ui;
-      if (placed.some(([ax, ay, aw, ah]) => lx < ax + aw && lx + w > ax && ly - h < ay && ly > ay - ah)) return;
-      placed.push([lx, ly, w, h]);
-      ctx.fillStyle = col;
-      ctx.fillText(t, lx, ly);
-    };
-    for (const b of cur.bodies) {
-      if (!known(g, b) && b.kind !== 'star') continue;
-      if (!this.project(b.pos, s)) continue;
-      if (b.kind === 'moon' && this.px(b.parent.pos, b.orb.a) < 12 && b !== g.target) continue;
-      const r = Math.max(b.kind === 'star' ? 5 : 2.5, (b.radius / s.z) * this.f);
-      ctx.fillStyle = bodyColor(b);
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, Math.min(r, H), 0, Math.PI * 2);
-      ctx.fill();
-      this.picks.push({ x: s.x, y: s.y, t: b });
-      label(s.x + Math.min(r, 40) - 4 * ui, s.y, b.name, b.kind === 'star' ? 'rgba(255,240,200,0.9)' : AMB + (b.kind === 'moon' ? '0.6)' : '0.85)'));
-    }
     for (const st of cur.stations) {
       if (!known(g, st) || !this.project(st.pos, s)) continue;
       if (this.px(st.parent.pos, st.parent.radius) < 6 && st !== g.target) continue;
