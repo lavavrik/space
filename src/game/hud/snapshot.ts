@@ -27,6 +27,7 @@ import { RADAR_RANGE, SWEEP, contactLabel, radarClass, radarContacts } from '../
 import { unitLabel, type Computer } from '../avionics/catalog';
 import { buildInfluences } from './influences';
 import { approachView } from './approach';
+import { HULL_WARN, heatDamageRate } from '../sim/damage';
 import { buildInfo, stationKind } from './info';
 import type { AutopilotView, AvionicsSlotView, ElectricalView, ModuleIcon, RadarView, OutfitView, FlightView, GaugeBadge, GaugeView, Lamp, NavView, GuideView, HudSnapshot, LocationView, Pill, PlannerView, Readout, SystemsView, TargetView } from './types';
 
@@ -63,6 +64,7 @@ export function buildSnapshot(g: Game): HudSnapshot {
             ...(g.dock.station.sky ? ['Catapult: thrown up and flown clear of the air, no input needed'] : []),
           ],
           sky: !!g.dock.station.sky,
+          hullFull: g.ship.hull >= 0.999,
           tanksFull: g.ship.prop >= SHIP.propCap - 1 && g.ship.exotic >= SHIP.exoticCap - 0.01,
         }
       : null,
@@ -314,6 +316,7 @@ function systems(g: Game): SystemsView {
         badges: ship.temp >= TEMP.panels ? [{ icon: 'panels-off', title: `Solar panels feathered: hull over ${TEMP.panels} K`, warn: true }] : undefined,
       },
       hullGauge(g),
+      integrityGauge(g),
     ],
     note,
   };
@@ -344,6 +347,14 @@ function hullGauge(g: Game): GaugeView {
   if (o.radiatorsOut > 0) badges.push({ icon: 'radiators', title: o.radiatorsOut < 1 ? `Radiators ${o.deploy ? 'deploying' : 'stowing'} (${Math.round(o.radiatorsOut * 100)} %)` : 'Radiators out' });
   if (h && h.pumpW > 0) badges.push({ icon: 'pump', title: `Heat pump: ${fmtPower(h.pumpW / 1000)}, loop at ${h.radTemp.toFixed(0)} K` });
   return { label: 'HULL', value: `${T.toFixed(0)} K`, frac: (T - 200) / (TEMP.fail - 200), variant: 'heat', sub: { text, warn: T >= TEMP.warn }, badges };
+}
+
+/** Structural integrity (sim/damage.ts): the bar, and what's wearing it or how to mend it. */
+function integrityGauge(g: Game): GaugeView {
+  const h = g.ship.hull;
+  const heat = heatDamageRate(g.ship.temp);
+  const text = heat > 0 ? `weakening ${(heat * 6000).toFixed(0)} %/min from heat` : h >= 0.999 ? 'sound' : g.dock?.docked ? 'repair in the docked panel' : 'dock at a station to repair';
+  return { label: 'INTEGRITY', value: `${Math.round(h * 100)} %`, frac: h, sub: { text, warn: heat > 0 || h <= HULL_WARN } };
 }
 
 function autopilotView(g: Game): AutopilotView {

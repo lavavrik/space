@@ -53,6 +53,7 @@ export interface ShipSave {
   exotic: number;
   batt: number;
   temp: number;
+  hull?: number;
   vent: boolean;
   sunTrack: boolean;
   landed: string | null;
@@ -141,6 +142,7 @@ function snapshotFlight(c: Game): FlightSave {
       exotic: ship.exotic,
       batt: ship.batt,
       temp: ship.temp,
+      hull: ship.hull,
       vent: ship.vent,
       sunTrack: ship.sunTrack,
       landed: ship.landed?.name ?? null,
@@ -296,7 +298,7 @@ function restoreFlight(c: Game, f: FlightSave) {
     dock: unit(s.avionics.dock) as Avionics['dock'],
   };
   Object.assign(ship, {
-    prop: s.prop, exotic: s.exotic, batt: s.batt, temp: s.temp, vent: s.vent, sunTrack: s.sunTrack,
+    prop: s.prop, exotic: s.exotic, batt: s.batt, temp: s.temp, hull: s.hull ?? 1, vent: s.vent, sunTrack: s.sunTrack,
     fa: s.fa, decoupled: s.decoupled, cruise: s.cruise, throttle: s.throttle, ftlSpeed: s.ftlSpeed, mode: s.mode,
     ftlCharge: 0, tanker: null, dead: null,
   });

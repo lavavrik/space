@@ -4,6 +4,7 @@ import { Panel } from './primitives';
 
 interface Actions {
   refuel: () => void;
+  repair: () => void;
   outfit: () => void;
   launch: () => void;
   catapult: () => void;
@@ -27,6 +28,9 @@ export function DockedPanel({ d, act }: { d: NonNullable<HudSnapshot['docked']>;
       <div className="obtns">
         <button type="button" className="obtn" onClick={act.refuel} disabled={d.tanksFull}>
           {d.tanksFull ? 'tanks full' : 'refuel H₂ + exotic'}
+        </button>
+        <button type="button" className="obtn" onClick={act.repair} disabled={d.hullFull}>
+          {d.hullFull ? 'hull sound' : 'repair hull'}
         </button>
         <button type="button" className="obtn" onClick={act.outfit}>
           outfitting (⇧U)

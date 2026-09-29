@@ -1,5 +1,6 @@
+import { impact } from './damage';
 import { ARRIVE_FLUX, CRASH_SPEED, NORMAL_ACC, NORMAL_BOOST, NORMAL_MAX, RESPAWN_TIME, WT, fluxDist } from '../constants';
-import { fmtDist, nf0 } from '../format';
+import { fmtDist } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import type { Body, Gravity } from '../types';
@@ -24,6 +25,8 @@ export const SURF_K = 0.2,
   SURF_MIN = 8,
   /** Height the ship rests at above the terrain (collide). */
   CLEARANCE = 30;
+/** Touching down faster than this (m/s) damages the hull (sim/damage.ts). */
+const LAND_SCRAPE = 10;
 
 /**
  * Flight assist's speed limit near a world's surface, if it's lower than the normal one: SURF_K ×
@@ -153,9 +156,10 @@ export function collide(g: Game, dt: number) {
       destroyShip(g, `Crushed in the atmosphere of ${b.name} · gas giants have no surface`, b);
       return;
     }
-    if (vin > CRASH_SPEED) {
+    // a hard landing damages the hull, the harder the worse: a whole hull's worth at CRASH_SPEED
+    const h0 = ship.hull;
+    if (impact(g, vin, LAND_SCRAPE, CRASH_SPEED, b.name, b)) {
       ship.vel.add(bv);
-      destroyShip(g, `Hit ${b.name} at ${nf0.format(vin)} m/s`, b);
       return;
     }
     ship.pos.copy(b.pos).addScaledVector(rel, min);
@@ -166,7 +170,7 @@ export function collide(g: Game, dt: number) {
     if (ship.ap) disengageAP(g);
     if (ship.landed !== b) {
       ship.landed = b;
-      g.showMsg(`Touchdown on ${b.name} · ${vin.toFixed(0)} m/s`);
+      if (ship.hull >= h0 - 0.01) g.showMsg(`Touchdown on ${b.name} · ${vin.toFixed(0)} m/s`); // (else the damage report stands)
     }
   }
 }
@@ -200,6 +204,7 @@ export function respawn(g: Game) {
   ship.tanker = null;
   refillShip(g);
   ship.temp = TEMP.start;
+  ship.hull = 1;
   ship.vent = false; // the replacement comes with the same modules, stowed
   ship.outfit.deploy = false;
   ship.outfit.radiatorsOut = 0;

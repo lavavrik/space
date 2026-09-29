@@ -26,7 +26,7 @@ import { SHIP } from '../constants';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import type { Station } from '../types';
-import { destroyShip } from './flight';
+import { impact } from './damage';
 import { engageAutoLaunch, engageAutodock } from './autodock';
 import { startDockGuide } from './guide';
 import { DECK_R } from './skyGeom';
@@ -42,8 +42,9 @@ const CLEARANCE = 8;
 const PAD_SPEED = 6;
 /** How close to the wall (m) counts as on the pad. */
 const PAD_HEIGHT = 12;
-/** Hitting the structure faster than this (m/s) destroys the ship. */
-const STATION_CRASH = 35;
+/** Hitting the structure: faster than STATION_SCRAPE (m/s) damages the hull, and at STATION_CRASH takes all of it. */
+const STATION_SCRAPE = 3,
+  STATION_CRASH = 35;
 /** How high the ship sits above a pad when docked (m; above CLEARANCE, so launching is clear of the wall), and how fast it launches (m/s). */
 const PAD_REST = 9,
   LAUNCH_SPEED = 25;
@@ -172,11 +173,11 @@ export function stationContact(g: Game) {
         g.showMsg(`Docked at ${st.name} · pad ${d.pad + 1} · services below · K ${st.sky ? 'lifts off · or take the catapult' : 'launches'}`);
         return;
       }
+      // hitting the structure damages the hull: a scrape under STATION_SCRAPE, a whole hull's worth
+      // at STATION_CRASH (sim/damage.ts)
       const speed = vRel.length();
-      if (speed > STATION_CRASH) {
-        destroyShip(g, `Hit ${st.name} at ${speed.toFixed(0)} m/s`, st.parent);
-        return;
-      }
+      const h0 = ship.hull;
+      if (impact(g, speed, STATION_SCRAPE, STATION_CRASH, st.name, st.parent)) return;
       // bounce: back to the last clear spot (in the station's own coordinates: mid-step world
       // positions lag the station by its orbital motion), most of the closing speed gone
       const back = lastClear.get(st);
@@ -184,7 +185,7 @@ export function stationContact(g: Game) {
       ship.vel.copy(stationPointVel(st, ship.pos)).addScaledVector(vRel, -0.25).sub(g.frameBody.vel);
       if (!g.warned.bump) {
         g.warned.bump = true;
-        g.showMsg(`Contact with ${st.name} · ${speed.toFixed(0)} m/s`, 'warn');
+        if (ship.hull >= h0 - 0.01) g.showMsg(`Contact with ${st.name} · ${speed.toFixed(0)} m/s`, 'warn');
       }
       if (st.sky) return; // open to the sky: never "inside"
       g.inStation = st;

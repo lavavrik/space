@@ -22,6 +22,7 @@ import { updatePivot } from './pivot';
 import { updateRadar } from './radar';
 import { autodock } from './autodock';
 import { ascent, stopAscent } from './catapult';
+import { updateDamage } from './damage';
 import { SHORE_POWER, holdDocked, rotationCorrection, stationContact, updateDockRequest } from './docking';
 
 const qa = new THREE.Quaternion();
@@ -193,6 +194,7 @@ export function update(g: Game, dt: number, realDt = dt) {
   settleBattery(g, dt);
   if (ship.batt > 1) g.warned.batt = false;
   updateThermal(g, dt, inTunnel);
+  updateDamage(g, dt); // (heat wear; impacts are taken where they happen)
   // dt can be 0 (two frames on one timestamp); 0/0 would stick NaN in the smoothed rate forever
   if (dt > 0) ship.burnRate += (power.burn / dt - ship.burnRate) * Math.min(1, dt * 3);
   if (!inTunnel) scoop(g, dt);
