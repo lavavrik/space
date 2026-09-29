@@ -214,6 +214,7 @@ export interface Ship {
   dead: { t: number; reason: string; body: Body } | null;
   grav: Gravity | null;
   prop: number; // kg of hydrogen
+  o2: number; // kg of liquid oxygen (sim/oxygen.ts)
   exotic: number; // kg of exotic matter
   batt: number; // kWh
   burnRate: number; // kg/s of propellant, smoothed for display
@@ -221,6 +222,7 @@ export interface Ship {
   tanker: Tanker | null;
   scoop: string; // what we are refuelling from this frame
   scoopRate: { prop: number; exotic: number }; // kg/s being scooped this frame
+  o2Rate: number; // kg/s of oxygen coming in this frame (sim/oxygen.ts: water split, air scooped)
   avionics: Avionics; // fitted computers (see avionics/catalog.ts)
   temp: number; // K, hull temperature (see sim/thermal.ts)
   hull: number; // structural integrity, 0–1 (0: lost; sim/damage.ts)
@@ -234,7 +236,7 @@ export interface Ship {
 }
 
 /** Loads on the power bus that can be switched off in the schematic (sim/power.ts). */
-export type Breaker = 'thrust' | 'ftl' | 'charge' | 'radar' | 'shield' | 'guard';
+export type Breaker = 'thrust' | 'ftl' | 'charge' | 'radar' | 'shield' | 'guard' | 'fuelcell' | 'electrolysis';
 
 /** Per-frame power bookkeeping. */
 export interface Power {
@@ -253,6 +255,11 @@ export interface Power {
   shieldKW: number; // magnetic deflector, while it works (sim/belt.ts)
   guardKW: number; // collision radar, near a ring's belt (sim/belt.ts)
   laserKW: number; // mining laser, while it fires (sim/laser.ts)
+  electrolysisKW: number; // electrolyser, splitting water for oxygen (sim/oxygen.ts)
+  /** Fuel cell (sim/oxygen.ts): running, what it offers the bus this frame, and what it gave (kW). */
+  fcOn: boolean;
+  fcOffer: number;
+  fcKW: number;
   turnKW: number; // the part of thrustKW spent turning (attitude thrusters; sim/resources.ts turnThrust)
   burn: number;
   cap: number; // kW the bus can supply this frame: solar + the battery's discharge limit (sim/power.ts)

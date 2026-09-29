@@ -28,10 +28,11 @@ import { RADAR_RANGE, SWEEP, contactLabel, radarClass, radarContacts } from '../
 import { unitLabel, type Computer } from '../avionics/catalog';
 import { buildInfluences } from './influences';
 import { approachView } from './approach';
-import { deflectorFitted, guardFitted, laserFitted } from '../outfit/catalog';
+import { deflectorFitted, fuelCellFitted, guardFitted, laserFitted } from '../outfit/catalog';
 import { threatNow } from '../sim/belt';
 import { rockLabel } from '../sim/ringRocks';
 import { liveProspects, prospectNow } from '../sim/prospect';
+import { FC_KWH, O2_PER_H2, o2Days } from '../sim/oxygen';
 import { BOARD_S, MAX_ACTIVE, board, canDeliverMetal, cantTake, reach, type Contract } from '../sim/contracts';
 import { FUELS, fuelPrice, CARGO_CAP, COMMODITIES, cargoMass, cargoValue, fmtCr, refuelQuote, repairQuote, sellPrice, type Commodity } from '../sim/economy';
 import { fitPrice } from '../outfit/fit';
@@ -84,7 +85,7 @@ export function buildSnapshot(g: Game): HudSnapshot {
           trade: tradeRows(g, g.dock.station),
           jobs: g.stationTab === 'contracts' ? contractsView(g) : null,
           outfit: g.stationTab === 'outfit' ? outfitView(g) : null,
-          fuels: (['prop', 'exotic'] as const).map((id) => ({ id, name: id === 'prop' ? 'Hydrogen' : 'Exotic matter', haveKg: g.ship[id], capKg: FUELS[id].cap, price: fuelPrice(g.dock!.station, id) })),
+          fuels: (['prop', 'exotic', 'o2'] as const).map((id) => ({ id, name: { prop: 'Hydrogen', exotic: 'Exotic matter', o2: 'Oxygen (LOX)' }[id], haveKg: g.ship[id], capKg: FUELS[id].cap, price: fuelPrice(g.dock!.station, id) })),
           creditsN: g.credits,
           hull: { pct: `${Math.round(g.ship.hull * 100)} %`, frac: g.ship.hull },
           tanksFull: g.ship.prop >= SHIP.propCap - 1 && g.ship.exotic >= SHIP.exoticCap - 0.01,
@@ -342,15 +343,35 @@ function systems(g: Game): SystemsView {
         value: fmtEnergy(ship.batt),
         frac: ship.batt / cap,
         variant: 'batt',
-        sub: { text: `${netText}${battTime}`, warn: net < -0.5 },
+        sub: { text: `${g.power.fcKW > 0.5 ? `fuel cell +${fmtPower(g.power.fcKW)} · ` : ''}${netText}${battTime}`, warn: net < -0.5 },
         badges: ship.temp >= TEMP.panels ? [{ icon: 'panels-off', title: `Solar panels feathered: hull over ${TEMP.panels} K`, warn: true }] : undefined,
       },
+      o2Gauge(g),
       hullGauge(g),
       integrityGauge(g),
       cargoGauge(g),
     ],
     note,
   };
+}
+
+/**
+ * Oxygen (sim/oxygen.ts): the LOX tank, and what's happening to it: coming in (split from water,
+ * scooped from air), the fuel cell burning it, or how long life support can breathe it.
+ */
+function o2Gauge(g: Game): GaugeView {
+  const { ship, power } = g;
+  const fcO2 = (power.fcKW / FC_KWH) * O2_PER_H2; // kg/h
+  const days = o2Days(ship.o2);
+  const text =
+    ship.o2Rate > 1e-4
+      ? `+${ship.o2Rate * 3600 < 100 ? (ship.o2Rate * 3600).toFixed(1) : Math.round(ship.o2Rate * 3600)} kg/h ${power.electrolysisKW > 0.5 ? `split from water (${fmtPower(power.electrolysisKW)})` : 'from the air'}`
+      : power.fcKW > 0.5
+        ? `fuel cell burning ${fcO2.toFixed(0)} kg/h · ${fmtTime((ship.o2 / fcO2) * 3600)} left`
+        : g.dock?.docked
+          ? "breathing the station's air"
+          : `life support · ${days > 60 ? `${Math.round(days)} days` : fmtTime(days * 86400)} of breathing`;
+  return { label: 'O₂', icon: 'o2', value: fmtMass(ship.o2), frac: ship.o2 / SHIP.o2Cap, variant: 'o2', sub: { text, warn: days < 3 } };
 }
 
 /**
@@ -471,6 +492,7 @@ function cargoView(g: Game): CargoView {
     tanks: [
       { name: 'Hydrogen', value: `${fmtMass(ship.prop)} / ${fmtMass(SHIP.propCap)}`, frac: ship.prop / SHIP.propCap, kind: 'prop' },
       { name: 'Exotic matter', value: `${fmtMass(ship.exotic)} / ${fmtMass(SHIP.exoticCap)}`, frac: ship.exotic / SHIP.exoticCap, kind: 'exotic' },
+      { name: 'Oxygen', value: `${fmtMass(ship.o2)} / ${fmtMass(SHIP.o2Cap)}`, frac: ship.o2 / SHIP.o2Cap, kind: 'o2' },
     ],
     mass: fmtMass(dry + ship.prop),
     dv: kg > 0.5 ? `${fmtSpeedText(dv)} · ${fmtSpeedText(dv0 - dv)} less than empty` : fmtSpeedText(dv),
@@ -604,6 +626,8 @@ function outfitView(g: Game): OutfitView {
           ? `stops ${Math.round(m.caps.block * 100)} % of dust erosion · ${fmtPower(m.caps.kw)} while working · ${fmtMass(m.mass)}`
           : m.kind === 'laser'
             ? `${fmtPower(m.caps.kw)} beam · out to ${fmtDist(m.caps.range)} · ${fmtMass(m.mass)}`
+            : m.kind === 'fuelcell'
+            ? `${fmtPower(m.caps.kw)} · ${((m.caps.kw / FC_KWH)).toFixed(1)} kg H₂ + ${((m.caps.kw / FC_KWH) * O2_PER_H2).toFixed(0)} kg O₂ an hour at full output · ${fmtMass(m.mass)}`
             : m.kind === 'guard'
             ? `rocks ${m.caps.minSize} m and up · ${fmtDist(m.caps.range)} ahead · ${m.caps.avoid ? 'steers clear' : 'warns'} · ${fmtPower(m.caps.kw)} · ${fmtMass(m.mass)}`
             : `${m.caps.exotic ? 'H₂ + exotic' : 'H₂ only'} · ${m.caps.rate}× intake · ${fmtMass(m.mass)}`;
@@ -616,7 +640,7 @@ function outfitView(g: Game): OutfitView {
     battery: { unit: moduleLabel(o.battery), specs: bSpecs(o.battery), options: st ? BATTERIES.map((b) => ({ id: b.id, unit: moduleLabel(b), specs: `${b.blurb} · ${bSpecs(b)} · ${fmtCr(fitPrice(st, b.price))}`, current: b === o.battery })) : [] },
     hint: 'Modules are fitted while docked at a station (target one, K for a pad, land on it)',
     slots: o.slots.map((m) => (m ? { unit: moduleLabel(m), blurb: m.blurb, specs: specsOf(m), empty: false, icon: m.kind } : { unit: 'empty', blurb: '', specs: '', empty: true, icon: 'empty' as const })),
-    catalogue: st ? MODULES.map((m) => ({ id: m.id, unit: moduleLabel(m), kind: { radiator: 'RADIATORS', heatpump: 'HEAT PUMP', scoop: 'FUEL SCOOP', deflector: 'DEFLECTOR', guard: 'COLLISION RADAR', laser: 'MINING LASER' }[m.kind], blurb: m.blurb, specs: `${specsOf(m)} · ${fmtCr(fitPrice(st, m.price))}` })) : [],
+    catalogue: st ? MODULES.map((m) => ({ id: m.id, unit: moduleLabel(m), kind: { radiator: 'RADIATORS', heatpump: 'HEAT PUMP', scoop: 'FUEL SCOOP', deflector: 'DEFLECTOR', guard: 'COLLISION RADAR', laser: 'MINING LASER', fuelcell: 'FUEL CELL' }[m.kind], blurb: m.blurb, specs: `${specsOf(m)} · ${fmtCr(fitPrice(st, m.price))}` })) : [],
     radiators: {
       fitted: rads.length > 0,
       out: o.radiatorsOut,
@@ -657,7 +681,7 @@ function electricalView(g: Game): ElectricalView {
   const lim = power.limited;
   const limitOf = (id: string) => {
     if (!lim) return null;
-    const is = { charge: /charging/, thrust: /thrusters/, ftl: /FTL drive/, pump: /heat pump/, radar: /^radar/, shield: /deflector/, guard: /collision radar/, laser: /mining laser/ }[id];
+    const is = { charge: /charging/, thrust: /thrusters/, ftl: /FTL drive/, pump: /heat pump/, radar: /^radar/, shield: /deflector/, guard: /collision radar/, laser: /mining laser/, electrolysis: /electrolyser/ }[id];
     return is?.test(lim.what) ? lim.frac : null;
   };
   const net = power.net;
@@ -678,6 +702,12 @@ function electricalView(g: Game): ElectricalView {
       curtailed: power.curtailed,
     },
     shore: { kw: power.shore, source: g.dock?.docked ? g.dock.station.name : null },
+    fuelcell: (() => {
+      const fc = fuelCellFitted(ship.outfit);
+      if (!fc) return null;
+      const h2 = (power.fcKW / FC_KWH);
+      return { unit: moduleLabel(fc), kw: power.fcKW, max: fc.caps.kw, on: loadOn(g, 'fuelcell'), running: power.fcOn, h2, o2: h2 * O2_PER_H2 };
+    })(),
     battery: { unit: moduleLabel(b), kwh: ship.batt, cap, flowKW: net, maxKW: b.caps.maxKW, chargeKW: b.caps.chargeKW },
     bus: { capKW: power.cap, drawKW: power.draw },
     loads: [
@@ -691,6 +721,7 @@ function electricalView(g: Game): ElectricalView {
       { id: 'shield', name: 'DEFLECTOR', kw: power.shieldKW, limited: limitOf('shield'), sw: deflectorFitted(ship.outfit) ? 'shield' : null, on: loadOn(g, 'shield') },
       { id: 'laser', name: 'MINING LASER', kw: power.laserKW, limited: limitOf('laser'), sw: laserFitted(ship.outfit) ? 'laser' : null, on: loadOn(g, 'laser') },
       { id: 'guard', name: 'COLLISION RADAR', kw: power.guardKW, limited: limitOf('guard'), sw: guardFitted(ship.outfit) ? 'guard' : null, on: loadOn(g, 'guard') },
+      { id: 'electrolysis', name: 'ELECTROLYSER (O₂)', kw: power.electrolysisKW, limited: limitOf('electrolysis'), sw: 'electrolysis', on: loadOn(g, 'electrolysis') },
     ],
     rows,
   };

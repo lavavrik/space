@@ -29,6 +29,24 @@ Ship stats (U) draws the bus as a schematic, and every load you can switch off h
 
 The switches are saved with the ship. Later they may become power shares instead of on/off, to direct a weak bus where it matters.
 
+## Oxygen and fuel cells (`sim/oxygen.ts`)
+
+The ship carries a 2 t tank of liquid oxygen (LOX, at 90 K, 1.14 kg/L), with its own gauge (O₂).
+
+- **Life support** breathes 2 kg a day: a crew of 4 at 0.84 kg each, with about half won back from the CO₂, as on the ISS.
+  - A full tank lasts about 1,000 days on breathing alone.
+  - Docked, the station supplies the air.
+  - You're warned at 3 days left. An empty tank is fatal.
+- **Fuel cell** (a module, a reserve generator: FC-50 Ember 50 kW / 0.9 t, FC-150 Hearth 150 kW / 2.5 t; the new ship has the FC-150 in a 7th slot):
+  - It works like the Apollo and Shuttle cells: H₂ + ½O₂ → water and electricity, at 55 % of hydrogen's heating value. That's 18.3 kWh per kg of H₂, taking 7.94 kg of O₂ each. The other 45 % is heat in the hull.
+  - It starts on its own when the battery falls under 30 % and stops over 80 %. It covers the loads the panels can't and recharges the battery, up to its rating. It has a switch on the power schematic.
+  - At 150 kW it burns 8.2 kg of H₂ and 65 kg of O₂ an hour, so a full tank lasts ~31 hours. The hydrogen barely registers; the oxygen is the limit.
+- **Oxygen comes from:**
+  - Stations: 0.3 Cr/kg, on the Services tab's slider (a full tank ~600 Cr).
+  - Water, split by the electrolyser (a load on the schematic, switchable and shed at a low battery). It runs while water is coming in (the laser boiling ice off a rock, or mining ice on the ground) and there's room in the tank, on spare power only, never from a battery under half. Splitting water costs 6.3 kWh per kg of oxygen (~50 kWh per kg of hydrogen), so its 300 kW makes ~48 kg an hour: plenty to breathe, slow for a fuel cell. Burning oxygen you split yourself gives back only ~2.3 kWh of each 6.3 you spent.
+  - Air: skimming an Earth-like world's atmosphere with the fuel scoop catches its oxygen (23 % of air by mass), in proportion to the air's density and your speed through it. The richest pickings are low and fast, where the entry heating is too.
+- (The scoop's hydrogen from ice isn't charged the electrolysis energy it would really need. The propellant yields were tuned for play before oxygen existed. Oxygen is charged in full.)
+
 ## Load shedding (`loadShed`)
 
 In flight, when the battery drops below 10 %, everything except life support, the thrusters and the

@@ -18,6 +18,7 @@
 import { minedRocks } from './sim/ringRocks';
 import { START_CREDITS } from './sim/economy';
 import type { Game } from './Game';
+import { SHIP } from './constants';
 import type { Switchable } from './sim/power';
 import type { Contract } from './sim/contracts';
 import { THREE } from './lib/three';
@@ -25,7 +26,7 @@ import { ALL_COMPUTERS, type Avionics } from './avionics/catalog';
 import { UTILITY_SLOTS, batteryById, bestOutfit, moduleById } from './outfit/catalog';
 
 /** The outfit's save format: 2 added utility slots 4 and 5 (belt protection), 3 slot 6 (mining laser). */
-const OUTFIT_REV = 3;
+const OUTFIT_REV = 4;
 import type { ApType, Npc, Ship, Target } from './types';
 import { systemById } from './universe/galaxy';
 import { resetFrame } from './sim/frame';
@@ -61,6 +62,7 @@ export interface ShipSave {
   batt: number;
   temp: number;
   hull?: number;
+  o2?: number;
   cargo?: Ship['cargo'];
   crates?: Ship['crates'];
   vent: boolean;
@@ -159,6 +161,7 @@ function snapshotFlight(c: Game): FlightSave {
       batt: ship.batt,
       temp: ship.temp,
       hull: ship.hull,
+      o2: ship.o2,
       cargo: { ...ship.cargo },
       crates: { ...ship.crates },
       vent: ship.vent,
@@ -309,10 +312,11 @@ function restoreFlight(c: Game, f: FlightSave) {
   const batt = batteryById(s.outfit.battery);
   if (batt) ship.outfit.battery = batt;
   // slots added since a save was written come fitted as on a new ship: 4 and 5 (rev 2: belt
-  // protection), 6 (rev 3: the mining laser). (A save may already list them, empty, if written in between.)
+  // protection), 6 (rev 3: the mining laser), 7 (rev 4: the fuel cell). (A save may already list
+  // them, empty, if written in between.)
   const stock = bestOutfit().slots;
   const rev = s.outfit.rev ?? 1;
-  const firstNew = rev < 2 ? 3 : rev < 3 ? 5 : UTILITY_SLOTS;
+  const firstNew = rev < 2 ? 3 : rev < 3 ? 5 : rev < 4 ? 6 : UTILITY_SLOTS;
   ship.outfit.slots = Array.from({ length: UTILITY_SLOTS }, (_, i) => {
     const id = s.outfit.slots[i];
     return id ? moduleById(id) : i >= firstNew ? stock[i] : null;
@@ -328,7 +332,7 @@ function restoreFlight(c: Game, f: FlightSave) {
     dock: unit(s.avionics.dock) as Avionics['dock'],
   };
   Object.assign(ship, {
-    prop: s.prop, exotic: s.exotic, batt: s.batt, temp: s.temp, hull: s.hull ?? 1, cargo: { ...(s.cargo ?? {}) }, crates: { ...(s.crates ?? {}) }, vent: s.vent, sunTrack: s.sunTrack,
+    prop: s.prop, exotic: s.exotic, batt: s.batt, temp: s.temp, hull: s.hull ?? 1, o2: s.o2 ?? SHIP.o2Cap, cargo: { ...(s.cargo ?? {}) }, crates: { ...(s.crates ?? {}) }, vent: s.vent, sunTrack: s.sunTrack,
     fa: s.fa, decoupled: s.decoupled, cruise: s.cruise, throttle: s.throttle, ftlSpeed: s.ftlSpeed, mode: s.mode,
     ftlCharge: 0, tanker: null, dead: null,
   });

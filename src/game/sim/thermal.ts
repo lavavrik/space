@@ -21,6 +21,7 @@ import type { Ship, World } from '../types';
 import { destroyShip } from './flight';
 import { dryMass } from './resources';
 import { grant } from './power';
+import { FC_EFF } from './oxygen';
 
 export const SIGMA = 5.670374e-8; // Stefan–Boltzmann, W/m²K⁴
 /** Solar constant: flux from a Sun-like star at 1 AU, W/m² (power.flux is in these units). */
@@ -186,7 +187,8 @@ export function heatBudget(g: Game, inTunnel: boolean): HeatBudget {
   const inp: Inputs = {
     star,
     planets: planetFlux * (HULL.area / 4),
-    internal: 1000 * (power.draw - power.thrustKW * (1 - HULL.exhaustKeep) - power.pumpKW),
+    // (a fuel cell's losses too: 45 % of what it burns ends up as heat, sim/oxygen.ts)
+    internal: 1000 * (power.draw - power.thrustKW * (1 - HULL.exhaustKeep) - power.pumpKW + (power.fcKW * (1 - FC_EFF)) / FC_EFF),
     radAbs: radStar + planetFlux * ((2 * finFace) / 4) + RADIATOR_SURFACE.emit * skyW * 2 * finFace,
     radArea: 2 * finFace,
     pumpMaxW: pump && ship.outfit.pumpAuto ? Math.min(pump.caps.maxKW, Math.max(0, power.left)) * 1000 : 0,

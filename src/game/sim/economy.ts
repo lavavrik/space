@@ -35,6 +35,7 @@ export const METAL_SPLIT: Record<Commodity, number> = { nife: 0.9, cobalt: 0.09,
 export const PRICE = {
   prop: 0.1, // Cr/kg of propellant: a full tank ~12,000
   exotic: 60, // Cr/kg: a full 100 kg ~6,000
+  o2: 0.3, // Cr/kg of liquid oxygen: a full 2 t tank ~600
   repair: 120, // Cr per percent of hull
   tankerCall: 2500, // the tanker's call-out fee, on top of its fuel
   tankerMarkup: 1.5, // × station prices for what it delivers
@@ -95,6 +96,7 @@ export function buyFuel(g: Game) {
 export const FUELS = {
   prop: { name: 'hydrogen', cap: SHIP.propCap },
   exotic: { name: 'exotic matter', cap: SHIP.exoticCap },
+  o2: { name: 'oxygen', cap: SHIP.o2Cap },
 } as const;
 export type Fuel = keyof typeof FUELS;
 export const fuelPrice = (st: Station | null, f: Fuel) => PRICE[f] * stationFactor(st, f);
@@ -108,12 +110,12 @@ export function buyFuelTo(g: Game, f: Fuel, toKg: number) {
   const st = g.dock.station;
   const have = g.ship[f],
     want = Math.min(FUELS[f].cap, toKg) - have;
-  if (want <= (f === 'prop' ? 1 : 0.01)) return;
+  if (want <= FUELS[f].cap * 1e-5) return;
   const p = fuelPrice(st, f);
   const kg = Math.min(want, g.credits / p);
   g.credits -= kg * p;
   g.ship[f] += kg;
-  const amount = f === 'prop' ? `${(kg / 1000).toFixed(1)} t` : `${kg.toFixed(1)} kg`;
+  const amount = FUELS[f].cap >= 1000 ? `${(kg / 1000).toFixed(2)} t` : `${kg.toFixed(1)} kg`;
   g.showMsg(kg < want - 1e-6 ? `${st.name} · ${amount} of ${FUELS[f].name}, all your credits would buy` : `${st.name} · ${amount} of ${FUELS[f].name} · ${fmtCr(kg * p)}`, kg < want - 1e-6 ? 'warn' : '');
 }
 

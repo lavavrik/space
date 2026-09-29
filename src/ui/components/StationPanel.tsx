@@ -11,7 +11,7 @@ type Tab = Docked['tab'];
 
 interface Actions extends ContractActions, OutfitActions {
   tab: (t: Tab) => void;
-  buyFuel: (f: 'prop' | 'exotic', toKg: number) => void;
+  buyFuel: (f: 'prop' | 'exotic' | 'o2', toKg: number) => void;
   repair: () => void;
   sell: (c: Docked['trade'][number]['id']) => void;
   sellAll: () => void;
@@ -40,7 +40,7 @@ function Group({ icon, title, children }: { icon: ResourceIcon; title: string; c
   );
 }
 
-const fmtKg = (kg: number, cap: number) => (cap >= 10_000 ? `${(kg / 1000).toFixed(1)} t` : `${kg.toFixed(1)} kg`);
+const fmtKg = (kg: number, cap: number) => (cap >= 10_000 ? `${(kg / 1000).toFixed(1)} t` : cap >= 1000 ? `${(kg / 1000).toFixed(2)} t` : `${kg.toFixed(1)} kg`);
 const fmtCr = (x: number) => `${Math.round(x).toLocaleString('en-US')} Cr`;
 
 /**
@@ -62,7 +62,7 @@ function FuelGroup({ f, credits, onBuy }: { f: Docked['fuels'][number]; credits:
         </span>
         <b>{f.price < 1 ? f.price.toFixed(3) : f.price.toFixed(1)} Cr/kg</b>
       </div>
-      <div className={cx('bar', f.id === 'exotic' && 'ftl', 'svfill')}>
+      <div className={cx('bar', f.id === 'exotic' && 'ftl', f.id === 'o2' && 'o2', 'svfill')}>
         <i className="svto" style={{ width: `${(level / f.capKg) * 100}%` }} />
         <i style={{ width: `${(f.haveKg / f.capKg) * 100}%` }} />
       </div>

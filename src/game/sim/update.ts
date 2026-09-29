@@ -30,6 +30,8 @@ import { mineRock, updateLaser } from './laser';
 import { SHORE_POWER, holdDocked, rotationCorrection, stationContact, updateDockRequest } from './docking';
 import { updateContracts } from './contracts';
 import { laserIdle } from './laser';
+import { breathe, gatherO2, waterIn } from './oxygen';
+import { destroyShip } from './flight';
 
 const qa = new THREE.Quaternion();
 const AX = new THREE.Vector3(1, 0, 0),
@@ -255,8 +257,12 @@ export function update(g: Game, dt: number, realDt = dt) {
   // no sunlight inside a station; docked, the station's shore power stands in for the panels
   power.solar = inTunnel || g.inStation ? 0 : solarPower(g);
   power.shore = g.dock?.docked ? SHORE_POWER : 0;
-  power.draw = SHIP.baseLoad + power.thrustKW + power.ftlKW + power.chargeKW + power.pumpKW + power.radarKW + power.lightsKW + power.shieldKW + power.guardKW + power.laserKW;
+  // oxygen (sim/oxygen.ts): split from water on spare power (it asks last), scooped from the air
+  ship.o2Rate = gatherO2(g, dt, waterIn(g));
+  power.draw = SHIP.baseLoad + power.thrustKW + power.ftlKW + power.chargeKW + power.pumpKW + power.radarKW + power.lightsKW + power.shieldKW + power.guardKW + power.laserKW + power.electrolysisKW;
   settleBattery(g, dt);
+  // life support breathes the tank (docked: the station's air); empty, the crew is lost
+  if (breathe(g, dt) && !ship.dead) destroyShip(g, 'Life support failed · the oxygen ran out', g.frameBody);
   loadShed(g);
   if (ship.batt > 1) g.warned.batt = false;
   updateThermal(g, dt, inTunnel);

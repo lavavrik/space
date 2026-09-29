@@ -3,7 +3,10 @@
  * power while docked at a station, plus what the battery can give (its discharge limit, and only while it holds charge). Loads are granted in the order
  * they ask, after the always-on base load:
  *
- *   base (life support, avionics) → drive charging → FTL drive → thrusters → heat pump
+ *   base (life support, avionics) → drive charging → FTL drive → thrusters → heat pump → … → electrolyser
+ *
+ * Sources: the panels, shore power while docked, the battery, and a fuel cell while it runs
+ * (sim/oxygen.ts: it starts when the battery runs low).
  *
  * A load that gets less than it asked for runs slower rather than failing outright: drive charging
  * stretches (the energy is fixed: 5 kWh for the FTL drive, ~35 kWh for a hyperjump), thrust is
@@ -14,6 +17,7 @@
 import { SHIP } from '../constants';
 import type { Game } from '../Game';
 import type { Breaker, Ship } from '../types';
+import { fuelCellOffer, settleFuelCell } from './oxygen';
 
 export const battCap = (ship: Ship) => ship.outfit.battery.caps.capacity;
 
@@ -28,7 +32,9 @@ export function beginPower(g: Game) {
   const { power } = g;
   // last frame's loads stay readable (HUD) until the next frame starts
   power.thrustKW = power.ftlKW = power.chargeKW = power.burn = power.shieldKW = power.guardKW = power.laserKW = power.turnKW = 0;
-  power.cap = busCapacity(g);
+  // a running fuel cell adds its rating (sim/oxygen.ts); what's used of it is settled with the battery
+  power.fcOffer = fuelCellOffer(g);
+  power.cap = busCapacity(g) + power.fcOffer;
   power.left = Math.max(0, power.cap - SHIP.baseLoad);
   power.limited = null;
 }
@@ -49,7 +55,8 @@ export function grant(g: Game, kw: number, what: string) {
 export function settleBattery(g: Game, dt: number) {
   const { ship, power } = g;
   const b = ship.outfit.battery.caps;
-  const surplus = power.solar + power.shore - power.draw;
+  const fc = settleFuelCell(g, dt, power.fcOffer);
+  const surplus = power.solar + power.shore + fc - power.draw;
   power.net = surplus >= 0 ? Math.min(surplus, ship.batt < b.capacity ? b.chargeKW : 0) : Math.max(surplus, -b.maxKW);
   power.curtailed = surplus > 0 ? surplus - power.net : 0;
   ship.batt = Math.min(b.capacity, Math.max(0, ship.batt + (power.net * dt) / 3600));
@@ -66,6 +73,7 @@ export function settleBattery(g: Game, dt: number) {
 export type Switchable = Breaker | 'lights' | 'pump' | 'laser';
 
 export const SWITCH_NAMES: Record<Switchable, string> = {
+  fuelcell: 'Fuel cell', electrolysis: 'Electrolyser',
   thrust: 'Thrusters', ftl: 'FTL drive', charge: 'Drive charging', radar: 'Radar', shield: 'Deflector', guard: 'Collision radar', lights: 'Headlights', pump: 'Heat pump', laser: 'Mining laser',
 };
 
@@ -101,7 +109,7 @@ export function toggleLoad(g: Game, id: Switchable) {
  */
 export const SHED_BELOW = 0.1;
 export const RESTORE_ABOVE = 0.3;
-const SHEDDABLE: Switchable[] = ['laser', 'lights', 'radar', 'shield', 'guard', 'pump'];
+const SHEDDABLE: Switchable[] = ['laser', 'lights', 'radar', 'shield', 'guard', 'pump', 'electrolysis'];
 
 export function loadShed(g: Game) {
   const { ship } = g;

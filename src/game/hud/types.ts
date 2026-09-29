@@ -80,10 +80,10 @@ export interface GaugeBadge {
 export interface GaugeView {
   label: string;
   /** An icon before the label (ui/components/icons.ts RESOURCE_ICONS). */
-  icon?: 'prop' | 'exotic' | 'cargo';
+  icon?: 'prop' | 'exotic' | 'cargo' | 'o2';
   value: string;
   frac: number;
-  variant?: 'ftl' | 'batt' | 'heat';
+  variant?: 'ftl' | 'batt' | 'heat' | 'o2';
   sub: Readout;
   /** Status icons beside the label, e.g. the solar panels feathered by heat, the hydrogen vent running. */
   badges?: GaugeBadge[];
@@ -125,7 +125,7 @@ export interface InfluencesView {
 }
 
 /** Icon per kind of module (see ui/components/icons.ts). */
-export type ModuleIcon = 'battery' | 'scoop' | 'radiator' | 'heatpump' | 'deflector' | 'guard' | 'laser' | 'empty';
+export type ModuleIcon = 'battery' | 'scoop' | 'radiator' | 'heatpump' | 'deflector' | 'guard' | 'laser' | 'fuelcell' | 'empty';
 
 /** One fitted computer in the avionics panel (U). */
 export interface AvionicsSlotView {
@@ -151,6 +151,8 @@ export interface ElectricalView {
   /** External power: the station's supply while docked (null source name when not connected). */
   shore: { kw: number; source: string | null };
   battery: { unit: string; kwh: number; cap: number; flowKW: number; maxKW: number; chargeKW: number };
+  /** The fuel cell, if fitted (sim/oxygen.ts): output now, its rating, switched on, running, and what it burns (kg/h). */
+  fuelcell: { unit: string; kw: number; max: number; on: boolean; running: boolean; h2: number; o2: number } | null;
   bus: { capKW: number; drawKW: number };
   /** `sw`: the load's power switch (sim/power.ts), and whether it's on; null for loads that can't be switched. */
   loads: { id: string; name: string; kw: number; limited: number | null; sw: Switchable | null; on: boolean }[];
@@ -309,7 +311,7 @@ export interface HudSnapshot {
     jobs: ContractsView | null;
     outfit: OutfitView | null;
     /** Services: each fuel (kg now and full, this station's Cr/kg) and your credits, for the refuel sliders; the hull. */
-    fuels: { id: 'prop' | 'exotic'; name: string; haveKg: number; capKg: number; price: number }[];
+    fuels: { id: 'prop' | 'exotic' | 'o2'; name: string; haveKg: number; capKg: number; price: number }[];
     creditsN: number;
     hull: { pct: string; frac: number };
   } | null;
@@ -336,7 +338,7 @@ export interface CargoView {
   total: string;
   where: string;
   credits: string;
-  tanks: { name: string; value: string; frac: number; kind: 'prop' | 'exotic' }[];
+  tanks: { name: string; value: string; frac: number; kind: 'prop' | 'exotic' | 'o2' }[];
   /** What the load costs in flight: ship mass and Δv left, and how much the hold takes off it. */
   mass: string;
   dv: string;

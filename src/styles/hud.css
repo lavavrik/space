@@ -51,6 +51,9 @@
 .bar.ftl i { background: var(--cyan); }
 .bar.batt { background: rgba(160, 230, 140, .18); }
 .bar.batt i { background: #a8e68c; }
+/* oxygen (LOX): a pale blue, apart from the exotic matter's cyan */
+.bar.o2 { background: rgba(170, 200, 255, .18); }
+.bar.o2 i { background: #b3cbff; }
 .bar.low i { background: var(--red) !important; }
 /* hull temperature (200 K to failure): the track shows the limits as bands, safe to failure */
 .bar.heat { background: linear-gradient(90deg, rgba(159,196,255,.16) 0 28.6%, rgba(255,210,122,.18) 28.6% 57.1%, rgba(255,138,58,.22) 57.1% 85.7%, rgba(255,70,70,.3) 85.7%); }

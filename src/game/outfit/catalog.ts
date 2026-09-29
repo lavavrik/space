@@ -21,7 +21,7 @@
  * Physics in sim/thermal.ts; numbers in docs/thermal.md.
  */
 
-export type ModuleKind = 'radiator' | 'heatpump' | 'scoop' | 'deflector' | 'guard' | 'laser';
+export type ModuleKind = 'radiator' | 'heatpump' | 'scoop' | 'deflector' | 'guard' | 'laser' | 'fuelcell';
 
 interface ModuleBase {
   id: string;
@@ -103,7 +103,19 @@ export interface LaserModule extends ModuleBase {
   };
 }
 
-export type Module = RadiatorModule | HeatPumpModule | ScoopModule | DeflectorModule | GuardModule | LaserModule;
+/**
+ * Fuel cell (sim/oxygen.ts): a reserve generator. It burns the propellant's hydrogen with oxygen
+ * from the LOX tank (as the Apollo and Shuttle cells did), 18.3 kWh per kg of H₂ and 7.9 kg of O₂
+ * each, when the battery runs low. Mass from the Shuttle's cells (~17 kg/kW).
+ */
+export interface FuelCellModule extends ModuleBase {
+  kind: 'fuelcell';
+  caps: {
+    kw: number; // electrical output
+  };
+}
+
+export type Module = RadiatorModule | HeatPumpModule | ScoopModule | DeflectorModule | GuardModule | LaserModule | FuelCellModule;
 
 /** Most thrust (m/s², ~3 g) deployed radiators can take; more is capped while they're out. */
 export const RADIATOR_MAX_ACC = 30;
@@ -169,6 +181,16 @@ export const MODULES: Module[] = [
     caps: { kw: 600, range: 1500 },
   },
   {
+    id: 'fc-50', kind: 'fuelcell', maker: 'Hydrion Power', model: 'FC-50', name: 'Ember', mass: 900, price: 12000,
+    blurb: 'Fuel cell: 50 kW from hydrogen and oxygen when the battery runs low. ~2.7 kg of H₂ and 22 kg of O₂ an hour at full output',
+    caps: { kw: 50 },
+  },
+  {
+    id: 'fc-150', kind: 'fuelcell', maker: 'Hydrion Power', model: 'FC-150', name: 'Hearth', mass: 2500, price: 30000,
+    blurb: 'Fuel cell: 150 kW. ~8.2 kg of H₂ and 65 kg of O₂ an hour at full output: a full LOX tank lasts ~31 hours',
+    caps: { kw: 150 },
+  },
+  {
     id: 'kh-2', kind: 'heatpump', maker: 'Kelvin Dynamics', model: 'KH-2', name: 'Coldsink', mass: 1200, price: 18000,
     blurb: 'Runs the radiator loop up to 250 K hotter than the hull; draws up to 2 MW. Needs radiators',
     caps: { maxKW: 2000, lift: 250 },
@@ -214,7 +236,7 @@ export const moduleById = (id: string) => MODULES.find((m) => m.id === id) ?? nu
 export const moduleLabel = (m: Module | BatteryModule) => `${m.model} ${m.name}`;
 
 /** Utility slots on the default hull. */
-export const UTILITY_SLOTS = 6;
+export const UTILITY_SLOTS = 7;
 
 /** What's fitted and the state of the deployable hardware. */
 export interface Outfit {
@@ -233,12 +255,13 @@ export const PUMP_ON_ABOVE = 300;
 /**
  * The ship you start with: the best of everything. HP-600 Tempest battery, and in the utility
  * slots the FS-5 Maelstrom scoop, KR-25 Glacier radiators, the KH-2 Coldsink heat pump, the MD-8
- * Bulwark deflector, the CR-5 Warden collision radar and the ML-6 Sunspear mining laser.
+ * Bulwark deflector, the CR-5 Warden collision radar, the ML-6 Sunspear mining laser and the FC-150
+ * Hearth fuel cell.
  */
 export const bestOutfit = (): Outfit => ({
   ...emptyOutfit(),
   battery: BATTERIES[BATTERIES.length - 1],
-  slots: ['fs-5', 'kr-25', 'kh-2', 'md-8', 'cr-5', 'ml-6'].map((id) => moduleById(id)),
+  slots: ['fs-5', 'kr-25', 'kh-2', 'md-8', 'cr-5', 'ml-6', 'fc-150'].map((id) => moduleById(id)),
 });
 
 export const emptyOutfit = (): Outfit => ({ battery: STOCK_BATTERY, slots: Array(UTILITY_SLOTS).fill(null), radiatorsOut: 0, deploy: false, pumpAuto: true });
@@ -256,4 +279,5 @@ export const scoopFitted = (o: Outfit) =>
 /** The fitted deflector and collision radar (the best of each, if more than one). */
 export const deflectorFitted = (o: Outfit) => o.slots.filter((x): x is DeflectorModule => x?.kind === 'deflector').sort((a, b) => b.caps.block - a.caps.block)[0] ?? null;
 export const guardFitted = (o: Outfit) => o.slots.filter((x): x is GuardModule => x?.kind === 'guard').sort((a, b) => a.caps.minSize - b.caps.minSize)[0] ?? null;
+export const fuelCellFitted = (o: Outfit) => o.slots.filter((x): x is FuelCellModule => x?.kind === 'fuelcell').sort((a, b) => b.caps.kw - a.caps.kw)[0] ?? null;
 export const laserFitted = (o: Outfit) => o.slots.filter((x): x is LaserModule => x?.kind === 'laser').sort((a, b) => b.caps.kw - a.caps.kw)[0] ?? null;
