@@ -2,8 +2,8 @@ import { AutopilotPanel } from './components/AutopilotPanel';
 import { AvionicsPanel } from './components/AvionicsPanel';
 import { CargoPanel } from './components/CargoPanel';
 import { ContractsPanel } from './components/ContractsPanel';
+import { StationPanel } from './components/StationPanel';
 import { BodyInfo } from './components/BodyInfo';
-import { DockedPanel } from './components/DockedPanel';
 import { HelpPanel } from './components/HelpPanel';
 import { InfluencesPanel } from './components/InfluencesPanel';
 import { FlightCluster, Location, ShipGauges, TargetCard } from './components/Hud';
@@ -47,7 +47,28 @@ export function App() {
                 act={{ back: () => game!.openShipStats(), battery: (id) => game!.fitBattery(id), fit: (s, id) => game!.fitModule(s, id), remove: (s) => game!.removeModule(s), radiators: () => game!.toggleRadiators(), pump: () => game!.togglePump() }}
               />
             ) : hud.avionics ? <AvionicsPanel slots={hud.avionics} electrical={hud.electrical} onOpen={(k) => game!.openAvionics(k)} onToggle={(id) => game!.toggleLoad(id)} /> : hud.docked ? (
-              <DockedPanel d={hud.docked} act={{ refuel: () => game!.refuelDocked(), repair: () => game!.repairDocked(), sell: () => game!.sellCargo(), outfit: () => game!.openAvionics('outfit'), cargo: () => game!.openCargo(), contracts: () => game!.openContracts(), launch: () => game!.launch(), catapult: () => game!.catapult() }} />
+              <StationPanel
+                d={hud.docked}
+                act={{
+                  tab: (t) => game!.setStationTab(t),
+                  refuel: () => game!.refuelDocked(),
+                  repair: () => game!.repairDocked(),
+                  sell: (c) => game!.sellOne(c),
+                  sellAll: () => game!.sellCargo(),
+                  battery: (id) => game!.fitBattery(id),
+                  fit: (s, id) => game!.fitModule(s, id),
+                  remove: (s) => game!.removeModule(s),
+                  radiators: () => game!.toggleRadiators(),
+                  pump: () => game!.togglePump(),
+                  cargo: () => game!.openCargo(),
+                  launch: () => game!.launch(),
+                  catapult: () => game!.catapult(),
+                  accept: (id) => game!.acceptJob(id),
+                  deliver: (id) => game!.deliverJob(id),
+                  abandon: (id) => game!.abandonJob(id),
+                  plot: (id) => game!.plotJob(id),
+                }}
+              />
             ) : hud.helpVisible && <HelpPanel save={hud.save} onNewGame={() => game!.newGame()} />}
           </div>
           <div id="rightcol">

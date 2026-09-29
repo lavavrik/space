@@ -9,8 +9,7 @@ function SlotIcon({ icon }: { icon: ModuleIcon }) {
   return <I weight="bold" />;
 }
 
-interface Actions {
-  back: () => void;
+export interface OutfitActions {
   battery: (id: string) => void;
   fit: (slot: number, id: string) => void;
   remove: (slot: number) => void;
@@ -23,12 +22,21 @@ interface Actions {
  * frame, nearly at rest) each slot can be refitted from the catalogue; elsewhere it's read-only apart
  * from deploying the radiators and switching the heat pump.
  */
-export function OutfitPanel({ v, act }: { v: OutfitView; act: Actions }) {
+export function OutfitPanel({ v, act }: { v: OutfitView; act: OutfitActions & { back: () => void } }) {
   return (
     <Panel name="outfit" id="outfit" className="pan" title="OUTFIT" right="⇧U HIDES">
       <button type="button" className="oback" onClick={act.back}>
         <CaretLeft weight="bold" /> SHIP STATS
       </button>
+      <OutfitBody v={v} act={act} />
+    </Panel>
+  );
+}
+
+/** The window's contents: also the station window's Outfitting tab (StationPanel). */
+export function OutfitBody({ v, act }: { v: OutfitView; act: OutfitActions }) {
+  return (
+    <>
       <div className="ohint">{v.station ? `Alongside ${v.station} · pick a module for a slot` : v.hint}</div>
       <div className="oslot">
         <div className="gtop">
@@ -101,6 +109,6 @@ export function OutfitPanel({ v, act }: { v: OutfitView; act: Actions }) {
         <span>MODULE MASS</span>
         <b>{v.mass}</b>
       </div>
-    </Panel>
+    </>
   );
 }

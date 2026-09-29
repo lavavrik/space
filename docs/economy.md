@@ -10,7 +10,17 @@ Code: `sim/economy.ts`; prices in `outfit/catalog.ts` (modules) and `PRICE`/`COM
 - Every station's prices differ a little, ±20 %, per item (a hash of its name and the item): worth
   shopping round, the same every visit.
 
-## Services (docked panel, with the price at this station)
+## The station window (docked; `ui/components/StationPanel.tsx`)
+
+It opens on docking, and on loading a game that was docked, in place of whatever was in the left column. It has four tabs:
+- **Trading:** the metal in your hold at this station's prices, each marked against the list price (±20 %, a hash of the station: worth shopping round). Sell one metal or all of it.
+- **Services:** refuel, repair, and leave (launch; lift off or the catapult at a sky station).
+- **Contracts:** the station's job board and your jobs. Shift+J while docked opens this tab.
+- **Outfitting:** refit the utility slots and the battery from its catalogue. Shift+U while docked opens this tab.
+
+It opens on Trading when there's metal in the hold, otherwise on Services.
+
+## Services (the station window's Services tab, with the price at this station)
 
 | | List price | |
 |---|---|---|

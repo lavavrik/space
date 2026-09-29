@@ -30,7 +30,7 @@ import { engageAutoLaunch, engageAutodock } from './autodock';
 import { startDockGuide } from './guide';
 import { DECK_R } from './skyGeom';
 import { HANGAR_R, PAD_R, padCount, padOf, stationPointVel, stationQuat, toLocal, toWorld, whereIsAt } from './stationGeom';
-import { freePads, pilotName, slotUser } from './control';
+import { freePads, pilotName, rootOf, slotUser } from './control';
 
 /** Within this distance (m) of a targeted station, K asks for a pad. */
 export const DOCK_REQUEST_RANGE = 10e3;
@@ -182,7 +182,8 @@ export function stationContact(g: Game) {
         d.docked = true;
         g.autodock = null;
         holdDocked(g);
-        g.showMsg(`Docked at ${st.name} · pad ${d.pad + 1} · services below · K ${st.sky ? 'lifts off · or take the catapult' : 'launches'}`);
+        g.showMsg(`Docked at ${st.name} · pad ${d.pad + 1} · K ${st.sky ? 'lifts off · or take the catapult' : 'launches'}`);
+        if (rootOf(g) === g) g.openStation(); // yours (not another ship's): the station window
         return;
       }
       // hitting the structure damages the hull: a scrape under STATION_SCRAPE, a whole hull's worth

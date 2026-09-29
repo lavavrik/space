@@ -288,7 +288,23 @@ export interface HudSnapshot {
   cargo: CargoView | null;
   contracts: ContractsView | null;
   /** Docked at a station: its name, the pad, and what the station is doing for the ship. */
-  docked: { station: string; pad: number; notes: string[]; sky: boolean; hullFull: boolean; tanksFull: boolean; credits: string; refuel: string; repair: string; cargo: string | null } | null;
+  docked: {
+    station: string;
+    pad: number;
+    notes: string[];
+    sky: boolean;
+    hullFull: boolean;
+    tanksFull: boolean;
+    credits: string;
+    refuel: string;
+    repair: string;
+    cargo: string | null;
+    /** The station window's open tab, and its Trading and Contracts contents. */
+    tab: 'trade' | 'services' | 'contracts' | 'outfit';
+    trade: { id: 'nife' | 'cobalt' | 'pgm'; name: string; have: string; price: string; vs: { text: string; up: boolean }; value: string; empty: boolean }[];
+    jobs: ContractsView | null;
+    outfit: OutfitView | null;
+  } | null;
   nav: NavView | null;
   guide: GuideView | null;
 }

@@ -2,6 +2,7 @@
 import { AU, FTL_CHARGE_TIME, JUMP_CHARGE_TIME, LY, JUMP_DEPART_TIME, NORMAL_ACC, NORMAL_BOOST, NORMAL_MAX, SHIP, ftlBurn, jumpCost } from '../constants';
 import { fmtArea, fmtClock, fmtEnergy, fmtDist, fmtFlow, fmtMass, fmtPower, fmtSpeed, fmtSpeedText, fmtTime } from '../format';
 import type { Game } from '../Game';
+import type { Station } from '../types';
 import { THREE } from '../lib/three';
 import { holdPoint, orbitVelErr } from '../sim/autopilot';
 import { velRel } from '../sim/frame';
@@ -77,7 +78,11 @@ export function buildSnapshot(g: Game): HudSnapshot {
           credits: fmtCr(g.credits),
           refuel: fmtCr(refuelQuote(g, g.dock.station).cost),
           repair: fmtCr(repairQuote(g, g.dock.station)),
-          cargo: cargoMass(g) > 0.5 ? fmtCr(cargoValue(g, g.dock.station)) : null,
+          cargo: Object.values(g.ship.cargo).some((kg) => (kg ?? 0) > 0.5) ? fmtCr(cargoValue(g, g.dock.station)) : null,
+          tab: g.stationTab,
+          trade: tradeRows(g, g.dock.station),
+          jobs: g.stationTab === 'contracts' ? contractsView(g) : null,
+          outfit: g.stationTab === 'outfit' ? outfitView(g) : null,
           tanksFull: g.ship.prop >= SHIP.propCap - 1 && g.ship.exotic >= SHIP.exoticCap - 0.01,
         }
       : null,
@@ -375,6 +380,24 @@ function cargoGauge(g: Game): GaugeView {
   const c = g.ship.cargo;
   const what = kg > 0.5 ? ` · ${(Object.keys(COMMODITIES) as Commodity[]).filter((k) => (c[k] ?? 0) > 0.5).map((k) => `${COMMODITIES[k].name.toLowerCase()} ${fmtMass(c[k]!)}`).join(', ')}` : '';
   return { label: 'CARGO', value: `${fmtMass(kg)} / ${fmtMass(CARGO_CAP)}`, frac: kg / CARGO_CAP, sub: { text: `${fmtCr(g.credits)}${what}` } };
+}
+
+/** The station window's Trading tab: each metal, what you hold, this station's price against the list price, and what it fetches. */
+function tradeRows(g: Game, st: Station) {
+  return (Object.keys(COMMODITIES) as Commodity[]).map((id) => {
+    const kg = g.ship.cargo[id] ?? 0,
+      p = sellPrice(st, id),
+      f = p / COMMODITIES[id].price - 1;
+    return {
+      id,
+      name: COMMODITIES[id].name,
+      have: kg > 0.5 ? fmtMass(kg) : '—',
+      price: `${p < 1 ? p.toFixed(3) : p.toFixed(2)} Cr/kg`,
+      vs: { text: `${f >= 0 ? '+' : '−'}${Math.round(Math.abs(f) * 100)} % on list`, up: f >= 0 },
+      value: fmtCr(kg * p),
+      empty: kg < 0.5,
+    };
+  });
 }
 
 /** The contracts window (Shift+J): the board at the station you're docked at, and your jobs. */

@@ -34,9 +34,11 @@ export function onPress(g: Game, code: string) {
     const was = outfit ? g.outfitVisible : radar ? g.radarVisible : cargo ? g.cargoVisible : jobs ? g.contractsVisible : { KeyU: g.avionicsVisible, KeyI: g.infoVisible, KeyB: g.influencesVisible }[code as 'KeyU' | 'KeyI' | 'KeyB'];
     g.avionicsVisible = g.infoVisible = g.influencesVisible = g.outfitVisible = g.radarVisible = g.cargoVisible = g.contractsVisible = false;
     g.jettisonArm = null;
-    if (outfit) g.outfitVisible = !was;
+    if (outfit && g.dock?.docked) g.openStation('outfit'); // docked: the station window's tab
+    else if (outfit) g.outfitVisible = !was;
     else if (radar) g.radarVisible = !was;
     else if (cargo) g.cargoVisible = !was;
+    else if (jobs && g.dock?.docked) g.openStation('contracts'); // docked: the station window's tab
     else if (jobs) g.contractsVisible = !was;
     else if (code === 'KeyU') g.avionicsVisible = !was;
     if (code === 'KeyB') g.influencesVisible = !was;

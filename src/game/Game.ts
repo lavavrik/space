@@ -18,6 +18,7 @@ import { closePlanner, openPlanner, requestDisengage } from './sim/planner';
 import { update } from './sim/update';
 import { ShipAudio } from './audio/ShipAudio';
 import type { Prospect } from './sim/prospect';
+export type StationTab = 'trade' | 'services' | 'contracts' | 'outfit';
 import { PENALTY, abandon, accept, board, deliverMetal, destSystem, type Contract } from './sim/contracts';
 import type { Body, CurrentSystem, Jump, Message, MsgKind, Planner, Power, Ship, StarSystem, Station, Target } from './types';
 import { systemsNear } from './universe/galaxy';
@@ -136,6 +137,8 @@ export class Game {
   contracts: Contract[] = [];
   contractsSeen = new Set<string>();
   contractsVisible = false;
+  /** The station window's tab (docked; ui/components/StationPanel.tsx). */
+  stationTab: StationTab = 'services';
   /** Abandoning a job: waiting for the second click (s left). */
   abandonArm: { id: string; t: number } | null = null;
   /** Cargo window (Shift+I), in the left column; and a jettison waiting for its second click (s left). */
@@ -283,7 +286,9 @@ export class Game {
 
     this.resize();
     // resume the saved game if there is one (save.ts), otherwise start at home
-    if (!loadGame(this)) {
+    if (loadGame(this)) {
+      if (this.dock?.docked) this.openStation(); // resumed on a pad: the station window, as on docking
+    } else {
       placeAtHome(this);
       // no title card: you're in the pilot's seat from the first frame (click to capture the mouse)
       this.showMsg('Engines online · hold W to thrust, J for FTL');
@@ -423,6 +428,22 @@ export class Game {
     this.target = c.target;
     if (scan) toggleScan(this);
     else this.showMsg(`Target · ${contactLabel(this, c.target)}`);
+    this.invalidateHud();
+  }
+
+  /**
+   * The station window: on docking (and on loading a game docked) it opens in the left column,
+   * closing whatever else was there, on Trading if there's metal to sell, else on Services; or on
+   * `tab` (Shift+J docked: Contracts).
+   */
+  openStation(tab?: StationTab) {
+    this.avionicsVisible = this.infoVisible = this.influencesVisible = this.outfitVisible = this.radarVisible = this.cargoVisible = this.contractsVisible = false;
+    this.helpVisible = false;
+    this.stationTab = tab ?? (Object.values(this.ship.cargo).some((kg) => (kg ?? 0) > 0.5) ? 'trade' : 'services');
+    this.invalidateHud();
+  }
+  setStationTab(tab: StationTab) {
+    this.stationTab = tab;
     this.invalidateHud();
   }
 

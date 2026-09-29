@@ -258,3 +258,21 @@
 .jtop b { font: 400 .95rem "Share Tech Mono", ui-monospace, monospace; color: var(--text); }
 .jtitle { color: var(--amber); font-size: .92rem; }
 .jsub { font-size: .8rem; color: var(--amber-dim); line-height: 1.35; }
+
+/* the station window (docked): tabs, and the Trading tab's rows */
+#leftcol > #docked { display: flex; flex-direction: column; gap: .35rem; }
+#docked > * { flex-shrink: 0; }
+.sttabs { display: flex; gap: .25rem; border-bottom: 1px solid var(--amber-faint); }
+.sttab { pointer-events: auto; cursor: pointer; background: none; border: 0; border-bottom: 2px solid transparent; padding: .2rem .5rem; font: inherit; font-size: .85rem; letter-spacing: .12em; text-transform: uppercase; color: var(--amber-dim); }
+.sttab:hover { color: var(--amber); }
+.sttab.cur { color: var(--amber); border-bottom-color: var(--amber); }
+.trlist { display: flex; flex-direction: column; gap: .2rem; }
+.trrow { display: grid; grid-template-columns: .7rem 1fr auto; column-gap: .45rem; align-items: center; font-size: .9rem; }
+.trrow .cgsw { width: .6rem; height: .6rem; grid-row: span 2; }
+.trrow .trname { color: var(--amber); }
+.trrow b { font: 400 .95rem "Share Tech Mono", ui-monospace, monospace; color: var(--text); text-align: right; }
+.trrow .trprice { font: .8rem "Share Tech Mono", ui-monospace, monospace; color: var(--amber-dim); }
+.trrow .obtn { grid-column: 2 / 4; justify-self: end; padding-top: 0; padding-bottom: 0; }
+.trrow.empty { opacity: .45; }
+.trup { color: #8fe08a; }
+.trdown { color: var(--red); }

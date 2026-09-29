@@ -1,7 +1,7 @@
 import type { ContractsView, JobView } from '../../game/hud/types';
 import { Panel, cx } from './primitives';
 
-interface Actions {
+export interface ContractActions {
   accept: (id: string) => void;
   deliver: (id: string) => void;
   abandon: (id: string) => void;
@@ -35,9 +35,18 @@ function Job({ j, children }: { j: JobView; children?: React.ReactNode }) {
  * Contracts (Shift+J; sim/contracts.ts): your jobs (deliver metal, plot the way there, abandon them
  * with a second click), and docked, the station's board to take jobs from.
  */
-export function ContractsPanel({ v, act }: { v: ContractsView; act: Actions }) {
+export function ContractsPanel({ v, act }: { v: ContractsView; act: ContractActions }) {
   return (
     <Panel name="contracts" id="contracts" className="pan" title="CONTRACTS" right="⇧J HIDES">
+      <ContractsBody v={v} act={act} />
+    </Panel>
+  );
+}
+
+/** The window's contents: also the station window's Contracts tab (StationPanel). */
+export function ContractsBody({ v, act }: { v: ContractsView; act: ContractActions }) {
+  return (
+    <>
       <div className="sub">
         <span>
           YOUR JOBS {v.mine.length} / {v.max}
@@ -80,6 +89,6 @@ export function ContractsPanel({ v, act }: { v: ContractsView; act: Actions }) {
       ) : (
         <div className="ohint">Dock at a station to see its job board</div>
       )}
-    </Panel>
+    </>
   );
 }
