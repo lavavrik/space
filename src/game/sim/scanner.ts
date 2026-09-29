@@ -21,6 +21,22 @@ export function scanKey(sys: StarSystem, t: Target) {
   return `${sys.id}/${t.kind === 'station' ? 'st:' : t.kind === 'ship' ? 'sh:' : ''}${t.name}`;
 }
 
+/**
+ * Docked at a station: its traffic control hands over its charts, so every world and station in the
+ * system is found and fully identified (as the home system is). Ships aren't on them: they come and
+ * go. Returns how many were new.
+ */
+export function learnSystem(g: Game) {
+  let n = 0;
+  for (const t of [...g.cur.bodies, ...g.cur.stations]) {
+    const key = scanKey(g.cur.sys, t);
+    if ((g.scans.get(key) ?? 0) < 1 || !g.radar.seen.has(key)) n++;
+    g.scans.set(key, 1);
+    g.radar.seen.add(key);
+  }
+  return n;
+}
+
 /** How much of `t` has been scanned, 0…1. */
 export function scanProgress(g: Game, t: Target) {
   if (g.cur.sys.id === HOME_ID && t.kind !== 'ship') return 1; // you know your home system (not who's passing through)

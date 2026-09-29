@@ -39,6 +39,7 @@ Ships are targets like bodies and stations (`types.ts Npc`, kind `ship`).
 | 75 % | where it's bound |
 
   The info panel (I) shows these rows plus your distance and relative speed. Your home system's ships aren't known in advance; you have to find them.
+- **Docking** at any station gets you its charts: every world and station in the system is found and fully identified, as the home system is. Ships aren't on them; you still have to scan those (`sim/scanner.ts learnSystem`).
 - **Until then:** an unscanned contact is an "Unidentified ship", and an unfound one isn't labelled at all.
 - **Not for ships:** there's no orbit planning, approach strip milestones or docking for them.
 

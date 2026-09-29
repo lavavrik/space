@@ -212,6 +212,10 @@
 .rdkind { width: .55rem; height: .55rem; border-radius: 50%; flex: none; display: inline-block; }
 .rddist { font: .82rem var(--ui-font); color: var(--amber-dim); }
 .rdok { color: var(--amber); text-align: center; width: 1.5rem; }
+/* every contact row the same height, identified (✓) or not (identify button): they jumped when you clicked identify */
+.rdrow { min-height: 1.75rem; }
+.rdrow .obtn { height: 1.55rem; padding-top: 0; padding-bottom: 0; }
+.rdok { height: 1.55rem; display: inline-flex; align-items: center; justify-content: center; }
 .rdrow .obtn { display: inline-flex; align-items: center; gap: .25rem; }
 #radar > * { flex-shrink: 0; }
 #radar > .rdlist { overflow-y: visible; flex: none; }
