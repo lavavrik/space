@@ -23,6 +23,7 @@ import { occluder } from '../sim/sight';
 import { populated } from '../sim/population';
 import { ATMO_FS, BODY_VS, GLOW_FS, GLOW_VS, PLANET_FS, PLANET_VS, POINT_FS, POINT_VS, RING_FS, SKYPT_FS, SKYPT_VS, SKY_BAKE_FS, SKY_CUBE_FS, SKY_FS, SKY_VS, STAR_FS, STATION_FS, SKY_STATION_FS, STATION_INTERIOR_FS, CLOUD_BAKE_FS, CLOUD_FS, CORRIDOR_FS, CORRIDOR_LIGHT_FS, CORRIDOR_LIGHT_VS } from './shaders';
 import { slotUser } from '../sim/control';
+import type { GameRenderer } from './api';
 
 type Uniforms = Record<string, THREE.IUniform>;
 
@@ -93,7 +94,8 @@ const DUST_FADE_FROM = 20e3,
  * is placed relative to the ship, so positions stay precise at astronomical distances. The sky
  * (Milky Way and stars) is a separate scene drawn first with its own camera.
  */
-export class SceneRenderer {
+export class SceneRenderer implements GameRenderer {
+  readonly kind = 'webgl' as const;
   readonly gl: THREE.WebGLRenderer;
   readonly views = new Map<Body, BodyView>();
   /** Station views; a sky station has only its mesh (no interior, entry corridor or approach lights). */
@@ -169,7 +171,14 @@ export class SceneRenderer {
   private readonly tmp3 = new THREE.Vector3();
   private readonly m4 = new THREE.Matrix4();
 
-  constructor(canvas: HTMLCanvasElement) {
+  bodyView(b: Body) {
+    return this.views.get(b);
+  }
+  stationView(st: Station) {
+    return this.stationViews.get(st);
+  }
+
+  constructor(readonly canvas: HTMLCanvasElement) {
     this.gl = new THREE.WebGLRenderer({ canvas, antialias: false, logarithmicDepthBuffer: true }); // MSAA happens in the HDR target
     this.gl.autoClear = false;
     this.setPixelRatio(innerWidth, innerHeight);

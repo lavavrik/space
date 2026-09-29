@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Game } from '../../game/Game';
+import { initGpu, wantWebGpu } from '../../game/gpu/device';
 import type { HudStore } from '../../game/hud/HudStore';
 
 declare global {
@@ -14,11 +15,20 @@ export function useGame() {
   const hostRef = useRef<HTMLDivElement>(null);
   const [game, setGame] = useState<Game | null>(null);
   useEffect(() => {
-    const g = new Game(hostRef.current!);
-    window.farlight = g;
-    setGame(g);
+    // the renderer: WebGPU if asked for (`?gpu=webgpu`) and there, else WebGL (docs/webgpu.md).
+    // Getting a WebGPU device is asynchronous, so the game is made once it's known.
+    let g: Game | null = null;
+    let gone = false;
+    void (async () => {
+      const gpu = wantWebGpu() ? await initGpu() : null;
+      if (gone) return;
+      g = new Game(hostRef.current!, gpu);
+      window.farlight = g;
+      setGame(g);
+    })();
     return () => {
-      g.dispose();
+      gone = true;
+      g?.dispose();
       if (window.farlight === g) delete window.farlight;
     };
   }, []);

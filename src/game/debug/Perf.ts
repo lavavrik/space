@@ -46,17 +46,18 @@ export class PerfMonitor {
 
   constructor(
     host: HTMLElement,
-    private readonly renderer: THREE.WebGLRenderer,
+    /** The WebGL renderer, for its GPU timers and counters; null under WebGPU (gpu/GpuRenderer.ts: its own timing to come). */
+    private readonly renderer: THREE.WebGLRenderer | null,
     private readonly overlayCanvas: HTMLCanvasElement,
   ) {
     this.canvas.id = 'perf';
     host.append(this.canvas);
     this.ctx = this.canvas.getContext('2d')!;
-    const ctx = renderer.getContext();
+    const ctx = renderer?.getContext();
     this.gl2 = typeof WebGL2RenderingContext !== 'undefined' && ctx instanceof WebGL2RenderingContext ? ctx : null;
     this.timer = this.gl2 ? (this.gl2.getExtension('EXT_disjoint_timer_query_webgl2') as TimerExt | null) : null;
     // several gl.render calls per frame (sky, scene): count them all, reset once per frame
-    renderer.info.autoReset = false;
+    if (renderer) renderer.info.autoReset = false;
     let saved = false;
     try {
       saved = localStorage.getItem(STORE_KEY) === '1';
@@ -84,7 +85,7 @@ export class PerfMonitor {
   /** Call at the start of a frame with the time since the previous one. */
   frameStart(frameMs: number) {
     this.frameMs[this.i] = frameMs;
-    this.renderer.info.reset();
+    this.renderer?.info.reset();
     this.pollGpu();
     this.t = performance.now();
   }
@@ -201,8 +202,7 @@ export class PerfMonitor {
       return r.length ? r.reduce((x, y) => x + y, 0) / r.length : NaN;
     };
     const gpu = mean(this.gpuMs);
-    const info = this.renderer.info;
-    const db = this.renderer.getContext();
+    const r = this.renderer;
 
     ctx.font = '11px "Chakra Petch", system-ui, sans-serif';
     ctx.textBaseline = 'top';
@@ -218,12 +218,15 @@ export class PerfMonitor {
     ctx.fillStyle = '#7fdcff';
     ctx.fillText(Number.isNaN(gpu) ? 'gpu n/a' : `gpu ${gpu.toFixed(1)}`, x, 21);
     ctx.fillStyle = 'rgba(255,230,199,.7)';
+    const db = r?.getContext();
     ctx.fillText(
-      `${db.drawingBufferWidth}×${db.drawingBufferHeight} @${this.renderer.getPixelRatio().toFixed(2)}  2D ${this.overlayCanvas.width}×${this.overlayCanvas.height}  ${info.render.calls} calls  ${(info.render.triangles / 1000).toFixed(0)}k tris`,
+      r && db
+        ? `${db.drawingBufferWidth}×${db.drawingBufferHeight} @${r.getPixelRatio().toFixed(2)}  2D ${this.overlayCanvas.width}×${this.overlayCanvas.height}  ${r.info.render.calls} calls  ${(r.info.render.triangles / 1000).toFixed(0)}k tris`
+        : `WebGPU  2D ${this.overlayCanvas.width}×${this.overlayCanvas.height}`,
       8,
       36,
     );
-    ctx.fillText(`${info.render.points} points  ${info.render.lines} lines  geo ${info.memory.geometries}  tex ${info.memory.textures}`, 8, 51);
+    if (r) ctx.fillText(`${r.info.render.points} points  ${r.info.render.lines} lines  geo ${r.info.memory.geometries}  tex ${r.info.memory.textures}`, 8, 51);
     // GPU time by category, most first
     const parts = [...this.split].map(([k, a]): [string, number] => [k, mean(a)]).filter(([, v]) => v >= 0.05).sort((a, b) => b[1] - a[1]);
     ctx.fillStyle = '#7fdcff';

@@ -12,6 +12,9 @@ import { defaultAvionics, type ComputerKind } from './avionics/catalog';
 import { PerfMonitor } from './debug/Perf';
 import { addNavFinal, addNavResult, engageRoute, removeNavPoint, replan, requestCancelRoute, type NavFinal, type NavMode, type Route } from './sim/navroute';
 import { SceneRenderer } from './render/SceneRenderer';
+import { GpuRenderer } from './gpu/GpuRenderer';
+import type { Gpu } from './gpu/device';
+import type { GameRenderer } from './render/api';
 import type { Guide } from './sim/guide';
 import { pickAt, placeAtHome } from './sim/navigation';
 import { closePlanner, openPlanner, requestDisengage } from './sim/planner';
@@ -241,7 +244,8 @@ export class Game {
 
   readonly hud = new HudStore();
   readonly input: Input;
-  private readonly scene: SceneRenderer;
+  /** The renderer: WebGL (render/SceneRenderer.ts) or, being ported, WebGPU (gpu/GpuRenderer.ts; docs/webgpu.md). */
+  private readonly scene: GameRenderer;
   readonly perf: PerfMonitor;
   readonly overlay: Overlay;
   /** The ship's sound (audio/ShipAudio.ts; Shift+P on / off). */
@@ -252,16 +256,17 @@ export class Game {
   private last = 0;
   private raf = 0;
 
-  constructor(host: HTMLElement) {
+  /** `gpu`: a WebGPU device to render with (gpu/device.ts), or none for WebGL. */
+  constructor(host: HTMLElement, gpu: Gpu | null = null) {
     this.glCanvas = document.createElement('canvas');
     this.glCanvas.id = 'gl';
     this.overlayCanvas = document.createElement('canvas');
     this.overlayCanvas.id = 'ov';
     host.append(this.glCanvas, this.overlayCanvas);
 
-    this.scene = new SceneRenderer(this.glCanvas);
+    this.scene = gpu ? new GpuRenderer(this.glCanvas, gpu) : new SceneRenderer(this.glCanvas);
     this.overlay = new Overlay(this.overlayCanvas, this.scene);
-    this.perf = new PerfMonitor(host, this.scene.gl, this.overlayCanvas);
+    this.perf = new PerfMonitor(host, this.scene instanceof SceneRenderer ? this.scene.gl : null, this.overlayCanvas);
     this.input = new Input(this.glCanvas, {
       onPress: (code) => onPress(this, code),
       onRepeat: (code) => onRepeat(this, code),

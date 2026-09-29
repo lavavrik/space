@@ -13,7 +13,7 @@ import { transitState, type TransitState } from '../sim/hyperspace';
 import { scanProgress } from '../sim/scanner';
 import { galPos, hiddenBy, occluders, reachable } from '../sim/navigation';
 import type { Jump, StarSystem } from '../types';
-import type { SceneRenderer } from './SceneRenderer';
+import type { GameRenderer } from './api';
 import { PAD_R, SLOT_H, SLOT_W, toWorld } from '../sim/stationGeom';
 import { padWorld } from '../sim/docking';
 import { contactLabel, known } from '../sim/radar';
@@ -69,7 +69,7 @@ export class Overlay {
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
-    private readonly scene: SceneRenderer,
+    private readonly scene: GameRenderer,
   ) {
     this.ctx = canvas.getContext('2d')!;
     outlineText(this.ctx, () => this.ui);
@@ -439,7 +439,7 @@ export class Overlay {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
     for (const b of g.cur.bodies) {
-      const view = this.scene.views.get(b)!;
+      const view = this.scene.bodyView(b) ?? { dist: b.pos.distanceTo(g.ship.pos), pxR: 0 };
       const rel = this.tmp.subVectors(b.pos, ship.pos);
       const isT = b === g.target;
       // nothing to mark until the radar has found it (the target is always marked)
@@ -501,7 +501,7 @@ export class Overlay {
     ctx.font = this.font(11, SANS);
     ctx.textAlign = 'center';
     for (const st of g.cur.stations) {
-      const view = this.scene.stationViews.get(st);
+      const view = this.scene.stationView(st);
       if (!view) continue;
       const isT = st === g.target;
       if (!isT && !known(g, st)) continue;

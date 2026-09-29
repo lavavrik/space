@@ -1,0 +1,67 @@
+# WebGPU renderer
+
+The game is moving from three.js on WebGL2 to a renderer of our own on raw WebGPU (`src/game/gpu/`).
+The simulation, HUD, audio and saves don't change. three.js stays only for its maths (vectors,
+quaternions, matrices), which the simulation uses throughout.
+
+## Why
+
+- **Compute shaders.** The ring belt is the heaviest thing on the GPU (~3–4 ms): every candidate
+  rock runs the full vertex shader just to find out it's empty or out of range. With compute, one
+  pass per frame builds the list of visible rocks and only those are drawn (indirect draw). Terrain
+  chunk baking, city lights and cloud baking can move to compute the same way.
+- **Precision.** Reversed-Z depth with a 32-bit float depth buffer and an infinite far plane gives
+  near-uniform precision from centimetres to light-seconds. That replaces the logarithmic depth we
+  write per fragment now, which disables early depth tests.
+- **Control.** No engine between us and the GPU: our own frame graph, bind groups set once per
+  frame, GPU timestamps per pass for the performance overlay, and later compute-based effects
+  (soft shadows, reflections, ray-marched or ray-traced lighting). WebGPU has **no hardware ray
+  tracing**: anything ray-traced is ours, in compute.
+- **Shipping.** It runs wherever Chromium runs (Electron for a desktop build), on Vulkan (Windows,
+  Linux, Android), Metal (macOS) or DX12 underneath; also Safari 26 and Firefox.
+
+## How the port runs
+
+Both renderers live side by side until WebGPU matches WebGL: the game stays playable all along.
+
+- **Switch:** `?gpu=webgpu` in the URL (remembered in `localStorage` as `farlight.renderer`), or
+  `?gpu=webgl` to go back. Without WebGPU (no `navigator.gpu`, no adapter) it falls back to WebGL
+  with a message.
+- **Interface:** both renderers implement `GameRenderer` (`src/game/render/api.ts`): `resize`,
+  `render(g)`, `dispose`, plus what the overlay and debug tools need. `Game` holds one.
+- **Porting order**, each layer compared against WebGL before moving on:
+  1. **Core:** device, canvas, the HDR target (rgba16float), reversed-Z depth (depth32float),
+     camera-relative view, tone mapping. First layer: the sky (the Milky Way, baked once to a cube
+     map, and the stars as instanced quads, since WebGPU has no sized points).
+  2. **Worlds:** the star and its glow, planets (the surface shader), atmospheres, cloud decks,
+     rings (the disc), dots for distant bodies.
+  3. **Terrain:** LOD chunks up close, with their baked textures (compute).
+  4. **Ring belt:** rocks via compute culling and indirect draw (the big win).
+  5. **Stations:** hulls, interiors, the corridor and its lights, sky stations.
+  6. **Ships and effects:** traffic, FTL trails, the laser, hyperspace, dust, the periscope patch.
+  7. **Auto-exposure and GPU timings**, then **remove WebGL** and three.js's renderer.
+- **Shaders** are ported from GLSL to WGSL by hand, one file per material under `src/game/gpu/shaders/`.
+
+## Conventions
+
+- **Camera-relative:** positions are world − camera in 64-bit floats on the CPU and 32-bit on the
+  GPU, as now. The camera sits at the origin.
+- **Depth:** reversed-Z (near = 1, far = 0), `depth32float`, `greater` compare, infinite far plane.
+- **Colour:** linear HDR in `rgba16float`, pre-multiplied by the exposure (render/exposure.ts);
+  alpha carries the "physical light" share for the meter, as now. The tone map is a final pass to the
+  canvas (`bgra8unorm` or the preferred format).
+- **Bind groups:** group 0 is per frame (camera, exposure, time), group 1 per material, group 2 per
+  object.
+
+## Progress
+
+- [x] **1. Core and sky** (`src/game/gpu/`):
+  - The renderer switch and WebGL fallback, and the `GameRenderer` interface (both renderers implement it).
+  - The HDR frame (rgba16float, 4× MSAA) with reversed-Z depth32float, and the tone map.
+  - The Milky Way cube map baked in WGSL (a port of the GLSL noise and sky), and the stars as instanced quads.
+  - Checked against WebGL at the galactic centre and at a nebula on another cube face: identical.
+  - Not yet: the periscope's sharper sky patch, the performance overlay's GPU timing, hyperspace.
+- [ ] 2. Worlds · [ ] 3. Terrain · [ ] 4. Ring belt · [ ] 5. Stations · [ ] 6. Ships and effects · [ ] 7. Auto-exposure, timings, remove WebGL
+
+**Dev note:** the preview tooling serves the main checkout. For this worktree, run
+`npx vite --port 5175` in it and open `http://localhost:5175/?gpu=webgpu`.
