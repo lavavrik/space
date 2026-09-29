@@ -22,7 +22,13 @@ A leg taking over 30 min is given up for another destination. A ship that crashe
 
 **Time warp:** a ship on a pad or coasting in orbit takes the warped step at once (on rails, like yours). One that's manoeuvring is stepped at most 10 × 0.1 s per frame, so under high warp it falls behind the clock (still carried with its frame body).
 
-At stations they go through traffic control like you (docs/docking.md): a free pad each, and the slot one ship at a time, queueing on its axis. They don't collide with each other or with you, and don't use the entry corridors' lights yet.
+At stations they go through traffic control like you (docs/docking.md): a free pad each, and the slot one ship at a time, queueing on its axis. **Collisions (`sim/shipContact.ts`):** every ship, yours included, is a sphere of 30 m (their ~60 m hulls).
+- A contact bounces the two apart, keeping momentum and returning 30 % of the closing speed. The lighter ship is thrown further.
+- Both take damage from the closing speed: nothing under 3 m/s, about 13 % at 20 m/s, and a whole hull at 50 m/s.
+- Ships in FTL, docked or landed don't collide.
+- Checked: a 2 m/s bump just bounces; at 20 m/s each ship loses ~13 %; at 60 m/s both are lost.
+
+**The corridor as a traffic light:** while another ship has a station's slot (lining up, going in, coming out), the corridor's walls glow and its approach lights turn amber, their pulses running the way that ship is going: in for an arrival, out for a departure. When it's clear they're back to green and red with the pulses running in.
 
 ## Radar, targeting and scanning
 

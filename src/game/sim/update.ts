@@ -32,6 +32,7 @@ import { updateContracts } from './contracts';
 import { laserIdle } from './laser';
 import { breathe, gatherO2, waterIn } from './oxygen';
 import { destroyShip } from './flight';
+import { shipContacts } from './shipContact';
 
 const qa = new THREE.Quaternion();
 const AX = new THREE.Vector3(1, 0, 0),
@@ -278,6 +279,7 @@ export function update(g: Game, dt: number, realDt = dt) {
   updateNav(g, dt);
   updateContracts(g); // deliveries on docking, deadlines (sim/contracts.ts)
   laserIdle(g); // the laser goes off after LASER_IDLE with nothing in its beam
+  if (!inTunnel) shipContacts(g); // ships bumping into ships, yours included (sim/shipContact.ts)
 
   // --- nearest body
   g.nearest = null;

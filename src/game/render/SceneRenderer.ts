@@ -22,6 +22,7 @@ import { skyStationGeometry } from './skyMesh';
 import { occluder } from '../sim/sight';
 import { populated } from '../sim/population';
 import { ATMO_FS, BODY_VS, GLOW_FS, GLOW_VS, PLANET_FS, PLANET_VS, POINT_FS, POINT_VS, RING_FS, SKYPT_FS, SKYPT_VS, SKY_BAKE_FS, SKY_CUBE_FS, SKY_FS, SKY_VS, STAR_FS, STATION_FS, SKY_STATION_FS, STATION_INTERIOR_FS, CLOUD_BAKE_FS, CLOUD_FS, CORRIDOR_FS, CORRIDOR_LIGHT_FS, CORRIDOR_LIGHT_VS } from './shaders';
+import { slotUser } from '../sim/control';
 
 type Uniforms = Record<string, THREE.IUniform>;
 
@@ -428,7 +429,7 @@ export class SceneRenderer {
     );
     corridor.visible = false;
     group.add(corridor);
-    const lightsUni: Uniforms = { uTime: { value: 0 }, uPxPerRad: { value: 1000 }, uSize: { value: st.size } };
+    const lightsUni: Uniforms = { uTime: { value: 0 }, uPxPerRad: { value: 1000 }, uSize: { value: st.size }, uBusy: { value: 0 }, uDir: { value: 1 } };
     const lights = new THREE.Points(
       corridorLights(len),
       new THREE.ShaderMaterial({ vertexShader: CORRIDOR_LIGHT_VS, fragmentShader: CORRIDOR_LIGHT_FS, uniforms: lightsUni, transparent: true, depthWrite: false,
@@ -736,13 +737,20 @@ export class SceneRenderer {
       if (!v.inner || !v.innerUni || !v.corridor || !v.corridorUni || !v.lights || !v.lightsUni) continue;
       // the interior only matters up close (it's seen through the slot, or from inside)
       v.inner.visible = d < st.size * 8;
-      v.corridor.visible = !!dk && dk.station === st && !dk.docked && !g.inStation;
+      // traffic control (sim/control.ts): another ship using the slot, and which way it's going
+      const other = d < 60e3 ? slotUser(g, st) : null;
+      const outbound = !!other && (other.autodock?.phase === 'exit' || other.autodock?.phase === 'rise');
+      // the corridor's walls glow while you have a pad here, or while another ship is in it
+      v.corridor.visible = ((!!dk && dk.station === st && !dk.docked) || !!other) && !g.inStation;
       if (v.corridor.visible) v.corridorUni.uTime.value = now;
-      // approach lights: on within 60 km, from outside the station
+      // approach lights: on within 60 km, from outside the station; amber while another ship has
+      // the slot, their pulses running the way it's going (in, or out)
       v.lights.visible = d < 60e3 && !g.inStation;
       if (v.lights.visible) {
         v.lightsUni.uTime.value = now;
         v.lightsUni.uPxPerRad.value = pxPerRad;
+        v.lightsUni.uBusy.value = other ? 1 : 0;
+        v.lightsUni.uDir.value = outbound ? -1 : 1;
       }
       if (v.inner.visible) {
         v.innerUni.uPadOn.value = dk && dk.station === st && !dk.docked ? 1 : 0;
