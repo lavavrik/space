@@ -486,24 +486,32 @@ export class Game {
     }
     this.invalidateHud();
   }
+  /**
+   * Contracts: plot the way to a job's destination (a metal order's is the station that placed it)
+   * with the nav computer: jumps if it's elsewhere, then a rendezvous with the station, ready to fly
+   * with Enter in the nav panel. The station is targeted too, if it's in this system. (In this
+   * system it used to only target it and point at O, which plans an orbit round its world instead.)
+   */
   plotJob(id: string) {
     const c = this.contracts.find((x) => x.id === id);
     if (!c) return;
-    if (c.to.sys === this.cur.sys.id) {
-      const st = this.cur.stations.find((s) => s.name === c.to.station);
-      if (st) {
-        this.target = st;
-        this.showMsg(`Target · ${st.name} · the autopilot's rendezvous takes you there (O)`);
-      }
-    } else {
-      const sys = destSystem(c);
-      if (!sys || this.route?.running) return this.showMsg('The nav computer is flying a route · cancel it first (M)', 'warn');
-      addNavFinal(this, sys, 'station', c.to.station);
-      this.navPanel = true;
-      document.exitPointerLock?.();
-      replan(this);
-      this.showMsg(`Route to ${c.to.station}, ${c.to.sysName} · Enter in the nav panel (M) to fly it`);
+    const sys = destSystem(c);
+    if (!sys) return;
+    if (this.route?.running) {
+      this.showMsg('The nav computer is flying a route · cancel it first (M)', 'warn');
+      return;
     }
+    if (!this.ship.avionics.nav) {
+      this.showMsg('No navigation computer fitted · see avionics (U)', 'warn');
+      return;
+    }
+    const here = sys.id === this.cur.sys.id;
+    if (here) this.target = this.cur.stations.find((s) => s.name === c.to.station) ?? this.target;
+    addNavFinal(this, sys, 'station', c.to.station);
+    this.navPanel = true;
+    document.exitPointerLock?.();
+    replan(this);
+    this.showMsg(`Route to ${c.to.station}${here ? '' : `, ${c.to.sysName}`} · Enter in the nav panel (M) to fly it`);
     this.invalidateHud();
   }
 

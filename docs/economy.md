@@ -92,7 +92,7 @@ Every station has a job board of 4 offers. It's the same for anyone who looks fo
 - **Getting paid:**
   - Hauls and courier runs pay when you dock at the destination.
   - Metal orders are handed over from the hold with "deliver", docked at the station that asked, once you have enough.
-- **Finding the way:** "plot route" targets the station if it's in this system. If it's elsewhere, the nav computer plans a route to it (jumps, then a rendezvous), ready to engage in the nav panel.
+- **Finding the way:** "plot route" has the nav computer plan the way to the job's destination (for a metal order, the station that placed it): jumps if it's in another system, then a rendezvous with the station. Enter in the nav panel flies it. A station in this system is targeted too.
 - **Failing:** a job past its deadline fails. Its crates are taken back and you pay 25 % of its reward, as far as your credits go. Abandoning (a second click) costs the same. You get a warning 5 minutes before a deadline.
 - **Losing the ship** loses the crates, so hauls fail. Courier runs and metal orders carry on.
 - **Scale:** a job pays about what 10–30 minutes of mining would. A platinum order can pay ~50,000 Cr, but you have to find and mine a platinum-rich rock first.
