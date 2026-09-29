@@ -5,15 +5,16 @@
  *   - a marker dot a few pixels across from any distance (cyan in FTL);
  *   - its engines: a glow at the tail while it thrusts (orange; blue in FTL), a smaller one at the
  *     nose while it brakes;
- *   - in FTL a trail streaming behind it: a line along its motion, as long as TRAIL_S seconds of
- *     travel at its speed (up to 0.2 AU), bright at the ship and fading to nothing, which pulls in
- *     after drop-out; your ship gets one too;
+ *   - in FTL a trail: the path it actually flew (render/Trail.ts), growing from where the drive
+ *     started, bending where it turned, fading with age (30 s) and length (0.2 AU); it stays where
+ *     it was laid after drop-out and fades there. Your ship gets one too;
  *   - a flash as it enters or leaves FTL.
  * Positions are camera-relative (world − ship), like the rest of the scene.
  */
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
-import { FLASH_S, easeTrail, type Npc } from '../sim/traffic';
+import { FLASH_S, type Npc } from '../sim/traffic';
+import { FtlTrail } from './Trail';
 import { occluder } from '../sim/sight';
 
 const MAX_SHIPS = 16;
@@ -85,30 +86,6 @@ const ADD = { blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDs
 
 interface ShipView {
   hull: THREE.Object3D;
-  trail: THREE.Line;
-}
-
-/** A trail line: two points, the ship (fade 1) and the tail (fade 0). */
-function trailLine(mat: THREE.Material) {
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
-  g.setAttribute('aFade', new THREE.BufferAttribute(new Float32Array([1, 0]), 1));
-  const l = new THREE.Line(g, mat);
-  l.frustumCulled = false;
-  return l;
-}
-
-/** Point a trail line from `head` (camera-relative) back along `dir` for L metres. */
-function setTrail(l: THREE.Line, head: THREE.Vector3, dir: THREE.Vector3, L: number) {
-  const p = l.geometry.attributes.position.array as Float32Array;
-  p[0] = head.x;
-  p[1] = head.y;
-  p[2] = head.z;
-  p[3] = head.x + dir.x * L;
-  p[4] = head.y + dir.y * L;
-  p[5] = head.z + dir.z * L;
-  l.geometry.attributes.position.needsUpdate = true;
-  l.visible = L > 1;
 }
 
 /** The ship model: meshes sharing one material, nose along +z (Object3D.lookAt points +z). */
@@ -135,9 +112,11 @@ export class TrafficView {
   private readonly ships: ShipView[] = [];
   private readonly hullMat: THREE.ShaderMaterial;
   private readonly model: THREE.Group;
-  private readonly own: THREE.Line; // your ship's trail
-  private ownL = 0;
-  private lastSim = 0;
+  private readonly own: FtlTrail; // your ship's trail
+  /** Each ship's trail (kept while it fades, after the ship has gone on or out of view). */
+  private readonly trails = new Map<Npc, FtlTrail>();
+  /** The system the trails were laid in. */
+  private sys = '';
   private readonly trailMat: THREE.ShaderMaterial;
   private readonly dots: THREE.Points;
   private readonly light = new THREE.Vector3();
@@ -148,8 +127,8 @@ export class TrafficView {
     this.hullMat = new THREE.ShaderMaterial({ vertexShader: HULL_VS, fragmentShader: HULL_FS, uniforms: { uLight: { value: this.light } } });
     this.trailMat = new THREE.ShaderMaterial({ vertexShader: TRAIL_VS, fragmentShader: TRAIL_FS, transparent: true, depthWrite: false, ...ADD });
     this.model = shipModel(this.hullMat);
-    this.own = trailLine(this.trailMat);
-    this.group.add(this.own);
+    this.own = new FtlTrail(this.trailMat);
+    this.group.add(this.own.line);
     const dg = new THREE.BufferGeometry();
     dg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MAX_SHIPS * 3 * 3), 3));
     dg.setAttribute('aColor', new THREE.BufferAttribute(new Float32Array(MAX_SHIPS * 3 * 3), 3));
@@ -162,20 +141,52 @@ export class TrafficView {
   private view(i: number) {
     let v = this.ships[i];
     if (!v) {
-      v = { hull: this.model.clone(), trail: trailLine(this.trailMat) };
-      this.group.add(v.hull, v.trail);
+      v = { hull: this.model.clone() };
+      this.group.add(v.hull);
       this.ships[i] = v;
     }
     return v;
   }
 
+  /** Every other ship's trail: recorded from its flight, drawn (a ship behind a world: its trail isn't). */
+  private drawTrails(g: Game) {
+    const { ship, simTime } = g;
+    for (const npc of g.traffic) {
+      let tr = this.trails.get(npc);
+      if (!tr) {
+        tr = new FtlTrail(this.trailMat);
+        this.group.add(tr.line);
+        this.trails.set(npc, tr);
+      }
+      tr.record(npc.pos, npc.vel, npc.ftl, simTime);
+      tr.draw(ship.pos, simTime);
+      if (occluder(g.cur.bodies, ship.pos, npc.pos)) tr.line.visible = false;
+    }
+    // ships gone from the system
+    for (const [npc, tr] of this.trails) if (!g.traffic.includes(npc)) {
+      this.dropTrail(tr);
+      this.trails.delete(npc);
+    }
+  }
+
+  private dropTrail(tr: FtlTrail) {
+    this.group.remove(tr.line);
+    tr.dispose();
+  }
+
   update(g: Game, pxScale: number) {
     const { ship, simTime } = g;
-    const dt = Math.max(0, Math.min(1, simTime - this.lastSim));
-    this.lastSim = simTime;
-    // your own trail, streaming back from just behind the camera along your course
-    this.ownL = easeTrail(this.ownL, ship.mode === 'ftl' && !g.jump ? ship.ftlSpeed : 0, dt);
-    setTrail(this.own, this.tmp.copy(ship.travelDir).multiplyScalar(-80), this.tmp2.copy(ship.travelDir).negate(), this.ownL);
+    // a new system: the trails laid in the last one go
+    if (g.cur.sys.id !== this.sys) {
+      this.sys = g.cur.sys.id;
+      this.own.clear();
+      for (const tr of this.trails.values()) this.dropTrail(tr);
+      this.trails.clear();
+    }
+    // your own trail, from just behind the camera back along the way you came
+    this.own.record(ship.pos, ship.travelDir, ship.mode === 'ftl' && !g.jump, simTime);
+    this.own.draw(ship.pos, simTime, this.tmp.copy(ship.travelDir).multiplyScalar(-80));
+    this.drawTrails(g);
     this.light.subVectors(g.cur.star.pos, ship.pos).normalize();
     const dp = this.dots.geometry.attributes.position.array as Float32Array,
       dc = this.dots.geometry.attributes.aColor.array as Float32Array,
@@ -186,10 +197,9 @@ export class TrafficView {
       const v = this.view(i);
       // behind a world: nothing of it shows (its dot and trail would draw over the world)
       if (occluder(g.cur.bodies, ship.pos, npc.pos)) {
-        v.hull.visible = v.trail.visible = false;
+        v.hull.visible = false;
         return;
       }
-      v.trail.visible = true;
       const rel = this.tmp.subVectors(npc.pos, ship.pos);
       // hull: its ship's attitude (sim/traffic.ts flies it on the player's flight code)
       v.hull.visible = rel.length() < 200e3;
@@ -217,20 +227,15 @@ export class TrafficView {
         dc.set([0.8 * k, 0.95 * k, 1.2 * k], nd * 3);
         ds[nd++] = (14 + 110 * Math.sqrt(fu)) * pxScale;
       }
-      // the trail
-      setTrail(v.trail, rel, npc.trailDir, npc.trailL);
     });
-    for (let i = npcs.length; i < this.ships.length; i++) {
-      this.ships[i].hull.visible = false;
-      this.ships[i].trail.visible = false;
-    }
+    for (let i = npcs.length; i < this.ships.length; i++) this.ships[i].hull.visible = false;
     this.dots.geometry.setDrawRange(0, nd);
     for (const a of ['position', 'aColor', 'aSize']) this.dots.geometry.attributes[a].needsUpdate = true;
   }
 
   dispose() {
-    for (const v of this.ships) v.trail.geometry.dispose();
-    this.own.geometry.dispose();
+    this.own.dispose();
+    for (const tr of this.trails.values()) tr.dispose();
     this.model.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
     this.hullMat.dispose();
     this.trailMat.dispose();

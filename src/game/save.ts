@@ -100,7 +100,6 @@ export interface NpcSave {
   to: string | null;
   t: number;
   wait: number;
-  trailL: number;
   flashAt: number | null; // null: never
   flight: FlightSave;
 }
@@ -201,7 +200,6 @@ function snapshotNpc(npc: Npc): NpcSave | null {
     to: npc.to?.name ?? null,
     t: npc.t,
     wait: npc.wait,
-    trailL: npc.trailL,
     flashAt: Number.isFinite(npc.flashAt) ? npc.flashAt : null,
     flight: snapshotFlight(c),
   };
@@ -383,7 +381,7 @@ function restoreNpc(g: Game, s: NpcSave): Npc | null {
   } catch {
     return null;
   }
-  Object.assign(npc, { task: s.task, at: place(s.at), to: place(s.to), t: s.t, wait: s.wait, trailL: s.trailL, flashAt: s.flashAt ?? -Infinity });
+  Object.assign(npc, { task: s.task, at: place(s.at), to: place(s.to), t: s.t, wait: s.wait, flashAt: s.flashAt ?? -Infinity });
   syncNpc(npc);
   return npc;
 }

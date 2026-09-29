@@ -32,7 +32,7 @@ import { newShip } from '../Game';
 import { mulberry32, rr } from '../lib/rng';
 import { THREE } from '../lib/three';
 import type { Body, CurrentSystem, Npc, Station } from '../types';
-import { AU, SHIP } from '../constants';
+import { SHIP } from '../constants';
 import { autopilot, ftlTransfer } from './autopilot';
 import { autodock, engageAutodock } from './autodock';
 import { holdDocked, launch, rotationCorrection, stationContact, updateDockRequest } from './docking';
@@ -53,13 +53,6 @@ export type { Npc };
 /** Where ships go. */
 type Dest = Body | Station;
 
-/**
- * FTL trail: as long as TRAIL_S seconds of travel at the ship's current speed, up to TRAIL_MAX (m).
- * It grows and shrinks with the speed, easing at TRAIL_EASE (1/s), so it pulls in after drop-out.
- */
-export const TRAIL_S = 30,
-  TRAIL_MAX = 0.2 * AU,
-  TRAIL_EASE = 1.5;
 /** How long an FTL flash lasts (s). */
 export const FLASH_S = 0.8;
 /** A ship's size for the radar, scanner and clicks (m): half its ~60 m length. */
@@ -173,8 +166,6 @@ export function spawnTraffic(game: Game): Npc[] {
       to: null,
       t: 0,
       wait: 0,
-      trailL: 0,
-      trailDir: new THREE.Vector3(0, 0, 1),
       flashAt: -Infinity,
     };
     pilots.set(npc, c);
@@ -183,7 +174,7 @@ export function spawnTraffic(game: Game): Npc[] {
     if (cur.stations.length && (g() < 0.65 || !worlds.length)) dockAt(npc, c, cur.stations[Math.floor(g() * cur.stations.length)], g);
     else placeInOrbit(npc, c, worlds[Math.floor(g() * worlds.length)], g);
     npc.t = npc.wait * g() * 0.9;
-    syncView(npc, c, 0);
+    syncView(npc, c);
     out.push(npc);
   }
   return out;
@@ -310,7 +301,7 @@ export function updateTraffic(g: Game, dt: number) {
       if (dv.length() > 2 * flown) npc.thrust = dv.dot(tmpN.set(0, 0, -1).applyQuaternion(ship.q)) >= 0 ? 1 : -1;
     }
     if (wasFtl !== (ship.mode === 'ftl')) npc.flashAt = g.simTime;
-    syncView(npc, c, dt);
+    syncView(npc, c);
   }
 }
 
@@ -320,13 +311,11 @@ function sysVel(c: Game, out: THREE.Vector3) {
 }
 
 /** What the renderer, radar and info panel read. */
-function syncView(npc: Npc, c: Game, dt: number) {
+function syncView(npc: Npc, c: Game) {
   const { ship } = c;
   npc.ftl = ship.mode === 'ftl';
   if (npc.ftl) npc.vel.copy(ship.travelDir).multiplyScalar(ship.ftlSpeed);
   else sysVel(c, npc.vel);
-  npc.trailL = easeTrail(npc.trailL, npc.ftl ? ship.ftlSpeed : 0, dt);
-  if (npc.ftl) npc.trailDir.copy(ship.travelDir).negate();
 }
 
 /** The captain: decides what to do next; the computers do the flying. */
@@ -455,11 +444,6 @@ export function npcStatus(npc: Npc) {
   }
 }
 
-/** A trail length eased toward TRAIL_S of travel at `speed` (m/s), capped at TRAIL_MAX. */
-export function easeTrail(L: number, speed: number, dt: number) {
-  const want = Math.min(TRAIL_MAX, speed * TRAIL_S);
-  return L + (want - L) * Math.min(1, TRAIL_EASE * dt);
-}
 
 /** A ship's pilot context (its Ship, dock, autopilot …): for saving (save.ts) and debugging. */
 export const pilotOf = (npc: Npc) => pilots.get(npc);
@@ -472,7 +456,7 @@ export function blankNpc(game: Game, name: string, cls: string) {
   const pilot = pilotFor(game);
   const npc: Npc = {
     kind: 'ship', radius: SHIP_R, name, cls, pos: pilot.ship.pos, vel: new THREE.Vector3(), q: pilot.ship.q,
-    ftl: false, thrust: 0, task: 'docked', at: null, to: null, t: 0, wait: 0, trailL: 0, trailDir: new THREE.Vector3(0, 0, 1), flashAt: -Infinity,
+    ftl: false, thrust: 0, task: 'docked', at: null, to: null, t: 0, wait: 0, flashAt: -Infinity,
   };
   pilots.set(npc, pilot);
   rides.set(npc, new THREE.Vector3());
@@ -482,6 +466,5 @@ export function blankNpc(game: Game, name: string, cls: string) {
 /** Refresh what the renderer, radar and info panel read from the ship's pilot (after a restore). */
 export function syncNpc(npc: Npc) {
   const c = pilots.get(npc)!;
-  syncView(npc, c, 0);
-  if (npc.ftl) npc.trailDir.copy(c.ship.travelDir).negate();
+  syncView(npc, c);
 }

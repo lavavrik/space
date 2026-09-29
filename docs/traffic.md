@@ -47,6 +47,15 @@ Ships are targets like bodies and stations (`types.ts Npc`, kind `ship`).
 - **Marker:** a dot a few pixels across from any distance, cyan in FTL.
 - **Engines:** a glow at the tail while it thrusts along its nose (orange; blue in FTL), a smaller one at the nose while it thrusts against it (worked out from its change of velocity, less gravity's share).
 - **Model:** within 200 km, a small procedural ship (~60 m: tapered hull, nose cone, cockpit, twin engine pods on pylons, a fin) at its own attitude, lit by the star.
-- **Trail:** in FTL a trail streams behind each ship: a line along its motion, as long as 30 s of travel at its current speed (`TRAIL_S`), capped at 0.2 AU (`TRAIL_MAX`). It's bright at the ship and fades to nothing at the tail, grows as the ship speeds up, and pulls back in after it drops out (eased, `TRAIL_EASE`). Your own ship gets the same trail in FTL, streaming back along your course.
+- **Trail (`render/Trail.ts`):** in FTL each ship leaves a trail: the path it actually flew, recorded
+  as positions and drawn as a line that fades with age (30 s, `TRAIL_S`) and length (0.2 AU,
+  `TRAIL_MAX`).
+  - It grows out from where the drive started.
+  - It bends where the ship turned, with a sample every 0.5 s and whenever the course turns 0.6°.
+  - After drop-out it stays where it was laid and fades there.
+  - The first version was one straight line of 30 s at the current speed. It appeared at full
+    length the moment FTL started, and swung round with the ship when it turned.
+  - Your own ship gets one too, starting just behind the camera. Trails are cleared on arriving
+    in a new system.
 - **Flash:** a burst that swells and fades over 0.8 s where a ship enters or leaves FTL (`FLASH_S`).
 - **Label:** beside any ship the radar has found within 500,000 km: its name once scanned, and its distance (or "FTL") (`Overlay.ts TRAFFIC_LABEL`).

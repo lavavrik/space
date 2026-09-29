@@ -130,9 +130,6 @@ export interface Npc {
   /** Seconds into the task, and how long it stays (docked or in orbit) before moving on. */
   t: number;
   wait: number;
-  /** The trail streaming behind it: length (m) and direction (world, unit). */
-  trailL: number;
-  trailDir: Vec3;
   /** Sim time of its last FTL entry or exit (the flash), or −∞. */
   flashAt: number;
 }
