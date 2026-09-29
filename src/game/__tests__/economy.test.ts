@@ -72,4 +72,11 @@ describe('economy', () => {
     expect(cargoMass(g)).toBeCloseTo(900);
     expect(g.credits).toBeCloseTo(100 * sellPrice(g.dock!.station, 'pgm'));
   });
+
+  it("stows metal by the rock's own mix", () => {
+    const g = fake(0);
+    stowMetal(g, 1000, { nife: 0.8, cobalt: 0.1, pgm: 0.1 });
+    expect(g.ship.cargo.pgm).toBeCloseTo(100);
+    expect(g.ship.cargo.nife).toBeCloseTo(800);
+  });
 });

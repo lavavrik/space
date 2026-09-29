@@ -17,6 +17,7 @@ import { pickAt, placeAtHome } from './sim/navigation';
 import { closePlanner, openPlanner, requestDisengage } from './sim/planner';
 import { update } from './sim/update';
 import { ShipAudio } from './audio/ShipAudio';
+import type { Prospect } from './sim/prospect';
 import type { Body, CurrentSystem, Jump, Message, MsgKind, Planner, Power, Ship, StarSystem, Station, Target } from './types';
 import { systemsNear } from './universe/galaxy';
 import { updateBodies } from './sim/kepler';
@@ -127,7 +128,7 @@ export class Game {
   dockRel = new THREE.Vector3();
   /** Radar (sim/radar.ts): seconds left of the sweep in progress (0 = idle), and every object it
    *  has found (scan keys, so per system). */
-  radar: { sweep: number; seen: Set<string> } = { sweep: 0, seen: new Set() };
+  radar: { sweep: number; seen: Set<string>; rocks: Prospect[] } = { sweep: 0, seen: new Set(), rocks: [] };
   /** Headlights (Shift+L): a floodlight cone along the nose (render/shaders/headlight.glsl). */
   lights = true;
   /** Cargo window (Shift+I), in the left column; and a jettison waiting for its second click (s left). */

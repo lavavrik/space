@@ -17,6 +17,9 @@ import type { SceneRenderer } from './SceneRenderer';
 import { PAD_R, SLOT_H, SLOT_W, toWorld } from '../sim/stationGeom';
 import { padWorld } from '../sim/docking';
 import { contactLabel, known } from '../sim/radar';
+import { liveProspects, prospectNow } from '../sim/prospect';
+/** Prospect markers' colours by the rock's metal (rgba prefixes). */
+const PROSPECT_COL = { icy: 'rgba(255,230,199,', 'nickel-iron': 'rgba(200,190,175,', 'cobalt-rich': 'rgba(110,160,255,', 'platinum-rich': 'rgba(255,215,120,' } as const;
 
 const AMB = 'rgba(255,165,58,',
   CYA = 'rgba(127,220,255,',
@@ -248,6 +251,7 @@ export class Overlay {
     this.drawBodies(g);
     this.drawStations(g);
     this.drawTraffic(g);
+    this.drawProspects(g);
     this.drawRockThreat(g);
     this.drawLaserTarget(g);
     this.drawReachable(g);
@@ -550,7 +554,9 @@ export class Overlay {
     const mined = 1 - (h.size / h.size0) ** 3;
     const lines = [
       `ROCK ${rockLabel(h.size)} · ${fmtDist(Math.max(0, h.dist))}`,
+      ...(m.kind !== 'icy' ? [`METAL-RICH · ${m.kind.toUpperCase()}`] : []),
       `ICE ${pct(m.ice)} % · SILICATE ${pct(m.rock)} % · METAL ${pct(m.metal)} %`,
+      `METAL: NI-FE ${pct(m.mix.nife)} % · CO ${pct(m.mix.cobalt)} % · PGM ${pct(m.mix.pgm)} %`,
       ...(mined > 0.005 ? [`MINED ${Math.round(mined * 100)} %`] : []),
     ];
     ctx.font = this.font(11, MONO);
@@ -590,6 +596,42 @@ export class Overlay {
     ctx.font = this.font(12, MONO);
     ctx.textAlign = 'center';
     ctx.fillText(label, s.x, s.y - r - 7 * this.ui);
+    ctx.restore();
+  }
+
+  /**
+   * The radar's metal-rich finds (sim/prospect.ts): a small diamond on each, coloured by its metal
+   * (grey nickel-iron, blue cobalt, gold platinum), with its kind, size and distance (names on).
+   * Off screen they aren't shown: the radar window lists them.
+   */
+  private drawProspects(g: Game) {
+    const finds = liveProspects(g);
+    if (!finds.length) return;
+    const { ctx, W, H } = this;
+    ctx.save();
+    ctx.font = this.font(10, MONO);
+    ctx.textAlign = 'left';
+    ctx.lineWidth = 1.5 * this.ui;
+    for (const [i, p] of finds.entries()) {
+      const rel = this.tmp.copy(prospectNow(g, p, this.tmp)).add(g.frameBody.pos).sub(g.ship.pos);
+      const d = rel.length();
+      const s = this.toScreen(g, rel);
+      if (s.behind || s.x < 0 || s.x > W || s.y < 0 || s.y > H) continue;
+      const r = Math.max(6 * this.ui, ((p.size * 0.9) / d) * g.view.pxPerRad + 4 * this.ui);
+      const col = PROSPECT_COL[p.kind];
+      ctx.strokeStyle = col + '0.9)';
+      ctx.beginPath();
+      ctx.moveTo(s.x, s.y - r);
+      ctx.lineTo(s.x + r, s.y);
+      ctx.lineTo(s.x, s.y + r);
+      ctx.lineTo(s.x - r, s.y);
+      ctx.closePath();
+      ctx.stroke();
+      if (g.showNames) {
+        ctx.fillStyle = col + '0.9)';
+        ctx.fillText(`${i + 1} · ${p.kind.toUpperCase()} ${rockLabel(p.size)} · ${fmtDist(Math.max(0, d - p.size))}`, s.x + r + 5 * this.ui, s.y + 3 * this.ui);
+      }
+    }
     ctx.restore();
   }
 

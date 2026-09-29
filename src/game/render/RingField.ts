@@ -19,7 +19,7 @@
 import { THREE } from '../lib/three';
 import { DISC_FROM, RING_HALF_THICK, ROCK_LAYERS, type RockLayer, ringDensity } from '../sim/rings';
 import type { World } from '../types';
-import { minedRocks } from '../sim/ringRocks';
+import { METAL_RICH, minedRocks } from '../sim/ringRocks';
 
 /** Above (or below) the belt by this much (m), the disc is back in full around you. */
 const FADE_ABOVE = 6000;
@@ -52,7 +52,14 @@ float rnd(inout uint s){
   uint w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
   return float((w >> 22u) ^ w) / 4294967295.0;
 }
-// the rock with this index: false if there's none; else its camera-relative place, radius, tint,
+// a rock's colour from its tint draw (0–1): the ring's colour, lighter or darker; under METAL_RICH a
+// metal-rich rock (sim/laser.ts rockMake), a darker warm grey, whatever the ring's colour
+const float METAL_RICH = ${METAL_RICH.toFixed(4)};
+bool rockMetal(float t){ return t < METAL_RICH; }
+vec3 rockCol(float t){
+  return rockMetal(t) ? dot(uColor, vec3(0.3, 0.59, 0.11)) * vec3(0.66, 0.58, 0.48) : uColor * (0.5 + 0.6 * t);
+}
+// the rock with this index: false if there's none; else its camera-relative place, radius, tint draw,
 // fade (0…1), and the random stream for more
 bool ringRock(int id, out vec3 p, out float size, out float tint, out float fade, out uint s){
   int K = int(uK);
@@ -88,7 +95,7 @@ bool ringRock(int id, out vec3 p, out float size, out float tint, out float fade
       break;
     }
   }
-  tint = 0.5 + 0.6 * rnd(s);
+  tint = rnd(s); // (its colour: rockCol)
   fade = (uFadeTo > 0.0 ? smoothstep(uInner, uFadeTo, d) : 1.0) * smoothstep(uRange, uRange * uOut, d);
   return true;
 }
@@ -117,7 +124,7 @@ const MESH_VS = `
 #include <logdepthbuf_pars_vertex>
 ${ROCK_GLSL}
 ${ROCK_NOISE}
-varying vec3 vWP; varying vec3 vN; varying vec3 vObj; varying vec3 vCol; varying float vSize; varying float vSh;
+varying vec3 vWP; varying vec3 vN; varying vec3 vObj; varying vec3 vCol; varying float vSize; varying float vSh; varying float vMetal;
 vec3 qrot(vec4 q, vec3 v){ return v + 2.0 * cross(q.xyz, cross(q.xyz, v) + q.w * v); }
 float shape(vec3 d, vec3 o){ return 1.0 + 0.30 * tn(d * 0.9 + o) + 0.14 * tn(d * 2.1 + o.yzx) + 0.06 * tn(d * 4.7 + o.zxy); }
 void main(){
@@ -147,7 +154,8 @@ void main(){
   vN = qrot(q, normalize(n / sc));
   vObj = p0 + o;
   vSize = size;
-  vCol = uColor * tint;
+  vCol = rockCol(tint);
+  vMetal = rockMetal(tint) ? 1.0 : 0.0;
   vSh = ringShadow(c);
   gl_Position = projectionMatrix * viewMatrix * vec4(vWP, 1.0);
   #include <logdepthbuf_vertex>
@@ -156,7 +164,7 @@ const MESH_FS = `
 #include <logdepthbuf_pars_fragment>
 uniform highp sampler3D uNoise3D;
 uniform vec3 uLight, uPC; uniform float uPR, uPlanetA, uExp;
-varying vec3 vWP; varying vec3 vN; varying vec3 vObj; varying vec3 vCol; varying float vSize; varying float vSh;
+varying vec3 vWP; varying vec3 vN; varying vec3 vObj; varying vec3 vCol; varying float vSize; varying float vSh; varying float vMetal;
 // the noise texture filtered here at full precision: the GPU's own filter weights have only 8 bits,
 // which magnified through the periscope showed as square blocks and moiré (as noise3d.glsl tnoiseHQ)
 float tnq(vec3 p){
@@ -201,7 +209,16 @@ void main(){
   vec3 Lp = toPl / dp;
   float shine = uPlanetA * (0.5 + 0.5 * dot(-Lp, L)) * (uPR * uPR) / (dp * dp) * max(dot(N, Lp), 0.0);
   float mottle = 0.8 + 0.2 * tno(3.1) + 0.1 * tno(13.0);
-  gl_FragColor = vec4(vCol * mottle * (sun + shine + 0.002) * uExp, 1.0);
+  vec3 col = vCol * mottle * (sun + shine + 0.002);
+  if (vMetal > 0.5) {
+    // metal-rich: bare metal in patches glints (a tight highlight where the relief faces the sun
+    // just right), so one catches the eye among the ice
+    float bare = smoothstep(0.1, 0.4, tno(5.3)); // ("patch" is reserved in GLSL)
+    vec3 H = normalize(L + V);
+    float spec = pow(max(dot(N, H), 0.0), 60.0) * max(dot(N, L), 0.0) * vSh;
+    col += vec3(1.0, 0.9, 0.75) * spec * (0.3 + 1.5 * bare) * length(vCol);
+  }
+  gl_FragColor = vec4(col * uExp, 1.0);
 }`;
 
 const DOT_VS = `
@@ -221,7 +238,7 @@ void main(){
   // a speck: never wider than 2 px (bigger dots read as flat discs), keeping the light of the rock
   // it stands for; below a pixel, dimmed by its share of one
   float light = px < 1.0 ? px * px : min(max(px * px / 4.0, 1.0), 8.0);
-  vC = uColor * tint * ringShadow(p) * phase * fade * light * 0.5; // (a lit rock shows about half its disc)
+  vC = rockCol(tint) * ringShadow(p) * phase * fade * light * 0.5; // (a lit rock shows about half its disc)
   gl_PointSize = clamp(px, 1.0, 2.0);
   gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
   #include <logdepthbuf_vertex>

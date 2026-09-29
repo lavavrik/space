@@ -13,19 +13,19 @@
  *   - Its draw is a load on the bus like any other (MINING LASER), from the battery beyond what the
  *     panels give, and like every load it ends up as heat in the hull.
  *   - What a rock is made of comes from its id (a hash, like everything else about it): a giant's
- *     ring rocks are 90–99 % water ice, the rest silicate grit and a trace of metal. (Metals are for
- *     later, with a hold and an economy: SPACE-51.)
+ *     ring rocks are 90–99 % water ice, the rest silicate grit and a trace of metal; one in 33 is
+ *     metal-rich, and what metal varies rock to rock (rockMake).
  */
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import { laserFitted, scoopFitted } from '../outfit/catalog';
 import { grant } from './power';
-import { stowMetal } from './economy';
+import { stowMetal, type Commodity } from './economy';
 import { RING_HALF_THICK } from './rings';
-import { COLLIDE_LAYERS, minedKey, minedRocks, rockLabel, rockMass, rockRay, rocksNear, type Rock } from './ringRocks';
+import { COLLIDE_LAYERS, METAL_RICH, minedKey, minedRocks, rockLabel, rockMass, rockRay, rocksNear, type Rock } from './ringRocks';
 
 /** Propellant per MW of beam on pure ice at close range (kg/s). */
-const YIELD_PER_MW = 600;
+export const YIELD_PER_MW = 600;
 /** Faster than this against the rock (m/s), the scoop can't catch the plume. */
 const HOLD_V = 50;
 
@@ -54,37 +54,60 @@ function idHash(id: string, salt: number) {
 /** A rock's water ice fraction from its id (a hash): 0.90–0.99 in a giant's rings. */
 export const rockIce = (id: string) => 0.9 + 0.09 * idHash(id, 0);
 
-/** What a rock is made of (fractions): water ice, and the rest silicate grit with a trace of metal (a hash too). */
+/**
+ * What a rock is made of (fractions): water ice, and the rest silicate grit and metal; and what its
+ * metal is (`mix`, fractions of the metal). `kind` names the metal-rich ones.
+ */
 export interface RockMake {
   ice: number;
   rock: number;
   metal: number;
+  mix: Record<Commodity, number>;
+  kind: 'icy' | 'nickel-iron' | 'cobalt-rich' | 'platinum-rich';
 }
-export function rockMake(id: string): RockMake {
-  // one in METALLIC is a metal-rich rock that fell in (or a moonlet's core): little ice, a lot of metal
-  if (idHash(id, 3) < METALLIC) {
-    const ice = 0.05 + 0.25 * idHash(id, 5),
-      metal = 0.25 + 0.3 * idHash(id, 7);
-    return { ice, rock: 1 - ice - metal, metal };
+
+/**
+ * A rock's make-up, from its id and tint draw (hashes, like everything else about it).
+ *
+ *   - Icy (most): 90–99 % water ice, a trace of metal: mostly nickel-iron, 3–12 % cobalt,
+ *     0.2–1.2 % platinum-group. About 0.2 Cr per kg of metal.
+ *   - Metal-rich (one in 33, tint under METAL_RICH: drawn darker and glinting): a rock that fell in,
+ *     or a moonlet's core; 5–30 % ice, 25–55 % metal, of three kinds:
+ *       nickel-iron (60 %): ~95 % nickel-iron, a little cobalt, ~0.1–0.2 Cr/kg;
+ *       cobalt-rich (30 %): 20–35 % cobalt, ~0.4 Cr/kg;
+ *       platinum-rich (10 %): 4–12 % platinum-group metals, ~0.5–1.4 Cr/kg: the find.
+ */
+export function rockMake(r: { id: string; tint: number }): RockMake {
+  const { id } = r;
+  const h = (salt: number) => idHash(id, salt);
+  const mix = (cobalt: number, pgm: number) => ({ nife: 1 - cobalt - pgm, cobalt, pgm });
+  if (r.tint < METAL_RICH) {
+    const ice = 0.05 + 0.25 * h(5),
+      metal = 0.25 + 0.3 * h(7);
+    const k = h(11);
+    const [kind, m] =
+      k < 0.6 ? (['nickel-iron', mix(0.02 + 0.04 * h(13), 0.002 + 0.006 * h(17))] as const)
+      : k < 0.9 ? (['cobalt-rich', mix(0.2 + 0.15 * h(13), 0.004 + 0.01 * h(17))] as const)
+      : (['platinum-rich', mix(0.05 + 0.1 * h(13), 0.04 + 0.08 * h(17))] as const);
+    return { ice, rock: 1 - ice - metal, metal, mix: m, kind };
   }
   const ice = rockIce(id);
-  const metal = (1 - ice) * (0.05 + 0.25 * idHash(id, 7));
-  return { ice, rock: 1 - ice - metal, metal };
+  const metal = (1 - ice) * (0.05 + 0.25 * h(7));
+  return { ice, rock: 1 - ice - metal, metal, mix: mix(0.03 + 0.09 * h(13), 0.002 + 0.01 * h(17)), kind: 'icy' };
 }
-/** The share of a giant's ring rocks that are metal-rich. */
-const METALLIC = 0.03;
 /**
  * Metal the scoop's magnetic separator catches, per kg of rock the beam breaks up and scatters (most
  * of the grains fly off): ~0.7 kg/s from an ice rock under the ML-6, ~30 from a metal-rich one.
  */
-const METAL_CATCH = 1e-4;
+export const METAL_CATCH = 1e-4;
 
 /**
  * Rock the beam breaks up and scatters, per kg of ice-equivalent it frees (what a pure-ice rock would
  * give the scoop): most of it is lost. Sized so a big rock lasts about a tank: ~100 m across, ~8 minutes under the ML-6;
  * a 20 m one, seconds; pebbles, a blink. Below GONE of its size it's gone.
  */
-const DISPERSE = 2000,
+export const DISPERSE = 2000,
+  /** (a mined rock's size below which it's gone) */
   GONE = 0.12;
 
 /** Shift+M. */
@@ -161,7 +184,7 @@ export function updateLaser(g: Game) {
   const { rock, t } = best;
   const at = from.clone().addScaledVector(nose, t);
   L.end = at;
-  const make = rockMake(rock.id);
+  const make = rockMake(rock);
   L.hit = { id: rock.id, size: rock.size, size0: rock.size0, make, center: rock.pos.clone(), normal: at.clone().sub(rock.pos).normalize(), dist: t };
   if (!scoopFitted(ship.outfit)) {
     L.why = 'no fuel scoop to catch the vapour';
@@ -193,7 +216,7 @@ export function mineRock(g: Game, dt: number) {
   if (!L.hit || L.removal <= 0 || dt <= 0) return;
   // metal into the hold, as far as it goes
   if (L.metal > 0) {
-    const took = stowMetal(g, L.metal * dt);
+    const took = stowMetal(g, L.metal * dt, L.hit.make.mix);
     if (took < L.metal * dt * 0.5 && !g.warned.holdFull) {
       g.warned.holdFull = true;
       g.showMsg('The hold is full · sell the metal at a station', 'warn');
@@ -207,7 +230,9 @@ export function mineRock(g: Game, dt: number) {
   const next = Math.cbrt(f);
   if (next < GONE) {
     minedRocks.set(key, 0);
-    g.showMsg(`The ${rockLabel(L.hit.size0)} rock is mined away`);
+    // its job done: the laser switches off rather than burn on into the next rock behind it (or empty space)
+    L.on = false;
+    g.showMsg(`The ${rockLabel(L.hit.size0)} rock is mined away · laser off`);
   } else minedRocks.set(key, next);
 }
 

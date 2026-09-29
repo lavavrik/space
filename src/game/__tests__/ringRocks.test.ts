@@ -102,4 +102,33 @@ describe('ring rock shapes and mining', () => {
     expect(again.find((r) => r.id === b.id)).toBeUndefined();
     minedRocks.clear();
   });
+
+  it('one rock in ~33 is metal-rich, mostly nickel-iron, rarely platinum-rich, and worth far more', async () => {
+    const { rockMake } = await import('../sim/laser');
+    const { rockWorth } = await import('../sim/prospect');
+    const list: Rock[] = [];
+    rocksNear(w, 1, at, at, 6000, 0, list, 20000);
+    const makes = list.map((r) => rockMake(r));
+    const rich = makes.filter((m) => m.kind !== 'icy');
+    expect(list.length).toBeGreaterThan(500);
+    expect(rich.length / list.length).toBeGreaterThan(0.015);
+    expect(rich.length / list.length).toBeLessThan(0.05);
+    for (const m of makes) {
+      expect(m.ice + m.rock + m.metal).toBeCloseTo(1);
+      expect(m.mix.nife + m.mix.cobalt + m.mix.pgm).toBeCloseTo(1);
+    }
+    // the same rock is the same every time (a hash of its id and tint)
+    expect(rockMake(list[0])).toEqual(rockMake(list[0]));
+    // per kg of metal: platinum-rich > cobalt-rich > nickel-iron
+    const perKg = (kind: string) => {
+      const m = makes.find((x) => x.kind === kind);
+      return m ? rockWorth(10, m, 600).perKg : null;
+    };
+    const [fe, co, pt] = [perKg('nickel-iron'), perKg('cobalt-rich'), perKg('platinum-rich')];
+    if (fe && co) expect(co).toBeGreaterThan(fe);
+    if (co && pt) expect(pt).toBeGreaterThan(co);
+    // a metal-rich rock holds ~10× the metal of an icy one its size
+    const icy = makes.find((m) => m.kind === 'icy')!;
+    expect(rockWorth(10, rich[0], 600).metalKg).toBeGreaterThan(5 * rockWorth(10, icy, 600).metalKg);
+  });
 });

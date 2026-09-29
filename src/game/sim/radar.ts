@@ -15,6 +15,9 @@ import type { Game } from '../Game';
 import type { Target } from '../types';
 import { grant } from './power';
 import { SCAN_STAGE, scanKey, scanProgress } from './scanner';
+import { prospect } from './prospect';
+import { fmtCr } from './economy';
+import { rockLabel } from './ringRocks';
 
 export const RADAR_RANGE = 10 * AU;
 export const RADAR_KW = 400;
@@ -83,7 +86,11 @@ export function updateRadar(g: Game, dt: number) {
     if (!r.seen.has(key)) n++;
     r.seen.add(key);
   }
-  g.showMsg(`Radar sweep complete · ${n ? `${n} new contact${n > 1 ? 's' : ''}` : 'nothing new'} within ${RADAR_RANGE / AU} AU`);
+  // in a belt, it prospects too: the best metal-rich rocks around (sim/prospect.ts)
+  r.rocks = prospect(g);
+  const best = r.rocks[0];
+  const rocks = best ? ` · ${r.rocks.length} metal-rich rock${r.rocks.length > 1 ? 's' : ''} marked, best a ${rockLabel(best.size)} ${best.kind} (~${fmtCr(best.perHour)}/h)` : '';
+  g.showMsg(`Radar sweep complete · ${n ? `${n} new contact${n > 1 ? 's' : ''}` : 'nothing new'} within ${RADAR_RANGE / AU} AU${rocks}`);
   g.invalidateHud();
 }
 

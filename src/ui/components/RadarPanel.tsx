@@ -63,6 +63,23 @@ export function RadarPanel({ v, act }: { v: RadarView; act: Actions }) {
           ))}
       </svg>
       {v.contacts.length === 0 && v.sweeping === 0 && <div className="ohint">Nothing tracked here yet · scan to sweep 10 AU (400 kW for 4 s)</div>}
+      {v.prospects.length > 0 && (
+        <div className="rdpros">
+          <div className="sub">
+            <span>METAL-RICH ROCKS · MARKED IN VIEW</span>
+          </div>
+          {v.prospects.map((p) => (
+            <div key={p.n} className="rdprow">
+              <i className={cx('rdkind', `pr-${p.kind}`)} />
+              <span>
+                {p.n} · {p.kind} {p.size}
+              </span>
+              <span className="rddist">{p.dist}</span>
+              <span className="rdworth">{p.worth}</span>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="rdlist">
         {v.contacts.map((k) => (
           <div key={k.key} className={cx('rdrow', k.targeted && 'tgt')}>

@@ -30,6 +30,7 @@ import { approachView } from './approach';
 import { deflectorFitted, guardFitted, laserFitted } from '../outfit/catalog';
 import { threatNow } from '../sim/belt';
 import { rockLabel } from '../sim/ringRocks';
+import { liveProspects, prospectNow } from '../sim/prospect';
 import { CARGO_CAP, COMMODITIES, cargoMass, cargoValue, fmtCr, refuelQuote, repairQuote, sellPrice, type Commodity } from '../sim/economy';
 import { fitPrice } from '../outfit/fit';
 import { HULL_WARN, heatDamageRate } from '../sim/damage';
@@ -512,6 +513,10 @@ function radarView(g: Game): RadarView {
         scanning: g.scanning === c.target,
         targeted: g.target === c.target,
       };
+    }),
+    prospects: liveProspects(g).map((p, i) => {
+      const now = prospectNow(g, p).add(g.frameBody.pos);
+      return { n: i + 1, kind: p.kind, size: rockLabel(p.size), dist: fmtDist(Math.max(0, now.distanceTo(g.ship.pos) - p.size)), worth: `${fmtCr(p.perHour)}/h mining · metal ${p.perKg.toFixed(2)} Cr/kg${p.metalKg < CARGO_CAP ? ` · ${fmtMass(p.metalKg)} in it` : ''}` };
     }),
   };
 }

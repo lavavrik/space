@@ -138,5 +138,28 @@ a new ship has the ML-6 in a 6th slot, and older saves get it fitted). Shift+M t
   with the game) by ring and rock id: the collisions, the radar and the laser see them shrunk or
   gone, and the renderer is told the nearest 24 per layer (`uMined`), which it draws shrunk or not
   at all.
-- **Metals:** the scoop also catches a little of the metal in what the beam breaks up, into the
-  hold (docs/economy.md); one rock in 30 is metal-rich (25–55 % metal, little ice).
+- **Metals:** the scoop also catches a little of the metal in what the beam breaks up, and it goes
+  into the hold (docs/economy.md). Each rock's metal has its own mix (`rockMake`):
+  - **Icy rocks:** mostly nickel-iron, with 3–12 % cobalt and 0.2–1.2 % platinum-group metals.
+  - **Metal-rich rocks (1 in 33):** 25–55 % metal and little ice, in three kinds:
+    - nickel-iron (60 %): about 0.1–0.2 Cr/kg;
+    - cobalt-rich (30 %): 20–35 % cobalt, about 0.4 Cr/kg;
+    - platinum-rich (10 %): 4–12 % platinum-group metals, about 0.5–1.4 Cr/kg.
+
+  The laser's readout shows the rock's kind and metal mix.
+- **Metal-rich rocks look different.** Being metal-rich is decided by the rock's tint draw (under
+  `METAL_RICH`), which the GPU and its CPU replica both compute. The renderer can therefore draw
+  exactly those rocks as a darker warm grey, whatever the ring's colour, with glinting patches of
+  bare metal.
+- **Prospecting (`sim/prospect.ts`):** a radar sweep in a belt picks out the metal-rich rocks
+  within 5 km (rocks) and 40 km (boulders). It keeps the best 6 and follows them round their orbits.
+  - They're ranked by what an hour under your laser at close range would fetch, capped by the metal
+    a small rock actually holds. The laser breaks rock up at a fixed rate, so a richer rock pays
+    faster.
+  - Ranking by the rock's whole metal put 1 km nickel-iron boulders, each holding thousands of
+    tonnes, above everything else.
+  - The finds are marked in the view (numbered diamonds coloured by metal) and listed in the radar
+    window with Cr/h and Cr/kg.
+  - A platinum-rich rock makes about 50–60,000 Cr/h under the ML-6, against about 7,000 for a
+    nickel-iron one.
+- **The laser switches off** when the rock it's cutting is mined away.

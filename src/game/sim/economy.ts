@@ -27,7 +27,7 @@ export const COMMODITIES: Record<Commodity, { name: string; price: number }> = {
   cobalt: { name: 'Cobalt', price: 1 },
   pgm: { name: 'Platinum-group metals', price: 10 },
 };
-/** What a rock's metal is, by mass. */
+/** A typical rock's metal, by mass (each rock's own mix: sim/laser.ts rockMake). */
 export const METAL_SPLIT: Record<Commodity, number> = { nife: 0.9, cobalt: 0.09, pgm: 0.01 };
 
 /** List prices for services. */
@@ -130,12 +130,12 @@ export function sellCargo(g: Game) {
   g.showMsg(`${st.name} · sold the hold for ${fmtCr(v)}`);
 }
 
-/** Put mined metal (kg) in the hold, split by METAL_SPLIT, up to its capacity. Returns what fit. */
-export function stowMetal(g: Game, kg: number) {
+/** Put mined metal (kg) in the hold, split by `mix` (the rock's), up to its capacity. Returns what fit. */
+export function stowMetal(g: Game, kg: number, mix: Record<Commodity, number> = METAL_SPLIT) {
   const room = Math.max(0, CARGO_CAP - cargoMass(g));
   const take = Math.min(kg, room);
   if (take <= 0) return 0;
-  for (const c of Object.keys(METAL_SPLIT) as Commodity[]) g.ship.cargo[c] = (g.ship.cargo[c] ?? 0) + take * METAL_SPLIT[c];
+  for (const c of Object.keys(mix) as Commodity[]) g.ship.cargo[c] = (g.ship.cargo[c] ?? 0) + take * mix[c];
   return take;
 }
 

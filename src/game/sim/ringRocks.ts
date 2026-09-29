@@ -64,7 +64,12 @@ export interface Rock {
   shapeSeed: number;
   /** Its size before any mining (mined rocks shrink: see `minedRocks`). */
   size0: number;
+  /** Its tint draw (0–1): the GPU colours it by this, and under METAL_RICH it's metal-rich (sim/laser.ts rockMake), drawn so. */
+  tint: number;
 }
+
+/** Rocks whose tint draw is under this are metal-rich (1 in 33): the one draw both the GPU and sim/laser.ts read. */
+export const METAL_RICH = 0.03;
 
 /**
  * Rocks mined down (sim/laser.ts): `${ring world}#${rock id}` → the share of its size left (0: gone).
@@ -141,7 +146,7 @@ export function rocksNear(w: World, layer: number, a: THREE.Vector3, b: THREE.Ve
         const left = minedRocks.get(minedKey(w, id)) ?? 1;
         if (left <= 0) continue; // mined away
         const size = size0 * left;
-        st.next(); // (its tint)
+        const tint = st.next();
         // (j, not jj: the angle continues across the wrap, like the sweep's)
         const th = (j + u) * dth + turn;
         const rr = rb + du;
@@ -150,7 +155,7 @@ export function rocksNear(w: World, layer: number, a: THREE.Vector3, b: THREE.Ve
         const pos = new THREE.Vector3().addScaledVector(e1, rr * c).addScaledVector(e2, rr * s).addScaledVector(n, zz);
         // it orbits at its bin's rate (the whole bin turns together, as drawn)
         const vel = new THREE.Vector3().addScaledVector(e1, -rr * s * om).addScaledVector(e2, rr * c * om);
-        out.push({ pos, vel, size, layer, id, shapeSeed: st.s, size0 });
+        out.push({ pos, vel, size, layer, id, shapeSeed: st.s, size0, tint });
       }
     }
   }
