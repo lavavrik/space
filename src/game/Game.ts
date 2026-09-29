@@ -18,6 +18,7 @@ import { closePlanner, openPlanner, requestDisengage } from './sim/planner';
 import { update } from './sim/update';
 import { ShipAudio } from './audio/ShipAudio';
 import type { Prospect } from './sim/prospect';
+import type { Wreck } from './types';
 export type StationTab = 'trade' | 'services' | 'contracts' | 'outfit';
 import { PENALTY, abandon, accept, board, deliverMetal, destSystem, type Contract } from './sim/contracts';
 import type { Body, CurrentSystem, Jump, Message, MsgKind, Planner, Power, Ship, StarSystem, Station, Target } from './types';
@@ -133,6 +134,8 @@ export class Game {
   radar: { sweep: number; seen: Set<string>; rocks: Prospect[] } = { sweep: 0, seen: new Set(), rocks: [] };
   /** Headlights (Shift+L): a floodlight cone along the nose (render/shaders/headlight.glsl). */
   lights = true;
+  /** Your lost ships' wrecks, with the metal they carried (sim/wreck.ts): all systems, the newest few. */
+  wrecks: Wreck[] = [];
   /** Your contracts (sim/contracts.ts), the board jobs you've taken or finished (not offered again), and the contracts window (Shift+J). */
   contracts: Contract[] = [];
   contractsSeen = new Set<string>();

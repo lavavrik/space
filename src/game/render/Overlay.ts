@@ -18,6 +18,7 @@ import { PAD_R, SLOT_H, SLOT_W, toWorld } from '../sim/stationGeom';
 import { padWorld } from '../sim/docking';
 import { contactLabel, known } from '../sim/radar';
 import { liveProspects, prospectNow } from '../sim/prospect';
+import { wreckMetal, wrecksHere } from '../sim/wreck';
 /** Prospect markers' colours by the rock's metal (rgba prefixes). */
 const PROSPECT_COL = { icy: 'rgba(255,230,199,', 'nickel-iron': 'rgba(200,190,175,', 'cobalt-rich': 'rgba(110,160,255,', 'platinum-rich': 'rgba(255,215,120,' } as const;
 
@@ -275,6 +276,7 @@ export class Overlay {
     this.drawStations(g);
     this.drawTraffic(g);
     this.drawProspects(g);
+    this.drawWrecks(g);
     this.drawRockThreat(g);
     this.drawLaserTarget(g);
     this.drawReachable(g);
@@ -702,6 +704,53 @@ export class Overlay {
       ctx.textAlign = 'left';
       ctx.fillText(text, s.x + 8, s.y - 6);
     }
+  }
+
+  /**
+   * Your lost ships' wrecks (sim/wreck.ts): their distress beacons, a blinking red × with the metal
+   * aboard and the distance, from anywhere in the system (and an edge arrow while one is targeted
+   * and off screen). Hidden behind a world, like a ship.
+   */
+  private drawWrecks(g: Game) {
+    const finds = wrecksHere(g);
+    if (!finds.length) return;
+    const { ctx, W, H } = this;
+    const { ship } = g;
+    const blink = 0.55 + 0.45 * Math.sin(performance.now() / 260);
+    ctx.save();
+    ctx.font = this.font(11, SANS);
+    ctx.lineWidth = 2 * this.ui;
+    for (const w of finds) {
+      if (occluder(g.cur.bodies, ship.pos, w.pos)) continue;
+      const rel = this.tmp.subVectors(w.pos, ship.pos);
+      const d = rel.length();
+      const s = this.toScreen(g, rel);
+      const text = `WRECK · ${(wreckMetal(w) / 1000).toFixed(1)} T · ${fmtDist(Math.max(0, d - w.radius))}`;
+      const isT = g.target === w;
+      if (s.behind || s.x < 0 || s.x > W || s.y < 0 || s.y > H) {
+        if (isT) this.edgeArrow(s.v, RED, text);
+        continue;
+      }
+      const r = (isT ? 9 : 6) * this.ui;
+      ctx.strokeStyle = RED + blink.toFixed(2) + ')';
+      ctx.beginPath();
+      ctx.moveTo(s.x - r, s.y - r);
+      ctx.lineTo(s.x + r, s.y + r);
+      ctx.moveTo(s.x + r, s.y - r);
+      ctx.lineTo(s.x - r, s.y + r);
+      ctx.stroke();
+      if (isT) {
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, r + 6 * this.ui, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      if (g.showNames || isT) {
+        ctx.fillStyle = RED + '0.95)';
+        ctx.textAlign = 'left';
+        ctx.fillText(text, s.x + r + 6 * this.ui, s.y + 4 * this.ui);
+      }
+    }
+    ctx.restore();
   }
 
   /** While the target is being scanned, a cyan arc around it fills clockwise with the scan progress. */

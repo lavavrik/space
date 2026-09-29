@@ -1,7 +1,7 @@
 /* Body info panel (I): everything about the current target, and where the ship stands relative to it. */
 import { surfaceDist } from '../sim/terrain';
 import { AU, MSUN, REARTH } from '../constants';
-import { fmtDist, fmtSpeedText, fmtTime } from '../format';
+import { fmtDist, fmtSpeedText, fmtTime, fmtMass } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import { velRel } from '../sim/frame';
@@ -13,6 +13,8 @@ import { atmoOf, type Atmo } from '../sim/atmosphere';
 import { HULL, SIGMA, TEMP, heatCap } from '../sim/thermal';
 import type { InfoView, Readout } from './types';
 import { padCount } from '../sim/stationGeom';
+import { SALVAGE_R, SALVAGE_V, wreckMetal } from '../sim/wreck';
+import type { Wreck } from '../types';
 
 const MEARTH = 5.972e24;
 const DEG = 180 / Math.PI;
@@ -31,6 +33,7 @@ export function buildInfo(g: Game, t: Target): InfoView {
   // what the scanner has revealed so far (see sim/scanner.ts); your own position and speed
   // relative to it come from the ship's instruments and are always shown
   if (t.kind === 'ship') return shipInfo(g, t);
+  if (t.kind === 'wreck') return wreckInfo(g, t);
   const p = scanProgress(g, t);
   const unknown: [string, string] = ['SCAN', scanHint(g, t, p)];
   let physical: [string, string][] = t.kind === 'station' ? stationPhysical(t) : bodyPhysical(g, t);
@@ -67,6 +70,23 @@ function shipInfo(g: Game, t: Npc): InfoView {
     ['RELATIVE SPEED', g.ship.mode === 'ftl' ? 'in FTL' : fmtSpeedText(v.length())],
   ];
   return { title: p >= SCAN_STAGE.type ? `${t.cls} ${t.name}` : 'Unidentified ship', type: p >= SCAN_STAGE.type ? t.cls.toUpperCase() : 'SHIP · UNSCANNED', physical, orbitHead: 'ACTIVITY', orbit, you };
+}
+
+/** Your lost ship's wreck (sim/wreck.ts): what's still aboard, where it is, and how to salvage it. */
+function wreckInfo(g: Game, t: Wreck): InfoView {
+  const kg = (c: 'nife' | 'cobalt' | 'pgm') => t.cargo[c] ?? 0;
+  const physical: [string, string][] = [
+    ['METAL ABOARD', `${fmtMass(wreckMetal(t))}: nickel-iron ${fmtMass(kg('nife'))}, cobalt ${fmtMass(kg('cobalt'))}, PGM ${fmtMass(kg('pgm'))}`],
+    ['SALVAGE', `within ${SALVAGE_R} m, under ${SALVAGE_V} m/s against it`],
+  ];
+  const orbit: [string, string][] = [[t.ground ? 'RESTING ON' : 'FALLING ROUND', t.body]];
+  const rv = g.ship.pos.clone().sub(t.pos);
+  const v = g.ship.vel.clone().add(g.frameBody.vel).sub(t.vel);
+  const you: [string, string | Readout][] = [
+    ['DISTANCE', fmtDist(rv.length())],
+    ['RELATIVE SPEED', g.ship.mode === 'ftl' ? 'in FTL' : fmtSpeedText(v.length())],
+  ];
+  return { title: t.name, type: 'WRECK · DISTRESS BEACON', physical, orbitHead: 'WHERE', orbit, you };
 }
 
 /** What to say where scan data is missing. */

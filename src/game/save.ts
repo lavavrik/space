@@ -27,7 +27,7 @@ import { UTILITY_SLOTS, batteryById, bestOutfit, moduleById } from './outfit/cat
 
 /** The outfit's save format: 2 added utility slots 4 and 5 (belt protection), 3 slot 6 (mining laser). */
 const OUTFIT_REV = 4;
-import type { ApType, Npc, Ship, Target } from './types';
+import type { ApType, Npc, Ship, Target, Wreck } from './types';
 import { systemById } from './universe/galaxy';
 import { resetFrame } from './sim/frame';
 import { arriveAt } from './sim/navigation';
@@ -130,6 +130,8 @@ export interface SaveData extends FlightSave {
   mined?: [string, number][];
   /** Your credits (absent in older saves: you start with START_CREDITS). */
   credits?: number;
+  /** Your lost ships' wrecks (sim/wreck.ts; absent in older saves). */
+  wrecks?: { name: string; sys: string; body: string; rel: V3; relVel: V3; ground: V3 | null; cargo: Wreck['cargo']; lostAt: number }[];
   /** Your contracts, and the board jobs taken or done (sim/contracts.ts; absent in older saves). */
   contracts?: Contract[];
   contractsSeen?: string[];
@@ -237,6 +239,7 @@ export function snapshotGame(g: Game): SaveData | null {
     mined: [...minedRocks],
     credits: g.credits,
     contracts: g.contracts,
+    wrecks: g.wrecks.map((w) => ({ name: w.name, sys: w.sys, body: w.body, rel: v3(w.rel), relVel: v3(w.relVel), ground: w.ground ? v3(w.ground) : null, cargo: { ...w.cargo }, lostAt: w.lostAt })),
     contractsSeen: [...g.contractsSeen],
   };
 }
@@ -406,6 +409,8 @@ function restore(g: Game, d: SaveData, sys: NonNullable<ReturnType<typeof system
   g.simTime = d.simTime;
   g.credits = d.credits ?? START_CREDITS;
   g.contracts = d.contracts ?? [];
+  // (a wreck's position is worked out from its world each step: rel/relVel are what's kept)
+  g.wrecks = (d.wrecks ?? []).map((w) => ({ kind: 'wreck' as const, name: w.name, radius: 30, sys: w.sys, body: w.body, pos: new THREE.Vector3(), vel: new THREE.Vector3(), rel: V(w.rel), relVel: V(w.relVel), ground: w.ground ? V(w.ground) : null, cargo: { ...w.cargo }, lostAt: w.lostAt }));
   g.contractsSeen = new Set(d.contractsSeen ?? []);
   minedRocks.clear();
   for (const [k, left] of d.mined ?? []) minedRocks.set(k, left);

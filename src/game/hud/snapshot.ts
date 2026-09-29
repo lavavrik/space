@@ -32,6 +32,7 @@ import { deflectorFitted, fuelCellFitted, guardFitted, laserFitted } from '../ou
 import { threatNow } from '../sim/belt';
 import { rockLabel } from '../sim/ringRocks';
 import { liveProspects, prospectNow } from '../sim/prospect';
+import { wreckMetal } from '../sim/wreck';
 import { FC_KWH, FC_OFF, FC_ON, O2_PER_H2, o2Days } from '../sim/oxygen';
 import { BOARD_S, MAX_ACTIVE, board, canDeliverMetal, cantTake, reach, type Contract } from '../sim/contracts';
 import { FUELS, fuelPrice, CARGO_CAP, COMMODITIES, cargoMass, cargoValue, fmtCr, refuelQuote, repairQuote, sellPrice, type Commodity } from '../sim/economy';
@@ -289,12 +290,12 @@ function target(g: Game): TargetView {
     const r = resolvable(g, t);
     scan = !g.ship.avionics.scanner ? { text: 'UNSCANNED · NO SCANNER' } : r.ok ? { text: sp > 0 ? `${Math.floor(sp * 100)} % SCANNED · Y` : 'UNSCANNED · Y TO SCAN' } : { text: `OUT OF RESOLUTION · ${fmtDist(r.needDist)}`, warn: true };
   }
-  const d = t.kind === 'station' ? t.pos.distanceTo(ship.pos) - t.size / 2 : t.kind === 'ship' ? t.pos.distanceTo(ship.pos) : surfaceDist(t, ship.pos); // to the ground under you up close
+  const d = t.kind === 'station' ? t.pos.distanceTo(ship.pos) - t.size / 2 : t.kind === 'ship' || t.kind === 'wreck' ? t.pos.distanceTo(ship.pos) : surfaceDist(t, ship.pos); // to the ground under you up close
   const dir = tmp.subVectors(t.pos, ship.pos).normalize();
   const vel = ship.mode === 'ftl' ? ship.travelDir.clone().multiplyScalar(ship.ftlSpeed) : ship.vel.clone();
   vel.add(g.frameBody.vel).sub(t.vel); // everything moves, so close on the target in its own frame
   const closing = vel.dot(dir);
-  const type = sp < SCAN_STAGE.type ? (t.kind === 'ship' ? 'SHIP' : 'UNKNOWN') : t.kind === 'station' ? stationKind(t) : t.kind === 'ship' ? t.cls.toUpperCase() : t.typeName.toUpperCase();
+  const type = sp < SCAN_STAGE.type ? (t.kind === 'ship' ? 'SHIP' : 'UNKNOWN') : t.kind === 'station' ? stationKind(t) : t.kind === 'ship' ? t.cls.toUpperCase() : t.kind === 'wreck' ? `WRECK · ${(wreckMetal(t) / 1000).toFixed(1)} T OF METAL` : t.typeName.toUpperCase();
   // (on a sky station's open deck you're never "inside" it, but docked is docked)
   const inside = g.inStation === t || (!!g.dock?.docked && g.dock.station === t);
   return { name: contactLabel(g, t), type, distance: inside ? (g.dock?.docked ? 'DOCKED' : 'INSIDE') : fmtDist(d), eta: closing > 1 ? `ETA ${fmtTime(d / closing)}` : 'NOT CLOSING', none: false, scan, scanFrac: sp, approach: inside ? null : approachView(g, t, d, closing) };

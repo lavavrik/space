@@ -107,7 +107,27 @@ export interface SkyAnchor {
 }
 
 /** Anything the ship can target. */
-export type Target = Body | Station | Npc;
+export type Target = Body | Station | Npc | Wreck;
+
+/**
+ * A ship you lost, with metal still in its hold (sim/wreck.ts): its beacon marks it, and its metal
+ * can be salvaged. `rel`/`relVel` are relative to its world (`body`, by name); `ground` is set once
+ * it rests on that world's surface (a point in the world's own turning frame).
+ */
+export interface Wreck {
+  kind: 'wreck';
+  name: string;
+  radius: number;
+  sys: string;
+  body: string;
+  pos: Vec3;
+  vel: Vec3;
+  rel: Vec3;
+  relVel: Vec3;
+  ground: Vec3 | null;
+  cargo: Partial<Record<'nife' | 'cobalt' | 'pgm', number>>;
+  lostAt: number;
+}
 
 /** Another ship (sim/traffic.ts): a target like a body or a station, but tiny and without gravity. */
 export interface Npc {

@@ -52,7 +52,7 @@ function milestones(g: Game, t: Target): Raw[] {
     else add(HOLD_OUT, 'HOLD POINT', 'Approach hold point on the slot axis', 'info');
     return out;
   }
-  if (t.kind === 'ship') return out; // another ship: nothing to mark on the way
+  if (t.kind === 'ship' || t.kind === 'wreck') return out; // a ship or a wreck: nothing to mark on the way
   const b = t;
   if (b.kind !== 'star') add(b.soi - b.radius, 'GRAVITY', `Sphere of influence: ${b.name}'s gravity dominates, its frame and orbits from here`, 'info');
   add(dropAlt(b) * MASS_LOCK_K, 'MASS LOCK', "Mass lock: FTL can't be engaged closer", 'warn');

@@ -15,6 +15,7 @@ import { TEMP } from './thermal';
 import { altitudeAt, reliefAmp, surfaceRadius } from './terrain';
 import { RING_HALF_THICK } from './rings';
 import { shipLost } from './contracts';
+import { leaveWreck } from './wreck';
 
 const tmp = new THREE.Vector3(),
   tmp2 = new THREE.Vector3(),
@@ -192,6 +193,8 @@ export function collide(g: Game, dt: number) {
 
 export function destroyShip(g: Game, reason: string, body: Body) {
   const { ship } = g;
+  // yours (not another ship's): a wreck with the hold's metal, for salvage (sim/wreck.ts)
+  if (Object.prototype.hasOwnProperty.call(g, 'traffic') && !ship.dead) leaveWreck(g);
   ship.dead = { t: RESPAWN_TIME, reason, body };
   g.dock = null;
   g.dockRequest = null;
@@ -244,5 +247,5 @@ export function respawn(g: Game) {
   ship.outfit.radiatorsOut = 0;
   lookAt(ship, b.pos);
   ship.dead = null;
-  g.showMsg(`Replacement ship delivered ${fmtDist(alt)} above ${b.name} · tanks full${lost ? ' · the cargo was lost' : ''}`);
+  g.showMsg(`Replacement ship delivered ${fmtDist(alt)} above ${b.name} · tanks full${lost ? (g.wrecks.some((w) => g.simTime - w.lostAt < 60) ? " · the wreck's beacon marks your cargo: salvage it" : ' · the cargo was lost') : ''}`);
 }

@@ -22,7 +22,7 @@ export function openPlanner(g: Game) {
   }
   // a targeted station plans an orbit around the world it circles
   // (a ship has no orbit to plan round: plan round what you're near)
-  const t = g.target && g.target.kind === 'station' ? g.target.parent : g.target && g.target.kind !== 'ship' ? g.target : null;
+  const t = g.target && g.target.kind === 'station' ? g.target.parent : g.target && g.target.kind !== 'ship' && g.target.kind !== 'wreck' ? g.target : null;
   const b = t || (ship.grav && ship.grav.body) || dominantBody(g.cur, ship.pos);
   const curAlt = ship.pos.distanceTo(b.pos) - b.radius;
   g.planner = { body: b, type: oc.caps.types[0], alt: defaultOrbitAlt(b), dir: 1, curAlt };
