@@ -16,6 +16,7 @@
  * ship isn't saved (the last save stands).
  */
 import { minedRocks } from './sim/ringRocks';
+import { START_CREDITS } from './sim/economy';
 import type { Game } from './Game';
 import { THREE } from './lib/three';
 import { ALL_COMPUTERS, type Avionics } from './avionics/catalog';
@@ -58,6 +59,7 @@ export interface ShipSave {
   batt: number;
   temp: number;
   hull?: number;
+  cargo?: Ship['cargo'];
   vent: boolean;
   sunTrack: boolean;
   landed: string | null;
@@ -120,6 +122,8 @@ export interface SaveData extends FlightSave {
   traffic?: NpcSave[];
   /** Ring rocks mined down: key → share of their size left (sim/ringRocks.ts minedRocks). */
   mined?: [string, number][];
+  /** Your credits (absent in older saves: you start with START_CREDITS). */
+  credits?: number;
 }
 
 const v3 = (v: THREE.Vector3): V3 => [v.x, v.y, v.z];
@@ -149,6 +153,7 @@ function snapshotFlight(c: Game): FlightSave {
       batt: ship.batt,
       temp: ship.temp,
       hull: ship.hull,
+      cargo: { ...ship.cargo },
       vent: ship.vent,
       sunTrack: ship.sunTrack,
       landed: ship.landed?.name ?? null,
@@ -219,6 +224,7 @@ export function snapshotGame(g: Game): SaveData | null {
     settings: { lights: g.lights, orbitPreview: g.orbitPreview, radarVisible: g.radarVisible },
     traffic: g.traffic.map(snapshotNpc).filter((n): n is NpcSave => !!n),
     mined: [...minedRocks],
+    credits: g.credits,
   };
 }
 
@@ -314,7 +320,7 @@ function restoreFlight(c: Game, f: FlightSave) {
     dock: unit(s.avionics.dock) as Avionics['dock'],
   };
   Object.assign(ship, {
-    prop: s.prop, exotic: s.exotic, batt: s.batt, temp: s.temp, hull: s.hull ?? 1, vent: s.vent, sunTrack: s.sunTrack,
+    prop: s.prop, exotic: s.exotic, batt: s.batt, temp: s.temp, hull: s.hull ?? 1, cargo: { ...(s.cargo ?? {}) }, vent: s.vent, sunTrack: s.sunTrack,
     fa: s.fa, decoupled: s.decoupled, cruise: s.cruise, throttle: s.throttle, ftlSpeed: s.ftlSpeed, mode: s.mode,
     ftlCharge: 0, tanker: null, dead: null,
   });
@@ -384,6 +390,7 @@ function restore(g: Game, d: SaveData, sys: NonNullable<ReturnType<typeof system
   const { ship } = g;
   // the clock first: loading the system puts every world and station where it is at this time
   g.simTime = d.simTime;
+  g.credits = d.credits ?? START_CREDITS;
   minedRocks.clear();
   for (const [k, left] of d.mined ?? []) minedRocks.set(k, left);
   g.loadSystem(sys);

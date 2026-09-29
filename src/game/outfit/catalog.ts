@@ -30,6 +30,7 @@ interface ModuleBase {
   name: string;
   blurb: string;
   mass: number; // kg
+  price: number; // Cr, list (sim/economy.ts: stations vary it)
 }
 
 export interface RadiatorModule extends ModuleBase {
@@ -113,62 +114,62 @@ export const PUMP_CARNOT = 0.5;
 
 export const MODULES: Module[] = [
   {
-    id: 'kr-12', kind: 'radiator', maker: 'Kelvin Dynamics', model: 'KR-12', name: 'Frostline', mass: 1800,
+    id: 'kr-12', kind: 'radiator', maker: 'Kelvin Dynamics', model: 'KR-12', name: 'Frostline', mass: 1800, price: 12000,
     blurb: '2 × 600 m² fins, 2,400 m² radiating: about doubles how fast the hull sheds heat',
     caps: { area: 1200, deployTime: 20 },
   },
   {
-    id: 'kr-25', kind: 'radiator', maker: 'Kelvin Dynamics', model: 'KR-25', name: 'Glacier', mass: 3500,
+    id: 'kr-25', kind: 'radiator', maker: 'Kelvin Dynamics', model: 'KR-25', name: 'Glacier', mass: 3500, price: 24000,
     blurb: '2 × 1,250 m² fins, 5,000 m² radiating: about triples it',
     caps: { area: 2500, deployTime: 30 },
   },
   {
-    id: 'fs-1', kind: 'scoop', maker: 'Aerodyne Fuel Systems', model: 'FS-1', name: 'Draught', mass: 2000,
+    id: 'fs-1', kind: 'scoop', maker: 'Aerodyne Fuel Systems', model: 'FS-1', name: 'Draught', mass: 2000, price: 15000,
     blurb: 'Hydrogen from gas giants and stellar coronae: 1.5–2.5 t/s. No exotic matter',
     caps: { exotic: false, rate: 1 },
   },
   {
-    id: 'fs-3', kind: 'scoop', maker: 'Aerodyne Fuel Systems', model: 'FS-3', name: 'Corona', mass: 3500,
+    id: 'fs-3', kind: 'scoop', maker: 'Aerodyne Fuel Systems', model: 'FS-3', name: 'Corona', mass: 3500, price: 30000,
     blurb: 'Hydrogen, plus exotic matter from stellar coronae (up to 1.2 kg/s)',
     caps: { exotic: true, rate: 1 },
   },
   {
-    id: 'fs-5', kind: 'scoop', maker: 'Aerodyne Fuel Systems', model: 'FS-5', name: 'Maelstrom', mass: 5500,
+    id: 'fs-5', kind: 'scoop', maker: 'Aerodyne Fuel Systems', model: 'FS-5', name: 'Maelstrom', mass: 5500, price: 60000,
     blurb: 'Twice the intake of the FS-3: hydrogen and exotic matter',
     caps: { exotic: true, rate: 2 },
   },
   {
-    id: 'md-4', kind: 'deflector', maker: 'Tessera Shielding', model: 'MD-4', name: 'Aegis', mass: 2500,
+    id: 'md-4', kind: 'deflector', maker: 'Tessera Shielding', model: 'MD-4', name: 'Aegis', mass: 2500, price: 20000,
     blurb: 'Magnetic field against ring dust: cuts the erosion by 90 %. Draws 800 kW while it works',
     caps: { block: 0.9, kw: 800 },
   },
   {
-    id: 'md-8', kind: 'deflector', maker: 'Tessera Shielding', model: 'MD-8', name: 'Bulwark', mass: 4000,
+    id: 'md-8', kind: 'deflector', maker: 'Tessera Shielding', model: 'MD-8', name: 'Bulwark', mass: 4000, price: 45000,
     blurb: 'A stronger field: cuts the erosion by 98 %. Draws 1.5 MW while it works',
     caps: { block: 0.98, kw: 1500 },
   },
   {
-    id: 'cr-2', kind: 'guard', maker: 'Tessera Shielding', model: 'CR-2', name: 'Sentinel', mass: 600,
+    id: 'cr-2', kind: 'guard', maker: 'Tessera Shielding', model: 'CR-2', name: 'Sentinel', mass: 600, price: 8000,
     blurb: 'Collision warning in ring belts: rocks of 10 m and up on a collision course, 5 km ahead',
     caps: { minSize: 10, range: 5000, avoid: false, kw: 150 },
   },
   {
-    id: 'cr-5', kind: 'guard', maker: 'Tessera Shielding', model: 'CR-5', name: 'Warden', mass: 900,
+    id: 'cr-5', kind: 'guard', maker: 'Tessera Shielding', model: 'CR-5', name: 'Warden', mass: 900, price: 22000,
     blurb: 'Tracks every rock, pebbles too (1.5 km ahead; bigger ones 8 km), and nudges you clear (with flight assist on)',
     caps: { minSize: 1.5, range: 8000, avoid: true, kw: 250 },
   },
   {
-    id: 'ml-2', kind: 'laser', maker: 'Tessera Shielding', model: 'ML-2', name: 'Ablator', mass: 1500,
+    id: 'ml-2', kind: 'laser', maker: 'Tessera Shielding', model: 'ML-2', name: 'Ablator', mass: 1500, price: 15000,
     blurb: 'Mining laser: boils ice off ring rocks for the fuel scoop to catch. 200 kW, out to 600 m',
     caps: { kw: 200, range: 600 },
   },
   {
-    id: 'ml-6', kind: 'laser', maker: 'Tessera Shielding', model: 'ML-6', name: 'Sunspear', mass: 3000,
+    id: 'ml-6', kind: 'laser', maker: 'Tessera Shielding', model: 'ML-6', name: 'Sunspear', mass: 3000, price: 40000,
     blurb: 'Mining laser: 600 kW, out to 1.5 km. Three times the ice, and three times the heat',
     caps: { kw: 600, range: 1500 },
   },
   {
-    id: 'kh-2', kind: 'heatpump', maker: 'Kelvin Dynamics', model: 'KH-2', name: 'Coldsink', mass: 1200,
+    id: 'kh-2', kind: 'heatpump', maker: 'Kelvin Dynamics', model: 'KH-2', name: 'Coldsink', mass: 1200, price: 18000,
     blurb: 'Runs the radiator loop up to 250 K hotter than the hull; draws up to 2 MW. Needs radiators',
     caps: { maxKW: 2000, lift: 250 },
   },
@@ -186,22 +187,22 @@ export interface BatteryModule extends ModuleBase {
 
 export const BATTERIES: BatteryModule[] = [
   {
-    id: 'eb-200', kind: 'battery', maker: 'Voltaic Systems', model: 'EB-200', name: 'Cell', mass: 1300,
+    id: 'eb-200', kind: 'battery', maker: 'Voltaic Systems', model: 'EB-200', name: 'Cell', mass: 1300, price: 4000,
     blurb: 'Stock lithium-iron pack: 200 kWh, 5C discharge, 1C charge',
     caps: { capacity: 200, maxKW: 1000, chargeKW: 200 },
   },
   {
-    id: 'eb-500', kind: 'battery', maker: 'Voltaic Systems', model: 'EB-500', name: 'Reservoir', mass: 3200,
+    id: 'eb-500', kind: 'battery', maker: 'Voltaic Systems', model: 'EB-500', name: 'Reservoir', mass: 3200, price: 12000,
     blurb: 'Bigger pack: 500 kWh, 5C discharge, 1C charge',
     caps: { capacity: 500, maxKW: 2500, chargeKW: 500 },
   },
   {
-    id: 'hp-300', kind: 'battery', maker: 'Voltaic Systems', model: 'HP-300', name: 'Surge', mass: 3800,
+    id: 'hp-300', kind: 'battery', maker: 'Voltaic Systems', model: 'HP-300', name: 'Surge', mass: 3800, price: 25000,
     blurb: 'Titanate power cells: 300 kWh, 30C discharge (FTL charges at full rate, jumps in ~14 s), 10C charge',
     caps: { capacity: 300, maxKW: 9000, chargeKW: 3000 },
   },
   {
-    id: 'hp-600', kind: 'battery', maker: 'Voltaic Systems', model: 'HP-600', name: 'Tempest', mass: 7500,
+    id: 'hp-600', kind: 'battery', maker: 'Voltaic Systems', model: 'HP-600', name: 'Tempest', mass: 7500, price: 60000,
     blurb: 'Titanate plus supercapacitor bank: 600 kWh, 50C discharge (hyperjumps charge at full rate, 5 s), 10C charge',
     caps: { capacity: 600, maxKW: 30000, chargeKW: 6000 },
   },

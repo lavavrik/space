@@ -229,10 +229,12 @@ export function respawn(g: Game) {
   refillShip(g);
   ship.temp = TEMP.start;
   ship.hull = 1;
+  const lost = Object.values(ship.cargo).some((kg) => (kg ?? 0) > 1);
+  ship.cargo = {}; // (the hold went down with the ship)
   ship.vent = false; // the replacement comes with the same modules, stowed
   ship.outfit.deploy = false;
   ship.outfit.radiatorsOut = 0;
   lookAt(ship, b.pos);
   ship.dead = null;
-  g.showMsg(`Replacement ship delivered ${fmtDist(alt)} above ${b.name} · tanks full`);
+  g.showMsg(`Replacement ship delivered ${fmtDist(alt)} above ${b.name} · tanks full${lost ? ' · the cargo was lost' : ''}`);
 }

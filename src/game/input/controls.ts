@@ -2,6 +2,7 @@ import { TANKER_TIME } from '../constants';
 import { dockKey } from '../sim/docking';
 import { catapultLaunch } from '../sim/catapult';
 import { toggleLaser } from '../sim/laser';
+import { PRICE, fmtCr, refuelQuote } from '../sim/economy';
 import { stopAutodock } from '../sim/autodock';
 import { togglePeriscope, wheelZoom } from '../sim/periscope';
 import { changeWarp, stopWarp } from '../sim/timewarp';
@@ -166,10 +167,12 @@ export function onPress(g: Game, code: string) {
         g.showMsg('Tanker call cancelled');
       } else if (ship.mode !== 'normal') g.showMsg('Drop out of FTL to meet a tanker', 'warn');
       else if (g.curSpeed > 200) g.showMsg('Slow below 200 m/s to meet a tanker', 'warn');
+      else if (g.credits < PRICE.tankerCall) g.showMsg(`A tanker's call-out is ${fmtCr(PRICE.tankerCall)} · you have ${fmtCr(g.credits)}`, 'warn');
       else {
         ship.tanker = { t: TANKER_TIME };
         startTankerGuide(g, ship.tanker);
-        g.showMsg(`Tanker on its way · hold still for ${TANKER_TIME} s`);
+        const q = refuelQuote(g, null, PRICE.tankerMarkup);
+        g.showMsg(`Tanker on its way · hold still for ${TANKER_TIME} s · ${fmtCr(PRICE.tankerCall + q.cost)} with the fuel`);
       }
       break;
     case 'KeyF':

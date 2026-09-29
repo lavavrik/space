@@ -30,6 +30,8 @@ import { approachView } from './approach';
 import { deflectorFitted, guardFitted, laserFitted } from '../outfit/catalog';
 import { threatNow } from '../sim/belt';
 import { rockLabel } from '../sim/ringRocks';
+import { CARGO_CAP, COMMODITIES, cargoMass, cargoValue, fmtCr, refuelQuote, repairQuote, type Commodity } from '../sim/economy';
+import { fitPrice } from '../outfit/fit';
 import { HULL_WARN, heatDamageRate } from '../sim/damage';
 import { buildInfo, stationKind } from './info';
 import type { AutopilotView, AvionicsSlotView, ElectricalView, ModuleIcon, RadarView, OutfitView, FlightView, GaugeBadge, GaugeView, Lamp, NavView, GuideView, HudSnapshot, LocationView, Pill, PlannerView, Readout, SystemsView, TargetView } from './types';
@@ -68,6 +70,10 @@ export function buildSnapshot(g: Game): HudSnapshot {
           ],
           sky: !!g.dock.station.sky,
           hullFull: g.ship.hull >= 0.999,
+          credits: fmtCr(g.credits),
+          refuel: fmtCr(refuelQuote(g, g.dock.station).cost),
+          repair: fmtCr(repairQuote(g, g.dock.station)),
+          cargo: cargoMass(g) > 0.5 ? fmtCr(cargoValue(g, g.dock.station)) : null,
           tanksFull: g.ship.prop >= SHIP.propCap - 1 && g.ship.exotic >= SHIP.exoticCap - 0.01,
         }
       : null,
@@ -240,7 +246,7 @@ function flight(g: Game): FlightView {
   if (g.autodock) pills.push({ text: `AUTO-DOCK · ${g.autodock.phase.toUpperCase()}`, kind: 'ftl' });
   if (g.ascent) pills.push({ text: 'ASCENT PROGRAM', kind: 'ftl' });
   const lz = g.laser;
-  if (lz.on) pills.push({ text: lz.rate > 0 ? `LASER · +${lz.rate.toFixed(0)} kg/s` : `LASER · ${lz.hit ? lz.why || 'no yield' : lz.why || 'firing'}`.toUpperCase(), kind: lz.rate > 0 ? 'on' : 'warn' });
+  if (lz.on) pills.push({ text: lz.rate > 0 ? `LASER · +${lz.rate.toFixed(0)} kg/s${lz.metal > 0.05 ? ` · METAL +${lz.metal.toFixed(1)} kg/s` : ''}` : `LASER · ${lz.hit ? lz.why || 'no yield' : lz.why || 'firing'}`.toUpperCase(), kind: lz.rate > 0 ? 'on' : 'warn' });
   const th = g.rockThreat;
   if (th) pills.push({ text: `ROCK ${rockLabel(th.size)} · ${Math.max(0, threatNow(g, th).t).toFixed(1)} s${th.avoiding ? ' · AVOIDING' : ''}`, kind: 'warn' });
   if (g.dock) pills.push({ text: g.dock.docked ? `DOCKED · PAD ${g.dock.pad + 1}` : `PAD ${g.dock.pad + 1} GRANTED`, kind: g.dock.docked ? 'on' : 'ftl' });
@@ -324,6 +330,7 @@ function systems(g: Game): SystemsView {
       },
       hullGauge(g),
       integrityGauge(g),
+      cargoGauge(g),
     ],
     note,
   };
@@ -354,6 +361,14 @@ function hullGauge(g: Game): GaugeView {
   if (o.radiatorsOut > 0) badges.push({ icon: 'radiators', title: o.radiatorsOut < 1 ? `Radiators ${o.deploy ? 'deploying' : 'stowing'} (${Math.round(o.radiatorsOut * 100)} %)` : 'Radiators out' });
   if (h && h.pumpW > 0) badges.push({ icon: 'pump', title: `Heat pump: ${fmtPower(h.pumpW / 1000)}, loop at ${h.radTemp.toFixed(0)} K` });
   return { label: 'HULL', value: `${T.toFixed(0)} K`, frac: (T - 200) / (TEMP.fail - 200), variant: 'heat', sub: { text, warn: T >= TEMP.warn }, badges };
+}
+
+/** The hold (sim/economy.ts), and your credits under it. */
+function cargoGauge(g: Game): GaugeView {
+  const kg = cargoMass(g);
+  const c = g.ship.cargo;
+  const what = kg > 0.5 ? ` · ${(Object.keys(COMMODITIES) as Commodity[]).filter((k) => (c[k] ?? 0) > 0.5).map((k) => `${COMMODITIES[k].name.toLowerCase()} ${fmtMass(c[k]!)}`).join(', ')}` : '';
+  return { label: 'CARGO', value: `${fmtMass(kg)} / ${fmtMass(CARGO_CAP)}`, frac: kg / CARGO_CAP, sub: { text: `${fmtCr(g.credits)}${what}` } };
 }
 
 /** Structural integrity (sim/damage.ts): the bar, and what's wearing it or how to mend it. */
@@ -484,10 +499,10 @@ function outfitView(g: Game): OutfitView {
   const bSpecs = (b: BatteryModule) => `${fmtEnergy(b.caps.capacity)} · ${fmtPower(b.caps.maxKW)} out (${b.caps.maxKW / b.caps.capacity}C) · ${fmtPower(b.caps.chargeKW)} in · ${fmtMass(b.mass)}`;
   return {
     station: st?.name ?? null,
-    battery: { unit: moduleLabel(o.battery), specs: bSpecs(o.battery), options: st ? BATTERIES.map((b) => ({ id: b.id, unit: moduleLabel(b), specs: `${b.blurb} · ${bSpecs(b)}`, current: b === o.battery })) : [] },
+    battery: { unit: moduleLabel(o.battery), specs: bSpecs(o.battery), options: st ? BATTERIES.map((b) => ({ id: b.id, unit: moduleLabel(b), specs: `${b.blurb} · ${bSpecs(b)} · ${fmtCr(fitPrice(st, b.price))}`, current: b === o.battery })) : [] },
     hint: 'Modules are fitted while docked at a station (target one, K for a pad, land on it)',
     slots: o.slots.map((m) => (m ? { unit: moduleLabel(m), blurb: m.blurb, specs: specsOf(m), empty: false, icon: m.kind } : { unit: 'empty', blurb: '', specs: '', empty: true, icon: 'empty' as const })),
-    catalogue: st ? MODULES.map((m) => ({ id: m.id, unit: moduleLabel(m), kind: { radiator: 'RADIATORS', heatpump: 'HEAT PUMP', scoop: 'FUEL SCOOP', deflector: 'DEFLECTOR', guard: 'COLLISION RADAR', laser: 'MINING LASER' }[m.kind], blurb: m.blurb, specs: specsOf(m) })) : [],
+    catalogue: st ? MODULES.map((m) => ({ id: m.id, unit: moduleLabel(m), kind: { radiator: 'RADIATORS', heatpump: 'HEAT PUMP', scoop: 'FUEL SCOOP', deflector: 'DEFLECTOR', guard: 'COLLISION RADAR', laser: 'MINING LASER' }[m.kind], blurb: m.blurb, specs: `${specsOf(m)} · ${fmtCr(fitPrice(st, m.price))}` })) : [],
     radiators: {
       fitted: rads.length > 0,
       out: o.radiatorsOut,

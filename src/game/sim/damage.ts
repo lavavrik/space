@@ -9,7 +9,7 @@
  *   - heat — above TEMP.critical the structure weakens, faster the hotter it gets (TEMP.fail is
  *     still immediate failure).
  *
- * A docked ship is repaired at the station (free until there's an economy: SPACE-51).
+ * A docked ship is repaired at the station, for credits (sim/economy.ts buyRepair).
  */
 import type { Game } from '../Game';
 import type { Body } from '../types';
@@ -67,11 +67,4 @@ export function heatDamageRate(T: number) {
 export function updateDamage(g: Game, dt: number) {
   const r = heatDamageRate(g.ship.temp);
   if (r > 0 && dt > 0) hurt(g, r * dt, `Hull failed from heat near ${g.cur.star.name}`, g.cur.star);
-}
-
-/** Docked services: repair the hull. */
-export function repairDocked(g: Game) {
-  if (!g.dock?.docked) return;
-  g.ship.hull = 1;
-  g.showMsg(`${g.dock.station.name} · hull repaired`);
 }

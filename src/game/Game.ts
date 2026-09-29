@@ -28,11 +28,11 @@ import { ZOOM_START, updatePeriscope } from './sim/periscope';
 import { startPivot } from './sim/pivot';
 import { contactLabel, radarContacts, radarSweep } from './sim/radar';
 import { toggleScan } from './sim/scanner';
-import { dockKey, launch, refuelDocked, type Dock } from './sim/docking';
+import { dockKey, launch, type Dock } from './sim/docking';
 import { catapultLaunch, type Ascent } from './sim/catapult';
 import type { RockThreat } from './sim/belt';
 import { laserOff, type LaserState } from './sim/laser';
-import { repairDocked } from './sim/damage';
+import { START_CREDITS, buyFuel, buyRepair, sellCargo } from './sim/economy';
 import type { AutoPhase } from './sim/autodock';
 import { fitBattery, fitModule, removeModule } from './outfit/fit';
 import { AUTOSAVE_S, clearSave, loadGame, saveGame } from './save';
@@ -44,7 +44,7 @@ export function newShip(): Ship {
     pos: new THREE.Vector3(), vel: new THREE.Vector3(), q: new THREE.Quaternion(),
     mode: 'normal', throttle: 0, cruise: false, ftlSpeed: 0, ftlCharge: 0, vmax: 0,
     fa: true, decoupled: false, travelDir: new THREE.Vector3(0, 0, -1), ap: null, landed: null, dead: null, grav: null,
-    hull: 1, prop: SHIP.propCap, exotic: SHIP.exoticCap, batt: BATTERIES[BATTERIES.length - 1].caps.capacity,
+    hull: 1, cargo: {}, prop: SHIP.propCap, exotic: SHIP.exoticCap, batt: BATTERIES[BATTERIES.length - 1].caps.capacity,
     burnRate: 0, sunTrack: false, tanker: null, scoop: '', scoopRate: { prop: 0, exotic: 0 }, avionics: defaultAvionics(), temp: TEMP.start, vent: false, outfit: bestOutfit(),
     breakers: { thrust: true, ftl: true, charge: true, radar: true, shield: true, guard: true },
   };
@@ -145,6 +145,8 @@ export class Game {
 
   /** Names on the HUD's markers (bodies, stations, ships, stars); Shift+N turns them off for a clean view. */
   showNames = true;
+  /** Your credits (sim/economy.ts): yours, not the ship's, so a replacement keeps them. */
+  credits = START_CREDITS;
   helpVisible = false; // Tab opens the controls (the hint under the system name says so)
   /** Body info panel (I), shown in place of the controls list while open. */
   infoVisible = false;
@@ -328,12 +330,17 @@ export class Game {
 
   /** Docked panel buttons. */
   refuelDocked() {
-    refuelDocked(this);
+    buyFuel(this);
     this.invalidateHud();
   }
 
   repairDocked() {
-    repairDocked(this);
+    buyRepair(this);
+    this.invalidateHud();
+  }
+
+  sellCargo() {
+    sellCargo(this);
     this.invalidateHud();
   }
 

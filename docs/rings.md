@@ -133,4 +133,5 @@ a new ship has the ML-6 in a 6th slot, and older saves get it fitted). Shift+M t
   with the game) by ring and rock id: the collisions, the radar and the laser see them shrunk or
   gone, and the renderer is told the nearest 24 per layer (`uMined`), which it draws shrunk or not
   at all.
-- Metals (stony and metallic rocks, cargo) wait for a hold and an economy (SPACE-51).
+- **Metals:** the scoop also catches a little of the metal in what the beam breaks up, into the
+  hold (docs/economy.md); one rock in 30 is metal-rich (25–55 % metal, little ice).

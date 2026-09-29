@@ -282,7 +282,7 @@ export interface HudSnapshot {
   outfit: OutfitView | null;
   radar: RadarView | null;
   /** Docked at a station: its name, the pad, and what the station is doing for the ship. */
-  docked: { station: string; pad: number; notes: string[]; sky: boolean; hullFull: boolean; tanksFull: boolean } | null;
+  docked: { station: string; pad: number; notes: string[]; sky: boolean; hullFull: boolean; tanksFull: boolean; credits: string; refuel: string; repair: string; cargo: string | null } | null;
   nav: NavView | null;
   guide: GuideView | null;
 }

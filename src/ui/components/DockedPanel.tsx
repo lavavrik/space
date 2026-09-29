@@ -5,14 +5,16 @@ import { Panel } from './primitives';
 interface Actions {
   refuel: () => void;
   repair: () => void;
+  sell: () => void;
   outfit: () => void;
   launch: () => void;
   catapult: () => void;
 }
 
 /**
- * Docked at a station (sim/docking.ts): where, and the station's services. Refuelling is free for
- * now; shore power charges the battery and the station cools the hull on its own.
+ * Docked at a station (sim/docking.ts): where, your credits, and the station's services at its prices
+ * (sim/economy.ts): fuel, repairs, buying your hold's metal, outfitting. Shore power charges the
+ * battery and the station cools the hull on its own, free.
  */
 export function DockedPanel({ d, act }: { d: NonNullable<HudSnapshot['docked']>; act: Actions }) {
   return (
@@ -20,6 +22,7 @@ export function DockedPanel({ d, act }: { d: NonNullable<HudSnapshot['docked']>;
       <div className="dkname">
         <Anchor weight="duotone" /> {d.station}
       </div>
+      <div className="ohint">You have {d.credits}</div>
       {d.notes.map((n) => (
         <div key={n} className="ohint">
           {n}
@@ -27,11 +30,16 @@ export function DockedPanel({ d, act }: { d: NonNullable<HudSnapshot['docked']>;
       ))}
       <div className="obtns">
         <button type="button" className="obtn" onClick={act.refuel} disabled={d.tanksFull}>
-          {d.tanksFull ? 'tanks full' : 'refuel H₂ + exotic'}
+          {d.tanksFull ? 'tanks full' : `refuel H₂ + exotic · ${d.refuel}`}
         </button>
         <button type="button" className="obtn" onClick={act.repair} disabled={d.hullFull}>
-          {d.hullFull ? 'hull sound' : 'repair hull'}
+          {d.hullFull ? 'hull sound' : `repair hull · ${d.repair}`}
         </button>
+        {d.cargo && (
+          <button type="button" className="obtn" onClick={act.sell}>
+            sell the hold · {d.cargo}
+          </button>
+        )}
         <button type="button" className="obtn" onClick={act.outfit}>
           outfitting (⇧U)
         </button>

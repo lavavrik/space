@@ -14,15 +14,16 @@ import { advanceBodies, frameVel, relVel, ringFrameOf, syncFrame, updateFrame } 
 import { maybeFtlLeg } from './planner';
 import { updateScan } from './scanner';
 import { updateNav } from './navroute';
-import { refillShip, scoop, shipMass, solarPower } from './resources';
+import { scoop, shipMass, solarPower } from './resources';
 import { crossSection, updateThermal } from './thermal';
-import { beginPower, grant, settleBattery } from './power';
+import { battCap, beginPower, grant, settleBattery } from './power';
 import { railsStep, stopWarp, warpBlocked } from './timewarp';
 import { updatePivot } from './pivot';
 import { updateRadar } from './radar';
 import { autodock } from './autodock';
 import { ascent, stopAscent } from './catapult';
 import { updateDamage } from './damage';
+import { PRICE, fmtCr, refuelQuote } from './economy';
 import { ringContact } from './ringContact';
 import { updateBelt } from './belt';
 import { mineRock, updateLaser } from './laser';
@@ -293,7 +294,18 @@ function updateTanker(g: Game, dt: number) {
   } else if ((ship.tanker.t -= dt) <= 0) {
     ship.tanker.docked = true;
     ship.tanker = null;
-    refillShip(g);
-    g.showMsg('Tanker docked · all tanks and the battery are full');
+    // the call-out fee, then its fuel at a mark-up as far as your credits go (the battery's charge
+    // comes free with the call)
+    g.credits = Math.max(0, g.credits - PRICE.tankerCall);
+    const q = refuelQuote(g, null, PRICE.tankerMarkup);
+    const prop = Math.min(q.prop, g.credits / q.pp);
+    g.credits -= prop * q.pp;
+    const exotic = Math.min(q.exotic, g.credits / q.px);
+    g.credits -= exotic * q.px;
+    ship.prop += prop;
+    ship.exotic += exotic;
+    ship.batt = battCap(ship);
+    const cost = PRICE.tankerCall + prop * q.pp + exotic * q.px;
+    g.showMsg(prop < q.prop - 1 ? `Tanker docked · ${fmtCr(cost)} · out of credits: tanks part-filled` : `Tanker docked · tanks and battery full · ${fmtCr(cost)}`, prop < q.prop - 1 ? 'warn' : '');
   }
 }

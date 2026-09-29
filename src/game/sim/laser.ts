@@ -20,6 +20,7 @@ import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import { laserFitted, scoopFitted } from '../outfit/catalog';
 import { grant } from './power';
+import { stowMetal } from './economy';
 import { RING_HALF_THICK } from './rings';
 import { COLLIDE_LAYERS, minedKey, minedRocks, rockLabel, rockMass, rockRay, rocksNear, type Rock } from './ringRocks';
 
@@ -36,10 +37,13 @@ export interface LaserState {
   hit: { id: string; size: number; size0: number; make: RockMake; center: THREE.Vector3; normal: THREE.Vector3; dist: number } | null;
   /** Propellant it's yielding (kg/s), and why none if none. */
   rate: number;
+  /** Rock the beam breaks up and scatters (kg/s), and metal the scoop catches from it (kg/s). */
+  removal: number;
+  metal: number;
   why: string;
 }
 
-export const laserOff = (): LaserState => ({ on: false, end: null, hit: null, rate: 0, why: '' });
+export const laserOff = (): LaserState => ({ on: false, end: null, hit: null, rate: 0, removal: 0, metal: 0, why: '' });
 
 function idHash(id: string, salt: number) {
   let h = 2166136261 ^ salt;
@@ -57,14 +61,27 @@ export interface RockMake {
   metal: number;
 }
 export function rockMake(id: string): RockMake {
+  // one in METALLIC is a metal-rich rock that fell in (or a moonlet's core): little ice, a lot of metal
+  if (idHash(id, 3) < METALLIC) {
+    const ice = 0.05 + 0.25 * idHash(id, 5),
+      metal = 0.25 + 0.3 * idHash(id, 7);
+    return { ice, rock: 1 - ice - metal, metal };
+  }
   const ice = rockIce(id);
   const metal = (1 - ice) * (0.05 + 0.25 * idHash(id, 7));
   return { ice, rock: 1 - ice - metal, metal };
 }
+/** The share of a giant's ring rocks that are metal-rich. */
+const METALLIC = 0.03;
+/**
+ * Metal the scoop's magnetic separator catches, per kg of rock the beam breaks up and scatters (most
+ * of the grains fly off): ~0.7 kg/s from an ice rock under the ML-6, ~30 from a metal-rich one.
+ */
+const METAL_CATCH = 1e-4;
 
 /**
- * Rock the beam breaks up and scatters, per kg of propellant the scoop catches: most of what it
- * frees is lost. Sized so a big rock lasts about a tank: ~100 m across, ~8 minutes under the ML-6;
+ * Rock the beam breaks up and scatters, per kg of ice-equivalent it frees (what a pure-ice rock would
+ * give the scoop): most of it is lost. Sized so a big rock lasts about a tank: ~100 m across, ~8 minutes under the ML-6;
  * a 20 m one, seconds; pebbles, a blink. Below GONE of its size it's gone.
  */
 const DISPERSE = 2000,
@@ -90,7 +107,7 @@ export function updateLaser(g: Game) {
   const L = g.laser;
   L.end = null;
   L.hit = null;
-  L.rate = 0;
+  L.rate = L.removal = L.metal = 0;
   L.why = '';
   power.laserKW = 0;
   const unit = laserFitted(ship.outfit);
@@ -157,23 +174,36 @@ export function updateLaser(g: Game) {
   }
   const r = unit.caps.range;
   const far = t < r / 3 ? 1 : Math.max(0, (r - t) / (r * (2 / 3)));
-  L.rate = YIELD_PER_MW * (kw / 1000) * make.ice * far;
-  if (L.rate <= 0) L.why = 'out of range';
+  // the rock broken up goes by the beam's power and range; the ice in it comes off as propellant,
+  // and a little of its metal is caught
+  const freed = YIELD_PER_MW * (kw / 1000) * far;
+  L.removal = freed * DISPERSE;
+  L.rate = freed * make.ice;
+  L.metal = L.removal * make.metal * METAL_CATCH;
+  if (freed <= 0) L.why = 'out of range';
 }
 
 /**
- * Each step, after the scoop took the yield (dt s): the rock loses what the beam broke off, DISPERSE ×
- * the propellant caught, and shrinks (its size goes as the cube root of its mass); mined away below
+ * Each step, after the scoop took the yield (dt s): the metal caught goes in the hold; the rock loses
+ * what the beam broke off, and shrinks (its size goes as the cube root of its mass); mined away below
  * GONE of its size.
  */
 export function mineRock(g: Game, dt: number) {
   const L = g.laser;
-  if (!L.hit || L.rate <= 0 || dt <= 0) return;
+  if (!L.hit || L.removal <= 0 || dt <= 0) return;
+  // metal into the hold, as far as it goes
+  if (L.metal > 0) {
+    const took = stowMetal(g, L.metal * dt);
+    if (took < L.metal * dt * 0.5 && !g.warned.holdFull) {
+      g.warned.holdFull = true;
+      g.showMsg('The hold is full · sell the metal at a station', 'warn');
+    }
+  }
   const w = g.frameBody;
   const key = minedKey(w, L.hit.id);
   const left = minedRocks.get(key) ?? 1;
   const m0 = rockMass(L.hit.size0);
-  const f = Math.max(0, left ** 3 - (L.rate * DISPERSE * dt) / m0);
+  const f = Math.max(0, left ** 3 - (L.removal * dt) / m0);
   const next = Math.cbrt(f);
   if (next < GONE) {
     minedRocks.set(key, 0);

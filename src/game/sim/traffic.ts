@@ -223,6 +223,7 @@ function refuel(c: Game) {
   c.ship.exotic = SHIP.exoticCap;
   c.ship.batt = battCap(c.ship);
   c.ship.hull = 1;
+  c.ship.cargo = {};
 }
 
 /** Engage the autopilot for a circular equatorial orbit round `b` (it takes an FTL leg if it's far). */

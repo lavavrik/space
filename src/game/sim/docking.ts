@@ -22,7 +22,6 @@
  * world's gravity is "down" here), and K lifts you off again. Or the catapult throws you up and
  * flies you out of the air (sim/catapult.ts).
  */
-import { SHIP } from '../constants';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import type { Station } from '../types';
@@ -297,14 +296,6 @@ export function rotationCorrection(g: Game, dt: number) {
   const st = g.inStation;
   if (!st || g.dock?.docked) return;
   g.ship.q.premultiply(new THREE.Quaternion().setFromAxisAngle(st.spinAxis, st.spinRate * dt)).normalize();
-}
-
-/** Docked services: fill the tanks (the station's fuel is free for now). */
-export function refuelDocked(g: Game) {
-  if (!g.dock?.docked) return;
-  g.ship.prop = SHIP.propCap;
-  g.ship.exotic = SHIP.exoticCap;
-  g.showMsg(`${g.dock.station.name} · tanks filled`);
 }
 
 /** Where the granted pad is (world), for the HUD. */
