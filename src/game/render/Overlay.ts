@@ -521,7 +521,8 @@ export class Overlay {
     const now = threatNow(g, th);
     const rel = this.tmp.copy(now.pos).add(g.frameBody.pos).sub(g.ship.pos);
     const d = rel.length();
-    const label = `ROCK ${rockLabel(th.size)} · ${Math.max(0, now.t).toFixed(1)} s`;
+    // (its distance too: in empty space nothing else tells you how big a rock is)
+    const label = `ROCK ${rockLabel(th.size)} · ${fmtDist(Math.max(0, d - th.size))} · ${Math.max(0, now.t).toFixed(1)} s`;
     const s = this.toScreen(g, rel);
     if (s.behind || s.x < 0 || s.x > this.W || s.y < 0 || s.y > this.H) {
       this.edgeArrow(s.v, RED, label);
