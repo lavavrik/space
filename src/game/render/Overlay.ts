@@ -32,6 +32,28 @@ const SANS = '"Chakra Petch", system-ui, sans-serif';
 /** Other ships get a label within this distance (m). */
 const TRAFFIC_LABEL = 5e8;
 
+/**
+ * Every label drawn on the overlay (and the system map, which shares its canvas) gets a dark
+ * outline under it, so it reads over a bright world or a sunlit cloud deck as well as against space.
+ * Done once, on the context: its fillText strokes the same text first (round joins, ~3 px). The
+ * outline fades with the text (its alpha follows the fill colour's, parsed from rgba()).
+ */
+function outlineText(ctx: CanvasRenderingContext2D, ui: () => number) {
+  const fill = ctx.fillText.bind(ctx);
+  ctx.fillText = (text: string, x: number, y: number, maxWidth?: number) => {
+    const m = /rgba?\([^,]+,[^,]+,[^,)]+(?:,\s*([\d.]+))?\)/.exec(String(ctx.fillStyle));
+    const a = m?.[1] !== undefined ? +m[1] : 1;
+    ctx.save();
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 3 * ui();
+    ctx.strokeStyle = `rgba(0, 0, 0, ${(0.7 * a * ctx.globalAlpha).toFixed(3)})`;
+    ctx.globalAlpha = 1;
+    ctx.strokeText(text, x, y, maxWidth);
+    ctx.restore();
+    fill(text, x, y, maxWidth);
+  };
+}
+
 export class Overlay {
   private readonly ctx: CanvasRenderingContext2D;
   private W = 1;
@@ -49,6 +71,7 @@ export class Overlay {
     private readonly scene: SceneRenderer,
   ) {
     this.ctx = canvas.getContext('2d')!;
+    outlineText(this.ctx, () => this.ui);
     this.map = new SystemMap(this.ctx, () => this.ui);
   }
 
