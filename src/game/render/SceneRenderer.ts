@@ -188,7 +188,7 @@ export class SceneRenderer {
     this.scene.add(this.ring);
     this.scene.add(this.trafficView.group);
     this.scene.add(this.laserView.group);
-    this.ringField = new RingField(this.expUni.uExp, this.noise3d);
+    this.ringField = new RingField(this.expUni.uExp, this.noise3d, this.headUni);
     this.scene.add(this.ringField.group);
 
     // dust around the ship, so you can feel your speed in normal space

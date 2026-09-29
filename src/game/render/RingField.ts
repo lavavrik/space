@@ -20,6 +20,7 @@ import { THREE } from '../lib/three';
 import { DISC_FROM, RING_HALF_THICK, ROCK_LAYERS, type RockLayer, ringDensity } from '../sim/rings';
 import type { World } from '../types';
 import { METAL_RICH, minedRocks } from '../sim/ringRocks';
+import { HEADLIGHT_GLSL } from './shaders';
 
 /** Above (or below) the belt by this much (m), the disc is back in full around you. */
 const FADE_ABOVE = 6000;
@@ -162,6 +163,8 @@ void main(){
 }`;
 const MESH_FS = `
 #include <logdepthbuf_pars_fragment>
+${HEADLIGHT_GLSL}
+uniform float uHeadK;
 uniform highp sampler3D uNoise3D;
 uniform vec3 uLight, uPC; uniform float uPR, uPlanetA, uExp;
 varying vec3 vWP; varying vec3 vN; varying vec3 vObj; varying vec3 vCol; varying float vSize; varying float vSh; varying float vMetal;
@@ -210,6 +213,8 @@ void main(){
   float shine = uPlanetA * (0.5 + 0.5 * dot(-Lp, L)) * (uPR * uPR) / (dp * dp) * max(dot(N, Lp), 0.0);
   float mottle = 0.8 + 0.2 * tno(3.1) + 0.1 * tno(13.0);
   vec3 col = vCol * mottle * (sun + shine + 0.002);
+  // the ship's headlights: rocks in the planet's shadow (or on their night side) light up in the cone
+  col += headlight(N, vWP, vCol * mottle, uHeadK);
   if (vMetal > 0.5) {
     // metal-rich: bare metal in patches glints (a tight highlight where the relief faces the sun
     // just right), so one catches the eye among the ice
@@ -217,6 +222,11 @@ void main(){
     vec3 H = normalize(L + V);
     float spec = pow(max(dot(N, H), 0.0), 60.0) * max(dot(N, L), 0.0) * vSh;
     col += vec3(1.0, 0.9, 0.75) * spec * (0.3 + 1.5 * bare) * length(vCol);
+    // and in the headlights' beam too (the lamp sits at the camera: the highlight faces you)
+    float dh = max(length(vWP), 5.0);
+    vec3 Lh = -vWP / dh;
+    float specH = pow(max(dot(N, Lh), 0.0), 60.0) * smoothstep(0.91, 0.96, dot(-Lh, uHeadDir)) * uHeadOn * uHeadK / (dh * dh);
+    col += vec3(1.0, 0.96, 0.88) * specH * (0.3 + 1.5 * bare) * length(vCol);
   }
   gl_FragColor = vec4(col * uExp, 1.0);
 }`;
@@ -477,8 +487,9 @@ export class RingField {
   /** How far the flat disc should fade out around the camera (m; 0 when there are no rocks here). */
   nearFade = 0;
 
-  constructor(exp: THREE.IUniform, noise: THREE.Texture) {
-    const shared = { ...this.uni, uExp: exp, uNoise3D: { value: noise } };
+  constructor(exp: THREE.IUniform, noise: THREE.Texture, head: Record<'uHeadDir' | 'uHeadOn' | 'uHeadK', THREE.IUniform>) {
+    // (the headlight uniforms are the renderer's own, shared with the stations: set once per frame)
+    const shared = { ...this.uni, uExp: exp, uNoise3D: { value: noise }, uHeadDir: head.uHeadDir, uHeadOn: head.uHeadOn, uHeadK: head.uHeadK };
     this.layers = [];
     ROCK_LAYERS.forEach((L, k) => {
       // one copy per detail level, each drawing its band of distance (nearest finest)

@@ -163,3 +163,7 @@ a new ship has the ML-6 in a 6th slot, and older saves get it fitted). Shift+M t
   - A platinum-rich rock makes about 50–60,000 Cr/h under the ML-6, against about 10,000–20,000 for a
     nickel-iron one.
 - **The laser switches off** when the rock it's cutting is mined away.
+- **Headlights (Shift+L) light the rocks.** They use the same lamp as on the stations
+(`shaders/headlight.glsl`): a cone along the nose with inverse-square falloff. They're about as
+bright as sunlight at 100 m, and they make rocks visible in the planet's shadow. Metal-rich rocks
+glint in the beam too.

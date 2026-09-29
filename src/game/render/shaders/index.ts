@@ -56,6 +56,8 @@ export const RING_FS = withNoise(ringFrag);
 /** Orbital stations (drawn with BODY_VS on a unit cube). */
 const withHeadlight = (src: string) => src.replace('#pragma farlight_headlight', headlightGlsl);
 export const STATION_FS = withHeadlight(withNoise(stationFrag));
+/** The headlight's GLSL (a cone along the nose), for shaders built in TypeScript (render/RingField.ts). */
+export const HEADLIGHT_GLSL = headlightGlsl;
 /** Sky stations (drawn with BODY_VS on render/skyMesh.ts): lit and hazed through their world's air. */
 export const SKY_STATION_FS = withHeadlight(skyStationFrag.replace('#pragma farlight_atmo', atmoGlsl));
 /** Station interiors: slot tunnel, hangar and pads (drawn with BODY_VS). */
