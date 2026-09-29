@@ -34,6 +34,14 @@ const AX = new THREE.Vector3(1, 0, 0),
   AY = new THREE.Vector3(0, 1, 0),
   AZ = new THREE.Vector3(0, 0, 1);
 const MOUSE_SENS = 0.0021;
+/**
+ * Turning has mass (Game.angVel): the mouse, the arrows and Q/E ask for a turn rate, and the ship's
+ * attitude thrusters get there at ANG_ACC (rad/s², for a ship of ANG_REF_MASS: slower when heavier,
+ * e.g. with a full hold), and stop it again at the same rate when you let go. It used to turn exactly
+ * as the mouse moved: no resistance at all.
+ */
+const ANG_ACC = 3,
+  ANG_REF_MASS = 200e3;
 /** Under time warp in a ring's belt, drift slower than this (m/s) against the rocks is snapped to their orbit. */
 const RING_SNAP = 5;
 /** Headlights' draw (kW): a few floodlights. */
@@ -81,16 +89,26 @@ export function update(g: Game, dt: number, realDt = dt) {
   if (!inTunnel && !departing && !apSteering && !jumpCharging) {
     // through the periscope, steering slows by the magnification so a target can be held
     const zs = 1 / g.zoom.cur;
-    let pitch = -mdy * MOUSE_SENS * zs,
-      yaw = -mdx * MOUSE_SENS * zs,
-      roll = 0;
+    // the turn rate asked for (rad/s): the mouse's motion this frame, the arrows, Q/E
+    const inv = realDt > 1e-4 ? 1 / realDt : 0;
+    let wp = -mdy * MOUSE_SENS * zs * inv,
+      wy = -mdx * MOUSE_SENS * zs * inv,
+      wr = 0;
     const kr = (ship.mode === 'ftl' ? 0.8 : 1.1) * zs;
-    if (keys.ArrowUp) pitch += kr * realDt;
-    if (keys.ArrowDown) pitch -= kr * realDt;
-    if (keys.ArrowLeft) yaw += kr * realDt;
-    if (keys.ArrowRight) yaw -= kr * realDt;
-    if (keys.KeyQ) roll += 1.4 * realDt;
-    if (keys.KeyE) roll -= 1.4 * realDt;
+    if (keys.ArrowUp) wp += kr;
+    if (keys.ArrowDown) wp -= kr;
+    if (keys.ArrowLeft) wy += kr;
+    if (keys.ArrowRight) wy -= kr;
+    if (keys.KeyQ) wr += 1.4;
+    if (keys.KeyE) wr -= 1.4;
+    // the attitude thrusters bring the turn rate there (and back to rest) at ANG_ACC, less if heavy
+    const acc = ANG_ACC * zs * Math.min(1.5, ANG_REF_MASS / shipMass(ship)) * realDt;
+    const av = g.angVel;
+    const toward = (w: number, want: number) => w + Math.max(-acc, Math.min(acc, want - w));
+    av.set(toward(av.x, wp), toward(av.y, wy), toward(av.z, wr));
+    const pitch = av.x * realDt,
+      yaw = av.y * realDt,
+      roll = av.z * realDt;
     if (ship.sunTrack && (pitch || yaw || roll)) {
       ship.sunTrack = false;
       g.showMsg('Sun tracking off · manual steering');
@@ -98,12 +116,17 @@ export function update(g: Game, dt: number, realDt = dt) {
     // (something else turned the ship since steering last did: the pivot, an autopilot, docking...)
     const turnedElsewhere = !ship.q.equals(g.steerQ);
     ship.q.multiply(qa.setFromAxisAngle(AY, yaw)).multiply(qa.setFromAxisAngle(AX, pitch)).multiply(qa.setFromAxisAngle(AZ, roll)).normalize();
-    if (roll !== 0 || turnedElsewhere || !g.steerUp) g.steerUp = new THREE.Vector3(0, 1, 0).applyQuaternion(ship.q);
+    // (something else turning the ship takes over its turn; a roll under way moves the reference)
+    if (turnedElsewhere) av.set(0, 0, 0);
+    if (av.z !== 0 || turnedElsewhere || !g.steerUp) g.steerUp = new THREE.Vector3(0, 1, 0).applyQuaternion(ship.q);
     else if (pitch !== 0 || yaw !== 0) lockRoll(g);
     // middle-click pivot (sim/pivot.ts); a deliberate mouse move or steering key takes over, jitter doesn't
     const steered = Math.abs(mdx) + Math.abs(mdy) > 2 || keys.ArrowUp || keys.ArrowDown || keys.ArrowLeft || keys.ArrowRight || keys.KeyQ || keys.KeyE;
     updatePivot(g, realDt, !!steered);
-    if (g.pivot) g.steerUp = new THREE.Vector3(0, 1, 0).applyQuaternion(ship.q);
+    if (g.pivot) {
+      g.steerUp = new THREE.Vector3(0, 1, 0).applyQuaternion(ship.q);
+      av.set(0, 0, 0); // (the pivot turns the ship its own way)
+    }
     g.steerQ.copy(ship.q);
   }
   g.qInv.copy(ship.q).invert();

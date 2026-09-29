@@ -283,7 +283,7 @@ export function startJump(g: Game) {
   ship.ftlCharge = 0;
   ship.ap = null;
   ship.sunTrack = false; // the charge swings the nose onto the destination; nothing else may steer
-  g.pivot = false;
+  g.pivot = g.pivotLocked = false;
   closePlanner(g);
   ship.tanker = null;
   g.jump = { phase: 'charge', t: JUMP_CHARGE_TIME, dest, cost, from: galPos(g), dur: transitTime(d) };

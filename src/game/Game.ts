@@ -134,6 +134,10 @@ export class Game {
   pivot = false;
   /** The pivot's turn rate (rad/s): it spins up and brakes (sim/pivot.ts). */
   pivotRate = 0;
+  /** The pivot reached its target and is holding the nose on it (sim/pivot.ts). */
+  pivotLocked = false;
+  /** The ship's turn rate under manual steering (rad/s: pitch, yaw, roll about its own axes; sim/update.ts). */
+  angVel = new THREE.Vector3();
   /**
    * Manual steering's reference "up" (sim/update.ts): mouse and arrow turns keep the ship's roll
    * against it, only Q/E change it; null until steering first uses it.

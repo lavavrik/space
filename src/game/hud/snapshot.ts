@@ -245,6 +245,7 @@ function flight(g: Game): FlightView {
   const pills: Pill[] = [];
   if (g.autodock) pills.push({ text: `AUTO-DOCK · ${g.autodock.phase.toUpperCase()}`, kind: 'ftl' });
   if (g.ascent) pills.push({ text: 'ASCENT PROGRAM', kind: 'ftl' });
+  if (g.pivot) pills.push({ text: g.pivotLocked ? `LOCKED · ${(g.target?.name ?? g.jumpDest?.name ?? '').toUpperCase()}` : 'PIVOTING', kind: 'on' });
   const lz = g.laser;
   if (lz.on) pills.push({ text: lz.rate > 0 ? `LASER · +${lz.rate.toFixed(0)} kg/s${lz.metal > 0.05 ? ` · METAL +${lz.metal.toFixed(1)} kg/s` : ''}` : `LASER · ${lz.hit ? lz.why || 'no yield' : lz.why || 'firing'}`.toUpperCase(), kind: lz.rate > 0 ? 'on' : 'warn' });
   const th = g.rockThreat;

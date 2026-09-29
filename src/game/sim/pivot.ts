@@ -3,8 +3,8 @@
  * target, the jump destination star) by the shortest turn, so it never rolls: roll is Q/E's alone.
  * (It used to keep the top as close as it could to where it was, which rolled the ship on the way
  * round.) Not while docked or landed: the ship is held on the pad or sits on its gear. The turn eases in fast and settles
- * precisely; it keeps tracking a moving target until it's centred to within PIVOT_DONE, and any
- * manual steering takes over. Through the periscope it's the easy way to centre something tiny.
+ * precisely, then stays locked on it, tracking it as it moves, until you steer away yourself (or
+ * the target goes, or you dock or land). The HUD says LOCKED while it holds. Through the periscope it's the easy way to centre something tiny.
  */
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
@@ -40,6 +40,7 @@ export function startPivot(g: Game) {
   }
   g.pivot = true;
   g.pivotRate = 0;
+  g.pivotLocked = false;
   g.ship.sunTrack = false; // it would turn the ship back toward the star
 }
 
@@ -55,7 +56,8 @@ export function updatePivot(g: Game, realDt: number, steered: boolean) {
   if (!g.pivot) return;
   const dir = aimDir(g);
   if (steered || !dir || g.ship.ap?.phase === 'transfer' || g.jump || g.dock?.docked || g.ship.landed) {
-    g.pivot = false;
+    if (g.pivotLocked && steered) g.showMsg('Lock released');
+    g.pivot = g.pivotLocked = false;
     g.pivotRate = 0;
     return;
   }
@@ -65,9 +67,13 @@ export function updatePivot(g: Game, realDt: number, steered: boolean) {
   want.setFromUnitVectors(nose, dir).multiply(ship.q);
   const ang = ship.q.angleTo(want);
   if (ang < PIVOT_DONE) {
+    // on it: stay locked, following it
     ship.q.copy(want);
-    g.pivot = false;
     g.pivotRate = 0;
+    if (!g.pivotLocked) {
+      g.pivotLocked = true;
+      g.showMsg(`Locked on ${g.target?.name ?? g.jumpDest?.name ?? 'the target'} · steer to break away`);
+    }
     return;
   }
   // (zoomed in, the periscope's field is small: a slower, finer turn, as manual steering does)
