@@ -17,7 +17,8 @@ import { altitudeAt, reliefAmp, surfaceRadius } from './terrain';
 const tmp = new THREE.Vector3(),
   tmp2 = new THREE.Vector3(),
   tmp3 = new THREE.Vector3(),
-  spinVel = new THREE.Vector3();
+  spinVel = new THREE.Vector3(),
+  tmpAhead = new THREE.Vector3();
 
 /** Near the ground flight assist caps your speed against it at SURF_K × height (m/s per m) … */
 export const SURF_K = 0.2,
@@ -64,8 +65,17 @@ export function manualFlight(g: Game, dt: number, grav: Gravity, inp: number[]) 
   const acc = inside ? inside.acc : boost ? NORMAL_ACC * 3 : NORMAL_ACC,
     maxV = inside ? inside.maxV : surf !== null ? surf * (boost ? 3 : 1) : belt !== null ? belt * (boost ? 3 : 1) : boost ? NORMAL_BOOST : NORMAL_MAX;
   ship.vel.addScaledVector(grav.vec, dt);
-  // everything below works in the local frame: the station's, or the system's
+  // everything below works in the local frame: the station's, or the system's. Its velocity is
+  // taken where this step leaves the ship (pos + vel·dt), not where it is: in a turning frame (the
+  // belt's rocks, the ground) the frame's velocity changes with position, and the gravity just
+  // added is this step's (dt) while the move from the last position was the last step's. Taken
+  // here, the two differed by a·(dt − dt_prev) every frame: with a jittery frame rate in a giant's
+  // belt (a ≈ 2.7 m/s²) flight assist burned up to ~1 kg/s "holding still" against nothing. Hands
+  // off (flight assist off) nothing fired and nothing drifted, which gave it away.
+  tmpAhead.copy(ship.pos);
+  ship.pos.addScaledVector(ship.vel, dt);
   const fv = frameVel(g);
+  ship.pos.copy(tmpAhead);
   const v0 = ship.vel.clone().sub(fv);
 
   const gh = tmp.copy(grav.vec).normalize();
