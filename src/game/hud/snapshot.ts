@@ -30,11 +30,11 @@ import { approachView } from './approach';
 import { deflectorFitted, guardFitted, laserFitted } from '../outfit/catalog';
 import { threatNow } from '../sim/belt';
 import { rockLabel } from '../sim/ringRocks';
-import { CARGO_CAP, COMMODITIES, cargoMass, cargoValue, fmtCr, refuelQuote, repairQuote, type Commodity } from '../sim/economy';
+import { CARGO_CAP, COMMODITIES, cargoMass, cargoValue, fmtCr, refuelQuote, repairQuote, sellPrice, type Commodity } from '../sim/economy';
 import { fitPrice } from '../outfit/fit';
 import { HULL_WARN, heatDamageRate } from '../sim/damage';
 import { buildInfo, stationKind } from './info';
-import type { AutopilotView, AvionicsSlotView, ElectricalView, ModuleIcon, RadarView, OutfitView, FlightView, GaugeBadge, GaugeView, Lamp, NavView, GuideView, HudSnapshot, LocationView, Pill, PlannerView, Readout, SystemsView, TargetView } from './types';
+import type { CargoView, AutopilotView, AvionicsSlotView, ElectricalView, ModuleIcon, RadarView, OutfitView, FlightView, GaugeBadge, GaugeView, Lamp, NavView, GuideView, HudSnapshot, LocationView, Pill, PlannerView, Readout, SystemsView, TargetView } from './types';
 
 const tmp = new THREE.Vector3();
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
@@ -59,6 +59,7 @@ export function buildSnapshot(g: Game): HudSnapshot {
     influences: g.influencesVisible ? buildInfluences(g) : null,
     outfit: g.outfitVisible ? outfitView(g) : null,
     radar: g.radarVisible ? radarView(g) : null,
+    cargo: g.cargoVisible ? cargoView(g) : null,
     docked: g.dock?.docked
       ? {
           station: g.dock.station.name,
@@ -371,6 +372,43 @@ function cargoGauge(g: Game): GaugeView {
   const c = g.ship.cargo;
   const what = kg > 0.5 ? ` · ${(Object.keys(COMMODITIES) as Commodity[]).filter((k) => (c[k] ?? 0) > 0.5).map((k) => `${COMMODITIES[k].name.toLowerCase()} ${fmtMass(c[k]!)}`).join(', ')}` : '';
   return { label: 'CARGO', value: `${fmtMass(kg)} / ${fmtMass(CARGO_CAP)}`, frac: kg / CARGO_CAP, sub: { text: `${fmtCr(g.credits)}${what}` } };
+}
+
+/**
+ * The cargo window (Shift+I): each metal in the hold with its value (at the docked station's
+ * prices, else list), the tanks, and what the load costs in Δv.
+ */
+function cargoView(g: Game): CargoView {
+  const { ship } = g;
+  const st = g.dock?.docked ? g.dock.station : null;
+  const kg = cargoMass(g);
+  const items = (Object.keys(COMMODITIES) as Commodity[]).map((id) => {
+    const m = ship.cargo[id] ?? 0,
+      p = sellPrice(st, id);
+    return { id, name: COMMODITIES[id].name, mass: fmtMass(m), frac: m / CARGO_CAP, price: `${p < 1 ? p.toFixed(3) : p.toFixed(2)} Cr/kg`, value: fmtCr(m * p), empty: m < 0.5 };
+  });
+  // Δv with this load, and what it would be with an empty hold (the hold counts in the dry mass)
+  const dv = deltaVLeft(ship),
+    dry = dryMass(ship),
+    dv0 = SHIP.ve * Math.log((dry - kg + ship.prop) / (dry - kg));
+  const lz = g.laser;
+  return {
+    used: `${fmtMass(kg)} / ${fmtMass(CARGO_CAP)}`,
+    frac: kg / CARGO_CAP,
+    items,
+    total: fmtCr(cargoValue(g, st)),
+    where: st ? `at ${st.name}` : 'at list prices',
+    credits: fmtCr(g.credits),
+    tanks: [
+      { name: 'Hydrogen', value: `${fmtMass(ship.prop)} / ${fmtMass(SHIP.propCap)}`, frac: ship.prop / SHIP.propCap, kind: 'prop' },
+      { name: 'Exotic matter', value: `${fmtMass(ship.exotic)} / ${fmtMass(SHIP.exoticCap)}`, frac: ship.exotic / SHIP.exoticCap, kind: 'exotic' },
+    ],
+    mass: fmtMass(dry + ship.prop),
+    dv: kg > 0.5 ? `${fmtSpeedText(dv)} · ${fmtSpeedText(dv0 - dv)} less than empty` : fmtSpeedText(dv),
+    mining: lz.on && lz.metal > 0.01 ? `Laser catching ${lz.metal.toFixed(1)} kg/s of metal` : null,
+    docked: !!st,
+    armed: g.jettisonArm?.c ?? null,
+  };
 }
 
 /** Structural integrity (sim/damage.ts): the bar, and what's wearing it or how to mend it. */

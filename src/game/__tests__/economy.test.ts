@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SHIP } from '../constants';
 import type { Game } from '../Game';
-import { CARGO_CAP, buyFuel, buyRepair, cargoMass, refuelQuote, sellCargo, stationFactor, stowMetal } from '../sim/economy';
+import { CARGO_CAP, buyFuel, buyRepair, cargoMass, jettison, refuelQuote, sellCargo, sellOne, sellPrice, stationFactor, stowMetal } from '../sim/economy';
 import type { Station } from '../types';
 
 const station = (name: string) => ({ name }) as Station;
@@ -58,5 +58,18 @@ describe('economy', () => {
     sellCargo(g);
     expect(cargoMass(g)).toBe(0);
     expect(g.credits).toBeGreaterThan(CARGO_CAP * 0.2);
+  });
+
+  it('sells one metal at a time, and jettisons without pay', () => {
+    const g = fake(0);
+    stowMetal(g, 10_000);
+    sellOne(g, 'pgm');
+    expect(g.ship.cargo.pgm).toBeUndefined();
+    expect(g.credits).toBeCloseTo(100 * sellPrice(g.dock!.station, 'pgm'));
+    expect(cargoMass(g)).toBeCloseTo(9_900);
+    jettison(g, 'nife');
+    expect(g.ship.cargo.nife).toBeUndefined();
+    expect(cargoMass(g)).toBeCloseTo(900);
+    expect(g.credits).toBeCloseTo(100 * sellPrice(g.dock!.station, 'pgm'));
   });
 });

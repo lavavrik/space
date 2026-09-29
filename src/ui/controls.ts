@@ -40,6 +40,7 @@ export const GROUPS: { id: ControlGroup; title: string; keys: [string, string][]
       ['⇧T / wheel click', 'pivot to target'],
       ['Y', 'scan target'],
       ['I', 'target info'],
+      ['⇧I', 'cargo & tanks'],
       ['⇧N', 'object names on / off'],
       ['⇧P', 'sound on / off'],
       ['B', 'influences'],

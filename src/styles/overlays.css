@@ -14,7 +14,7 @@
 /* Left column: location, then the controls list or the target info panel. */
 #leftcol {
   position: fixed; top: calc(1.167rem + env(safe-area-inset-top, 0px)); left: 1.333rem;
-  width: 27.5rem; max-width: calc(100% - 2.667rem); max-height: calc(100% - 24rem); overflow: hidden; /* stops above the bottom HUD (the 4-gauge ship panel with a note line) */
+  width: 27.5rem; max-width: calc(100% - 2.667rem); max-height: var(--left-max, calc(100% - 24rem)); overflow: hidden; /* stops above the ship gauges: --left-max is measured (ui/hooks/useLeftRoom.ts) */
   display: flex; flex-direction: column; gap: 0.833rem; pointer-events: none;
 }
 #info { display: flex; flex-direction: column; gap: 2px; }
@@ -221,3 +221,20 @@
 .esch .eswknob { fill: var(--amber-dim); transition: cx .15s; }
 .esch .esw.on .eswtrack { fill: rgba(168, 230, 140, .15); stroke: #a8e68c; }
 .esch .esw.on .eswknob { fill: #a8e68c; }
+
+/* cargo window (Shift+I): a stacked hold bar, a colour per metal */
+#leftcol > #cargo { display: flex; flex-direction: column; gap: .3rem; }
+#cargo > * { flex-shrink: 0; } /* the panel scrolls; its parts keep their height */
+.cghold { height: .6rem; }
+.cghold i { position: absolute; top: 0; bottom: 0; }
+.cg-nife { background: #b7aa98 !important; }
+.cg-cobalt { background: #5b8cff !important; }
+.cg-pgm { background: #f3e2a8 !important; }
+.cglist { display: flex; flex-direction: column; gap: .15rem; margin: .2rem 0; }
+.cgrow { display: grid; grid-template-columns: .7rem 1fr auto; column-gap: .45rem; align-items: center; font-size: .9rem; }
+.cgrow .cgsw { width: .6rem; height: .6rem; grid-row: span 2; }
+.cgrow .cgname { color: var(--amber); letter-spacing: .05em; }
+.cgrow b { font: 400 .95rem "Share Tech Mono", ui-monospace, monospace; color: var(--text); text-align: right; }
+.cgrow .cgprice { font: .8rem "Share Tech Mono", ui-monospace, monospace; color: var(--amber-dim); }
+.cgrow .obtn { grid-column: 2 / 4; justify-self: end; padding-top: 0; padding-bottom: 0; }
+.cgrow.empty { opacity: .45; }

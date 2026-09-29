@@ -2,5 +2,5 @@
 @media (max-width: 62rem) {
   #hud { grid-template-columns: 1fr 1fr; }
   #centre { grid-column: 1 / -1; justify-self: center; order: -1; }
-  #leftcol { max-height: calc(100% - 26rem); }
+  #leftcol { max-height: var(--left-max, calc(100% - 26rem)); }
 }

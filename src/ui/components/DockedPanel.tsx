@@ -7,6 +7,7 @@ interface Actions {
   repair: () => void;
   sell: () => void;
   outfit: () => void;
+  cargo: () => void;
   launch: () => void;
   catapult: () => void;
 }
@@ -40,6 +41,9 @@ export function DockedPanel({ d, act }: { d: NonNullable<HudSnapshot['docked']>;
             sell the hold · {d.cargo}
           </button>
         )}
+        <button type="button" className="obtn" onClick={act.cargo}>
+          cargo (⇧I)
+        </button>
         <button type="button" className="obtn" onClick={act.outfit}>
           outfitting (⇧U)
         </button>

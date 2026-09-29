@@ -23,25 +23,29 @@ export function onPress(g: Game, code: string) {
   if (code === 'Backquote') g.perf.toggle(); // performance overlay, available any time
   g.invalidateHud();
   if (code === 'Tab') g.helpVisible = !g.helpVisible;
-  // info (I), avionics (U), outfit (Shift+U) and influences (B) share the left column: opening one closes the others
+  // info (I), avionics (U), outfit (Shift+U), influences (B), radar (Shift+Y) and cargo (Shift+I)
+  // share the left column: opening one closes the others
   const shift = !!(keys.ShiftLeft || keys.ShiftRight);
   if (code === 'KeyU' || code === 'KeyI' || code === 'KeyB' || (code === 'KeyY' && shift)) {
     const outfit = code === 'KeyU' && shift,
-      radar = code === 'KeyY';
-    const was = outfit ? g.outfitVisible : radar ? g.radarVisible : { KeyU: g.avionicsVisible, KeyI: g.infoVisible, KeyB: g.influencesVisible }[code as 'KeyU' | 'KeyI' | 'KeyB'];
-    g.avionicsVisible = g.infoVisible = g.influencesVisible = g.outfitVisible = g.radarVisible = false;
+      radar = code === 'KeyY',
+      cargo = code === 'KeyI' && shift;
+    const was = outfit ? g.outfitVisible : radar ? g.radarVisible : cargo ? g.cargoVisible : { KeyU: g.avionicsVisible, KeyI: g.infoVisible, KeyB: g.influencesVisible }[code as 'KeyU' | 'KeyI' | 'KeyB'];
+    g.avionicsVisible = g.infoVisible = g.influencesVisible = g.outfitVisible = g.radarVisible = g.cargoVisible = false;
+    g.jettisonArm = null;
     if (outfit) g.outfitVisible = !was;
     else if (radar) g.radarVisible = !was;
+    else if (cargo) g.cargoVisible = !was;
     else if (code === 'KeyU') g.avionicsVisible = !was;
     if (code === 'KeyB') g.influencesVisible = !was;
-    if (code === 'KeyI') {
+    if (code === 'KeyI' && !cargo) {
       g.infoVisible = !was;
       if (g.infoVisible && !g.target) g.showMsg('Target something (T, G or click) to see its details');
     }
     // ship stats, outfit and influences are clicked through (entries, refit buttons, body names):
     // free the cursor on opening (checked after every toggle above, or B was never seen as open)
-    if (g.avionicsVisible || g.outfitVisible || g.influencesVisible || g.radarVisible) document.exitPointerLock?.();
-    if (radar) return; // Shift+Y is only the window (Y alone scans)
+    if (g.avionicsVisible || g.outfitVisible || g.influencesVisible || g.radarVisible || g.cargoVisible) document.exitPointerLock?.();
+    if (radar || cargo) return; // Shift+Y and Shift+I are only their windows
   }
   if ((g.jump && g.jump.phase !== 'charge') || ship.dead) return;
 

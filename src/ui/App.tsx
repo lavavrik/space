@@ -1,5 +1,6 @@
 import { AutopilotPanel } from './components/AutopilotPanel';
 import { AvionicsPanel } from './components/AvionicsPanel';
+import { CargoPanel } from './components/CargoPanel';
 import { BodyInfo } from './components/BodyInfo';
 import { DockedPanel } from './components/DockedPanel';
 import { HelpPanel } from './components/HelpPanel';
@@ -12,10 +13,12 @@ import { RadarPanel } from './components/RadarPanel';
 import { OrbitPlanner } from './components/OrbitPlanner';
 import { Toast } from './components/Toast';
 import { useGame, useHud } from './hooks/useGame';
+import { useLeftRoom } from './hooks/useLeftRoom';
 
 export function App() {
   const { hostRef, game } = useGame();
   const hud = useHud(game);
+  useLeftRoom(!!hud && !hud.mapOpen);
   return (
     <>
       <div ref={hostRef} />
@@ -33,13 +36,15 @@ export function App() {
             <Location loc={hud.location} />
             {hud.info ? <BodyInfo info={hud.info} /> : hud.influences ? <InfluencesPanel v={hud.influences} onTarget={(n) => game!.targetByName(n)} /> : hud.radar ? (
               <RadarPanel v={hud.radar} act={{ sweep: () => game!.radarSweep(), pick: (k, scan) => game!.radarPick(k, scan) }} />
+            ) : hud.cargo ? (
+              <CargoPanel v={hud.cargo} act={{ sell: (c) => game!.sellOne(c), sellAll: () => game!.sellCargo(), jettison: (c) => game!.jettison(c) }} />
             ) : hud.outfit ? (
               <OutfitPanel
                 v={hud.outfit}
                 act={{ back: () => game!.openShipStats(), battery: (id) => game!.fitBattery(id), fit: (s, id) => game!.fitModule(s, id), remove: (s) => game!.removeModule(s), radiators: () => game!.toggleRadiators(), pump: () => game!.togglePump() }}
               />
             ) : hud.avionics ? <AvionicsPanel slots={hud.avionics} electrical={hud.electrical} onOpen={(k) => game!.openAvionics(k)} onToggle={(id) => game!.toggleLoad(id)} /> : hud.docked ? (
-              <DockedPanel d={hud.docked} act={{ refuel: () => game!.refuelDocked(), repair: () => game!.repairDocked(), sell: () => game!.sellCargo(), outfit: () => game!.openAvionics('outfit'), launch: () => game!.launch(), catapult: () => game!.catapult() }} />
+              <DockedPanel d={hud.docked} act={{ refuel: () => game!.refuelDocked(), repair: () => game!.repairDocked(), sell: () => game!.sellCargo(), outfit: () => game!.openAvionics('outfit'), cargo: () => game!.openCargo(), launch: () => game!.launch(), catapult: () => game!.catapult() }} />
             ) : hud.helpVisible && <HelpPanel save={hud.save} onNewGame={() => game!.newGame()} />}
           </div>
           <div id="rightcol">

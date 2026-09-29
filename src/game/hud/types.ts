@@ -283,8 +283,39 @@ export interface HudSnapshot {
   influences: InfluencesView | null;
   outfit: OutfitView | null;
   radar: RadarView | null;
+  cargo: CargoView | null;
   /** Docked at a station: its name, the pad, and what the station is doing for the ship. */
   docked: { station: string; pad: number; notes: string[]; sky: boolean; hullFull: boolean; tanksFull: boolean; credits: string; refuel: string; repair: string; cargo: string | null } | null;
   nav: NavView | null;
   guide: GuideView | null;
+}
+
+/** The cargo window (Shift+I): the hold and the tanks, what they're worth, and what to do with them. */
+export interface CargoView {
+  /** The hold: "12.4 t / 200 t", and how full (0…1). */
+  used: string;
+  frac: number;
+  items: {
+    id: 'nife' | 'cobalt' | 'pgm';
+    name: string;
+    mass: string;
+    /** Share of the hold's capacity (0…1), for the stacked bar. */
+    frac: number;
+    price: string; // Cr/kg, here if docked, else list
+    value: string;
+    empty: boolean;
+  }[];
+  /** Total value, and whose prices ("at Newton Orbital" or "list prices"). */
+  total: string;
+  where: string;
+  credits: string;
+  tanks: { name: string; value: string; frac: number; kind: 'prop' | 'exotic' }[];
+  /** What the load costs in flight: ship mass and Δv left, and how much the hold takes off it. */
+  mass: string;
+  dv: string;
+  /** The laser's metal catch right now, if it's cutting. */
+  mining: string | null;
+  docked: boolean;
+  /** A jettison waiting for its second click. */
+  armed: 'nife' | 'cobalt' | 'pgm' | null;
 }

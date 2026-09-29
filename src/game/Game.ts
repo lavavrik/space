@@ -34,7 +34,7 @@ import { catapultLaunch, type Ascent } from './sim/catapult';
 import type { RockThreat } from './sim/belt';
 import { laserOff, type LaserState } from './sim/laser';
 import { mapClosed, type MapState } from './render/SystemMap';
-import { START_CREDITS, buyFuel, buyRepair, sellCargo } from './sim/economy';
+import { START_CREDITS, buyFuel, buyRepair, jettison, sellCargo, sellOne, type Commodity } from './sim/economy';
 import type { AutoPhase } from './sim/autodock';
 import { fitBattery, fitModule, removeModule } from './outfit/fit';
 import { AUTOSAVE_S, clearSave, loadGame, saveGame } from './save';
@@ -130,6 +130,9 @@ export class Game {
   radar: { sweep: number; seen: Set<string> } = { sweep: 0, seen: new Set() };
   /** Headlights (Shift+L): a floodlight cone along the nose (render/shaders/headlight.glsl). */
   lights = true;
+  /** Cargo window (Shift+I), in the left column; and a jettison waiting for its second click (s left). */
+  cargoVisible = false;
+  jettisonArm: { c: Commodity; t: number } | null = null;
   /** Radar window (Shift+Y), in the left column. */
   radarVisible = false;
   /** Turning to face the target (middle mouse button; sim/pivot.ts). */
@@ -369,6 +372,18 @@ export class Game {
     this.invalidateHud();
   }
 
+  /** Cargo window: sell one commodity (docked), or jettison it (a second click within 3 s). */
+  sellOne(c: Commodity) {
+    sellOne(this, c);
+    this.invalidateHud();
+  }
+  jettison(c: Commodity) {
+    if (this.jettisonArm?.c === c) {
+      this.jettisonArm = null;
+      jettison(this, c);
+    } else this.jettisonArm = { c, t: 3 };
+    this.invalidateHud();
+  }
   sellCargo() {
     sellCargo(this);
     this.invalidateHud();
@@ -398,6 +413,13 @@ export class Game {
     this.target = c.target;
     if (scan) toggleScan(this);
     else this.showMsg(`Target · ${contactLabel(this, c.target)}`);
+    this.invalidateHud();
+  }
+
+  /** The docked panel's cargo button: the cargo window (as Shift+I). */
+  openCargo() {
+    this.avionicsVisible = this.infoVisible = this.influencesVisible = this.outfitVisible = this.radarVisible = false;
+    this.cargoVisible = true;
     this.invalidateHud();
   }
 
@@ -532,6 +554,10 @@ export class Game {
     if ((this.saveT -= dt) <= 0) {
       this.saveT = AUTOSAVE_S;
       this.saveNow();
+    }
+    if (this.jettisonArm && (this.jettisonArm.t -= dt) <= 0) {
+      this.jettisonArm = null;
+      this.invalidateHud();
     }
     if (this.newGameConfirm > 0 && (this.newGameConfirm -= dt) <= 0) {
       this.newGameConfirm = 0;

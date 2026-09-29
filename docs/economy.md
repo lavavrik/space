@@ -42,6 +42,13 @@ batteries 4k/12k/25k/60k.
 - Sold at any station (docked panel: "sell the hold"): nickel-iron 0.05, cobalt 1, platinum-group
   metals 10 Cr/kg list (≈ 0.24 Cr per kg of mixed metal, ~47,000 Cr for a full hold). The first
   prices were 40× this: a 20 t hold paid ~200,000 Cr.
+- **Cargo window (Shift+I**, or "cargo" in the docked panel; `ui/components/CargoPanel.tsx`):
+  - The hold as one stacked bar, with a colour per metal.
+  - A line per metal: mass, price and value. Prices are the docked station's, otherwise list prices.
+  - Docked: sell one metal or the whole hold. In flight: jettison a metal to lighten the ship or make
+    room. Jettisoning takes a second click within 3 s and is gone for good.
+  - Below: the tanks, the ship's mass, and Δv left, with how much less that is than with an empty hold.
+  - While the laser cuts: its metal catch per second.
 
 ## Not yet
 

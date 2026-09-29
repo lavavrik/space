@@ -138,3 +138,28 @@ export function stowMetal(g: Game, kg: number) {
   for (const c of Object.keys(METAL_SPLIT) as Commodity[]) g.ship.cargo[c] = (g.ship.cargo[c] ?? 0) + take * METAL_SPLIT[c];
   return take;
 }
+
+/** Sell one commodity from the hold at the station you're docked at. */
+export function sellOne(g: Game, c: Commodity) {
+  if (!g.dock?.docked) return;
+  const st = g.dock.station;
+  const kg = g.ship.cargo[c] ?? 0;
+  if (kg < 0.5) return;
+  const v = kg * sellPrice(st, c);
+  g.credits += v;
+  delete g.ship.cargo[c];
+  g.warned.holdFull = false;
+  g.showMsg(`${st.name} · sold ${Math.round(kg).toLocaleString('en-US')} kg of ${COMMODITIES[c].name.toLowerCase()} for ${fmtCr(v)}`);
+}
+
+/**
+ * Dump one commodity out of the hold (in flight: to lighten the ship, or make room for something
+ * better). Gone for good; the cargo window asks twice.
+ */
+export function jettison(g: Game, c: Commodity) {
+  const kg = g.ship.cargo[c] ?? 0;
+  if (kg < 0.5) return;
+  delete g.ship.cargo[c];
+  g.warned.holdFull = false;
+  g.showMsg(`Jettisoned ${Math.round(kg).toLocaleString('en-US')} kg of ${COMMODITIES[c].name.toLowerCase()}`, 'warn');
+}
