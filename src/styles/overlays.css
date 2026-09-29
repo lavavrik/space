@@ -305,3 +305,7 @@
 .pmbtn.danger { margin-top: .3rem; color: var(--amber-dim); justify-content: center; }
 .pmbtn.danger.armed { color: var(--red); border-color: var(--red); }
 .pmsave { font-size: .78rem; color: var(--amber-dim); text-align: center; }
+/* a metal order's progress: how much of it is in the hold (full: ready to deliver) */
+.jbar { margin: .15rem 0 .1rem; }
+.jbar i { background: rgba(255, 215, 120, .85); }
+.jbar.done i { background: #8fe08a; }

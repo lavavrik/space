@@ -27,6 +27,11 @@ function Job({ j, children }: { j: JobView; children?: React.ReactNode }) {
         <span className={cx(j.time.warn && 'warnc')}>{j.time.text}</span>
         {j.note && <span> · {j.note}</span>}
       </div>
+      {j.progress !== null && (
+        <div className={cx('bar', 'jbar', j.progress >= 1 && 'done')}>
+          <i style={{ width: `${j.progress * 100}%` }} />
+        </div>
+      )}
       {children && <div className="obtns">{children}</div>}
     </div>
   );

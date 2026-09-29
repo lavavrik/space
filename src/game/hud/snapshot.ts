@@ -428,6 +428,7 @@ function contractsView(g: Game): ContractsView {
       time: { text: mine ? `${fmtTime(Math.max(0, left))} left` : `${Math.round(left / 60)} min to deliver once taken`, warn: mine && left < 300 },
       note: mine ? (c.kind === 'metal' ? `${kg(Math.min(have, c.kg))} of ${kg(c.kg)} in the hold` : null) : cantTake(g, c),
       canDeliver: mine && canDeliverMetal(g, c),
+      progress: mine && c.kind === 'metal' ? Math.min(1, have / c.kg) : null,
       canPlot: mine && !(st && st.name === c.to.station && !elsewhere),
       armed: g.abandonArm?.id === c.id,
     };

@@ -362,6 +362,8 @@ export interface JobView {
   /** Board: why it can't be taken. Yours: metal progress ("12.3 t of 20 t in the hold"). */
   note: string | null;
   canDeliver: boolean;
+  /** A metal order you hold: how much of it is in the hold (0…1), for its bar; else null. */
+  progress: number | null;
   /** Its destination is elsewhere: the nav computer can plot it. */
   canPlot: boolean;
   armed: boolean; // abandoning: waiting for the second click
