@@ -13,6 +13,7 @@ import { applyThrust, refillShip } from './resources';
 import { stationLimits } from './docking';
 import { TEMP } from './thermal';
 import { altitudeAt, reliefAmp, surfaceRadius } from './terrain';
+import { RING_HALF_THICK } from './rings';
 
 const tmp = new THREE.Vector3(),
   tmp2 = new THREE.Vector3(),
@@ -26,6 +27,8 @@ export const SURF_K = 0.2,
   SURF_MIN = 8,
   /** Height the ship rests at above the terrain (collide). */
   CLEARANCE = 30;
+/** A replacement ship is delivered at least this far (m) outside a ring's belt. */
+const RESPAWN_RING_CLEAR = 50e3;
 /** Touching down faster than this (m/s) damages the hull (sim/damage.ts). */
 const LAND_SCRAPE = 10;
 
@@ -205,6 +208,16 @@ export function respawn(g: Game) {
   const u = ship.pos.clone().sub(b.pos).normalize();
   const alt = b.kind === 'star' ? fluxDist(b.L, ARRIVE_FLUX, b.radius) - b.radius : Math.max(dropAlt(b) * 2, b.radius * 1.5);
   ship.pos.copy(b.pos).addScaledVector(u, b.radius + alt);
+  // never inside a ring's belt: at rest there the rocks stream past at km/s, and a replacement ship
+  // delivered where the last one hit a rock was hit again and again. Lifted clear of its slab.
+  if (b.kind !== 'star' && b.ring) {
+    const rel = ship.pos.clone().sub(b.pos);
+    const h = rel.dot(b.axis);
+    const r = Math.sqrt(Math.max(0, rel.lengthSq() - h * h));
+    const clear = RING_HALF_THICK + RESPAWN_RING_CLEAR;
+    if (r > b.ring.inner * b.radius - RESPAWN_RING_CLEAR && r < b.ring.outer * b.radius + RESPAWN_RING_CLEAR && Math.abs(h) < clear)
+      ship.pos.addScaledVector(b.axis, (h >= 0 ? 1 : -1) * clear - h);
+  }
   ship.vel.set(0, 0, 0);
   resetFrame(g, dominantBody(g.cur, ship.pos));
   ship.vel.copy(b.vel).sub(g.frameBody.vel); // at rest relative to the body you died at

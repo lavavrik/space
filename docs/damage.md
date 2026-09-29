@@ -2,7 +2,8 @@
 
 The hull has a structural integrity, 0–100 % (`Ship.hull`; `sim/damage.ts`). At 0 the ship is
 lost. It's shown as INTEGRITY in the ship panel, under the hull temperature, with what's wearing it
-or where to mend it. It's saved with the ship; a replacement ship starts sound.
+or where to mend it. It's saved with the ship; a replacement ship starts sound, and is never delivered inside a ring's belt
+(at least 50 km off its slab: at rest there the rocks stream past at km/s).
 
 ## What wears it
 
