@@ -178,6 +178,8 @@ const turnT = new THREE.Vector3();
 export function turnThrust(g: Game, dw: number, dt: number) {
   if (dw < 1e-9) return 1;
   turnT.set(TURN_K * dw, 0, 0);
+  const kw0 = g.power.thrustKW;
   applyThrust(g, turnT, dt);
+  g.power.turnKW += g.power.thrustKW - kw0; // (the sound tells the attitude thrusters from the main drive)
   return turnT.x / (TURN_K * dw);
 }

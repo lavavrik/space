@@ -27,7 +27,7 @@ export function busCapacity(g: Game) {
 export function beginPower(g: Game) {
   const { power } = g;
   // last frame's loads stay readable (HUD) until the next frame starts
-  power.thrustKW = power.ftlKW = power.chargeKW = power.burn = power.shieldKW = power.guardKW = power.laserKW = 0;
+  power.thrustKW = power.ftlKW = power.chargeKW = power.burn = power.shieldKW = power.guardKW = power.laserKW = power.turnKW = 0;
   power.cap = busCapacity(g);
   power.left = Math.max(0, power.cap - SHIP.baseLoad);
   power.limited = null;

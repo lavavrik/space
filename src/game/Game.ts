@@ -16,6 +16,7 @@ import type { Guide } from './sim/guide';
 import { pickAt, placeAtHome } from './sim/navigation';
 import { closePlanner, openPlanner, requestDisengage } from './sim/planner';
 import { update } from './sim/update';
+import { ShipAudio } from './audio/ShipAudio';
 import type { Body, CurrentSystem, Jump, Message, MsgKind, Planner, Power, Ship, StarSystem, Station, Target } from './types';
 import { systemsNear } from './universe/galaxy';
 import { updateBodies } from './sim/kepler';
@@ -61,7 +62,7 @@ export class Game {
   /** Systems around the current one that a jump could reach (with a margin for moving within it). */
   nearby: StarSystem[] = [];
   readonly ship = newShip();
-  readonly power: Power = { solar: 0, shore: 0, cos: 0, shadow: null, draw: 0, net: 0, thrustKW: 0, ftlKW: 0, chargeKW: 0, pumpKW: 0, radarKW: 0, lightsKW: 0, shieldKW: 0, guardKW: 0, laserKW: 0, burn: 0, flux: 0, cap: 0, left: 0, limited: null, curtailed: 0, ftlShort: 0 };
+  readonly power: Power = { solar: 0, shore: 0, cos: 0, shadow: null, draw: 0, net: 0, thrustKW: 0, ftlKW: 0, chargeKW: 0, pumpKW: 0, radarKW: 0, lightsKW: 0, shieldKW: 0, guardKW: 0, laserKW: 0, turnKW: 0, burn: 0, flux: 0, cap: 0, left: 0, limited: null, curtailed: 0, ftlShort: 0 };
   /**
    * One selection at a time: a body or station (target) or a star to jump to (jumpDest). Setting
    * either clears the other. A hyperjump in progress keeps its own destination (jump.dest).
@@ -221,6 +222,8 @@ export class Game {
   private readonly scene: SceneRenderer;
   readonly perf: PerfMonitor;
   readonly overlay: Overlay;
+  /** The ship's sound (audio/ShipAudio.ts; Shift+P on / off). */
+  readonly audio = new ShipAudio();
   private readonly glCanvas: HTMLCanvasElement;
   private readonly overlayCanvas: HTMLCanvasElement;
   private hudT = 0;
@@ -489,6 +492,7 @@ export class Game {
 
   private onVisibility = () => {
     if (document.visibilityState === 'hidden') this.saveNow();
+    this.audio.visibility(document.visibilityState === 'hidden');
   };
 
   /** Controls panel button: first click arms, a second within a few seconds wipes the save and starts over. */
@@ -539,6 +543,7 @@ export class Game {
     perf.gpuEnd();
     perf.mark('render');
     this.overlay.draw(this);
+    this.audio.update(this, dt);
     perf.mark('overlay');
     this.hudT -= dt;
     if (this.hudT <= 0) this.publishHud();
@@ -558,6 +563,7 @@ export class Game {
     removeEventListener('pagehide', this.saveNow);
     document.removeEventListener('visibilitychange', this.onVisibility);
     this.input.dispose();
+    this.audio.dispose();
     this.scene.dispose();
     this.perf.dispose();
     this.glCanvas.remove();

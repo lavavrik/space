@@ -150,6 +150,11 @@ export function onPress(g: Game, code: string) {
       else openPlanner(g);
       break;
     case 'KeyP':
+      // Shift+P: sound on / off (audio/ShipAudio.ts); P: sun tracking
+      if (keys.ShiftLeft || keys.ShiftRight) {
+        g.showMsg(g.audio.toggleMute() ? 'Sound on' : 'Sound off · Shift+P turns it back on');
+        break;
+      }
       if (g.jump) {
         g.showMsg('Hyperdrive is charging · it holds the nose on the destination', 'warn');
         break;

@@ -252,6 +252,7 @@ export interface Power {
   shieldKW: number; // magnetic deflector, while it works (sim/belt.ts)
   guardKW: number; // collision radar, near a ring's belt (sim/belt.ts)
   laserKW: number; // mining laser, while it fires (sim/laser.ts)
+  turnKW: number; // the part of thrustKW spent turning (attitude thrusters; sim/resources.ts turnThrust)
   burn: number;
   cap: number; // kW the bus can supply this frame: solar + the battery's discharge limit (sim/power.ts)
   left: number; // kW not yet granted this frame
