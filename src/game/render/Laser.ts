@@ -62,7 +62,7 @@ const PUFFS = 90,
   PUFF_LIFE = 2.5;
 
 interface Puff {
-  off: THREE.Vector3; // from the hit point (m)
+  off: THREE.Vector3; // from the rock's centre (m): the plume stays on the rock where it was hit, however the beam wanders
   vel: THREE.Vector3; // m/s, relative to the rock
   age: number;
   size: number;
@@ -152,7 +152,7 @@ export class LaserView {
         this.spawn -= 1;
         const v = nrm.clone().multiplyScalar(15 + Math.random() * 35);
         v.add(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(25));
-        const p: Puff = { off: new THREE.Vector3(), vel: v, age: 0, size: 2 + Math.random() * 3 };
+        const p: Puff = { off: L.end.clone().sub(L.hit.center), vel: v, age: 0, size: 2 + Math.random() * 3 };
         if (this.puffs.length >= PUFFS) this.puffs.shift();
         this.puffs.push(p);
       }
@@ -162,10 +162,12 @@ export class LaserView {
       p.off.addScaledVector(p.vel, dt);
     }
     for (let i = this.puffs.length - 1; i >= 0; i--) if (this.puffs[i].age > PUFF_LIFE) this.puffs.splice(i, 1);
+    // the rock's centre, camera-relative (the specks ride along with it)
+    const c = L.hit ? L.hit.center.clone().add(w.pos).sub(ship.pos) : b;
     for (const p of this.puffs) {
-      const x = b.x + p.off.x,
-        y = b.y + p.off.y,
-        z = b.z + p.off.z;
+      const x = c.x + p.off.x,
+        y = c.y + p.off.y,
+        z = c.z + p.off.z;
       const k = 1 - p.age / PUFF_LIFE;
       const dist = Math.hypot(x, y, z);
       dp.set([x, y, z], n * 3);

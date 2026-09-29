@@ -7,7 +7,7 @@
  *   - Yield: YIELD_PER_MW × the beam's power (what the bus grants of it) × the rock's ice fraction ×
  *     the range factor (full out to a third of the range, falling to none at it). Tuned to be worth
  *     it (the ML-6 at close range fills an empty tank in ~6 minutes), not from the physics: really
- *     6 MW would boil ~2 kg/s.
+ *     600 kW would boil ~0.2 kg/s.
  *   - It needs a fuel scoop to catch the vapour, and you close to the rock (under HOLD_V relative
  *     to it) or the plume streams past.
  *   - Its draw is a load on the bus like any other (MINING LASER), from the battery beyond what the
@@ -24,7 +24,7 @@ import { RING_HALF_THICK } from './rings';
 import { COLLIDE_LAYERS, minedKey, minedRocks, rockLabel, rockMass, rockRay, rocksNear, type Rock } from './ringRocks';
 
 /** Propellant per MW of beam on pure ice at close range (kg/s). */
-const YIELD_PER_MW = 60;
+const YIELD_PER_MW = 600;
 /** Faster than this against the rock (m/s), the scoop can't catch the plume. */
 const HOLD_V = 50;
 

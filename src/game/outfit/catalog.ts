@@ -159,13 +159,13 @@ export const MODULES: Module[] = [
   },
   {
     id: 'ml-2', kind: 'laser', maker: 'Tessera Shielding', model: 'ML-2', name: 'Ablator', mass: 1500,
-    blurb: 'Mining laser: boils ice off ring rocks for the fuel scoop to catch. 2 MW, out to 600 m',
-    caps: { kw: 2000, range: 600 },
+    blurb: 'Mining laser: boils ice off ring rocks for the fuel scoop to catch. 200 kW, out to 600 m',
+    caps: { kw: 200, range: 600 },
   },
   {
     id: 'ml-6', kind: 'laser', maker: 'Tessera Shielding', model: 'ML-6', name: 'Sunspear', mass: 3000,
-    blurb: 'Mining laser: 6 MW, out to 1.5 km. Three times the ice, and three times the heat',
-    caps: { kw: 6000, range: 1500 },
+    blurb: 'Mining laser: 600 kW, out to 1.5 km. Three times the ice, and three times the heat',
+    caps: { kw: 600, range: 1500 },
   },
   {
     id: 'kh-2', kind: 'heatpump', maker: 'Kelvin Dynamics', model: 'KH-2', name: 'Coldsink', mass: 1200,
