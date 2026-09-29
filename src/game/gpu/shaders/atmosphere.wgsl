@@ -1,0 +1,37 @@
+// The sky: a shell at the top of a world's air, drawn from inside (render/shaders/atmosphere.frag.glsl).
+// Each pixel adds the light scattered along its ray through the air (up to the ground) and dims
+// what's behind in proportion to how bright it is (blend: src + dst × alpha), so daylight hides the stars.
+// #include frame
+// #include world
+// #include atmo
+
+struct Out {
+  @builtin(position) pos: vec4f,
+  @location(0) wp: vec3f,
+}
+
+@vertex
+fn vs(@location(0) position: vec3f) -> Out {
+  var o: Out;
+  // the shell: the unit sphere at the top of the air (a hair wider, so its facets cover the true sphere)
+  let wp = world.atC.xyz + (world.rotN * vec4f(position, 0.0)).xyz * world.atTop * 1.001;
+  o.wp = wp;
+  o.pos = frame.viewProj * vec4f(wp, 1.0);
+  return o;
+}
+
+@fragment
+fn fs(in: Out) -> @location(0) vec4f {
+  let dir = normalize(in.wp);
+  var s = atSpan(dir);
+  if (s.y <= s.x) { discard; }
+  let C = world.atC.xyz;
+  let b = dot(dir, C);
+  let cg = dot(C, C) - atR() * atR();
+  let dg = b * b - cg;
+  if (dg > 0.0 && b - sqrt(dg) > 0.0) { s.y = min(s.y, b - sqrt(dg)); }
+  let sky = atInscatter(dir * s.x, dir * s.y, normalize(world.light.xyz), 8);
+  let lum = dot(sky, vec3f(0.2126, 0.7152, 0.0722));
+  let keep = clamp(1.0 - lum * 5.0, 0.0, 1.0) * dot(atTrans, vec3f(0.333));
+  return vec4f(sky, keep);
+}

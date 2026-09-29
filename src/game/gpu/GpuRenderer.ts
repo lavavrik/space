@@ -1,7 +1,8 @@
 /**
  * The WebGPU renderer (docs/webgpu.md), being built layer by layer beside the WebGL one
  * (render/SceneRenderer.ts). So far: the core (HDR frame, reversed-Z depth, camera-relative view,
- * tone mapping) and the sky (the Milky Way and the stars). Everything else is still WebGL-only.
+ * tone mapping), the sky (the Milky Way and the stars) and the system's bodies (gpu/worlds.ts: the star,
+ * planets, skies, cloud decks, ring discs, dots). Everything else is still WebGL-only.
  *
  * A frame:
  *   1. the scene into `hdr` (rgba16float, 4× MSAA, resolved into `resolved`), with a depth32float
@@ -16,10 +17,8 @@ import { skyColor, skyLook } from '../sim/hyperspace';
 import type { Body, CurrentSystem, StarSystem, Station } from '../types';
 import type { Gpu } from './device';
 import { SKY_BAKE_WGSL, SKY_WGSL, STARS_WGSL, TONEMAP_WGSL } from './shaders';
+import { DEPTH_FORMAT, HDR_FORMAT, SAMPLES, WorldsLayer } from './worlds';
 
-const HDR_FORMAT: GPUTextureFormat = 'rgba16float';
-const DEPTH_FORMAT: GPUTextureFormat = 'depth32float';
-const SAMPLES = 4;
 /** Near plane (m): with reversed-Z and 32-bit float depth, precision barely depends on it. */
 const NEAR = 0.5;
 /** Most pixels rendered per frame, as the WebGL renderer (render/SceneRenderer.ts MAX_RENDER_PIXELS). */
@@ -41,6 +40,7 @@ export class GpuRenderer implements GameRenderer {
   private readonly skyGroup: GPUBindGroup;
   private readonly starsPipe: GPURenderPipeline;
   private readonly tonePipe: GPURenderPipeline;
+  private readonly worlds: WorldsLayer;
   private starBuf: GPUBuffer | null = null;
   private starCount = 0;
   private hdr!: GPUTexture;
@@ -137,6 +137,8 @@ export class GpuRenderer implements GameRenderer {
       vertex: { module: toneModule, entryPoint: 'vs' },
       fragment: { module: toneModule, entryPoint: 'fs', targets: [{ format }] },
     });
+
+    this.worlds = new WorldsLayer(device, this.frameLayout);
   }
 
   /** The Milky Way into a cube map, once (skyBake.wgsl): a pass per face. */
@@ -190,6 +192,7 @@ export class GpuRenderer implements GameRenderer {
     this.starBuf = this.device.createBuffer({ label: 'stars', size: data.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
     this.device.queue.writeBuffer(this.starBuf, 0, data);
     this.starCount = others.length;
+    this.worlds.setSystem(cur);
   }
 
   /** As the WebGL renderer: up to 1.5× the CSS resolution, at most MAX_RENDER_PIXELS. */
@@ -197,6 +200,7 @@ export class GpuRenderer implements GameRenderer {
     this.PR = Math.min(devicePixelRatio || 1, 1.5, Math.sqrt(MAX_RENDER_PIXELS / Math.max(1, W * H)));
     this.W = Math.max(1, Math.round(W * this.PR));
     this.H = Math.max(1, Math.round(H * this.PR));
+    this.worlds.pr = this.PR;
     this.canvas.width = this.W;
     this.canvas.height = this.H;
     this.canvas.style.width = `${W}px`;
@@ -235,6 +239,7 @@ export class GpuRenderer implements GameRenderer {
     f.set([this.W, this.H, P.elements[0], P.elements[5], this.PR, g.simTime, 1, 1, 1], 32);
     device.queue.writeBuffer(this.frameBuf, 0, f);
     this.updateViews(g);
+    this.worlds.update(g);
 
     const enc = device.createCommandEncoder({ label: 'frame' });
     const pass = enc.beginRenderPass({
@@ -252,6 +257,9 @@ export class GpuRenderer implements GameRenderer {
       pass.setVertexBuffer(0, this.starBuf);
       pass.draw(6, this.starCount);
     }
+    // the system's bodies: surfaces, then the transparent layers
+    this.worlds.drawOpaque(pass);
+    this.worlds.drawTransparent(pass);
     pass.end();
 
     const tone = enc.beginRenderPass({
@@ -287,6 +295,7 @@ export class GpuRenderer implements GameRenderer {
 
   dispose() {
     this.starBuf?.destroy();
+    this.worlds.dispose();
     this.hdr?.destroy();
     this.resolved?.destroy();
     this.depth?.destroy();

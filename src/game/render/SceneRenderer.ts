@@ -47,14 +47,14 @@ export interface BodyView {
 }
 
 /** Cloud deck height, in the air's scale heights (~9 km on an Earth). */
-const CLOUD_H = 1.3;
+export const CLOUD_H = 1.3;
 
 /**
  * Scattering coefficients at the ground (1/m, per colour) for the sky shader: Earth-like and ocean
  * worlds scatter like air (Rayleigh, ∝ λ⁻⁴: blue sky, red sunsets); the rest in their palette's sky
  * colour (dust, haze), thicker the denser the air.
  */
-function airBeta(b: World) {
+export function airBeta(b: World) {
   const a = atmoOf(b);
   if (!a) return new THREE.Vector3();
   const k = Math.min(a.rho0 / 1.2, 50); // (a 60 kg/m³ Venus-like air would be solid white otherwise)

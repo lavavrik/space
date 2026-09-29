@@ -1,0 +1,515 @@
+/**
+ * The system's bodies in WebGPU (docs/webgpu.md, phase 2): the star (disc and glow), planets and moons
+ * (the far sphere: surface, terrain as bumps, city lights), their skies (a scattering shell), cloud
+ * decks (a cube-map bake per world, a shell at the deck), ring discs, and dots for distant bodies.
+ * Mirrors render/SceneRenderer.ts attachStar / attachWorld / renderScene; LOD terrain (up close) is
+ * phase 3, the ring's rocks phase 4.
+ *
+ * Draw order: opaque (surfaces, the star's disc), then the transparent layers far to near within
+ * each (as three.js sorts them): glow, rings, dots; skies; cloud decks.
+ */
+import type { Game } from '../Game';
+import { AU, WT } from '../constants';
+import { THREE } from '../lib/three';
+import { noise3dBytes, NOISE3D_SIZE } from '../lib/noise3d';
+import { airBeta, CLOUD_H } from '../render/SceneRenderer';
+import { CITY_K } from '../render/exposure';
+import { atmoOf } from '../sim/atmosphere';
+import { populated } from '../sim/population';
+import { hasCraters, reliefAmp, terrainOffsets, worldQuat } from '../sim/terrain';
+import type { Body, CurrentSystem, Star, World } from '../types';
+import { ATMO_WGSL, CLOUD_BAKE_WGSL, CLOUD_WGSL, DOTS_WGSL, PLANET_WGSL, RING_WGSL, STAR_WGSL } from './shaders';
+
+export const HDR_FORMAT: GPUTextureFormat = 'rgba16float';
+export const DEPTH_FORMAT: GPUTextureFormat = 'depth32float';
+export const SAMPLES = 4;
+
+const WORLD_BYTES = 1232;
+const STAR_BYTES = 128;
+const RING_BYTES = 128;
+const CLOUD_CUBE = 1024;
+const MAXDOTS = 256;
+
+interface Mesh {
+  pos: GPUBuffer;
+  nrm: GPUBuffer;
+  idx: GPUBuffer;
+  count: number;
+  format: GPUIndexFormat;
+}
+
+interface WorldView {
+  b: World;
+  buf: GPUBuffer;
+  data: ArrayBuffer;
+  group: GPUBindGroup;
+  cloud: GPUTexture | null;
+  air: boolean;
+  ring: { buf: GPUBuffer; group: GPUBindGroup; mesh: Mesh } | null;
+  dotColor: THREE.Color;
+  dist: number;
+  pxR: number;
+  mesh: Mesh;
+}
+
+interface StarView {
+  b: Star;
+  buf: GPUBuffer;
+  group: GPUBindGroup;
+  dist: number;
+  pxR: number;
+}
+
+const blendAdd: GPUBlendState = { color: { srcFactor: 'one', dstFactor: 'one' }, alpha: { srcFactor: 'zero', dstFactor: 'src-alpha' } };
+const blendSky: GPUBlendState = { color: { srcFactor: 'one', dstFactor: 'src-alpha' }, alpha: { srcFactor: 'zero', dstFactor: 'one' } };
+const blendAlpha: GPUBlendState = { color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } };
+
+export class WorldsLayer {
+  private readonly sphere: { hi: Mesh; mid: Mesh; lo: Mesh };
+  private readonly noiseTex: GPUTexture;
+  private readonly noiseSamp: GPUSampler;
+  private readonly cloudSamp: GPUSampler;
+  private readonly noCloud: GPUTexture;
+  private readonly worldLayout: GPUBindGroupLayout;
+  private readonly oneBufLayout: GPUBindGroupLayout;
+  private readonly planetPipe: GPURenderPipeline;
+  private readonly atmoPipe: GPURenderPipeline;
+  private readonly cloudPipe: GPURenderPipeline;
+  private readonly cloudBakePipe: GPURenderPipeline;
+  private readonly ringPipe: GPURenderPipeline;
+  private readonly discPipe: GPURenderPipeline;
+  private readonly glowPipe: GPURenderPipeline;
+  private readonly dotsPipe: GPURenderPipeline;
+  private readonly dotBuf: GPUBuffer;
+  private readonly dotData = new Float32Array(MAXDOTS * 7);
+  private dotCount = 0;
+  private worlds: WorldView[] = [];
+  private star: StarView | null = null;
+  private readonly m = new THREE.Matrix4();
+  private readonly q = new THREE.Quaternion();
+  private readonly v = new THREE.Vector3();
+  private readonly s = new THREE.Vector3();
+
+  constructor(
+    private readonly device: GPUDevice,
+    frameLayout: GPUBindGroupLayout,
+  ) {
+    this.sphere = { hi: this.mesh(new THREE.SphereGeometry(1, 320, 160)), mid: this.mesh(new THREE.SphereGeometry(1, 96, 48)), lo: this.mesh(new THREE.SphereGeometry(1, 32, 16)) };
+
+    // the fine octaves' 3D noise (lib/noise3d.ts), as in WebGL: 64³ r8, repeating, linear
+    const n = NOISE3D_SIZE;
+    this.noiseTex = device.createTexture({ label: 'noise3d', size: [n, n, n], dimension: '3d', format: 'r8unorm', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
+    device.queue.writeTexture({ texture: this.noiseTex }, noise3dBytes() as Uint8Array<ArrayBuffer>, { bytesPerRow: n, rowsPerImage: n }, [n, n, n]);
+    this.noiseSamp = device.createSampler({ magFilter: 'linear', minFilter: 'linear', addressModeU: 'repeat', addressModeV: 'repeat', addressModeW: 'repeat' });
+    this.cloudSamp = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
+    this.noCloud = device.createTexture({ label: 'no clouds', size: [1, 1, 6], format: 'r16float', usage: GPUTextureUsage.TEXTURE_BINDING });
+
+    const FS = GPUShaderStage.FRAGMENT,
+      VS = GPUShaderStage.VERTEX;
+    this.worldLayout = device.createBindGroupLayout({
+      entries: [
+        { binding: 0, visibility: VS | FS, buffer: { type: 'uniform' } },
+        { binding: 1, visibility: FS, texture: { viewDimension: '3d' } },
+        { binding: 2, visibility: FS, sampler: {} },
+        { binding: 3, visibility: FS, texture: { viewDimension: 'cube' } },
+        { binding: 4, visibility: FS, sampler: {} },
+      ],
+    });
+    this.oneBufLayout = device.createBindGroupLayout({ entries: [{ binding: 0, visibility: VS | FS, buffer: { type: 'uniform' } }] });
+    const worldPL = device.createPipelineLayout({ bindGroupLayouts: [frameLayout, this.worldLayout] });
+    const onePL = device.createPipelineLayout({ bindGroupLayouts: [frameLayout, this.oneBufLayout] });
+
+    const posNrm: GPUVertexBufferLayout[] = [
+      { arrayStride: 12, attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x3' }] },
+      { arrayStride: 12, attributes: [{ shaderLocation: 1, offset: 0, format: 'float32x3' }] },
+    ];
+    const posOnly: GPUVertexBufferLayout[] = [posNrm[0]];
+    const opaque: GPUDepthStencilState = { format: DEPTH_FORMAT, depthWriteEnabled: true, depthCompare: 'greater' };
+    const tested: GPUDepthStencilState = { format: DEPTH_FORMAT, depthWriteEnabled: false, depthCompare: 'greater' };
+    const ms = { count: SAMPLES };
+    const mod = (label: string, code: string) => device.createShaderModule({ label, code });
+
+    const planet = mod('planet', PLANET_WGSL);
+    this.planetPipe = device.createRenderPipeline({
+      label: 'planet',
+      layout: worldPL,
+      vertex: { module: planet, entryPoint: 'vs', buffers: posNrm },
+      fragment: { module: planet, entryPoint: 'fs', targets: [{ format: HDR_FORMAT }] },
+      primitive: { cullMode: 'back' },
+      depthStencil: opaque,
+      multisample: ms,
+    });
+    const atmo = mod('atmosphere', ATMO_WGSL);
+    this.atmoPipe = device.createRenderPipeline({
+      label: 'atmosphere',
+      layout: worldPL,
+      vertex: { module: atmo, entryPoint: 'vs', buffers: posOnly },
+      fragment: { module: atmo, entryPoint: 'fs', targets: [{ format: HDR_FORMAT, blend: blendSky }] },
+      primitive: { cullMode: 'front' }, // drawn from inside: the far side of the shell
+      depthStencil: tested,
+      multisample: ms,
+    });
+    const cloud = mod('cloud layer', CLOUD_WGSL);
+    this.cloudPipe = device.createRenderPipeline({
+      label: 'cloud layer',
+      layout: worldPL,
+      vertex: { module: cloud, entryPoint: 'vs', buffers: posOnly },
+      fragment: { module: cloud, entryPoint: 'fs', targets: [{ format: HDR_FORMAT, blend: blendAlpha }] },
+      primitive: { cullMode: 'none' },
+      depthStencil: tested,
+      multisample: ms,
+    });
+    const bake = mod('cloud bake', CLOUD_BAKE_WGSL);
+    this.cloudBakePipe = device.createRenderPipeline({
+      label: 'cloud bake',
+      layout: device.createPipelineLayout({ bindGroupLayouts: [this.oneBufLayout, this.worldLayout] }),
+      vertex: { module: bake, entryPoint: 'vs' },
+      fragment: { module: bake, entryPoint: 'fs', targets: [{ format: 'r16float' }] },
+    });
+    const ring = mod('ring', RING_WGSL);
+    this.ringPipe = device.createRenderPipeline({
+      label: 'ring',
+      layout: onePL,
+      vertex: { module: ring, entryPoint: 'vs', buffers: posOnly },
+      fragment: { module: ring, entryPoint: 'fs', targets: [{ format: HDR_FORMAT, blend: blendAlpha }] },
+      primitive: { cullMode: 'none' },
+      depthStencil: tested,
+      multisample: ms,
+    });
+    const star = mod('star', STAR_WGSL);
+    this.discPipe = device.createRenderPipeline({
+      label: 'star disc',
+      layout: onePL,
+      vertex: { module: star, entryPoint: 'vsDisc', buffers: posNrm },
+      fragment: { module: star, entryPoint: 'fsDisc', targets: [{ format: HDR_FORMAT }] },
+      primitive: { cullMode: 'back' },
+      depthStencil: opaque,
+      multisample: ms,
+    });
+    this.glowPipe = device.createRenderPipeline({
+      label: 'star glow',
+      layout: onePL,
+      vertex: { module: star, entryPoint: 'vsGlow' },
+      fragment: { module: star, entryPoint: 'fsGlow', targets: [{ format: HDR_FORMAT, blend: blendAdd }] },
+      depthStencil: tested,
+      multisample: ms,
+    });
+    const dots = mod('dots', DOTS_WGSL);
+    this.dotsPipe = device.createRenderPipeline({
+      label: 'dots',
+      layout: device.createPipelineLayout({ bindGroupLayouts: [frameLayout] }),
+      vertex: {
+        module: dots,
+        entryPoint: 'vs',
+        buffers: [
+          {
+            arrayStride: 28,
+            stepMode: 'instance',
+            attributes: [
+              { shaderLocation: 0, offset: 0, format: 'float32x3' },
+              { shaderLocation: 1, offset: 12, format: 'float32x3' },
+              { shaderLocation: 2, offset: 24, format: 'float32' },
+            ],
+          },
+        ],
+      },
+      fragment: { module: dots, entryPoint: 'fs', targets: [{ format: HDR_FORMAT, blend: blendAdd }] },
+      depthStencil: tested,
+      multisample: ms,
+    });
+    this.dotBuf = device.createBuffer({ label: 'dots', size: this.dotData.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+  }
+
+  /** A three.js geometry's vertices and indices as GPU buffers. */
+  private mesh(geo: THREE.BufferGeometry): Mesh {
+    const { device } = this;
+    const buf = (data: ArrayBufferView, usage: number) => {
+      const b = device.createBuffer({ size: Math.ceil(data.byteLength / 4) * 4, usage: usage | GPUBufferUsage.COPY_DST });
+      device.queue.writeBuffer(b, 0, data.buffer, data.byteOffset, data.byteLength);
+      return b;
+    };
+    const pos = geo.attributes.position.array as Float32Array;
+    const nrm = (geo.attributes.normal?.array as Float32Array | undefined) ?? new Float32Array(pos.length);
+    const index = geo.index!.array;
+    const big = pos.length / 3 > 65535;
+    const idx = big ? new Uint32Array(index) : new Uint16Array(index);
+    geo.dispose();
+    return { pos: buf(pos, GPUBufferUsage.VERTEX), nrm: buf(nrm, GPUBufferUsage.VERTEX), idx: buf(idx, GPUBufferUsage.INDEX), count: index.length, format: big ? 'uint32' : 'uint16' };
+  }
+
+  private freeMesh(m: Mesh) {
+    m.pos.destroy();
+    m.nrm.destroy();
+    m.idx.destroy();
+  }
+
+  /** A new system's bodies: uniform buffers, cloud bakes, ring discs. */
+  setSystem(cur: CurrentSystem) {
+    this.clear();
+    const { device } = this;
+    for (const b of cur.bodies) {
+      if (b.kind === 'star') {
+        const buf = device.createBuffer({ size: STAR_BYTES, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+        this.star = { b, buf, group: device.createBindGroup({ layout: this.oneBufLayout, entries: [{ binding: 0, resource: { buffer: buf } }] }), dist: Infinity, pxR: 0 };
+        continue;
+      }
+      const air = atmoOf(b);
+      const clouded = !!air && (b.type === WT.EarthLike || b.type === WT.Ocean);
+      const buf = device.createBuffer({ label: b.name, size: WORLD_BYTES, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+      const data = new ArrayBuffer(WORLD_BYTES);
+      this.fillStatic(b, data, clouded ? air!.H * CLOUD_H : 0);
+      device.queue.writeBuffer(buf, 0, data);
+      const cloud = clouded ? device.createTexture({ label: `${b.name} clouds`, size: [CLOUD_CUBE, CLOUD_CUBE, 6], format: 'r16float', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING }) : null;
+      const groupWith = (clouds: GPUTexture) =>
+        device.createBindGroup({
+          layout: this.worldLayout,
+          entries: [
+            { binding: 0, resource: { buffer: buf } },
+            { binding: 1, resource: this.noiseTex.createView() },
+            { binding: 2, resource: this.noiseSamp },
+            { binding: 3, resource: clouds.createView({ dimension: 'cube' }) },
+            { binding: 4, resource: this.cloudSamp },
+          ],
+        });
+      const group = groupWith(cloud ?? this.noCloud);
+      // (the bake can't read the cube it writes: it binds the empty one)
+      if (cloud) this.bakeClouds(cloud, groupWith(this.noCloud));
+      let ring: WorldView['ring'] = null;
+      if (b.ring) {
+        const rbuf = device.createBuffer({ size: RING_BYTES, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+        ring = { buf: rbuf, group: device.createBindGroup({ layout: this.oneBufLayout, entries: [{ binding: 0, resource: { buffer: rbuf } }] }), mesh: this.mesh(new THREE.RingGeometry(b.ring.inner, b.ring.outer, 256, 1)) };
+      }
+      const dotColor = b.pal.a.clone().lerp(b.pal.b, 0.5).lerp(new THREE.Color(1, 1, 1), 0.4);
+      this.worlds.push({ b, buf, data, group, cloud, air: !!air, ring, dotColor, dist: Infinity, pxR: 0, mesh: this.sphere.mid });
+    }
+  }
+
+  /** The uniforms that don't change frame to frame (world.wgsl World). */
+  private fillStatic(b: World, data: ArrayBuffer, cloudH: number) {
+    const f = new Float32Array(data),
+      i = new Int32Array(data);
+    const col = (c: THREE.Color, at: number, w = 0) => f.set([c.r, c.g, c.b, w], at);
+    col(b.pal.a, 48);
+    col(b.pal.b, 52);
+    col(b.pal.c, 56);
+    col(b.pal.d, 60);
+    const atmo = b.pal.atmo;
+    col(atmo ? atmo.c : new THREE.Color(0, 0, 0), 64, atmo ? atmo.k * 0.6 : 0);
+    const air = atmoOf(b);
+    const beta = airBeta(b);
+    f.set([beta.x, beta.y, beta.z, air?.H ?? 1], 80);
+    f[84] = b.radius + (air?.top ?? 0); // atTop
+    f[85] = 45; // atSunI
+    f[86] = air ? 1 : 0;
+    f[87] = b.pal.sea;
+    f[88] = b.seed;
+    f[91] = cloudH;
+    f[92] = b.radius;
+    f[93] = hasCraters(b) ? 1 : 0;
+    f[94] = reliefAmp(b);
+    f[95] = 0; // useQc (terrain chunks only)
+    f[96] = populated(b) ? 1 : 0;
+    f[97] = CITY_K;
+    f[98] = b.radius + cloudH;
+    i[99] = b.type;
+    i[100] = 5;
+    const off = terrainOffsets(b.seed);
+    for (let k = 0; k < 17; k++) f.set([off[k * 3], off[k * 3 + 1], off[k * 3 + 2], 0], 104 + k * 4);
+  }
+
+  /** A world's cloud pattern into its cube map, once (cloudBake.wgsl): a pass per face. */
+  private bakeClouds(tex: GPUTexture, group: GPUBindGroup) {
+    const { device } = this;
+    for (let face = 0; face < 6; face++) {
+      const buf = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+      const u = new ArrayBuffer(16);
+      new Uint32Array(u, 0, 1)[0] = face;
+      new Float32Array(u, 4, 1)[0] = CLOUD_CUBE;
+      device.queue.writeBuffer(buf, 0, u);
+      const enc = device.createCommandEncoder();
+      const pass = enc.beginRenderPass({
+        colorAttachments: [{ view: tex.createView({ dimension: '2d', baseArrayLayer: face, arrayLayerCount: 1 }), loadOp: 'clear', storeOp: 'store', clearValue: [0, 0, 0, 1] }],
+      });
+      pass.setPipeline(this.cloudBakePipe);
+      pass.setBindGroup(0, device.createBindGroup({ layout: this.oneBufLayout, entries: [{ binding: 0, resource: { buffer: buf } }] }));
+      pass.setBindGroup(1, group);
+      pass.draw(3);
+      pass.end();
+      device.queue.submit([enc.finish()]);
+      buf.destroy();
+    }
+  }
+
+  /** Per frame (before drawing): each body's place, size on screen and uniforms (renderScene's loop). */
+  update(g: Game) {
+    const { ship, cur, simTime } = g;
+    const pxPerRad = g.view.pxPerRad;
+    const starPos = cur.star.pos;
+    const { device, m, q, v, s } = this;
+    if (this.star) {
+      const st = this.star;
+      const b = st.b;
+      const rel = v.subVectors(b.pos, ship.pos);
+      const d = rel.length();
+      st.dist = d;
+      st.pxR = (b.radius / d) * pxPerRad;
+      const flux = b.L * (AU / d) * (AU / d);
+      const I = Math.min(1.5, Math.max(0.35, 0.95 + 0.2 * Math.log10(flux)));
+      const minPx = (16 + 22 * I) * 1.6;
+      const size = Math.max(b.radius * 5, (d / pxPerRad) * minPx);
+      const f = new Float32Array(STAR_BYTES / 4);
+      m.compose(rel, q.identity(), s.setScalar(b.radius));
+      f.set(m.elements, 0);
+      f.set([b.color.r, b.color.g, b.color.b, b.seed], 16);
+      const gc = b.color.clone().lerp(new THREE.Color(1, 1, 1), 0.2);
+      f.set([gc.r, gc.g, gc.b, I], 20);
+      f.set([rel.x, rel.y, rel.z, size], 24);
+      f[28] = simTime;
+      device.queue.writeBuffer(st.buf, 0, f);
+    }
+    let nd = 0;
+    for (const w of this.worlds) {
+      const b = w.b;
+      const rel = v.subVectors(b.pos, ship.pos);
+      const d = rel.length();
+      w.dist = d;
+      const pxR = (b.radius / d) * pxPerRad;
+      w.pxR = pxR;
+      w.mesh = pxR > 140 ? this.sphere.hi : pxR > 14 ? this.sphere.mid : this.sphere.lo;
+      const f = new Float32Array(w.data),
+        i = new Int32Array(w.data);
+      const wq = worldQuat(b, q);
+      m.compose(rel, wq, s.setScalar(b.radius));
+      f.set(m.elements, 0);
+      m.makeRotationFromQuaternion(wq);
+      f.set(m.elements, 16);
+      const qInv = wq.clone().invert();
+      m.makeRotationFromQuaternion(qInv);
+      f.set(m.elements, 32);
+      const light = new THREE.Vector3().subVectors(starPos, b.pos).normalize();
+      f.set([light.x, light.y, light.z, 0], 68);
+      const lightL = light.clone().applyQuaternion(qInv);
+      f.set([lightL.x, lightL.y, lightL.z, 0], 72);
+      f.set([rel.x, rel.y, rel.z, b.radius], 76);
+      f[89] = simTime;
+      f[90] = d - b.radius;
+      i[100] = Math.max(4, Math.min(17, Math.round(4 + Math.log2(Math.max(pxR, 1) / 30))));
+      device.queue.writeBuffer(w.buf, 0, w.data);
+      if (w.ring && b.ring) {
+        // the disc: in the world's tilted plane (not spinning), radii in planet radii
+        const tilt = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(Math.cos(b.seed), 0, Math.sin(b.seed)), b.tilt);
+        const flat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+        m.compose(rel, tilt.multiply(flat), s.setScalar(b.radius));
+        const rf = new Float32Array(RING_BYTES / 4);
+        rf.set(m.elements, 0);
+        rf.set([b.ring.color.r, b.ring.color.g, b.ring.color.b, b.ring.seed], 16);
+        rf.set([light.x, light.y, light.z, b.radius], 20);
+        rf.set([rel.x, rel.y, rel.z, 0], 24); // (near fade: the rocks come in phase 4)
+        rf.set([b.ring.inner, b.ring.outer], 28);
+        device.queue.writeBuffer(w.ring.buf, 0, rf);
+      }
+      // distant bodies as dots of reflected starlight
+      if (pxR < 2.5 && nd < MAXDOTS) {
+        const dS = b.pos.distanceTo(starPos);
+        const toS = new THREE.Vector3().subVectors(starPos, b.pos).normalize();
+        const phase = 0.5 * (1 - toS.dot(rel) / d);
+        const dA = d / AU;
+        const br = ((6e8 * b.albedo * cur.star.L * (b.radius / dS) ** 2) / (dA * dA)) * (0.15 + phase);
+        const a = Math.max(0, Math.min(1, (Math.log10(br) + 3.2) / 3.2)) * (pxR < 1.2 ? 1 : (2.5 - pxR) / 1.3);
+        if (a > 0.02) {
+          const c = w.dotColor;
+          this.dotData.set([rel.x, rel.y, rel.z, c.r * a, c.g * a, c.b * a, (2.2 + 2.5 * a) * this.pr], nd * 7);
+          nd++;
+        }
+      }
+    }
+    this.dotCount = nd;
+    if (nd) device.queue.writeBuffer(this.dotBuf, 0, this.dotData, 0, nd * 7);
+  }
+
+  /** Render pixels per CSS pixel (GpuRenderer.resize). */
+  pr = 1;
+
+  /** Opaque: surfaces and the star's disc. */
+  drawOpaque(pass: GPURenderPassEncoder) {
+    if (this.star && this.star.pxR > 0.6) {
+      pass.setPipeline(this.discPipe);
+      pass.setBindGroup(1, this.star.group);
+      this.drawMesh(pass, this.sphere.mid, true);
+    }
+    pass.setPipeline(this.planetPipe);
+    for (const w of this.worlds) {
+      if (w.pxR <= 0.6) continue;
+      pass.setBindGroup(1, w.group);
+      this.drawMesh(pass, w.mesh, true);
+    }
+  }
+
+  /** Transparent, far to near within each kind (glow, rings and dots; skies; cloud decks). */
+  drawTransparent(pass: GPURenderPassEncoder) {
+    const far = [...this.worlds].sort((a, b) => b.dist - a.dist);
+    if (this.star) {
+      pass.setPipeline(this.glowPipe);
+      pass.setBindGroup(1, this.star.group);
+      pass.draw(6);
+    }
+    pass.setPipeline(this.ringPipe);
+    for (const w of far) {
+      if (!w.ring) continue;
+      pass.setBindGroup(1, w.ring.group);
+      this.drawMesh(pass, w.ring.mesh, false);
+    }
+    if (this.dotCount) {
+      pass.setPipeline(this.dotsPipe);
+      pass.setVertexBuffer(0, this.dotBuf);
+      pass.draw(6, this.dotCount);
+    }
+    pass.setPipeline(this.atmoPipe);
+    for (const w of far) {
+      if (!w.air || w.pxR <= 2) continue;
+      pass.setBindGroup(1, w.group);
+      this.drawMesh(pass, this.sphere.hi, false);
+    }
+    pass.setPipeline(this.cloudPipe);
+    for (const w of far) {
+      if (!w.cloud || w.pxR <= 2) continue;
+      pass.setBindGroup(1, w.group);
+      this.drawMesh(pass, this.sphere.hi, false);
+    }
+  }
+
+  private drawMesh(pass: GPURenderPassEncoder, mesh: Mesh, normals: boolean) {
+    pass.setVertexBuffer(0, mesh.pos);
+    if (normals) pass.setVertexBuffer(1, mesh.nrm);
+    pass.setIndexBuffer(mesh.idx, mesh.format);
+    pass.drawIndexed(mesh.count);
+  }
+
+  /** How far a body is and how big it looks (for the overlay). */
+  view(b: Body) {
+    if (this.star?.b === b) return this.star;
+    return this.worlds.find((w) => w.b === b);
+  }
+
+  private clear() {
+    for (const w of this.worlds) {
+      w.buf.destroy();
+      w.cloud?.destroy();
+      if (w.ring) {
+        w.ring.buf.destroy();
+        this.freeMesh(w.ring.mesh);
+      }
+    }
+    this.worlds = [];
+    this.star?.buf.destroy();
+    this.star = null;
+  }
+
+  dispose() {
+    this.clear();
+    for (const mesh of Object.values(this.sphere)) this.freeMesh(mesh);
+    this.noiseTex.destroy();
+    this.noCloud.destroy();
+    this.dotBuf.destroy();
+  }
+}

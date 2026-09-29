@@ -61,7 +61,12 @@ Both renderers live side by side until WebGPU matches WebGL: the game stays play
   - The Milky Way cube map baked in WGSL (a port of the GLSL noise and sky), and the stars as instanced quads.
   - Checked against WebGL at the galactic centre and at a nebula on another cube face: identical.
   - Not yet: the periscope's sharper sky patch, the performance overlay's GPU timing, hyperspace.
-- [ ] 2. Worlds · [ ] 3. Terrain · [ ] 4. Ring belt · [ ] 5. Stations · [ ] 6. Ships and effects · [ ] 7. Auto-exposure, timings, remove WebGL
+- [x] **2. Worlds** (`gpu/worlds.ts`, the WGSL in `gpu/shaders/`):
+  - Ported from GLSL: the star (disc and glow), the planets' far sphere (surface, terrain as bumps, city lights), the sky shell, the cloud decks (a cube-map bake per world), the ring discs, and dots for distant bodies.
+  - The GLSL includes (noise3d, terrain, atmo, clouds, city) are WGSL parts; per-world uniforms are one `World` block (world.wgsl).
+  - Checked against WebGL for an Earth-like world from orbit, the star and a ringed giant: matching.
+  - Not yet: the auto-exposure (phase 7; exposure stays 1), the ring's near fade (it comes with the rocks, phase 4).
+- [ ] 3. Terrain · [ ] 4. Ring belt · [ ] 5. Stations · [ ] 6. Ships and effects · [ ] 7. Auto-exposure, timings, remove WebGL
 
 **Dev note:** the preview tooling serves the main checkout. For this worktree, run
 `npx vite --port 5175` in it and open `http://localhost:5175/?gpu=webgpu`.
