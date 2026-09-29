@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { HANGAR_R, PAD_COUNT, PAD_R, padLocal, spinRateFor, whereIs } from '../sim/stationGeom';
 import { THREE } from '../lib/three';
+import { HOLD_OUT, clearPath } from '../sim/autodock';
 
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 
@@ -24,5 +25,17 @@ describe('station geometry', () => {
   it('spins for about half a g on the wall', () => {
     const w = spinRateFor(1000);
     expect((w * w * HANGAR_R * 1000) / 9.81).toBeCloseTo(0.5, 5);
+  });
+
+  it("the docking computer's path to the hold point: straight when clear, round the station when not", () => {
+    const S = 1407; // Rubin Hub: big enough that its hold point sits inside the keep-out sphere
+    const hold = new THREE.Vector3(0, 0, S / 2 + HOLD_OUT);
+    // out on the slot's axis: straight in (it used to park here for good)
+    expect(clearPath(new THREE.Vector3(0, 0, 14_000), hold, S)).toEqual(hold);
+    // behind the station: round it, never through
+    const p = new THREE.Vector3(0, 0, -14_000);
+    const way = clearPath(p, hold, S);
+    expect(way.equals(hold)).toBe(false);
+    expect(way.length()).toBeGreaterThanOrEqual(S * 0.87);
   });
 });

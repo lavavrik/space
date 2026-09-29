@@ -196,6 +196,11 @@ export function destroyShip(g: Game, reason: string, body: Body) {
   g.dockRequest = null;
   g.inStation = null;
   g.ascent = null;
+  // the computers stand down (a replacement ship arrived still flying the last one's docking)
+  g.autodock = null;
+  g.autodockStation = null;
+  g.guide = null;
+  g.pivot = false;
   ship.ap = null;
   ship.ftlCharge = 0;
   ship.landed = null;

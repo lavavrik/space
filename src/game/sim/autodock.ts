@@ -44,6 +44,7 @@ import { applyThrust } from './resources';
 import { airDensityAt, airSpeedLimit } from './catapult';
 import { HANGAR_R, padOf, stationPointVelAt, stationQuat } from './stationGeom';
 import { stationAcc } from './stations';
+import { NORMAL_ACC } from '../constants';
 
 export type AutoPhase = 'approach' | 'wait' | 'hold' | 'align' | 'enter' | 'descend' | 'rise' | 'exit';
 
@@ -77,7 +78,10 @@ export function clearPath(p: THREE.Vector3, target: THREE.Vector3, S: number) {
   // closest approach of the segment p → target to the station's centre
   const d = target.clone().sub(p);
   const t = Math.max(0, Math.min(1, -p.dot(d) / Math.max(d.lengthSq(), 1e-9)));
-  if (p.clone().addScaledVector(d, t).length() > hull) return target;
+  // nearest at the target itself: the way there is clear (the target is chosen clear of the hull; on
+  // a big station the hold point, HOLD_OUT off the slot's face, is inside this sphere, and counting
+  // it as "in the way" parked the ship on the axis 15 km out for good)
+  if (t >= 1 || p.clone().addScaledVector(d, t).length() > hull) return target;
   const R = S * AROUND_K + AROUND_M;
   const pn = p.clone().normalize(),
     tn = target.clone().normalize();
@@ -258,7 +262,18 @@ export function autodock(g: Game, dt: number, gravVec: THREE.Vector3) {
   const T = vDes.sub(ship.vel).divideScalar(ad.phase === 'descend' ? TAU / 2 : TAU);
   // a sky station doesn't fall: hold the ship up with it (plus the pull that turns it with the world)
   if (sky) T.add(stationAcc(st)).sub(gravVec);
-  if (T.length() > AUTO_ACC) T.setLength(AUTO_ACC);
+  // Normally it keeps to AUTO_ACC. But taken over while closing fast (engaged 5 km out from a
+  // rendezvous still braking for its 2 km stand-off at ~500 m/s, it needed 5.5 km to stop and hit
+  // the hull at 300 m/s), it brakes as hard as it must to stop short of the hull, up to the drive's
+  // limit (with a margin: 1.5× what it needs).
+  let acc = AUTO_ACC;
+  if (!inHull && !sky) {
+    const out = rel.length();
+    const closing = -ship.vel.clone().sub(vFrame).dot(rel) / Math.max(out, 1);
+    const room = Math.max(1, out - (S * 0.87 + KEEP_OUT));
+    if (closing > 0) acc = Math.min(NORMAL_ACC, Math.max(AUTO_ACC, (1.5 * closing * closing) / (2 * room)));
+  }
+  if (T.length() > acc) T.setLength(acc);
   T.multiplyScalar(dt);
   applyThrust(g, T, dt);
   ship.vel.add(T);

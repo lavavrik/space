@@ -100,6 +100,19 @@ Using the mid-step position put ω × r about 15 m/s wrong, and bounced ships ou
 
 The docking computer never flies through the station on its way to the hold point. If the straight line would pass within 150 m of the station's circumscribed sphere, it heads for a point on a sphere 1.2 station sizes + 250 m out, 0.5 rad further round toward the slot's side. It re-picks that point every step, so it climbs away from the hull and curves round to the front. This matters because the hull spins: its corners move at ~70 m/s, over the 35 m/s crash limit, so any touch is fatal. (`autodock.ts clearPath`; tested from starts all round a station, down to 50 m off the hull.)
 
+- **The target itself is never "in the way."** On a big station (over ~1.2 km), the hold point 600 m
+  off the slot's face lies inside that keep-out sphere. Counting it as blocked parked the ship on
+  the axis, 15 km out, for good (Rubin Hub, Lovelace Terminal).
+- **Taken over at speed, it brakes hard.** Its normal thrust is 25 m/s², but when closing faster
+  than that can stop short of the hull, it brakes with whatever it needs, up to the drive's
+  400 m/s² (1.5× the need, as margin). Engaged with K 5 km out while the rendezvous autopilot was
+  still braking at ~500 m/s for its 2 km stand-off, it needed 5.5 km to stop and hit the hull at
+  300 m/s.
+- It was checked over 50 runs: all five orbital stations, five directions each, both engaged
+  from 20 km and handed over from a rendezvous at 5 km. Every run docked.
+- **When the ship is lost, the computers stand down.** The docking computer, its guide and the
+  pivot used to carry on flying the replacement ship.
+
 ## Attitude on the way in
 
 On the way to the hold point (and while waiting for clearance) the docking computer points the nose where it's going, or at the station while it waits, and keeps the ship's roll. Within 250 m of the hold point it turns to the slot's orientation for the align phase. (`autodock.ts`, FACE_SLOT.)
