@@ -265,6 +265,8 @@ export interface Lamp {
 }
 
 export interface HudSnapshot {
+  /** The pause menu (Esc), while it's up: the switches it shows. */
+  pause: { sound: boolean; names: boolean; system: string; credits: string } | null;
   /** The system map is open: the flight HUD steps aside (render/SystemMap.ts). */
   mapOpen: boolean;
   lamps: Lamp[];

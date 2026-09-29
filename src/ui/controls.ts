@@ -44,6 +44,7 @@ export const GROUPS: { id: ControlGroup; title: string; keys: [string, string][]
       ['⇧J', 'contracts: the job board'],
       ['⇧N', 'object names on / off'],
       ['⇧P', 'sound on / off'],
+      ['Esc', 'pause menu (cursor free)'],
       ['B', 'influences'],
       ['U', 'ship stats'],
     ],

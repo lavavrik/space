@@ -291,3 +291,17 @@
 .svcr { display: inline-flex; align-items: center; gap: .3rem; font: 400 .95rem var(--ui-font); color: var(--text); }
 .svfill .svto { opacity: .35; }
 .svslider { pointer-events: auto; width: 100%; accent-color: var(--amber); margin: 0; }
+
+/* the pause menu (Esc): a dimmed view with a box of buttons in the middle */
+#pause { position: fixed; inset: 0; z-index: 200; /* over the whole HUD */ display: grid; place-items: center; background: rgba(4, 6, 10, .55); pointer-events: auto; }
+.pmbox { width: 22rem; max-width: calc(100% - 2rem); display: flex; flex-direction: column; gap: .4rem; padding: 1.2rem 1.4rem 1.3rem; }
+.pmtitle { font-size: 1.6rem; font-weight: 600; letter-spacing: .35em; color: var(--amber); text-align: center; }
+.pmsub { text-align: center; color: var(--amber-dim); font-size: .9rem; margin-bottom: .4rem; }
+.pmbtn { pointer-events: auto; cursor: pointer; display: flex; align-items: center; gap: .55rem; width: 100%; padding: .5rem .75rem; background: rgba(255, 165, 58, .04); border: 1px solid var(--amber-faint); color: var(--text); font: inherit; font-size: .95rem; letter-spacing: .06em; text-align: left; }
+.pmbtn:hover { background: rgba(255, 165, 58, .12); border-color: var(--amber-dim); }
+.pmbtn svg { font-size: 1.15rem; color: var(--amber); flex: none; }
+.pmbtn kbd { margin-left: auto; font: inherit; font-size: .75rem; color: var(--amber-dim); border: 1px solid var(--amber-faint); padding: 0 .35rem; }
+.pmbtn.main { border-color: var(--amber-dim); }
+.pmbtn.danger { margin-top: .3rem; color: var(--amber-dim); justify-content: center; }
+.pmbtn.danger.armed { color: var(--red); border-color: var(--red); }
+.pmsave { font-size: .78rem; color: var(--amber-dim); text-align: center; }

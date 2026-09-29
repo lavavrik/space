@@ -20,6 +20,16 @@ import { adjustAlt, closePlanner, engageOrbit, openPlanner, requestDisengage, re
 /** Handle a key press (not held keys, which the simulation polls). */
 export function onPress(g: Game, code: string) {
   const { ship, keys } = g;
+  // Esc (only reaches us with the cursor free: while it's captured the browser takes Esc to free it):
+  // closes the system map if it's open, else opens or closes the pause menu
+  if (code === 'Escape') {
+    if (g.paused) g.resume();
+    else if (g.map.open) g.overlay.map.toggle(g);
+    else g.pause();
+    g.invalidateHud();
+    return;
+  }
+  if (g.paused) return; // the pause menu: nothing else until it's closed
   if (code === 'Backquote') g.perf.toggle(); // performance overlay, available any time
   g.invalidateHud();
   if (code === 'Tab') g.helpVisible = !g.helpVisible;
@@ -266,10 +276,12 @@ export function onPress(g: Game, code: string) {
 
 /** Auto-repeat only matters for stepping the planner altitude. */
 export function onRepeat(g: Game, code: string) {
+  if (g.paused) return;
   if (g.planner && (code === 'BracketLeft' || code === 'BracketRight')) onPress(g, code);
 }
 
 export function onWheel(g: Game, deltaY: number) {
+  if (g.paused) return;
   if (g.map.open) g.overlay.map.zoom(g, deltaY);
   else if (g.planner) adjustAlt(g, deltaY < 0 ? 1.1 : 1 / 1.1);
   else if (g.zoom.on) wheelZoom(g, deltaY);

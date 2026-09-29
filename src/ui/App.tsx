@@ -3,6 +3,7 @@ import { AvionicsPanel } from './components/AvionicsPanel';
 import { CargoPanel } from './components/CargoPanel';
 import { ContractsPanel } from './components/ContractsPanel';
 import { StationPanel } from './components/StationPanel';
+import { PauseMenu } from './components/PauseMenu';
 import { BodyInfo } from './components/BodyInfo';
 import { HelpPanel } from './components/HelpPanel';
 import { InfluencesPanel } from './components/InfluencesPanel';
@@ -23,6 +24,13 @@ export function App() {
   return (
     <>
       <div ref={hostRef} />
+      {hud?.pause && (
+        <PauseMenu
+          p={hud.pause}
+          save={hud.save}
+          act={{ resume: () => game!.resume(), controls: () => game!.showControls(), sound: () => game!.toggleSound(), names: () => game!.toggleNames(), save: () => game!.saveFromMenu(), newGame: () => game!.newGame() }}
+        />
+      )}
       {hud && hud.mapOpen && (
         // the system map covers the view (drawn on the HUD canvas): only the messages stay
         <div id="hud">

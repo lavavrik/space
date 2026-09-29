@@ -180,6 +180,9 @@ export class Game {
   warned: Record<string, boolean> = {};
   msg: Message = { text: '', kind: '', on: false, t: 0 };
 
+  /** The pause menu is up (Esc with the cursor free): nothing moves. */
+  paused = false;
+
   /** Names on the HUD's markers (bodies, stations, ships, stars); Shift+N turns them off for a clean view. */
   showNames = true;
   /** The system map (Shift+O; render/SystemMap.ts). */
@@ -261,6 +264,7 @@ export class Game {
       onRepeat: (code) => onRepeat(this, code),
       onWheel: (dy) => onWheel(this, dy),
       onClick: (x, y, locked) => {
+        if (this.paused) return;
         if (this.map.open) {
           this.overlay.map.click(this, x, y);
           this.invalidateHud();
@@ -274,6 +278,7 @@ export class Game {
       },
       isActive: () => true,
       onMiddleClick: () => {
+        if (this.paused) return;
         startPivot(this);
         this.invalidateHud();
       },
@@ -543,6 +548,44 @@ export class Game {
   }
 
   /** Top-right button with the mouse free: capture it for steering. */
+  /**
+   * The pause menu (Esc with the cursor free; ui/components/PauseMenu.tsx): the simulation and the
+   * sound stop, and the mouse is let go. Resuming takes the mouse back unless `keepCursor`.
+   */
+  pause() {
+    if (this.paused) return;
+    this.paused = true;
+    document.exitPointerLock?.();
+    this.audio.visibility(true);
+    this.invalidateHud();
+  }
+  resume(keepCursor = false) {
+    if (!this.paused) return;
+    this.paused = false;
+    this.newGameConfirm = 0;
+    this.audio.visibility(document.hidden);
+    if (!keepCursor) this.input.requestLock();
+    this.invalidateHud();
+  }
+  /** Pause menu: the controls (resumes, cursor free, with the controls list open). */
+  showControls() {
+    this.helpVisible = true;
+    this.avionicsVisible = this.infoVisible = this.influencesVisible = this.outfitVisible = this.radarVisible = this.cargoVisible = this.contractsVisible = false;
+    this.resume(true);
+  }
+  toggleSound() {
+    this.audio.toggleMute();
+    this.invalidateHud();
+  }
+  toggleNames() {
+    this.showNames = !this.showNames;
+    this.invalidateHud();
+  }
+  saveFromMenu() {
+    this.saveNow();
+    this.invalidateHud();
+  }
+
   captureMouse() {
     this.input.requestLock();
   }
@@ -635,9 +678,12 @@ export class Game {
     perf.frameStart(now - this.last);
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
-    updatePeriscope(this, dt);
-    update(this, dt * this.warp, dt);
-    if ((this.saveT -= dt) <= 0) {
+    // paused (the pause menu, Esc): the clock stops; the view is still drawn under the menu
+    if (!this.paused) {
+      updatePeriscope(this, dt);
+      update(this, dt * this.warp, dt);
+    }
+    if (!this.paused && (this.saveT -= dt) <= 0) {
       this.saveT = AUTOSAVE_S;
       this.saveNow();
     }
