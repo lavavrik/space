@@ -252,7 +252,7 @@ export interface GuideView {
  */
 export type LampId =
   | 'fa' | 'decoupled' | 'autopilot' | 'cruise' | 'dock'
-  | 'sun' | 'lights' | 'radiators' | 'pump' | 'vent' | 'scoop' | 'radar' | 'shore'
+  | 'sun' | 'lights' | 'radiators' | 'pump' | 'vent' | 'scoop' | 'radar' | 'shore' | 'fuelcell'
   | 'charge' | 'entry' | 'masslock' | 'hot' | 'battery' | 'power' | 'warp' | 'pivot' | 'zoom';
 export interface Lamp {
   id: LampId;

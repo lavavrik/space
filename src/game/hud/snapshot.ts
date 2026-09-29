@@ -32,7 +32,7 @@ import { deflectorFitted, fuelCellFitted, guardFitted, laserFitted } from '../ou
 import { threatNow } from '../sim/belt';
 import { rockLabel } from '../sim/ringRocks';
 import { liveProspects, prospectNow } from '../sim/prospect';
-import { FC_KWH, O2_PER_H2, o2Days } from '../sim/oxygen';
+import { FC_KWH, FC_OFF, FC_ON, O2_PER_H2, o2Days } from '../sim/oxygen';
 import { BOARD_S, MAX_ACTIVE, board, canDeliverMetal, cantTake, reach, type Contract } from '../sim/contracts';
 import { FUELS, fuelPrice, CARGO_CAP, COMMODITIES, cargoMass, cargoValue, fmtCr, refuelQuote, repairQuote, sellPrice, type Commodity } from '../sim/economy';
 import { fitPrice } from '../outfit/fit';
@@ -165,6 +165,8 @@ function lamps(g: Game): Lamp[] {
     L('vent', ship.vent, 'Hydrogen vent', 'R', 'Dumps hydrogen through the heat exchanger to cool the hull', 'ftl'),
     L('scoop', ship.scoop, 'Fuel scoop', undefined, ship.scoop || 'Not scooping', 'ftl'),
     L('radar', g.radar.sweep > 0, 'Radar sweep', 'Shift+Y', g.radar.sweep > 0 ? `${g.radar.sweep.toFixed(1)} s left` : 'Idle', 'on', true),
+    // the fuel cell (sim/oxygen.ts): lit while it runs, with its output and what it burns
+    L('fuelcell', power.fcOn, 'Fuel cell', undefined, power.fcOn ? `${fmtPower(power.fcKW)} from H₂ + O₂ · ${((power.fcKW / FC_KWH) * O2_PER_H2).toFixed(0)} kg O₂/h · stops over ${FC_OFF * 100} % battery` : `Starts when the battery falls under ${FC_ON * 100} %`),
     L('shore', power.shore > 0, 'Shore power', undefined, power.shore > 0 ? `Station supplying ${fmtPower(power.shore)}` : 'Only when docked'),
     // warnings and modes
     L('charge', charging, g.jump ? 'Hyperdrive charging' : 'FTL drive charging', g.jump ? 'H' : 'J', charging ? `${Math.max(0, g.jump?.t ?? ship.ftlCharge).toFixed(1)} s at full power` : undefined, 'ftl', true, charging ? chargeDone : undefined),

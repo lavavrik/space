@@ -40,6 +40,7 @@ The ship carries a 2 t tank of liquid oxygen (LOX, at 90 K, 1.14 kg/L), with its
 - **Fuel cell** (a module, a reserve generator: FC-50 Ember 50 kW / 0.9 t, FC-150 Hearth 150 kW / 2.5 t; the new ship has the FC-150 in a 7th slot):
   - It works like the Apollo and Shuttle cells: H₂ + ½O₂ → water and electricity, at 55 % of hydrogen's heating value. That's 18.3 kWh per kg of H₂, taking 7.94 kg of O₂ each. The other 45 % is heat in the hull.
   - It starts on its own when the battery falls under 30 % and stops over 80 %. It covers the loads the panels can't and recharges the battery, up to its rating. It has a switch on the power schematic.
+  - While it runs you see: a flask lamp on the dashboard (its tooltip gives output and O₂ burn), "fuel cell +N kW" on the battery gauge, its burn rate and time left on the O₂ gauge, a message when it starts, and its box on the power schematic.
   - At 150 kW it burns 8.2 kg of H₂ and 65 kg of O₂ an hour, so a full tank lasts ~31 hours. The hydrogen barely registers; the oxygen is the limit.
 - **Oxygen comes from:**
   - Stations: 0.3 Cr/kg, on the Services tab's slider (a full tank ~600 Cr).

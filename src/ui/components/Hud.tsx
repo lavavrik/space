@@ -1,5 +1,5 @@
 import {
-  Anchor, ArrowsOutCardinal, BatteryWarning, Binoculars, Broadcast, Crosshair, Fan, Funnel, Gauge, Headlights, Hourglass, Lightning,
+  Anchor, ArrowsOutCardinal, Flask, BatteryWarning, Binoculars, Broadcast, Crosshair, Fan, Funnel, Gauge, Headlights, Hourglass, Lightning,
   LightningSlash, Fire, Lock, PlugsConnected, ShieldCheck, SolarPanel, Snowflake, SteeringWheel, Sun, ThermometerHot, Wind, type Icon,
 } from '@phosphor-icons/react';
 import { RESOURCE_ICONS } from './icons';
@@ -69,7 +69,7 @@ export function ShipGauges({ s }: { s: SystemsView }) {
 /** Phosphor icons (MIT) for the dashboard lamps. */
 const LAMP_ICONS: Record<LampId, Icon> = {
   fa: ShieldCheck, decoupled: ArrowsOutCardinal, autopilot: SteeringWheel, cruise: Gauge, dock: Anchor,
-  sun: Sun, lights: Headlights, radiators: Snowflake, pump: Fan, vent: Wind, scoop: Funnel, radar: Broadcast, shore: PlugsConnected,
+  sun: Sun, lights: Headlights, radiators: Snowflake, pump: Fan, vent: Wind, scoop: Funnel, radar: Broadcast, shore: PlugsConnected, fuelcell: Flask,
   charge: Lightning, entry: Fire, masslock: Lock, hot: ThermometerHot, battery: BatteryWarning, power: LightningSlash, warp: Hourglass, pivot: Crosshair, zoom: Binoculars,
 };
 
