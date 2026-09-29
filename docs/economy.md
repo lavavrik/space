@@ -32,14 +32,16 @@ batteries 4k/12k/25k/60k.
 
 ## Cargo and metals
 
-- A 20 t hold (`Ship.cargo`, saved; lost with the ship).
+- A 200 t hold (`Ship.cargo`, saved; lost with the ship). Its load counts in the ship's mass: a full
+  hold more than doubles the empty ship's 80 t, and Δv drops to match.
 - The mining laser's scoop catches a little of the metal in the rock it breaks up (1 part in 10,000
   of the metal in what it scatters), split 90 % nickel-iron, 9 % cobalt, 1 % platinum-group metals.
 - Most ring rocks are 90–99 % ice with a trace of metal (~0.7 kg/s under the ML-6). One in 30 is a
-  metal-rich rock (25–55 % metal, little ice): ~30 kg/s, 2 t (~20,000 Cr) a minute, but little
-  propellant. The laser's target readout shows the make-up: prospect before you fire.
-- Sold at any station (docked panel: "sell the hold"): nickel-iron 3, cobalt 30, platinum-group
-  metals 500 Cr/kg list (≈ 10 Cr per kg of mixed metal).
+  metal-rich rock (25–55 % metal, little ice): ~30 kg/s, ~2 t (~500 Cr) a minute, but little
+  propellant; the hold fills in about two hours of it. The laser's target readout shows the make-up: prospect before you fire.
+- Sold at any station (docked panel: "sell the hold"): nickel-iron 0.05, cobalt 1, platinum-group
+  metals 10 Cr/kg list (≈ 0.24 Cr per kg of mixed metal, ~47,000 Cr for a full hold). The first
+  prices were 40× this: a 20 t hold paid ~200,000 Cr.
 
 ## Not yet
 

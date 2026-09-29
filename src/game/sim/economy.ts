@@ -16,14 +16,16 @@ import { SHIP } from '../constants';
 import type { Station } from '../types';
 
 export const START_CREDITS = 25_000;
-/** The hold (kg). */
-export const CARGO_CAP = 20_000;
+/** The hold (kg). Its load counts in the ship's mass (sim/resources.ts dryMass). */
+export const CARGO_CAP = 200_000;
 
 export type Commodity = 'nife' | 'cobalt' | 'pgm';
 export const COMMODITIES: Record<Commodity, { name: string; price: number }> = {
-  nife: { name: 'Nickel-iron', price: 3 }, // Cr/kg, list
-  cobalt: { name: 'Cobalt', price: 30 },
-  pgm: { name: 'Platinum-group metals', price: 500 },
+  // Cr/kg, list: ≈ 0.24 Cr per kg of mixed metal, ~47,000 Cr for a full 200 t hold (a first price
+  // of ~10 Cr/kg paid ~200,000 for a 20 t hold: more than any module)
+  nife: { name: 'Nickel-iron', price: 0.05 },
+  cobalt: { name: 'Cobalt', price: 1 },
+  pgm: { name: 'Platinum-group metals', price: 10 },
 };
 /** What a rock's metal is, by mass. */
 export const METAL_SPLIT: Record<Commodity, number> = { nife: 0.9, cobalt: 0.09, pgm: 0.01 };

@@ -57,6 +57,6 @@ describe('economy', () => {
     expect(cargoMass(g)).toBeCloseTo(CARGO_CAP, 6);
     sellCargo(g);
     expect(cargoMass(g)).toBe(0);
-    expect(g.credits).toBeGreaterThan(CARGO_CAP * 5);
+    expect(g.credits).toBeGreaterThan(CARGO_CAP * 0.2);
   });
 });

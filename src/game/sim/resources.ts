@@ -8,7 +8,8 @@ import { battCap, grant } from './power';
 import { RADIATOR_MAX_ACC, outfitMass, scoopFitted } from '../outfit/catalog';
 
 /** Dry mass: the hull plus whatever modules are fitted. */
-export const dryMass = (ship: Ship) => SHIP.dry + outfitMass(ship.outfit);
+/** The ship without propellant: hull, modules, and whatever's in the hold (a full hold is 200 t: Δv drops). */
+export const dryMass = (ship: Ship) => SHIP.dry + outfitMass(ship.outfit) + Object.values(ship.cargo).reduce((a: number, b) => a + (b ?? 0), 0);
 export const shipMass = (ship: Ship) => dryMass(ship) + ship.prop;
 /** Rocket equation: Δv the remaining propellant can deliver. */
 export const deltaVLeft = (ship: Ship) => SHIP.ve * Math.log((dryMass(ship) + ship.prop) / dryMass(ship));
