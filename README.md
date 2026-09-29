@@ -81,6 +81,7 @@ The simulation never touches the DOM. Each frame it steps the physics, draws the
 | V | Decoupled: turn without changing course (normal space and FTL) |
 | J | FTL drive |
 | F | FTL cruise control: the throttle holds. Off, it spools down when you release W and the drive idles; only J drops you out |
+| Shift+O | System map: every orbit, station and ship the radar knows, your orbit and the autopilot's, in one zoomable 3D view (drag turns, wheel zooms, click targets and centres) |
 | Shift+N | Object names on the HUD's markers (bodies, stations, ships, stars) on / off; the markers stay |
 | T / G | Target body or station ahead / cycle by distance |
 | Click | Target the body, station or reachable star under the cursor (or the crosshair, with the mouse captured). Clicking empty space captures the mouse |

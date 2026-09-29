@@ -84,7 +84,12 @@ export function update(g: Game, dt: number, realDt = dt) {
   power.lightsKW = g.lights ? grant(g, LIGHTS_KW, 'headlights') : 0;
 
   // --- rotation
-  const [mdx, mdy] = input.consumeMouse();
+  let [mdx, mdy] = input.consumeMouse();
+  // the system map open: the mouse turns the map's view, not the ship
+  if (g.map.open) {
+    g.overlay.map.rotate(g, mdx, mdy);
+    mdx = mdy = 0;
+  }
   // while the hyperdrive charges it swings the nose onto the destination (updateJump): no manual
   // steering, pivot or sun tracking fighting it
   const jumpCharging = g.jump?.phase === 'charge';

@@ -1,5 +1,6 @@
 import { threatNow } from '../sim/belt';
 import { rockLabel } from '../sim/ringRocks';
+import { SystemMap } from './SystemMap';
 import { occluder } from '../sim/sight';
 import { surfaceDist } from '../sim/terrain';
 import { JUMP_CHARGE_TIME, RESPAWN_TIME } from '../constants';
@@ -37,11 +38,15 @@ export class Overlay {
   private readonly tmp2 = new THREE.Vector3();
   private transit?: TransitState;
 
+  /** The system map (Shift+O), drawn on this canvas in place of the flight HUD while it's open. */
+  readonly map: SystemMap;
+
   constructor(
     private readonly canvas: HTMLCanvasElement,
     private readonly scene: SceneRenderer,
   ) {
     this.ctx = canvas.getContext('2d')!;
+    this.map = new SystemMap(this.ctx, () => this.ui);
   }
 
   resize(W: number, H: number) {
@@ -202,6 +207,10 @@ export class Overlay {
     }
     if (ship.dead) {
       this.drawDestroyed(ship.dead.t, ship.dead.reason);
+      return;
+    }
+    if (g.map.open) {
+      this.map.draw(g, W, H);
       return;
     }
 

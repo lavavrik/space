@@ -261,6 +261,8 @@ export interface Lamp {
 }
 
 export interface HudSnapshot {
+  /** The system map is open: the flight HUD steps aside (render/SystemMap.ts). */
+  mapOpen: boolean;
   lamps: Lamp[];
   helpVisible: boolean;
   /** The save (save.ts): when it was last written, and whether "new game" is armed. */

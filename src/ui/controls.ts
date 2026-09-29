@@ -27,6 +27,7 @@ export const GROUPS: { id: ControlGroup; title: string; keys: [string, string][]
       ['N', 'pick star'],
       ['H', 'hyperjump (again: cancel charge)'],
       ['M', 'navigation / routes'],
+      ['⇧O', 'system map'],
     ],
   },
   {

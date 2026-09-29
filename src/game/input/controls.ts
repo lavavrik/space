@@ -134,6 +134,12 @@ export function onPress(g: Game, code: string) {
 
   switch (code) {
     case 'KeyO':
+      // Shift+O: the system map (render/SystemMap.ts)
+      if (keys.ShiftLeft || keys.ShiftRight) {
+        g.overlay.map.toggle(g);
+        g.invalidateHud();
+        break;
+      }
       // while the autopilot flies, O shows its status instead of switching it off
       g.navPanel = false;
       if (g.planner) closePlanner(g);
@@ -251,6 +257,7 @@ export function onRepeat(g: Game, code: string) {
 }
 
 export function onWheel(g: Game, deltaY: number) {
-  if (g.planner) adjustAlt(g, deltaY < 0 ? 1.1 : 1 / 1.1);
+  if (g.map.open) g.overlay.map.zoom(g, deltaY);
+  else if (g.planner) adjustAlt(g, deltaY < 0 ? 1.1 : 1 / 1.1);
   else if (g.zoom.on) wheelZoom(g, deltaY);
 }

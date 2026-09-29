@@ -32,6 +32,7 @@ import { dockKey, launch, type Dock } from './sim/docking';
 import { catapultLaunch, type Ascent } from './sim/catapult';
 import type { RockThreat } from './sim/belt';
 import { laserOff, type LaserState } from './sim/laser';
+import { mapClosed, type MapState } from './render/SystemMap';
 import { START_CREDITS, buyFuel, buyRepair, sellCargo } from './sim/economy';
 import type { AutoPhase } from './sim/autodock';
 import { fitBattery, fitModule, removeModule } from './outfit/fit';
@@ -164,6 +165,8 @@ export class Game {
 
   /** Names on the HUD's markers (bodies, stations, ships, stars); Shift+N turns them off for a clean view. */
   showNames = true;
+  /** The system map (Shift+O; render/SystemMap.ts). */
+  map: MapState = mapClosed();
   /** Your credits (sim/economy.ts): yours, not the ship's, so a replacement keeps them. */
   credits = START_CREDITS;
   helpVisible = false; // Tab opens the controls (the hint under the system name says so)
@@ -217,7 +220,7 @@ export class Game {
   readonly input: Input;
   private readonly scene: SceneRenderer;
   readonly perf: PerfMonitor;
-  private readonly overlay: Overlay;
+  readonly overlay: Overlay;
   private readonly glCanvas: HTMLCanvasElement;
   private readonly overlayCanvas: HTMLCanvasElement;
   private hudT = 0;
@@ -239,6 +242,11 @@ export class Game {
       onRepeat: (code) => onRepeat(this, code),
       onWheel: (dy) => onWheel(this, dy),
       onClick: (x, y, locked) => {
+        if (this.map.open) {
+          this.overlay.map.click(this, x, y);
+          this.invalidateHud();
+          return;
+        }
         const { W, H } = this.view;
         const hit = pickAt(this, locked ? W / 2 : x, locked ? H / 2 : y);
         // clicking empty space captures the mouse, as before

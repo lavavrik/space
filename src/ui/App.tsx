@@ -19,7 +19,15 @@ export function App() {
   return (
     <>
       <div ref={hostRef} />
-      {hud && (
+      {hud && hud.mapOpen && (
+        // the system map covers the view (drawn on the HUD canvas): only the messages stay
+        <div id="hud">
+          <div id="centre">
+            <Toast toast={hud.toast} />
+          </div>
+        </div>
+      )}
+      {hud && !hud.mapOpen && (
         <>
           <div id="leftcol">
             <Location loc={hud.location} />

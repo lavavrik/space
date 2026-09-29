@@ -78,6 +78,7 @@ export function buildSnapshot(g: Game): HudSnapshot {
         }
       : null,
     nav: g.navPanel || g.route?.running ? navView(g) : null,
+    mapOpen: g.map.open,
     guide: g.guide ? guide(g.guide) : null,
   };
 }
