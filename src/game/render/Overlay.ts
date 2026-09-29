@@ -433,7 +433,7 @@ export class Overlay {
         ctx.stroke();
         if (r < H * 0.4) {
           ctx.fillStyle = AMB + '1)';
-          ctx.fillText(name.toUpperCase(), s.x, s.y - r - 8);
+          if (g.showNames) ctx.fillText(name.toUpperCase(), s.x, s.y - r - 8);
           ctx.fillStyle = 'rgba(255,230,199,0.9)';
           ctx.fillText(fmtDist(surfaceDist(b, ship.pos)), s.x, s.y + r + 15);
         }
@@ -445,7 +445,7 @@ export class Overlay {
         ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
         ctx.stroke();
         ctx.fillStyle = AMB + (b.kind === 'moon' ? '0.5)' : '0.75)');
-        ctx.fillText(name, s.x, s.y - r - 5);
+        if (g.showNames) ctx.fillText(name, s.x, s.y - r - 5);
       }
     }
   }
@@ -499,7 +499,7 @@ export class Overlay {
           ctx.lineTo(s.x - r, s.y + r);
           ctx.stroke();
         }
-        if (isT || d < st.parent.radius * 25) {
+        if (g.showNames && (isT || d < st.parent.radius * 25)) {
           ctx.fillStyle = MINT + '0.95)';
           ctx.fillText(isT ? label.toUpperCase() : stName, s.x, s.y - r - 7);
         }
@@ -543,10 +543,10 @@ export class Overlay {
         this.drawScanArc(g, s.x, s.y, r + 8);
         ctx.fillStyle = CYA + '0.95)';
         ctx.textAlign = 'center';
-        ctx.fillText(text.toUpperCase(), s.x, s.y - r - 8);
+        if (g.showNames) ctx.fillText(text.toUpperCase(), s.x, s.y - r - 8);
         continue;
       }
-      if (d > TRAFFIC_LABEL) continue;
+      if (d > TRAFFIC_LABEL || !g.showNames) continue;
       ctx.fillStyle = ftl ? 'rgba(127,220,255,0.85)' : 'rgba(255,230,199,0.7)';
       ctx.textAlign = 'left';
       ctx.fillText(text, s.x + 8, s.y - 6);
@@ -598,7 +598,7 @@ export class Overlay {
       ctx.beginPath();
       ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
       ctx.stroke();
-      if (off < 0.06) {
+      if (off < 0.06 && g.showNames) {
         ctx.fillStyle = CYA + '0.7)';
         ctx.fillText(`${s.name} · ${ly.toFixed(1)} ly`, p.x, p.y - 11);
       }

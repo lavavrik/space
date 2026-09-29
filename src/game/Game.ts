@@ -134,6 +134,8 @@ export class Game {
   warned: Record<string, boolean> = {};
   msg: Message = { text: '', kind: '', on: false, t: 0 };
 
+  /** Names on the HUD's markers (bodies, stations, ships, stars); Shift+N turns them off for a clean view. */
+  showNames = true;
   helpVisible = false; // Tab opens the controls (the hint under the system name says so)
   /** Body info panel (I), shown in place of the controls list while open. */
   infoVisible = false;

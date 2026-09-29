@@ -224,7 +224,11 @@ export function onPress(g: Game, code: string) {
       cycleTarget(g);
       break;
     case 'KeyN':
-      pickDest(g);
+      // N: pick a star to jump to; Shift+N: names on the HUD's markers on / off
+      if (keys.ShiftLeft || keys.ShiftRight) {
+        g.showNames = !g.showNames;
+        g.showMsg(g.showNames ? 'Object names shown' : 'Object names hidden · Shift+N shows them');
+      } else pickDest(g);
       break;
     case 'KeyH':
       startJump(g);
