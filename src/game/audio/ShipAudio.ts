@@ -217,8 +217,9 @@ export class ShipAudio {
     const set = (p: AudioParam, x: number, tau = 0.08) => p.setTargetAtTime(x, t, tau);
     const { layers: L } = this;
     set(L.hum.gain.gain, 0.12 * v.hum, 0.5);
-    // the idle hum: louder and higher as the drive works
-    set(L.idle.gain.gain, 0.16 * v.idle * (0.6 + 0.4 * v.engine), 0.3);
+    // the drive's warble: only while it works, louder and higher with thrust (at rest it droned on
+    // as a constant "wawawa")
+    set(L.idle.gain.gain, 0.16 * v.idle * v.engine, 0.3);
     set(L.idle.filter!.frequency, 420 + 900 * v.engine, 0.15);
     for (const [i, o] of L.idle.osc!.entries()) set(o.frequency, [82, 123.5, 41][i] * (1 + 0.25 * v.engine), 0.3);
     set(L.engine.gain.gain, 0.9 * v.engine, 0.1);

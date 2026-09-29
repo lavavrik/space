@@ -16,7 +16,7 @@ what the pilot hears inside the hull.
 | Layer | When | Sound |
 |---|---|---|
 | hum | alive | 50/100 Hz and quiet fans (life support) |
-| idle | normal space, flying (not docked, landed or in FTL) | the drive's warbling hum: two saws through a resonant low-pass whose cutoff wobbles at 5.5 Hz, with a slow pitch warble. It's a nod to a certain cartoon delivery ship, and louder and higher as you thrust. |
+| idle | thrusting in normal space (not docked, landed or in FTL) | the drive's warble, a nod to a certain cartoon delivery ship: two saws through a resonant low-pass whose cutoff wobbles at 5.5 Hz, with a slow pitch warble. It rises with thrust and is silent at rest (a constant drone at rest was too much). |
 | engine | linear thrust (`thrustKW − turnKW`, full at 400 m/s²) | deep brown-noise rumble with detuned 38 Hz saws; the filter opens with thrust |
 | rcs | turning (`power.turnKW`, from `turnThrust`) | band-passed hiss |
 | ftlCharge | FTL charging | a whine up 2.5 octaves over the charge, with a quickening tremolo |
