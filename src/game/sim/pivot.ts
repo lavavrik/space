@@ -14,9 +14,10 @@ import { galPos } from './navigation';
  * The turn has mass: it spins up at PIVOT_ACC, cruises at up to PIVOT_RATE, and brakes at PIVOT_ACC
  * to arrive at rest (the most it can turn at while still stopping in the angle left: √(2 α θ)).
  * It used to ease exponentially, fastest at the start: a ship with no mass, snapping round.
+ * Measured: 10° 1.3 s, 45° 2.8 s, 90° 3.9 s, 150° 5.2 s.
  */
-const PIVOT_ACC = 1.2, // rad/s²
-  PIVOT_RATE = 1.0; // rad/s
+const PIVOT_ACC = 0.4, // rad/s²: ~23°/s² (1.2 at first felt no different from before on small turns)
+  PIVOT_RATE = 0.8; // rad/s
 /** Close enough (rad): about 1″, well below a pixel even at 1,000× zoom. */
 const PIVOT_DONE = 5e-6;
 
