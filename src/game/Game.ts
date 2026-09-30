@@ -11,7 +11,6 @@ import { Overlay } from './render/Overlay';
 import { defaultAvionics, type ComputerKind } from './avionics/catalog';
 import { PerfMonitor } from './debug/Perf';
 import { addNavFinal, addNavResult, engageRoute, removeNavPoint, replan, requestCancelRoute, type NavFinal, type NavMode, type Route } from './sim/navroute';
-import { SceneRenderer } from './render/SceneRenderer';
 import { GpuRenderer } from './gpu/GpuRenderer';
 import type { Gpu } from './gpu/device';
 import type { GameRenderer } from './render/api';
@@ -135,7 +134,7 @@ export class Game {
   /** Radar (sim/radar.ts): seconds left of the sweep in progress (0 = idle), and every object it
    *  has found (scan keys, so per system). */
   radar: { sweep: number; seen: Set<string>; rocks: Prospect[] } = { sweep: 0, seen: new Set(), rocks: [] };
-  /** Headlights (Shift+L): a floodlight cone along the nose (render/shaders/headlight.glsl). */
+  /** Headlights (Shift+L): a floodlight cone along the nose (gpu/shaders/frame.wgsl headlight). */
   lights = true;
   /** Your lost ships' wrecks, with the metal they carried (sim/wreck.ts): all systems, the newest few. */
   wrecks: Wreck[] = [];
@@ -244,7 +243,7 @@ export class Game {
 
   readonly hud = new HudStore();
   readonly input: Input;
-  /** The renderer: WebGL (render/SceneRenderer.ts) or, being ported, WebGPU (gpu/GpuRenderer.ts; docs/webgpu.md). */
+  /** The renderer (gpu/GpuRenderer.ts; docs/webgpu.md). */
   private readonly scene: GameRenderer;
   readonly perf: PerfMonitor;
   readonly overlay: Overlay;
@@ -256,17 +255,17 @@ export class Game {
   private last = 0;
   private raf = 0;
 
-  /** `gpu`: a WebGPU device to render with (gpu/device.ts), or none for WebGL. */
-  constructor(host: HTMLElement, gpu: Gpu | null = null) {
+  /** `gpu`: the WebGPU device to render with (gpu/device.ts). */
+  constructor(host: HTMLElement, gpu: Gpu) {
     this.glCanvas = document.createElement('canvas');
     this.glCanvas.id = 'gl';
     this.overlayCanvas = document.createElement('canvas');
     this.overlayCanvas.id = 'ov';
     host.append(this.glCanvas, this.overlayCanvas);
 
-    this.scene = gpu ? new GpuRenderer(this.glCanvas, gpu) : new SceneRenderer(this.glCanvas);
+    this.perf = new PerfMonitor(host, this.overlayCanvas);
+    this.scene = new GpuRenderer(this.glCanvas, gpu, this.perf);
     this.overlay = new Overlay(this.overlayCanvas, this.scene);
-    this.perf = new PerfMonitor(host, this.scene instanceof SceneRenderer ? this.scene.gl : null, this.overlayCanvas);
     this.input = new Input(this.glCanvas, {
       onPress: (code) => onPress(this, code),
       onRepeat: (code) => onRepeat(this, code),
@@ -713,9 +712,7 @@ export class Game {
       this.invalidateHud();
     }
     perf.mark('sim');
-    perf.gpuBegin();
     this.scene.render(this);
-    perf.gpuEnd();
     perf.mark('render');
     this.overlay.draw(this);
     this.audio.update(this, dt);

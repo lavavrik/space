@@ -20,20 +20,16 @@ const SAMPLE_S = 0.5,
   MAX_PTS = 128;
 
 export class FtlTrail {
-  readonly line: THREE.Line;
+  /** The line to draw, camera-relative (filled by draw): positions, fades 0…1, and how many. */
+  readonly pos = new Float32Array((MAX_PTS + 2) * 3);
+  readonly fade = new Float32Array(MAX_PTS + 2);
+  count = 0;
+  visible = false;
   /** Recorded positions (system frame) and when, oldest first. */
   private readonly pts: { p: THREE.Vector3; t: number }[] = [];
   private readonly lastDir = new THREE.Vector3();
   private active = false;
   private readonly head = new THREE.Vector3();
-
-  constructor(mat: THREE.Material) {
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array((MAX_PTS + 2) * 3), 3));
-    g.setAttribute('aFade', new THREE.BufferAttribute(new Float32Array(MAX_PTS + 2), 1));
-    this.line = new THREE.Line(g, mat);
-    this.line.frustumCulled = false;
-  }
 
   /** Each frame: the ship at `pos` (system frame) flying along `dir`, in FTL (`on`) or not, at sim time t. */
   record(pos: THREE.Vector3, dir: THREE.Vector3, on: boolean, t: number) {
@@ -57,12 +53,11 @@ export class FtlTrail {
   }
 
   /**
-   * Fill the line, camera-relative to `cam` (system frame), at sim time t. `headAt` moves the head
+   * Fill the line (pos, fade, count), camera-relative to `cam` (system frame), at sim time t. `headAt` moves the head
    * vertex (your own trail starts a little behind the camera, not in the eye).
    */
   draw(cam: THREE.Vector3, t: number, headAt?: THREE.Vector3) {
-    const pos = this.line.geometry.attributes.position.array as Float32Array,
-      fade = this.line.geometry.attributes.aFade.array as Float32Array;
+    const { pos, fade } = this;
     let n = 0,
       len = 0;
     const prev = new THREE.Vector3();
@@ -77,13 +72,7 @@ export class FtlTrail {
     let go = true;
     if (this.active) go = put(headAt ? headAt.clone().add(cam) : this.head, 0);
     for (let i = this.pts.length - 1; i >= 0 && go; i--) go = put(this.pts[i].p, t - this.pts[i].t);
-    this.line.geometry.setDrawRange(0, n);
-    this.line.geometry.attributes.position.needsUpdate = true;
-    this.line.geometry.attributes.aFade.needsUpdate = true;
-    this.line.visible = n >= 2;
-  }
-
-  dispose() {
-    this.line.geometry.dispose();
+    this.count = n;
+    this.visible = n >= 2;
   }
 }

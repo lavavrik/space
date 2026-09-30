@@ -1,6 +1,5 @@
 /**
- * The WebGPU renderer (docs/webgpu.md), built layer by layer beside the WebGL one
- * (render/SceneRenderer.ts):
+ * The renderer, on WebGPU (docs/webgpu.md):
  *   - the sky (gpu/sky.ts): the Milky Way, the periscope's patch, the stars;
  *   - the system's bodies (gpu/worlds.ts): the star, planets, terrain up close (gpu/terrain.ts),
  *     skies, cloud decks, rings and their rocks (gpu/rings.ts), dots for distant things;
@@ -10,28 +9,33 @@
  *   1. compute: terrain chunks' bakes, the ring rocks' culling;
  *   2. the scene into `hdr` (rgba16float, 4× MSAA, resolved into `resolved`), with a depth32float
  *      buffer, reversed-Z (cleared to 0, `greater` passes), infinite far plane: sky, opaque things,
- *      then transparent ones;
- *   3. the tone map from `resolved` to the canvas.
- * Positions are camera-relative (world − ship), in doubles on the CPU, as in the WebGL renderer.
+ *      then transparent ones, every physical light × the exposure (render/exposure.ts);
+ *   3. with auto-exposure on, the meter (gpu/meter.ts), read back a frame or two later;
+ *   4. the tone map from `resolved` to the canvas.
+ * With the performance overlay up (and timestamp queries there), the scene is split into passes and
+ * each is timed (gpu/timing.ts).
+ * Positions are camera-relative (world − ship), in doubles on the CPU, then 32-bit on the GPU.
  */
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
+import type { PerfMonitor } from '../debug/Perf';
 import type { GameRenderer, ViewInfo } from '../render/api';
-import { FLOOD_K, HEAD_K, INT_K, SKY_K, WINDOW_K } from '../render/exposure';
+import { AUTO_EXPOSURE, AutoExposure, FLOOD_K, HEAD_K, INT_K, MAX_EXP, SKY_EXP_P, SKY_K, STAR_EXP_P, WINDOW_K } from '../render/exposure';
+import { MAX_RENDER_PIXELS } from '../render/look';
 import type { Body, CurrentSystem, StarSystem, Station } from '../types';
 import type { Gpu } from './device';
 import { EffectsLayer } from './effects';
 import { DEPTH_FORMAT, HDR_FORMAT, SAMPLES } from './formats';
 import { HyperspaceLayer } from './hyperspace';
+import { Meter } from './meter';
 import { TONEMAP_WGSL } from './shaders';
 import { SkyLayer } from './sky';
 import { StationsLayer } from './stations';
+import { GpuTimer } from './timing';
 import { WorldsLayer } from './worlds';
 
 /** Near plane (m): with reversed-Z and 32-bit float depth, precision barely depends on it. */
 const NEAR = 0.5;
-/** Most pixels rendered per frame, as the WebGL renderer (render/SceneRenderer.ts MAX_RENDER_PIXELS). */
-const MAX_RENDER_PIXELS = 5e6;
 /** Bytes in the per-frame uniform block (frame.wgsl Frame): two mat4, 12 floats, a vec4, 4 floats. */
 const FRAME_BYTES = 208;
 
@@ -49,6 +53,9 @@ export class GpuRenderer implements GameRenderer {
   private readonly stations: StationsLayer;
   private readonly fx: EffectsLayer;
   private readonly hyper: HyperspaceLayer;
+  private readonly exposure = new AutoExposure();
+  private readonly meter: Meter;
+  private readonly timer: GpuTimer | null;
   private hdr!: GPUTexture;
   private resolved!: GPUTexture;
   private depth!: GPUTexture;
@@ -66,6 +73,7 @@ export class GpuRenderer implements GameRenderer {
   constructor(
     readonly canvas: HTMLCanvasElement,
     gpu: Gpu,
+    private readonly perf: PerfMonitor,
   ) {
     const { device, format } = gpu;
     this.device = device;
@@ -92,6 +100,10 @@ export class GpuRenderer implements GameRenderer {
     this.stations = new StationsLayer(device, this.frameLayout, this.worlds.worldLayout);
     this.fx = new EffectsLayer(device, this.frameLayout);
     this.hyper = new HyperspaceLayer(device, this.frameLayout);
+    this.meter = new Meter(device);
+    this.timer = gpu.timestamps ? new GpuTimer(device, (slot, parts) => perf.gpuResult(slot, parts)) : null;
+    perf.gpuTimed = !!this.timer;
+    perf.info = () => `WebGPU ${this.W}×${this.H} @${this.PR.toFixed(2)}`;
   }
 
   setSystem(cur: CurrentSystem, sky: StarSystem[]) {
@@ -101,7 +113,7 @@ export class GpuRenderer implements GameRenderer {
     this.stations.setSystem(cur, this.worlds);
   }
 
-  /** As the WebGL renderer: up to 1.5× the CSS resolution, at most MAX_RENDER_PIXELS. */
+  /** Up to 1.5× the CSS resolution, at most MAX_RENDER_PIXELS (render/look.ts). */
   resize(W: number, H: number) {
     this.PR = Math.min(devicePixelRatio || 1, 1.5, Math.sqrt(MAX_RENDER_PIXELS / Math.max(1, W * H)));
     this.W = Math.max(1, Math.round(W * this.PR));
@@ -119,6 +131,7 @@ export class GpuRenderer implements GameRenderer {
     this.resolved = this.device.createTexture({ label: 'hdr resolved', size, format: HDR_FORMAT, usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
     this.depth = this.device.createTexture({ label: 'depth', size, format: DEPTH_FORMAT, sampleCount: SAMPLES, usage: GPUTextureUsage.RENDER_ATTACHMENT });
     this.toneGroup = this.device.createBindGroup({ layout: this.tonePipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: this.resolved.createView() }] });
+    this.meter.resize(this.resolved, this.W, this.H);
   }
 
   /**
@@ -136,6 +149,12 @@ export class GpuRenderer implements GameRenderer {
     const { ship } = g;
     // in hyperspace: only the Milky Way and the real stars streaming past, no system scene
     const inTunnel = !!g.jump && g.jump.phase === 'tunnel';
+    // the eye's adaptation (render/exposure.ts): the Milky Way and the stars follow only part of it
+    this.exposure.update(this.meter.collect());
+    const e = this.exposure.value;
+    const skyExp = AUTO_EXPOSURE ? (e / MAX_EXP) ** SKY_EXP_P : 1,
+      starExp = AUTO_EXPOSURE ? (e / MAX_EXP) ** STAR_EXP_P : 1;
+    this.worlds.starExp = starExp;
     // per-frame uniforms
     const P = this.projection(g.fov);
     this.rot.makeRotationFromQuaternion(ship.q);
@@ -144,7 +163,7 @@ export class GpuRenderer implements GameRenderer {
     const f = this.frameData;
     f.set(this.vp.elements, 0);
     f.set(this.rot.elements, 16);
-    f.set([this.W, this.H, P.elements[0], P.elements[5], this.PR, g.simTime, 1, 1, 1, HEAD_K, FLOOD_K, HEAD_K / INT_K], 32);
+    f.set([this.W, this.H, P.elements[0], P.elements[5], this.PR, g.simTime, e, skyExp, starExp, HEAD_K, FLOOD_K, HEAD_K / INT_K], 32);
     this.head.set(0, 0, -1).applyQuaternion(ship.q);
     f.set([this.head.x, this.head.y, this.head.z, g.lights ? 1 : 0, INT_K, WINDOW_K, SKY_K], 44);
     device.queue.writeBuffer(this.frameBuf, 0, f);
@@ -160,39 +179,68 @@ export class GpuRenderer implements GameRenderer {
     }
 
     const enc = device.createCommandEncoder({ label: 'frame' });
-    if (!inTunnel) this.worlds.bake(enc, this.frameGroup);
-    const pass = enc.beginRenderPass({
-      label: 'scene',
-      colorAttachments: [{ view: this.hdr.createView(), resolveTarget: this.resolved.createView(), loadOp: 'clear', storeOp: 'discard', clearValue: [0, 0, 0, 1] }],
-      depthStencilAttachment: { view: this.depth.createView(), depthLoadOp: 'clear', depthStoreOp: 'discard', depthClearValue: 0 },
-    });
-    pass.setBindGroup(0, this.frameGroup);
-    this.sky.draw(pass, !inTunnel);
-    if (inTunnel) {
-      pass.setPipeline(this.sky.starsPipe);
-      this.hyper.drawHeads(pass);
-      this.hyper.drawStreaks(pass);
-    } else {
-      // opaque things, then the transparent layers
-      this.worlds.drawOpaque(pass);
+    // timing (the overlay up): each pass's timestamps, and the scene split into passes
+    const timed = !!this.timer && this.perf.splitting && this.timer.begin();
+    const tw = (label: string) => this.timer?.pass(label, timed);
+    if (!inTunnel) this.worlds.bake(enc, this.frameGroup, tw);
+    const hdrView = this.hdr.createView(),
+      depthView = this.depth.createView();
+    const scene = (label: string, first: boolean, last: boolean, draw: (pass: GPURenderPassEncoder) => void) => {
+      const pass = enc.beginRenderPass({
+        label,
+        colorAttachments: [{ view: hdrView, resolveTarget: last ? this.resolved.createView() : undefined, loadOp: first ? 'clear' : 'load', storeOp: last ? 'discard' : 'store', clearValue: [0, 0, 0, 1] }],
+        depthStencilAttachment: { view: depthView, depthLoadOp: first ? 'clear' : 'load', depthStoreOp: last ? 'discard' : 'store', depthClearValue: 0 },
+        timestampWrites: tw(label),
+      });
+      pass.setBindGroup(0, this.frameGroup);
+      draw(pass);
+      pass.end();
+    };
+    const sky = (pass: GPURenderPassEncoder) => this.sky.draw(pass, !inTunnel);
+    const bodies = (pass: GPURenderPassEncoder) => this.worlds.drawOpaque(pass);
+    const craft = (pass: GPURenderPassEncoder) => {
       this.stations.drawOpaque(pass);
       this.fx.drawOpaque(pass);
+    };
+    const transparent = (pass: GPURenderPassEncoder) =>
       this.worlds.drawTransparent(pass, (p) => {
         this.stations.drawTransparent(p);
         this.fx.drawTransparent(p);
       });
-    }
-    pass.end();
+    if (inTunnel)
+      scene('hyperspace', true, true, (pass) => {
+        sky(pass);
+        pass.setPipeline(this.sky.starsPipe);
+        this.hyper.drawHeads(pass);
+        this.hyper.drawStreaks(pass);
+      });
+    else if (timed) {
+      scene('sky', true, false, sky);
+      scene('bodies', false, false, bodies);
+      scene('stations, ships', false, false, craft);
+      scene('transparent', false, true, transparent);
+    } else
+      scene('scene', true, true, (pass) => {
+        sky(pass);
+        bodies(pass);
+        craft(pass);
+        transparent(pass);
+      });
+    if (AUTO_EXPOSURE) this.meter.encode(enc, e);
 
     const tone = enc.beginRenderPass({
       label: 'tonemap',
       colorAttachments: [{ view: this.context.getCurrentTexture().createView(), loadOp: 'clear', storeOp: 'store', clearValue: [0, 0, 0, 1] }],
+      timestampWrites: tw('post'),
     });
     tone.setPipeline(this.tonePipe);
     tone.setBindGroup(0, this.toneGroup);
     tone.draw(3);
     tone.end();
+    if (timed) this.timer!.end(enc, this.perf.slot);
     device.queue.submit([enc.finish()]);
+    this.meter.submitted();
+    this.timer?.submitted();
   }
 
   /** Each body's and station's distance and apparent size this frame, for the overlay. */
@@ -221,6 +269,8 @@ export class GpuRenderer implements GameRenderer {
     this.stations.dispose();
     this.fx.dispose();
     this.hyper.dispose();
+    this.meter.dispose();
+    this.timer?.dispose();
     this.hdr?.destroy();
     this.resolved?.destroy();
     this.depth?.destroy();

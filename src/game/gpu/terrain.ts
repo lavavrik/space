@@ -1,17 +1,62 @@
-/**
- * Planet terrain up close in WebGPU (docs/webgpu.md phase 3; the WebGL twin and the why are in
- * render/Terrain.ts and docs/terrain.md): a cube-sphere quadtree of 32 × 32 chunks, chosen by the
- * camera's distance, drawn by planet.wgsl vsChunk.
+/*
+ * Planet terrain up close: a cube-sphere quadtree of chunks, each a 32×32 grid raised by the
+ * terrain height in the vertex shader (planet.wgsl vsChunk, height in terrain.wgsl).
+ * See docs/terrain.md.
  *
- * What differs from WebGL: a chunk's heights, normals and sun shadows are baked by a compute shader
- * (terrainBake.wgsl) into a storage buffer the vertex shader reads, instead of a points pass into a
- * float texture; the index, grid and skirt buffers are the same for every chunk, so they're shared;
- * and each chunk's transform is written per frame (camera-relative, from doubles on the CPU).
+ * - Each cube face is a quadtree. A chunk splits into four when the camera is within SPLIT_K of its
+ *   edge length, down to MIN_SPACING between vertices (~8 m), so detail follows you to the ground.
+ * - Vertex positions are built on the CPU in double precision, relative to the chunk's centre, and
+ *   the chunk mesh sits at that centre, so nothing loses precision on a 6,000 km world.
+ * - A chunk's vertices carry only the octaves its spacing can show (uVOct); the fragment shader
+ *   bump-maps the finer ones, so shading doesn't change when a chunk splits, only the silhouette.
+ * - The terrain isn't evaluated per frame: a chunk's heights, normals, sun shadows and coarse
+ *   terrain state are baked once by a compute shader (terrainBake.wgsl) into a storage buffer per chunk, and
+ *   re-baked only when the sun has moved over it by SUN_REBAKE (the world turns). Drawing just reads
+ *   it, and each pixel works out only the few octaves finer than its chunk's vertices.
+ * - Skirts hang from every edge to hide the cracks where levels meet: only as deep as a crack can
+ *   be, and shaded cheaply below their top half (planet.wgsl), since hidden or not they're
+ *   shaded (docs/perf.md, "Terrain skirts").
+ * - Chunks entirely beyond the horizon aren't drawn; unused ones are freed after a while.
  */
+// (The index, grid and skirt buffers are the same for every chunk, so they're shared; each chunk's
+// transform is written per frame, camera-relative, from doubles on the CPU.)
 import { THREE } from '../lib/three';
-import { faceDir, KEEP_FRAMES, MAX_BUILDS, MAX_REBAKES, MIN_SPACING, N, SKIRT_SPACINGS, SPLIT_K, SUN_REBAKE } from '../render/Terrain';
 import { reliefAmp, T_OCT_MAX, terrainOffsets } from '../sim/terrain';
 import type { World } from '../types';
+
+const N = 32; // quads per chunk edge
+const SPLIT_K = 1.6; // split when the camera is within this many edge lengths (quads ~15–20 px on screen)
+const MIN_SPACING = 8; // m between vertices at the finest level
+const MAX_BUILDS = 12; // chunk meshes built per frame at most (the rest wait a frame)
+const KEEP_FRAMES = 240; // free a chunk unused this long
+const SUN_REBAKE = Math.cos(0.004); // re-bake a chunk's shadows once the sun has moved ~0.2° over it
+const MAX_REBAKES = 8; // shadow re-bakes per frame
+const SKIRT_SPACINGS = 1; // skirt depth beyond the missing octaves' amplitude, in vertex spacings
+
+/** Cube faces: normal n and in-face axes u, v with u × v = n (so triangles face outward). */
+const FACES: [number, number, number][][] = [
+  [[1, 0, 0], [0, 0, -1], [0, 1, 0]],
+  [[-1, 0, 0], [0, 0, 1], [0, 1, 0]],
+  [[0, 1, 0], [1, 0, 0], [0, 0, -1]],
+  [[0, -1, 0], [1, 0, 0], [0, 0, 1]],
+  [[0, 0, 1], [1, 0, 0], [0, 1, 0]],
+  [[0, 0, -1], [-1, 0, 0], [0, 1, 0]],
+];
+
+/** Unit direction for face f at face coordinates s, t ∈ [−1, 1] (tan-warped, so cells are ~even). */
+function faceDir(f: number, s: number, t: number, out: number[]) {
+  const [n, u, v] = FACES[f];
+  const a = Math.tan((s * Math.PI) / 4),
+    b = Math.tan((t * Math.PI) / 4);
+  const x = n[0] + a * u[0] + b * v[0],
+    y = n[1] + a * u[1] + b * v[1],
+    z = n[2] + a * u[2] + b * v[2];
+  const l = Math.hypot(x, y, z);
+  out[0] = x / l;
+  out[1] = y / l;
+  out[2] = z / l;
+  return out;
+}
 
 /** Bytes in chunk.wgsl Chunk: mat4 + 4 floats + 2 × 17 vec4. */
 export const CHUNK_BYTES = 64 + 16 + 2 * 17 * 16;
@@ -211,9 +256,9 @@ export class TerrainGpu {
   }
 
   /** The queued bakes (terrainBake.wgsl), before the frame's render pass. Group 0 is the frame's. */
-  bake(enc: GPUCommandEncoder, frameGroup: GPUBindGroup) {
+  bake(enc: GPUCommandEncoder, frameGroup: GPUBindGroup, tw: (label: string) => GPUComputePassTimestampWrites | undefined) {
     if (!this.toBake.length) return;
-    const pass = enc.beginComputePass({ label: 'terrain bake' });
+    const pass = enc.beginComputePass({ label: 'terrain bake', timestampWrites: tw('terrain bake') });
     pass.setPipeline(this.sh.bakePipe);
     pass.setBindGroup(0, frameGroup);
     pass.setBindGroup(1, this.worldGroup);
@@ -298,7 +343,7 @@ export class TerrainGpu {
     // (the model, at 0…15, is written per frame)
     u[16] = vOct;
     u[17] = spacing;
-    // deep enough to cover the crack to a coarser neighbour, no deeper (render/Terrain.ts)
+    // deep enough to cover the crack to a coarser neighbour, no deeper: skirts are shaded even where hidden
     u[18] = spacing * SKIRT_SPACINGS + this.A * 0.6 ** vOct;
     u[19] = N + 1;
     this.latticeAt(cen, 8, u, 20);

@@ -24,7 +24,7 @@ const PROSPECT_COL = { icy: 'rgba(255,230,199,', 'nickel-iron': 'rgba(200,190,17
 
 const AMB = 'rgba(255,165,58,',
   CYA = 'rgba(127,220,255,',
-  MINT = 'rgba(115,255,178,', // stations (matches STATION_RGB in SceneRenderer)
+  MINT = 'rgba(115,255,178,', // stations (matches STATION_RGB in render/look.ts)
   RED = 'rgba(255,91,70,'; // warnings (the mass lock's way out)
 /** The HUD's one typeface (no monospace: see styles/theme.css). */
 const SANS = '"Chakra Petch", system-ui, sans-serif';

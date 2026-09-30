@@ -54,9 +54,9 @@ The old shader chain `sp = 1.6·dir + seedOffset`, multiplied by 2.03 per octave
 - **ALT** on the HUD is height above the ground under you.
 - **Surface speed limit** (`flight.ts surfaceLimit`): with flight assist on, speed against the ground is capped at 0.2 × height per second, never below 8 m/s (4 km/s at 20 km, 200 m/s at 1 km). It covers falling as well, so a hands-off or full-thrust dive eases down and touches down at ~8 m/s instead of hitting the ground. Shift triples it. The HUD bar shows it as SURFACE LIMIT.
 
-## City lights (`render/shaders/cityLights.glsl`)
+## City lights (`gpu/shaders/city.wgsl`)
 
-Earth-like worlds are populated: their night side lights up (`uCity`, set in SceneRenderer for
+Earth-like worlds are populated: their night side lights up (`city` in the world's uniforms, gpu/worlds.ts, for
 `WT.EarthLike`). The lights fade in past the terminator, are dimmed by the air above them like the
 ground, and are drawn by the planet shader on both the far sphere and the terrain chunks.
 

@@ -27,6 +27,8 @@ body {
 }
 #gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; }
 #ov { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+/* no WebGPU (ui/hooks/useGame.ts): the game can't run; say why where the view would be */
+#nogpu { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; text-align: center; font-size: 15px; line-height: 1.5; }
 
 /* digits all one width, so readouts don't jitter as they change: what the monospace font was for.
    (!important: the `font` shorthand in many rules would otherwise reset it) */

@@ -1,5 +1,4 @@
-// A terrain chunk's uniforms (bind group 2; gpu/terrain.ts writes them, render/Terrain.ts has the
-// WebGL twin). The far sphere binds an empty one: the planet shader reads it either way.
+// A terrain chunk's uniforms (bind group 2; gpu/terrain.ts writes them). The far sphere binds an empty one: the planet shader reads it either way.
 struct Chunk {
   model: mat4x4f,  // chunk-local (m from the chunk's centre, the world's own axes) → camera-relative
   vOct: f32,       // octaves the vertices carry (uVOct)

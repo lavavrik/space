@@ -1,20 +1,83 @@
-/**
- * A planetary ring's rocks up close in WebGPU (docs/webgpu.md phase 4; the WebGL twin and the why
- * are in render/RingField.ts and docs/rings.md).
+/*
+ * A planetary ring up close (sim/rings.ts, docs/rings.md): the rocks themselves, all generated on
+ * the GPU so there can be a lot of them.
  *
- * The same layers and detail copies as WebGL, the same bin table per layer (filled on the CPU each
- * frame, in doubles), the same rocks. What's new: a compute pass per copy runs every candidate
+ * Each layer (ROCK_LAYERS) is a grid of cells centred on the camera, in the ring's co-orbiting
+ * frame, with a few candidate rocks per cell. The shaders work out a rock's cell from its
+ * instance (or vertex) index, and from a hash of the cell's global indices its place, size, tint,
+ * orientation and whether it's there at all (the ring's density), so the same rocks are there every
+ * visit. Meshes are lumpy icospheres (faceted from screen-space derivatives), specks are points sized
+ * by how big the rock would look (at most 2 px, keeping its light). The CPU only fills a small table
+ * per radial bin each frame (Layer.update): the bin's offset from the camera's radius, the camera's
+ * place in the bin's co-orbiting frame (in double precision: rings are ~10⁸ m out), the density.
+ * Each radial bin turns at its own orbit rate, so the ring shears like a real one.
+ *
+ * Layers fade in and out over wide bands (the boulder specks come in as the boulder meshes shrink
+ * away), so no edge shows; the ring's flat disc takes over past DISC_FROM while you're in the belt
+ * (ring.wgsl, pc.w), and fully again once you're well above or below it.
+ */
+/*
+ * On the GPU (docs/webgpu.md phase 4): a compute pass per layer copy runs every candidate
  * (rocksCull.wgsl) and appends only the rocks that are there and in view to a list, counting them
- * into an indirect draw; the draw (rocks.wgsl) then runs the vertex shader for those alone. WebGL ran
- * the full rock vertex shader for every candidate, most of them empty, out of range or off screen.
+ * into an indirect draw; the draw (rocks.wgsl) runs the vertex shader for those alone. (WebGL ran
+ * the full rock vertex shader for every candidate, most of them empty, out of range or off screen.)
  */
 import { THREE } from '../lib/three';
-import { FADE_ABOVE, MINED_MAX, type MinedRock, minedHere, sphereGeometry } from '../render/RingField';
 import { DISC_FROM, RING_HALF_THICK, ROCK_LAYERS, type RockLayer, ringDensity } from '../sim/rings';
-import { METAL_RICH } from '../sim/ringRocks';
+import { METAL_RICH, minedRocks } from '../sim/ringRocks';
 import type { World } from '../types';
 import { DEPTH_FORMAT, HDR_FORMAT, SAMPLES } from './formats';
 import { ROCKS_CULL_WGSL, ROCKS_WGSL } from './shaders';
+
+/** Above (or below) the belt by this much (m), the disc is back in full around you. */
+const FADE_ABOVE = 6000;
+
+/** A unit icosphere, welded (the vertex shader shapes each rock from it: the instances are many, so vertex count matters). */
+function sphereGeometry(detail: number) {
+  const g = new THREE.IcosahedronGeometry(1, detail);
+  const p = g.attributes.position as THREE.BufferAttribute;
+  const map = new Map<string, number>();
+  const verts: number[] = [],
+    index: number[] = [];
+  for (let i = 0; i < p.count; i++) {
+    const k = `${p.getX(i).toFixed(5)},${p.getY(i).toFixed(5)},${p.getZ(i).toFixed(5)}`;
+    let j = map.get(k);
+    if (j === undefined) {
+      j = verts.length / 3;
+      map.set(k, j);
+      verts.push(p.getX(i), p.getY(i), p.getZ(i));
+    }
+    index.push(j);
+  }
+  g.dispose();
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  out.setIndex(index);
+  return out;
+}
+
+/** How many mined rocks per layer the shader knows about (the nearest to the camera). */
+const MINED_MAX = 24;
+
+interface MinedRock {
+  layer: number;
+  gi: number;
+  jj: number;
+  q: number;
+  left: number;
+}
+
+/** This ring's mined rocks (sim/ringRocks.ts minedRocks), parsed from their keys. */
+function minedHere(b: World): MinedRock[] {
+  const out: MinedRock[] = [];
+  const pre = `${b.name}#`;
+  for (const [key, left] of minedRocks) {
+    if (!key.startsWith(pre)) continue;
+    const [layer, gi, jj, q] = key.slice(pre.length).split(':').map(Number);
+    out.push({ layer, gi, jj, q, left });
+  }
+  return out;
+}
 
 /** Bytes in rock.wgsl Layer: 6 vec4, 20 floats, 24 + 6 vec4. */
 const LAYER_BYTES = (6 * 4 + 20 + 24 * 4 + 6 * 4) * 4;
@@ -47,7 +110,7 @@ interface Pipes {
   noiseSamp: GPUSampler;
 }
 
-/** One copy of a layer (see RingField.ts): its bins, candidates, list and indirect draw. */
+/** One copy of a layer (see the top): its bins, candidates, list and indirect draw. */
 class LayerGpu {
   private readonly data: Float32Array<ArrayBuffer>;
   private readonly u = new Float32Array(LAYER_BYTES / 4);
@@ -128,7 +191,7 @@ class LayerGpu {
     });
   }
 
-  /** Fill the bin table and uniforms for this frame (as RingField.ts Layer.update); false if no part of it is near the ring. */
+  /** Fill the bin table and uniforms for this frame; not visible if no part of it is near the ring. */
   update(fr: RingFrame, seed: number, mined: MinedRock[]) {
     const { b, r, h } = fr;
     const L = this.L,
@@ -315,7 +378,7 @@ export class RingFieldGpu {
   }
 
   /**
-   * Show the rocks of `b`'s ring around the camera (as RingField.ts update): `rel` is the planet's
+   * Show the rocks of `b`'s ring around the camera: `rel` is the planet's
    * centre relative to the camera (m), `n` the ring's normal, `light` the direction to the star.
    * Returns whether any part of the ring is close enough to have rocks.
    */
@@ -354,9 +417,9 @@ export class RingFieldGpu {
     this.nearFade = 0;
   }
 
-  cull(enc: GPUCommandEncoder, frameGroup: GPUBindGroup) {
+  cull(enc: GPUCommandEncoder, frameGroup: GPUBindGroup, tw: (label: string) => GPUComputePassTimestampWrites | undefined) {
     if (!this.active) return;
-    const pass = enc.beginComputePass({ label: 'cull rocks' });
+    const pass = enc.beginComputePass({ label: 'cull rocks', timestampWrites: tw('rock cull') });
     pass.setBindGroup(0, frameGroup);
     for (const l of this.layers) if (l.visible) l.cull(pass);
     pass.end();

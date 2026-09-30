@@ -2,7 +2,7 @@
  * The system's bodies in WebGPU (docs/webgpu.md, phase 2): the star (disc and glow), planets and moons
  * (the far sphere: surface, terrain as bumps, city lights), their skies (a scattering shell), cloud
  * decks (a cube-map bake per world, a shell at the deck), ring discs, and dots for distant bodies.
- * Mirrors render/SceneRenderer.ts attachStar / attachWorld / renderScene. Up close, a world with
+ * Ported from the WebGL renderer's attachStar / attachWorld / renderScene. Up close, a world with
  * relief is LOD terrain chunks instead of its sphere (gpu/terrain.ts); and close to a ring, its rocks
  * (gpu/rings.ts).
  *
@@ -13,7 +13,7 @@ import type { Game } from '../Game';
 import { AU, WT } from '../constants';
 import { THREE } from '../lib/three';
 import { noise3dBytes, NOISE3D_SIZE } from '../lib/noise3d';
-import { airBeta, CLOUD_H, TERRAIN_NEAR, TERRAIN_PX } from '../render/SceneRenderer';
+import { airBeta, CLOUD_H, TERRAIN_NEAR, TERRAIN_PX } from '../render/look';
 import { CITY_K } from '../render/exposure';
 import { atmoOf } from '../sim/atmosphere';
 import { populated } from '../sim/population';
@@ -106,7 +106,7 @@ export class WorldsLayer {
   ) {
     this.sphere = { hi: this.mesh(new THREE.SphereGeometry(1, 320, 160)), mid: this.mesh(new THREE.SphereGeometry(1, 96, 48)), lo: this.mesh(new THREE.SphereGeometry(1, 32, 16)) };
 
-    // the fine octaves' 3D noise (lib/noise3d.ts), as in WebGL: 64³ r8, repeating, linear
+    // the fine octaves' 3D noise (lib/noise3d.ts): 64³ r8, repeating, linear
     const n = NOISE3D_SIZE;
     this.noiseTex = device.createTexture({ label: 'noise3d', size: [n, n, n], dimension: '3d', format: 'r8unorm', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
     device.queue.writeTexture({ texture: this.noiseTex }, noise3dBytes() as Uint8Array<ArrayBuffer>, { bytesPerRow: n, rowsPerImage: n }, [n, n, n]);
@@ -458,7 +458,7 @@ export class WorldsLayer {
       const lightL = light.clone().applyQuaternion(qInv);
       f.set([lightL.x, lightL.y, lightL.z, 0], 72);
       f.set([rel.x, rel.y, rel.z, b.radius], 76);
-      // up close, LOD terrain replaces the sphere: big on screen and actually close (render/SceneRenderer.ts)
+      // up close, LOD terrain replaces the sphere: big on screen and actually close (render/look.ts)
       w.terrOn = !!w.terrain && pxR > TERRAIN_PX && d < b.radius * TERRAIN_NEAR;
       if (w.terrOn) {
         const cam = new THREE.Vector3().subVectors(ship.pos, b.pos).applyQuaternion(qInv);
@@ -525,10 +525,10 @@ export class WorldsLayer {
     return this.worlds.find((w) => w.b === b)!.group;
   }
 
-  /** Compute work before the frame's render pass: terrain chunks' bakes. */
-  bake(enc: GPUCommandEncoder, frameGroup: GPUBindGroup) {
-    for (const w of this.worlds) if (w.terrOn) w.terrain!.bake(enc, frameGroup);
-    this.rocks.cull(enc, frameGroup);
+  /** Compute work before the frame's render pass: terrain chunks' bakes, the rocks' culling. `tw`: a pass's timestamp writes (gpu/timing.ts). */
+  bake(enc: GPUCommandEncoder, frameGroup: GPUBindGroup, tw: (label: string) => GPUComputePassTimestampWrites | undefined) {
+    for (const w of this.worlds) if (w.terrOn) w.terrain!.bake(enc, frameGroup, tw);
+    this.rocks.cull(enc, frameGroup, tw);
   }
 
   /** Render pixels per CSS pixel (GpuRenderer.resize). */

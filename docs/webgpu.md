@@ -1,8 +1,17 @@
 # WebGPU renderer
 
-The game is moving from three.js on WebGL2 to a renderer of our own on raw WebGPU (`src/game/gpu/`).
-The simulation, HUD, audio and saves don't change. three.js stays only for its maths (vectors,
-quaternions, matrices), which the simulation uses throughout.
+The game renders with a renderer of our own on raw WebGPU (`src/game/gpu/`); it moved there from
+three.js on WebGL2 (the port below, done 2026-09-30). The simulation, HUD, audio and saves didn't
+change. three.js stays only for its maths (vectors, quaternions, matrices, and a few geometry
+builders), which the simulation uses throughout. Without WebGPU the game can't run and says so.
+
+**Where things are:** `gpu/GpuRenderer.ts` runs a frame (its header has the order of passes);
+`gpu/sky.ts`, `worlds.ts` (with `terrain.ts`, `rings.ts`), `stations.ts`, `effects.ts`,
+`hyperspace.ts` each own a layer; `gpu/meter.ts` and `timing.ts` do exposure metering and GPU
+timing; `gpu/shaders/*.wgsl` are the shaders (`// #include name` splices a shared part, see
+`shaders/index.ts`). Comments that name a `.glsl` file or `render/SceneRenderer.ts`, `Terrain.ts`,
+`RingField.ts`, `Traffic.ts`, `Laser.ts`, `Hyperspace.ts` or `hdr.ts` mean the WebGL code a piece was
+ported from: it's in git history before the phase 7 commit.
 
 ## Why
 
@@ -20,14 +29,12 @@ quaternions, matrices), which the simulation uses throughout.
 - **Shipping.** It runs wherever Chromium runs (Electron for a desktop build), on Vulkan (Windows,
   Linux, Android), Metal (macOS) or DX12 underneath; also Safari 26 and Firefox.
 
-## How the port runs
+## How the port ran
 
-Both renderers live side by side until WebGPU matches WebGL: the game stays playable all along.
+Both renderers lived side by side until WebGPU matched WebGL, the game playable all along
+(`?gpu=webgpu` / `?gpu=webgl` switched between them), then WebGL went.
 
-- **Switch:** `?gpu=webgpu` in the URL (remembered in `localStorage` as `farlight.renderer`), or
-  `?gpu=webgl` to go back. Without WebGPU (no `navigator.gpu`, no adapter) it falls back to WebGL
-  with a message.
-- **Interface:** both renderers implement `GameRenderer` (`src/game/render/api.ts`): `resize`,
+- **Interface:** the renderer implements `GameRenderer` (`src/game/render/api.ts`): `resize`,
   `render(g)`, `dispose`, plus what the overlay and debug tools need. `Game` holds one.
 - **Porting order**, each layer compared against WebGL before moving on:
   1. **Core:** device, canvas, the HDR target (rgba16float), reversed-Z depth (depth32float),
@@ -45,13 +52,18 @@ Both renderers live side by side until WebGPU matches WebGL: the game stays play
 ## Conventions
 
 - **Camera-relative:** positions are world − camera in 64-bit floats on the CPU and 32-bit on the
-  GPU, as now. The camera sits at the origin.
+  GPU. The camera sits at the origin.
 - **Depth:** reversed-Z (near = 1, far = 0), `depth32float`, `greater` compare, infinite far plane.
 - **Colour:** linear HDR in `rgba16float`, pre-multiplied by the exposure (render/exposure.ts);
-  alpha carries the "physical light" share for the meter, as now. The tone map is a final pass to the
+  alpha carries the "physical light" share for the meter (glows and signal lights write less). The tone map is a final pass to the
   canvas (`bgra8unorm` or the preferred format).
-- **Bind groups:** group 0 is per frame (camera, exposure, time), group 1 per material, group 2 per
-  object.
+- **Bind groups:** group 0 is per frame (frame.wgsl: camera, exposure, time, light levels), group 1
+  per material or object, group 2 what's more specific still (a terrain chunk; a sky station, whose
+  world's air is group 1).
+- **Blending** as three.js did it: glows and signal lights add colour and multiply alpha by theirs
+  (0: out of the meter); skies add and dim what's behind; clouds and ring discs blend normally.
+  Transparent things are drawn far to near within each kind: glow, rings, dots, corridors, trails,
+  beam, orbit ring; then skies; then cloud decks.
 
 ## Progress
 
@@ -84,7 +96,11 @@ Both renderers live side by side until WebGPU matches WebGL: the game stays play
   worlds' dots; hyperspace heads (the stars' pipeline) and streaks (lines, positions scaled past the
   near plane); the periscope's sky patch. Checked: a ship up close, the periscope at 40× (as WebGL),
   a hyperspace transit.
-- [ ] 7. Auto-exposure, timings, remove WebGL
+- [x] **7. Auto-exposure, timings, remove WebGL**: the meter is a compute pass over the resolved
+  frame (64 px cells, alpha-weighted) read back asynchronously into render/exposure.ts's
+  AutoExposure (still switched off by `AUTO_EXPOSURE`, as it was under WebGL: exposure 1, fixed light
+  levels); GPU timestamps per pass for the performance overlay (docs/perf.md); the WebGL renderer,
+  its GLSL, the renderer switch and three.js's renderer removed; shared constants in render/look.ts.
 
 **Dev note:** the preview tooling serves the main checkout. For this worktree, run
 `npx vite --port 5175` in it and open `http://localhost:5175/?gpu=webgpu`.

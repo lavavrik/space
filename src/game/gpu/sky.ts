@@ -1,7 +1,7 @@
 /**
  * The sky in WebGPU (docs/webgpu.md phases 1 and 6): the Milky Way baked once into a cube map, the
- * periscope's sharper patch re-baked for the zoomed view (render/SceneRenderer.ts updateSkyPatch has
- * the why), and every other system in sight as a star (instanced quads).
+ * periscope's sharper patch re-baked for the zoomed view (at 100× a cube texel spans ~7 screen
+ * pixels, far too coarse), and every other system in sight as a star (instanced quads).
  */
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';

@@ -1,6 +1,6 @@
 /**
- * Stations in WebGPU (docs/webgpu.md phase 5; the WebGL twin is render/SceneRenderer.ts
- * attachStation / attachSkyStation and the stations part of renderScene): the orbital stations'
+ * Stations (docs/webgpu.md phase 5; ported from the WebGL renderer's attachStation /
+ * attachSkyStation and the stations part of renderScene): the orbital stations'
  * hulls, their interiors (up close), the approach corridor and its lights; sky stations hanging in
  * their world's air; and far off, a mint beacon dot (added to the worlds' dots).
  *
@@ -8,7 +8,7 @@
  */
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
-import { STATION_RGB } from '../render/SceneRenderer';
+import { STATION_RGB } from '../render/look';
 import { skyStationGeometry } from '../render/skyMesh';
 import { CORRIDOR_GROW, corridorGeometry, corridorLights, hullGeometry, interiorGeometry } from '../render/stationMesh';
 import { slotUser } from '../sim/control';

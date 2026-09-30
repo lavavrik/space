@@ -13,9 +13,9 @@
  * the orbit ring, dust and station beacons) are display-referred instead: they're added after exposure, so they look the
  * same in sunlight and in the dark, like a well-designed beacon does to the eye.
  *
- * Pipeline (render/SceneRenderer.ts): the frame is drawn into a half-float target, with every
- * physical shader multiplied by the current exposure (uExp, "pre-exposure", which keeps the
- * values in half-float's range). The frame is shrunk 64× and read back asynchronously; the meter
+ * Pipeline (gpu/GpuRenderer.ts): the frame is drawn into a half-float target, with every
+ * physical shader multiplied by the current exposure (frame.exposure, "pre-exposure", which keeps
+ * the values in half-float's range). The frame is shrunk 64× and read back asynchronously (gpu/meter.ts); the meter
  * turns that into scene luminance and picks a target exposure (see meter), and the exposure eases
  * toward it in log space: quicker when the view gets brighter than into the dark, as eyes do. A
  * final pass rolls the highlights off with a soft shoulder (linear below 0.8), so a sunlit scene looks as before (exposure ≈ 1).
@@ -23,8 +23,6 @@
  * The effects: stars fade next to a sunlit planet (the system's star in view doesn't dim them); in a world's
  * shadow they come back, and a station's floodlights and your headlights become plainly visible.
  */
-import { THREE } from '../lib/three';
-
 /**
  * Auto-exposure switch. Off (for now): exposure stays at 1, the frame is only tone-mapped (no
  * metering), and every light uses a fixed display level instead of its squashed physical one: the
@@ -75,61 +73,6 @@ const SUNNY = 0.05;
 const ADAPT_BRIGHT = 2,
   ADAPT_DARK = 1;
 
-/**
- * Asynchronous readback of a small float render target: readPixels into a pixel-pack buffer,
- * then collect it a frame or two later once its fence has passed, so the GPU never stalls.
- */
-class Readback {
-  private pbo: WebGLBuffer | null = null;
-  private fence: WebGLSync | null = null;
-  private w = 0;
-  private h = 0;
-  private tag = 0;
-  private buf = new Float32Array(0);
-
-  constructor(private readonly gl: WebGL2RenderingContext) {}
-
-  /** Start a read of `rt` if none is in flight, tagging it (e.g. with the exposure it was drawn at). */
-  start(r: THREE.WebGLRenderer, rt: THREE.WebGLRenderTarget, tag: number) {
-    if (this.fence) return;
-    const gl = this.gl;
-    const prev = r.getRenderTarget();
-    r.setRenderTarget(rt);
-    this.pbo ??= gl.createBuffer();
-    this.w = rt.width;
-    this.h = rt.height;
-    this.tag = tag;
-    const n = this.w * this.h * 4;
-    if (this.buf.length !== n) this.buf = new Float32Array(n);
-    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.pbo);
-    gl.bufferData(gl.PIXEL_PACK_BUFFER, n * 4, gl.STREAM_READ);
-    gl.readPixels(0, 0, this.w, this.h, gl.RGBA, gl.FLOAT, 0);
-    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
-    this.fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
-    gl.flush();
-    r.setRenderTarget(prev);
-  }
-
-  /** The finished read, if one has landed since the last call. */
-  collect(): { data: Float32Array; w: number; h: number; tag: number } | null {
-    const gl = this.gl;
-    if (!this.fence) return null;
-    const s = gl.clientWaitSync(this.fence, 0, 0);
-    if (s !== gl.ALREADY_SIGNALED && s !== gl.CONDITION_SATISFIED) return null;
-    gl.deleteSync(this.fence);
-    this.fence = null;
-    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.pbo);
-    gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, this.buf);
-    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
-    return { data: this.buf, w: this.w, h: this.h, tag: this.tag };
-  }
-
-  dispose() {
-    if (this.fence) this.gl.deleteSync(this.fence);
-    if (this.pbo) this.gl.deleteBuffer(this.pbo);
-  }
-}
-
 export class AutoExposure {
   /** Current exposure: scene luminance × value = display value. */
   value = 1;
@@ -138,35 +81,24 @@ export class AutoExposure {
   stats = { mean: 0, max: 0 };
   private last = 0;
   private first = true;
-  private readonly rb: Readback;
-
-  constructor(gl: THREE.WebGLRenderer) {
-    this.rb = new Readback(gl.getContext() as WebGL2RenderingContext);
-  }
 
   /**
-   * Each frame, after the meter target has been drawn: collect a finished reading (if any), start
-   * the next, and ease the exposure toward the target.
+   * Each frame: take a finished meter reading if one has landed (gpu/meter.ts reads the frame back
+   * asynchronously; `tag` is the exposure it was drawn at) and ease the exposure toward the target.
    */
-  update(r: THREE.WebGLRenderer, meterRT: THREE.WebGLRenderTarget) {
+  update(got: { data: Float32Array; w: number; h: number; tag: number } | null) {
     if (!AUTO_EXPOSURE) return; // fixed at 1
-    const got = this.rb.collect();
     if (got) {
       this.target = meter(got.data, got.w, got.h, got.tag, this.stats);
       if (this.first) this.value = this.target;
       this.first = false;
     }
-    this.rb.start(r, meterRT, this.value);
     const now = performance.now() / 1000;
     const dt = this.last ? Math.min(0.2, now - this.last) : 0;
     this.last = now;
     const d = Math.log(this.target) - Math.log(this.value);
     const k = 1 - Math.exp(-(d < 0 ? ADAPT_BRIGHT : ADAPT_DARK) * dt);
     this.value = Math.exp(Math.log(this.value) + d * k);
-  }
-
-  dispose() {
-    this.rb.dispose();
   }
 }
 

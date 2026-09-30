@@ -1,44 +1,22 @@
 /**
- * WebGPU setup (docs/webgpu.md): which renderer to use, and the GPU device for the WebGPU one.
- *
- * `?gpu=webgpu` in the URL picks the WebGPU renderer, `?gpu=webgl` the WebGL one; the choice is
- * remembered (localStorage `farlight.renderer`). WebGL is the default until the port is done. With
- * WebGPU asked for but not available (no `navigator.gpu`, or no adapter), it falls back to WebGL.
+ * The GPU device (docs/webgpu.md). The game renders with WebGPU only; without it (no
+ * `navigator.gpu`, or no adapter) it can't run, and says so (ui/hooks/useGame.ts).
  */
-
-const KEY = 'farlight.renderer';
 
 export interface Gpu {
   adapter: GPUAdapter;
   device: GPUDevice;
   /** The canvas's preferred format (bgra8unorm on most platforms). */
   format: GPUTextureFormat;
-  /** Optional features we asked for and got. */
+  /** Optional features we asked for and got: GPU timing for the performance overlay. */
   timestamps: boolean;
 }
 
-/** The renderer asked for: the URL's `?gpu=`, else the remembered choice, else WebGL. */
-export function wantWebGpu(): boolean {
-  const q = new URLSearchParams(location.search).get('gpu');
-  try {
-    if (q === 'webgpu' || q === 'webgl') localStorage.setItem(KEY, q);
-    return (q ?? localStorage.getItem(KEY)) === 'webgpu';
-  } catch {
-    return q === 'webgpu';
-  }
-}
-
-/** The GPU device, or null (with why, in the console) if WebGPU isn't there. */
-export async function initGpu(): Promise<Gpu | null> {
-  if (!navigator.gpu) {
-    console.warn('WebGPU: not supported by this browser · using WebGL');
-    return null;
-  }
+/** The GPU device, or why there isn't one. */
+export async function initGpu(): Promise<Gpu | string> {
+  if (!navigator.gpu) return 'This browser has no WebGPU.';
   const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
-  if (!adapter) {
-    console.warn('WebGPU: no adapter · using WebGL');
-    return null;
-  }
+  if (!adapter) return 'WebGPU found no graphics adapter.';
   const timestamps = adapter.features.has('timestamp-query');
   const device = await adapter.requestDevice({ requiredFeatures: timestamps ? ['timestamp-query'] : [] });
   device.lost.then((info) => console.error(`WebGPU device lost: ${info.reason} · ${info.message}`));

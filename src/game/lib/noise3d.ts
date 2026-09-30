@@ -1,5 +1,4 @@
 import { mulberry32 } from './rng';
-import { THREE } from './three';
 
 /**
  * A tileable 3D gradient-noise texture (64³ texels, 8 lattice cells per axis) for the fine octaves
@@ -8,7 +7,7 @@ import { THREE } from './three';
  * The coarse octaves stay exact simplex noise, so continents and cloud patterns don't change.
  *
  * Stored as noise / (4σ) in 8 bits, so the shader decodes it to unit σ-scaled noise (see
- * noise3d.glsl). Deterministic: the same texture every run.
+ * gpu/shaders/noise3d.wgsl). Deterministic: the same texture every run.
  */
 export const NOISE3D_SIZE = 64,
   NOISE3D_CELLS = 8;
@@ -68,16 +67,3 @@ export function noise3dData(size = NOISE3D_SIZE, cells = NOISE3D_CELLS) {
 let cached: Uint8Array | null = null;
 /** noise3dData(), built once. */
 export const noise3dBytes = () => (cached ??= noise3dData());
-
-export function createNoiseTexture() {
-  const size = NOISE3D_SIZE;
-  const data = noise3dBytes().slice();
-  const tex = new THREE.Data3DTexture(data, size, size, size);
-  tex.format = THREE.RedFormat;
-  tex.type = THREE.UnsignedByteType;
-  tex.minFilter = tex.magFilter = THREE.LinearFilter;
-  tex.wrapS = tex.wrapT = tex.wrapR = THREE.RepeatWrapping;
-  tex.unpackAlignment = 1;
-  tex.needsUpdate = true;
-  return tex;
-}

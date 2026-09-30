@@ -1,5 +1,3 @@
-import type { THREE } from '../lib/three';
-
 /** Stages of a frame, timed on the CPU in this order. */
 const STAGES = ['sim', 'render', 'overlay', 'hud'] as const;
 type Stage = (typeof STAGES)[number];
@@ -9,21 +7,15 @@ const N = 240; // frames of history in the graph
 const GRAPH_MS = 50; // graph height in ms
 const STORE_KEY = 'farlight.perf';
 
-interface TimerExt {
-  TIME_ELAPSED_EXT: number;
-  GPU_DISJOINT_EXT: number;
-}
-
 /**
  * Performance overlay (backquote toggles; also `?perf` in the URL). Shows FPS, frame time
- * (average, 95th percentile, worst), CPU time per stage, GPU time when the browser exposes
- * EXT_disjoint_timer_query_webgl2, draw calls, and render resolution, plus a graph of the last
- * 240 frames: stacked CPU stages, the rest of each frame in grey (waiting on the GPU or vsync),
- * GPU time as a cyan line, and 60 / 30 fps guides.
+ * (average, 95th percentile, worst), CPU time per stage, GPU time when the adapter has WebGPU's
+ * timestamp queries, and the renderer's own line (resolution, draws), plus a graph of the last 240
+ * frames: stacked CPU stages, the rest of each frame in grey (waiting on the GPU or vsync), GPU time
+ * as a cyan line, and 60 / 30 fps guides.
  *
- * While it's shown, GPU time is also split by what's drawn: the renderer tags each draw with a
- * category (terrain, planet, air, clouds, sky, post…; SceneRenderer.perfTag) and every change of
- * category starts a new timer query (gpuSegment), so a slow frame shows where its GPU time went.
+ * While it's shown, GPU time is also split by pass (compute, sky, bodies, stations and ships,
+ * transparent, post; gpu/timing.ts), so a slow frame shows where its GPU time went.
  */
 export class PerfMonitor {
   visible: boolean;
@@ -36,28 +28,20 @@ export class PerfMonitor {
   private count = 0;
   private t = 0; // start of the current stage
   private drawIn = 0;
-  private readonly gl2: WebGL2RenderingContext | null;
-  private readonly timer: TimerExt | null;
-  private readonly queries: { q: WebGLQuery; slot: number; label: string | null }[] = [];
-  private active: WebGLQuery | null = null;
-  /** The category being timed (split timing), and GPU ms per category per frame. */
-  private activeLabel: string | null = null;
+  /** GPU ms per pass per frame. */
   private readonly split = new Map<string, Float32Array>();
+  /** Set by the renderer when it can time the GPU (gpu/timing.ts). */
+  gpuTimed = false;
+  /** The renderer's line for the panel (resolution, draws…). */
+  info: () => string = () => '';
 
   constructor(
     host: HTMLElement,
-    /** The WebGL renderer, for its GPU timers and counters; null under WebGPU (gpu/GpuRenderer.ts: its own timing to come). */
-    private readonly renderer: THREE.WebGLRenderer | null,
     private readonly overlayCanvas: HTMLCanvasElement,
   ) {
     this.canvas.id = 'perf';
     host.append(this.canvas);
     this.ctx = this.canvas.getContext('2d')!;
-    const ctx = renderer?.getContext();
-    this.gl2 = typeof WebGL2RenderingContext !== 'undefined' && ctx instanceof WebGL2RenderingContext ? ctx : null;
-    this.timer = this.gl2 ? (this.gl2.getExtension('EXT_disjoint_timer_query_webgl2') as TimerExt | null) : null;
-    // several gl.render calls per frame (sky, scene): count them all, reset once per frame
-    if (renderer) renderer.info.autoReset = false;
     let saved = false;
     try {
       saved = localStorage.getItem(STORE_KEY) === '1';
@@ -85,8 +69,6 @@ export class PerfMonitor {
   /** Call at the start of a frame with the time since the previous one. */
   frameStart(frameMs: number) {
     this.frameMs[this.i] = frameMs;
-    this.renderer?.info.reset();
-    this.pollGpu();
     this.t = performance.now();
   }
 
@@ -97,45 +79,26 @@ export class PerfMonitor {
     this.t = now;
   }
 
-  /** Whether GPU time is split by category this frame (only while shown). */
+  /** Whether GPU time is timed and split by pass this frame (only while shown). */
   get splitting() {
-    return this.visible && !!this.timer;
+    return this.visible && this.gpuTimed;
   }
 
-  /** Bracket the GPU work of the frame (only when the timer extension exists). */
-  gpuBegin() {
-    if (!this.timer || !this.gl2 || this.active || this.queries.length > 600) return;
-    if (this.splitting) {
-      this.gpuSegment('other');
-      return;
+  /** This frame's slot, to report its GPU time to once it's read back. */
+  get slot() {
+    return this.i;
+  }
+
+  /** A frame's GPU time, by pass (read back a frame or two after it was drawn). */
+  gpuResult(slot: number, parts: [string, number][]) {
+    let total = 0;
+    for (const [label, ms] of parts) {
+      total += ms;
+      let a = this.split.get(label);
+      if (!a) this.split.set(label, (a = new Float32Array(N).fill(NaN)));
+      a[slot] = (Number.isNaN(a[slot]) ? 0 : a[slot]) + ms;
     }
-    const q = this.gl2.createQuery();
-    if (!q) return;
-    this.gl2.beginQuery(this.timer.TIME_ELAPSED_EXT, q);
-    this.active = q;
-    this.activeLabel = null;
-  }
-
-  /** Split timing: what's drawn from here on counts toward `label` (until the next segment). */
-  gpuSegment(label: string) {
-    if (!this.timer || !this.gl2 || !this.splitting || label === this.activeLabel) return;
-    if (this.active) this.endQuery();
-    const q = this.gl2.createQuery();
-    if (!q) return;
-    this.gl2.beginQuery(this.timer.TIME_ELAPSED_EXT, q);
-    this.active = q;
-    this.activeLabel = label;
-  }
-
-  gpuEnd() {
-    if (this.active) this.endQuery();
-  }
-
-  private endQuery() {
-    this.gl2!.endQuery(this.timer!.TIME_ELAPSED_EXT);
-    this.queries.push({ q: this.active!, slot: this.i, label: this.activeLabel });
-    this.active = null;
-    this.activeLabel = null;
+    this.gpuMs[slot] = total;
   }
 
   frameEnd() {
@@ -146,30 +109,6 @@ export class PerfMonitor {
     if (this.visible && --this.drawIn <= 0) {
       this.drawIn = 4; // redraw the panel every 4th frame; it's cheap but not free
       this.draw();
-    }
-  }
-
-  private pollGpu() {
-    const gl = this.gl2,
-      ext = this.timer;
-    if (!gl || !ext) return;
-    const disjoint = gl.getParameter(ext.GPU_DISJOINT_EXT) as boolean;
-    while (this.queries.length) {
-      const { q, slot, label } = this.queries[0];
-      if (!gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) break;
-      if (!disjoint) {
-        const ms = (gl.getQueryParameter(q, gl.QUERY_RESULT) as number) / 1e6;
-        const add = (a: Float32Array) => (a[slot] = (Number.isNaN(a[slot]) ? 0 : a[slot]) + ms);
-        if (label === null) this.gpuMs[slot] = ms;
-        else {
-          add(this.gpuMs);
-          let a = this.split.get(label);
-          if (!a) this.split.set(label, (a = new Float32Array(N).fill(NaN)));
-          add(a);
-        }
-      }
-      gl.deleteQuery(q);
-      this.queries.shift();
     }
   }
 
@@ -202,7 +141,6 @@ export class PerfMonitor {
       return r.length ? r.reduce((x, y) => x + y, 0) / r.length : NaN;
     };
     const gpu = mean(this.gpuMs);
-    const r = this.renderer;
 
     ctx.font = '11px "Chakra Petch", system-ui, sans-serif';
     ctx.textBaseline = 'top';
@@ -218,15 +156,7 @@ export class PerfMonitor {
     ctx.fillStyle = '#7fdcff';
     ctx.fillText(Number.isNaN(gpu) ? 'gpu n/a' : `gpu ${gpu.toFixed(1)}`, x, 21);
     ctx.fillStyle = 'rgba(255,230,199,.7)';
-    const db = r?.getContext();
-    ctx.fillText(
-      r && db
-        ? `${db.drawingBufferWidth}×${db.drawingBufferHeight} @${r.getPixelRatio().toFixed(2)}  2D ${this.overlayCanvas.width}×${this.overlayCanvas.height}  ${r.info.render.calls} calls  ${(r.info.render.triangles / 1000).toFixed(0)}k tris`
-        : `WebGPU  2D ${this.overlayCanvas.width}×${this.overlayCanvas.height}`,
-      8,
-      36,
-    );
-    if (r) ctx.fillText(`${r.info.render.points} points  ${r.info.render.lines} lines  geo ${r.info.memory.geometries}  tex ${r.info.memory.textures}`, 8, 51);
+    ctx.fillText(`${this.info()}  2D ${this.overlayCanvas.width}×${this.overlayCanvas.height}`, 8, 36);
     // GPU time by category, most first
     const parts = [...this.split].map(([k, a]): [string, number] => [k, mean(a)]).filter(([, v]) => v >= 0.05).sort((a, b) => b[1] - a[1]);
     ctx.fillStyle = '#7fdcff';

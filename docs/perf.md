@@ -4,13 +4,13 @@ Press **`** (backquote) or open the game with `?perf` to show the performance ov
 
 - FPS, plus frame time: average, 95th percentile and worst.
 - CPU time per stage: sim, 3D render submission, 2D overlay, HUD snapshot.
-- GPU time, where the browser exposes `EXT_disjoint_timer_query_webgl2`.
-- Render and overlay resolution, draw calls, triangles, points and lines.
+- GPU time, where the adapter has WebGPU's `timestamp-query` feature.
+- Render and overlay resolution.
 - A 240-frame graph: stacked CPU stages; grey for the rest of each frame (waiting on the GPU or vsync); a cyan line for GPU time; guides at 60 and 30 fps.
 
-## GPU time by category
+## GPU time by pass
 
-While the overlay is up, the fourth line splits GPU time by what's being drawn: terrain (the LOD chunks), planet (the far spheres), air (atmosphere shells), clouds, sky, star, stations, points (dust, markers, stars), rings, post (tone mapping), and the bakes (terrain chunk bakes, the periscope's sky patch). Each draw is tagged by its shader (`SceneRenderer.perfTag`), and each change of category starts a new timer query (`Perf.gpuSegment`). The queries themselves cost a little, and a category includes some GPU pipeline wait, so read it for where the time goes rather than exact numbers.
+While the overlay is up, the fourth line splits GPU time by pass (`gpu/timing.ts`): the compute passes (terrain bake, rock cull, meter), then the scene split into sky, bodies (planets, terrain, ring rocks), stations and ships, and transparent (glows, rings, dots, skies, clouds), and post (tone mapping). WebGPU times whole passes, so to split the scene it's drawn as four passes while the overlay is up (storing and reloading the MSAA target between them, which costs a little itself). Before the WebGPU port it split by shader category with WebGL timer queries.
 
 ## Terrain skirts and the periscope (2026-09-28)
 
@@ -69,6 +69,6 @@ What changed (`shaders/planet.frag.glsl`, `shaders/noise3d.glsl`, `lib/noise3d.t
 
 - **Dynamic resolution:** scale the pixel ratio from the measured frame time (for example, a 60 fps target between 0.6 and the cap), so weaker GPUs stay smooth.
 - **MSAA:** `antialias: true` at ~5 MP is costly in bandwidth. Consider it off when the pixel ratio is at least 1.25, or FXAA.
-- **Logarithmic depth buffer:** writing `gl_FragDepth` disables early-z, so hidden fragments are still shaded. The camera-relative scene could instead use a reversed-Z float depth buffer (WebGL2 + `EXT_clip_control`) or per-object depth ranges.
+- ~~**Logarithmic depth buffer**~~: done with the WebGPU port (reversed-Z depth32float, infinite far plane; no fragment depth writes, so the early depth test works again).
 - **Overlay:** redraw only when something moved (it currently clears and redraws every frame).
 - **HUD:** React re-renders about 12×/s. That's fine now; memoise panels if it shows up in the `hud` bar.

@@ -10,7 +10,7 @@
 import type { Game } from '../Game';
 import { mulberry32 } from '../lib/rng';
 import { THREE } from '../lib/three';
-import { DUST, DUSTBOX, DUST_FADE_FROM, DUST_FADE_TO, RING_AP, RING_N, RING_PLAN } from '../render/SceneRenderer';
+import { DUST, DUSTBOX, DUST_FADE_FROM, DUST_FADE_TO, RING_AP, RING_N, RING_PLAN } from '../render/look';
 import { FtlTrail } from '../render/Trail';
 import { orbitPreview } from '../sim/planner';
 import { occluder } from '../sim/sight';
@@ -86,7 +86,7 @@ export class EffectsLayer {
   private readonly beamIdx: GPUBuffer;
   private beamOn = false;
 
-  private readonly own = new FtlTrail(new THREE.LineBasicMaterial());
+  private readonly own = new FtlTrail();
   private readonly trails = new Map<Npc, FtlTrail>();
   private sys = '';
   private readonly dustSeed: [number, number, number][] = [];
@@ -206,14 +206,13 @@ export class EffectsLayer {
     if (this.lineN) this.device.queue.writeBuffer(this.lineBuf, 0, this.lineData, 0, this.lineN * LINE_FLOATS);
   }
 
-  /** A trail's line (FtlTrail fills a THREE.Line's arrays; we copy them, faded, into the line buffer). */
+  /** A trail's line (render/Trail.ts fills it), copied, faded, into the line buffer. */
   private addTrail(tr: FtlTrail) {
-    if (!tr.line.visible) return;
-    const geo = tr.line.geometry;
-    const n = Math.min(geo.drawRange.count, MAX_LINE_VERTS - this.lineN);
+    if (!tr.visible) return;
+    const n = Math.min(tr.count, MAX_LINE_VERTS - this.lineN);
     if (n < 2) return;
-    const p = geo.attributes.position.array as Float32Array,
-      f = geo.attributes.aFade.array as Float32Array;
+    const p = tr.pos,
+      f = tr.fade;
     const first = this.lineN;
     for (let i = 0; i < n; i++) {
       const a = f[i] * f[i] * 0.9;
@@ -229,7 +228,6 @@ export class EffectsLayer {
     if (g.cur.sys.id !== this.sys) {
       this.sys = g.cur.sys.id;
       this.own.clear();
-      for (const tr of this.trails.values()) tr.dispose();
       this.trails.clear();
     }
     // your own trail, from just behind the camera back along the way you came
@@ -238,16 +236,12 @@ export class EffectsLayer {
     this.addTrail(this.own);
     for (const npc of g.traffic) {
       let tr = this.trails.get(npc);
-      if (!tr) this.trails.set(npc, (tr = new FtlTrail(new THREE.LineBasicMaterial())));
+      if (!tr) this.trails.set(npc, (tr = new FtlTrail()));
       tr.record(npc.pos, npc.vel, npc.ftl, simTime);
       tr.draw(ship.pos, simTime);
       if (!occluder(g.cur.bodies, ship.pos, npc.pos)) this.addTrail(tr);
     }
-    for (const [npc, tr] of this.trails)
-      if (!g.traffic.includes(npc)) {
-        tr.dispose();
-        this.trails.delete(npc);
-      }
+    for (const npc of [...this.trails.keys()]) if (!g.traffic.includes(npc)) this.trails.delete(npc); // gone from the system
     const light = this.tmp2.subVectors(g.cur.star.pos, ship.pos).normalize();
     this.fxData.set([light.x, light.y, light.z], 0);
     this.hulls = 0;
@@ -428,8 +422,6 @@ export class EffectsLayer {
   }
 
   dispose() {
-    this.own.dispose();
-    for (const tr of this.trails.values()) tr.dispose();
     for (const b of [this.fxBuf, this.hull.pos, this.hull.nrm, this.inst, this.lineBuf, this.beamBuf, this.beamIdx]) b.destroy();
   }
 }

@@ -1,7 +1,6 @@
 /**
- * What the game needs from a renderer (docs/webgpu.md): the WebGL one (render/SceneRenderer.ts, on
- * three.js) and the WebGPU one being built (gpu/GpuRenderer.ts) both implement it, and `Game` holds
- * whichever is in use.
+ * What the game needs from its renderer (gpu/GpuRenderer.ts; docs/webgpu.md): the overlay and the
+ * debug tools see it through this.
  */
 import type { Game } from '../Game';
 import type { Body, CurrentSystem, Station, StarSystem } from '../types';
@@ -13,7 +12,7 @@ export interface ViewInfo {
 }
 
 export interface GameRenderer {
-  readonly kind: 'webgl' | 'webgpu';
+  readonly kind: 'webgpu';
   /** The canvas it draws into (the HUD's overlay canvas sits on top of it). */
   readonly canvas: HTMLCanvasElement;
   /** A new system: everything in it, and every other system within sight as a star in the sky. */

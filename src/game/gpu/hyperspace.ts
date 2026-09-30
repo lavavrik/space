@@ -1,6 +1,7 @@
 /**
- * The star field during a hyperspace transit in WebGPU (render/Hyperspace.ts has the why): every
- * real system near the path at its true place relative to the moving ship, a head (drawn by the sky
+ * The star field during a hyperspace transit, in light-years: every real system within SKY_RADIUS
+ * of the path at its true place relative to the moving ship (nearby stars sweep past with parallax
+ * and smear more than distant ones; streaks grow and shrink with the ship's speed), a head (drawn by the sky
  * stars' pipeline, as a direction) plus a streak trailing back along the direction of travel.
  *
  * Positions are in light-years, scaled up (SCALE) before drawing: only directions matter to the

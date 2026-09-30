@@ -32,6 +32,7 @@ import stationInterior from './stationInterior.wgsl?raw';
 import corridor from './corridor.wgsl?raw';
 import skyStation from './skyStation.wgsl?raw';
 import fx from './fx.wgsl?raw';
+import meter from './meter.wgsl?raw';
 
 const parts: Record<string, string> = { noise, frame, world, chunk, rock, stationBody, noise3d, terrain, atmo, clouds, city };
 const build = (src: string) => src.replace(/^\/\/ #include (\w+)$/gm, (_, name: string) => parts[name] ?? `// (no ${name})`);
@@ -55,3 +56,4 @@ export const STATION_INTERIOR_WGSL = build(stationInterior);
 export const CORRIDOR_WGSL = build(corridor);
 export const SKY_STATION_WGSL = build(skyStation);
 export const FX_WGSL = build(fx);
+export const METER_WGSL = build(meter);
