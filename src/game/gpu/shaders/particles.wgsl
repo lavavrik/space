@@ -100,7 +100,9 @@ fn simulate(@builtin(global_invocation_id) gid: vec3u) {
     parts[i] = p;
     return;
   }
-  p.vel *= exp(-p.k.y * dt);
+  // drag toward the ship's frame (the local medium), not the frame body's: in a ring's belt you
+  // orbit at ~20 km/s, and slowing toward the planet flung everything backward along the orbit
+  p.vel = sim.camVel.xyz + (p.vel - sim.camVel.xyz) * exp(-p.k.y * dt);
   p.pos += (p.vel - sim.camVel.xyz) * dt;
   parts[i] = p;
   let k = atomicAdd(&args[1], 1u);

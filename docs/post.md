@@ -12,7 +12,8 @@ the final pass `tonemap.wgsl`:
    (after John Chapman's pseudo lens flare), read from the 1/8-size bloom copy less 1, so only the
    star and lamps make them. No halo: from a bright limb or sky it swept arcs across the view.
 3. **FTL zoom blur:** in FTL, 12 samples toward the point you're heading for (away from it when it's
-   behind you), stronger toward the edges and with speed (from ~1,000 to ~1,000,000 km/s).
+   behind you), stronger toward the edges and with speed (from ~1,000 to ~1,000,000 km/s), kept to a
+   tenth of full strength: a hint of speed, not a smear.
 4. The volumetric clouds laid over, then the tone map (linear to 0.8, a soft shoulder toward 1).
 
 The HUD and the overlay are drawn separately, so they stay sharp.

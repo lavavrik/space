@@ -118,7 +118,7 @@ export function postParams(g: Game, vp: THREE.Matrix4, clouds: boolean) {
     fy = 0.5,
     side = 1;
   if (g.ship.mode === 'ftl' && !g.jump) {
-    blur = THREE.MathUtils.clamp((Math.log10(Math.max(g.curSpeed, 1)) - 6) / 3, 0, 1);
+    blur = 0.1 * THREE.MathUtils.clamp((Math.log10(Math.max(g.curSpeed, 1)) - 6) / 3, 0, 1); // (a hint of it: full strength was too much)
     const d = new THREE.Vector4(g.ship.travelDir.x, g.ship.travelDir.y, g.ship.travelDir.z, 0).applyMatrix4(vp);
     if (Math.abs(d.w) > 1e-6) {
       side = d.w > 0 ? 1 : -1;

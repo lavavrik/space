@@ -11,7 +11,9 @@ pass writes the new ones after the last (random direction, speed, size and life 
 second ages and moves all of them and lists the living, and they're drawn with one indirect draw.
 
 - Positions are camera-relative and velocities relative to the frame body (the ship's own frame of
-  reference, `ship.vel`), so a particle moves by (its velocity − the ship's) × dt: exhaust left
+  reference, `ship.vel`), so a particle moves by (its velocity − the ship's) × dt, and drag slows it
+  toward the ship's velocity (the local medium; toward the frame body's it flung a belt's plume
+  backward along the orbit at ~20 km/s): exhaust left
   behind by a passing ship streams away, the laser's plume stays with the rock you're matched with.
 - Sprites are `size` metres across, never under 1.5 px (smaller ones dimmed by their share of a
   pixel), and stretched along their motion relative to the camera over `streak` seconds, their
@@ -19,7 +21,7 @@ second ages and moves all of them and lists the living, and they're drawn with o
 
 | Emitter | Where | Look |
 | --- | --- | --- |
-| Laser plume | the hit point, along the surface's normal | ice vapour, ~600/s, 2.5 s, growing |
+| Laser plume | the hit point, a wide cone round the surface's normal | ice vapour, ~600/s, 2.5 s, growing |
 | Laser sparks | the same | hot orange streaks, ~250/s, 0.4 s |
 | Exhaust | other ships' engines while they thrust (normal space, within 60 km) | glowing gas, 1 s, growing |
 | Re-entry plasma | a region ahead of the ship, once the air's heating (½ρv³) passes 10⁵ W/m² | streaks pouring past, brighter to 10⁷ |
