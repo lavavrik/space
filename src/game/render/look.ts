@@ -23,7 +23,10 @@ export function airBeta(b: World) {
   if (b.type === WT.EarthLike || b.type === WT.Ocean) return new THREE.Vector3(5.8e-6, 13.5e-6, 33.1e-6).multiplyScalar(k);
   const c = b.pal.atmo!.c;
   const m = Math.max(c.r, c.g, c.b, 1e-3);
-  return new THREE.Vector3(c.r / m, c.g / m, c.b / m).multiplyScalar(1.5e-5 * Math.sqrt(k));
+  // (a giant's face is its cloud tops: at full strength the haze above them washed an ice giant out
+  // to white, its bands and storms gone)
+  const giant = b.type === WT.GasGiant || b.type === WT.IceGiant ? 0.3 : 1;
+  return new THREE.Vector3(c.r / m, c.g / m, c.b / m).multiplyScalar(1.5e-5 * Math.sqrt(k) * giant);
 }
 
 /** Apparent radius (px) above which a world with relief is drawn as LOD terrain instead of a sphere. */
