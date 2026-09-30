@@ -35,6 +35,9 @@ import { destroyShip } from './flight';
 import { shipContacts } from './shipContact';
 import { updateWrecks } from './wreck';
 
+/** A turn asked for (rad/s) above this cancels sun tracking (below: jitter, a turn coasting down). */
+const STEER_CANCEL = 0.05;
+
 const qa = new THREE.Quaternion();
 const AX = new THREE.Vector3(1, 0, 0),
   AY = new THREE.Vector3(0, 1, 0),
@@ -119,6 +122,18 @@ export function update(g: Game, dt: number, realDt = dt) {
     if (keys.ArrowRight) wy -= kr;
     if (keys.KeyQ) wr += 1.4;
     if (keys.KeyE) wr -= 1.4;
+    // sun tracking gives way only to a real ask to turn: a turn still coasting down from the last
+    // mouse move (the smoothed rate takes a while to settle) cancelled it the moment it came on;
+    // while it's on, the leftover rate is dropped and the thrusters bring the turn to rest
+    if (ship.sunTrack) {
+      if (Math.hypot(wp, wy, wr) > STEER_CANCEL) {
+        ship.sunTrack = false;
+        g.showMsg('Sun tracking off · manual steering');
+      } else {
+        wp = wy = wr = 0;
+        g.mouseRate.set(0, 0, 0);
+      }
+    }
     // the attitude thrusters bring the turn rate there (and back to rest) at ANG_ACC, less if heavy
     const acc = ANG_ACC * zs * Math.min(1.5, ANG_REF_MASS / shipMass(ship)) * realDt;
     const av = g.angVel;
@@ -132,10 +147,6 @@ export function update(g: Game, dt: number, realDt = dt) {
     const pitch = av.x * realDt,
       yaw = av.y * realDt,
       roll = av.z * realDt;
-    if (ship.sunTrack && (pitch || yaw || roll)) {
-      ship.sunTrack = false;
-      g.showMsg('Sun tracking off · manual steering');
-    }
     // (something else turned the ship since steering last did: the pivot, an autopilot, docking...)
     const turnedElsewhere = !ship.q.equals(g.steerQ);
     ship.q.multiply(qa.setFromAxisAngle(AY, yaw)).multiply(qa.setFromAxisAngle(AX, pitch)).multiply(qa.setFromAxisAngle(AZ, roll)).normalize();
