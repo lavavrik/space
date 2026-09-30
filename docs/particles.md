@@ -21,7 +21,7 @@ second ages and moves all of them and lists the living, and they're drawn with o
 
 | Emitter | Where | Look |
 | --- | --- | --- |
-| Laser plume | the hit point, a wide cone round the surface's normal | ice vapour, ~600/s, 2.5 s, growing |
+| Laser plume | the hit point, a wide cone round the surface's normal | faint ice vapour, ~200/s, 2 s, growing a little (thin, or it hides the rock) |
 | Laser sparks | the same | hot orange streaks, ~250/s, 0.4 s |
 | Exhaust | other ships' engines while they thrust (normal space, within 60 km) | glowing gas, 1 s, growing |
 | Re-entry plasma | a region ahead of the ship, once the air's heating (½ρv³) passes 10⁵ W/m² | streaks pouring past, brighter to 10⁷ |

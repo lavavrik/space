@@ -385,7 +385,8 @@ export class EffectsLayer {
       const f = 0.8 + 0.2 * Math.sin(now * 37) * Math.sin(now * 23);
       worlds.addDot(b, 1.6 * f, 1.3 * f, 1.0 * f, spot * pr);
       const nrm = L.hit.normal;
-      px.emit({ key: 'plume', pos: b, vel: ship.vel, dir: nrm, speed: 18, spread: 40, count: 600 * dt, life: 2.5, color: [0.26, 0.33, 0.4], size: 2.5, growth: 1, drag: 0.2, fadeIn: 0.1 });
+      // (thin: a thousand overlapping puffs added up to a white blob that hid the rock)
+      px.emit({ key: 'plume', pos: b, vel: ship.vel, dir: nrm, speed: 18, spread: 40, count: 200 * dt, life: 2.0, color: [0.05, 0.065, 0.08], size: 1.5, growth: 0.6, drag: 0.2, fadeIn: 0.1 });
       px.emit({ key: 'sparks', pos: b, vel: ship.vel, dir: nrm, speed: 25, spread: 80, count: 250 * dt, life: 0.4, color: [3, 1.5, 0.5], size: 0.15, streak: 0.04, drag: 2 });
     }
   }
