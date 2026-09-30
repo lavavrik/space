@@ -1,4 +1,5 @@
 import { spawnTraffic, type Npc } from './sim/traffic';
+import { debugSpots } from './debug/poses';
 import { noAero, type AeroState } from './sim/atmosphere';
 import { FOV, HUD_INTERVAL, JUMP_RANGE, MSG_TIME, SHIP, SKY_RADIUS } from './constants';
 import { buildSnapshot } from './hud/snapshot';
@@ -587,6 +588,18 @@ export class Game {
     this.helpVisible = true;
     this.avionicsVisible = this.infoVisible = this.influencesVisible = this.outfitVisible = this.radarVisible = this.cargoVisible = this.contractsVisible = false;
     this.resume(true);
+  }
+  /** Pause menu, debug builds (debug/poses.ts): jump to one of this system's telling spots, and fly on. */
+  debugJump(id: string) {
+    if (this.inStation || this.dock?.docked) {
+      this.showMsg('Leave the station first', 'warn');
+      return;
+    }
+    const spot = debugSpots(this).find((s) => s.id === id);
+    if (!spot) return;
+    spot.go();
+    this.showMsg(`Jumped · ${spot.label} · ${spot.hint}`);
+    this.resume();
   }
   toggleSound() {
     this.audio.toggleMute();

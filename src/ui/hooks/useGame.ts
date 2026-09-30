@@ -8,7 +8,7 @@ declare global {
     /** Console access for debugging: `farlight.step(seconds)` fast-forwards the simulation. */
     farlight?: Game;
     /** Dev builds: camera poses for checking how things look (game/debug/poses.ts). */
-    farlightPose?: ReturnType<typeof import('../../game/debug/poses').poses>;
+    farlightPose?: Record<string, () => string>;
   }
 }
 
@@ -34,8 +34,19 @@ export function useGame() {
       g = new Game(hostRef.current!, gpu);
       window.farlight = g;
       if (import.meta.env.DEV) {
+        // the pause menu's debug jumps, in the console too: farlightPose.belt(), .station(), …
         const game = g;
-        void import('../../game/debug/poses').then(({ poses }) => (window.farlightPose = poses(game)));
+        void import('../../game/debug/poses').then(({ debugSpots }) => {
+          window.farlightPose = new Proxy({} as Record<string, () => string>, {
+            get: (_, id) => () => {
+              const s = debugSpots(game).find((x) => x.id === id);
+              if (!s) return `no ${String(id)} here: ${debugSpots(game).map((x) => x.id).join(', ')}`;
+              s.go();
+              game.paused = true;
+              return s.hint;
+            },
+          });
+        });
       }
       setGame(g);
     })();
