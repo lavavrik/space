@@ -54,6 +54,9 @@ hull showed dimly, as if beyond the clouds. Bloom and the lens flare see the clo
   once slower, round a tilted axis and from another part of the map. The two slide past each other,
   so weather systems grow, merge and die away over hours. Swells evolve over ~an hour, clumps and
   towers over ~15 min, the finest detail over a few minutes.
+- **Shadows of what's near:** the sunlight at each sample goes through the shadow map too
+  (`frame.wgsl shadowAtPoint`, one tap), so a sky station, or a ship, shadows the clouds under it.
+  It works within the cascades' 30 km, while the map is on (a station within 30 km).
 - **Upsampling:** the half-res result is laid over the frame through a 3 × 3 filter weighted by
   how alike the scene's depth is where each texel was marched and at the pixel. Blurred across an
   edge, sky clouds bled onto the far terrain and back, a soft low-res band along the horizon.

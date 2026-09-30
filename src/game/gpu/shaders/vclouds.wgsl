@@ -292,6 +292,8 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     // plus, near you, your own lamps scattered in the cloud (the path from them is the path from the
     // camera: × T again), and at night the night's own faint light
     let lamp = vec3f(1.0, 0.97, 0.92) * shipLightAt(P) * T * 0.08;
+    // (the sunlight's share in the shadows of what's near: a sky station's on the clouds under it)
+    sun *= shadowAtPoint(P);
     let light = sunCol * (sun * 0.6 + 0.12 * (0.4 + 0.6 * h)) * dayK * 0.97 + lamp + vec3f(0.55, 0.7, 1.0) * 0.05 * (1.0 - dayK);
     let tStep = exp(-dn * SIGMA * dt);
     S += T * light * (1.0 - tStep);

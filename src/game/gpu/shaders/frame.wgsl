@@ -116,3 +116,19 @@ fn shadowAt(wp: vec3f, n: vec3f) -> f32 {
   // fading out toward the last cascade's edge
   return mix(s / 9.0, 1.0, smoothstep(0.75, 0.95, dist / shadowU.radius.z));
 }
+
+// The same at a point in the air (no surface to push off, one tap: the volumetric clouds, where the
+// march's jitter and the temporal blend soften it)
+fn shadowAtPoint(wp: vec3f) -> f32 {
+  if (shadowU.radius.w < 0.5) { return 1.0; }
+  let dist = length(wp);
+  var c = 0;
+  if (dist > shadowU.radius.x * 0.9) { c = 1; }
+  if (dist > shadowU.radius.y * 0.9) { c = 2; }
+  if (dist > shadowU.radius.z * 0.95) { return 1.0; }
+  let q = shadowU.vp[c] * vec4f(wp, 1.0);
+  let uv = vec2f(q.x * 0.5 + 0.5, 0.5 - q.y * 0.5);
+  if (uv.x <= 0.0 || uv.y <= 0.0 || uv.x >= 1.0 || uv.y >= 1.0 || q.z >= 1.0) { return 1.0; }
+  let s = textureSampleCompareLevel(shadowTex, shadowSamp, uv, c, q.z - shadowU.bias[c] * 4.0);
+  return mix(s, 1.0, smoothstep(0.75, 0.95, dist / shadowU.radius.z));
+}

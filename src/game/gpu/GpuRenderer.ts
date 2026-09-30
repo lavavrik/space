@@ -107,8 +107,9 @@ export class GpuRenderer implements GameRenderer {
     this.frameLayout = device.createBindGroupLayout({
       entries: [
         { binding: 0, visibility: ALL, buffer: { type: 'uniform' } },
-        { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'depth', viewDimension: '2d-array' } },
-        { binding: 2, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'comparison' } },
+        // (the volumetric clouds read it too: a sky station's shadow on them)
+        { binding: 1, visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE, texture: { sampleType: 'depth', viewDimension: '2d-array' } },
+        { binding: 2, visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE, sampler: { type: 'comparison' } },
         { binding: 3, visibility: ALL, buffer: { type: 'uniform' } },
       ],
     });
