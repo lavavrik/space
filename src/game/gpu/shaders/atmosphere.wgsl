@@ -41,7 +41,7 @@ fn fs(in: Out) -> @location(0) vec4f {
   // a pair's second sun lights the air too, in its colour (docs/binaries.md)
   let two = world.light2.w > 0.5;
   let L2 = normalize(world.light2.xyz + vec3f(0.0, 1e-9, 0.0));
-  if (two) { sky += atInscatter(dir * s.x, dir * s.y, L2, 8) * world.lightC2.rgb; }
+  if (two) { sky += atInscatter(dir * s.x, dir * s.y, L2, 8) * world.lightC2.rgb * sunShade2(dir * at - C); }
   // the night sky's own faint glow (airglow, starlight in the air): as much as there's air along the
   // ray, where the sun's gone (at night the sky was pitch black, and so was everything under it)
   let up2 = select(0.0, min(1.0, 4.0 * max(world.lightC2.r, max(world.lightC2.g, world.lightC2.b))), two);

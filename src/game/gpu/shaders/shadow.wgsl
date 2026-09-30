@@ -14,11 +14,16 @@ fn discCover(aS: f32, aO: f32, sep: f32) -> f32 {
 }
 
 // P: the point relative to the world's centre (m, world axes)
-fn eclipse(P: vec3f) -> f32 {
-  let S = world.sunC.xyz - P;
+fn eclipse(P: vec3f) -> f32 { return eclipseOf(P, world.sunC); }
+// …of a pair's second sun (docs/binaries.md; the same bodies can eclipse it)
+fn eclipse2(P: vec3f) -> f32 { return eclipseOf(P, world.sunC2); }
+
+// sunC: the star relative to the world's centre (w: its radius)
+fn eclipseOf(P: vec3f, sunC: vec4f) -> f32 {
+  let S = sunC.xyz - P;
   let dS = length(S);
   let Ld = S / dS;
-  let aS = asin(min(1.0, world.sunC.w / dS));
+  let aS = asin(min(1.0, sunC.w / dS));
   var lit = 1.0;
   let n = i32(world.ringP.w + 0.5);
   for (var i = 0; i < 4; i++) {
@@ -53,4 +58,9 @@ fn toLocalM() -> mat3x3f { return mat3x3f(world.toLocal[0].xyz, world.toLocal[1]
 // both, for a point relative to the world's centre in world axes
 fn sunShade(P: vec3f) -> f32 {
   return eclipse(P) * ringShade(toLocalM() * P, world.lightL.xyz);
+}
+// …of a pair's second sun (0 with one star)
+fn sunShade2(P: vec3f) -> f32 {
+  if (world.light2.w < 0.5) { return 0.0; }
+  return eclipse2(P) * ringShade(toLocalM() * P, world.lightL2.xyz);
 }

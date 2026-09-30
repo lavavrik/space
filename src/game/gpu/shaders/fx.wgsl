@@ -44,7 +44,7 @@ fn vsHullShadow(@location(0) position: vec3f, @location(2) m0: vec4f, @location(
 fn fsHull(in: HullOut) -> @location(0) vec4f {
   let N = normalize(in.n);
   let d = max(dot(N, fx.light.xyz), 0.0) * in.lit * shadowAt(in.wp, N);
-  let d2 = select(vec3f(0.0), max(dot(N, fx.light2.xyz), 0.0) * fx.lightC2.rgb, fx.light2.w > 0.5);
+  let d2 = select(vec3f(0.0), max(dot(N, fx.light2.xyz), 0.0) * fx.lightC2.rgb * shadowAt2(in.wp, N), fx.light2.w > 0.5);
   return vec4f(vec3f(0.62, 0.64, 0.68) * (0.04 + 0.6 * (d + d2)), 1.0);
 }
 

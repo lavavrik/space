@@ -79,7 +79,7 @@ fn vsChunk(@location(0) position: vec3f, @location(1) dir: vec3f, @location(2) g
   o.sun2 = vec3f(0.0);
   if (has2()) {
     o.haze += atInscatter(vd * atSpan(vd).x, ground, L2dir(), 5) * world.lightC2.rgb;
-    o.sun2 = atSunlight(ground, L2dir()) * world.lightC2.rgb;
+    o.sun2 = atSunlight(ground, L2dir()) * world.lightC2.rgb * B.w; // (B.w: the mountains' shadow from it)
   }
   o.pos = frame.viewProj * wp;
   return o;
@@ -325,9 +325,10 @@ fn fs(in: Out) -> @location(0) vec4f {
   sunC *= shade;
   var sunC2 = vec3f(0.0);
   if (two) {
-    sunC2 = select(atSunlightC(C1, L2) * world.lightC2.rgb, in.sun2, terr) * ringShade(p * (world.radius + elev), world.lightL2.xyz);
+    sunC2 = select(atSunlightC(C1, L2) * world.lightC2.rgb, in.sun2, terr) * ringShade(p * (world.radius + elev), world.lightL2.xyz) * eclipse2(Pc);
   }
   if (terr) { sunC *= shadowAt(in.wp, N); } // up close: sky stations', ships' and rocks' shadows on the ground
+  if (terr && two) { sunC2 *= shadowAt2(in.wp, N); }
   let sky = select(0.0, 0.07 * smoothstep(-0.12, 0.35, ndl0), world.atOn > 0.5);
   let sky2 = select(vec3f(0.0), 0.07 * smoothstep(-0.12, 0.35, ndl20) * world.lightC2.rgb, world.atOn > 0.5 && two);
   let R = reflect(-L, N);

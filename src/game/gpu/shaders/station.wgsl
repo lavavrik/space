@@ -65,7 +65,7 @@ fn fs(in: BodyOut) -> @location(0) vec4f {
     let L2 = so.v[14].xyz;
     let ndl2 = max(dot(Np, L2), 0.0);
     let gloss2 = pow(max(dot(Np, normalize(L2 + V)), 0.0), 140.0) * 2.5;
-    col += (base * 0.55 + F * gloss2) * so.v[15].rgb * starC * ndl2 * shadowAt(in.wp, N);
+    col += (base * 0.55 + F * gloss2) * so.v[15].rgb * starC * ndl2 * shadowAt2(in.wp, N);
   }
   // the station's own floodlights: pools of warm light from lamps at each face's edge midpoints
   let e = uv - 0.5;

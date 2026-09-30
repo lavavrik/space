@@ -263,7 +263,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   let L2 = normalize(world.light2.xyz + vec3f(0.0, 1e-9, 0.0));
   let cosT2 = dot(dir, L2);
   var sunCol2 = vec3f(0.0);
-  if (two) { sunCol2 = atSunlightC(normalize(mid) * (world.radius + world.cloudH), L2) * world.lightC2.rgb * world.atSunI / 45.0 * smoothstep(-0.15, 0.3, dot(normalize(mid), L2)); }
+  if (two) { sunCol2 = atSunlightC(normalize(mid) * (world.radius + world.cloudH), L2) * sunShade2(mid) * world.lightC2.rgb * world.atSunI / 45.0 * smoothstep(-0.15, 0.3, dot(normalize(mid), L2)); }
   let span = t1 - t0;
   // Level of detail: steps no finer than 0.4 % of the distance to the layer (150 m at least), so a
   // ray from high up through a few km of layer takes ~12, not 48: from 300 km a screen full of
