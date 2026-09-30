@@ -895,8 +895,12 @@ export class Overlay {
     ctx.fillText(`${best.name} · ${best.star.spec}`, lx, by - 4);
     ctx.fillStyle = CYA + '0.75)';
     ctx.font = this.font(11, SANS);
-    const dist = `${best.pos.distanceTo(gp).toFixed(1)} ly${from ? ` · ${best.pos.distanceTo(from.pos).toFixed(1)} ly from ${from.name}` : ''}`;
-    ctx.fillText(`${dist} · click to add`, lx, by + 12);
+    // how far from you, and (with a route planned) from where it would go on from: the route's last
+    // stop, named with its number (the diamonds on the stars). "148.5 ly from Jorundor" alone didn't
+    // say what Jorundor was.
+    const n = g.navPoints.length;
+    ctx.fillText(`${best.pos.distanceTo(gp).toFixed(1)} ly from you${from ? ` · ${best.pos.distanceTo(from.pos).toFixed(1)} ly on from stop ${n}, ${from.name}` : ''}`, lx, by + 12);
+    ctx.fillText(`click to add as stop ${n + 1}`, lx, by + 26);
   }
 
   /** Diamond on the hyperjump destination star. */
