@@ -7,6 +7,10 @@
 // mountains poke through, and the clouds are hazed by the air in front of them. Each pixel's march
 // starts at a jittered offset, and the result is blended with the last frame's (reprojected by the
 // clouds' distance), so the jitter's grain averages out over a few frames.
+//
+// Light shafts: below the deck, the air's haze along the ray is dimmed where the clouds hide the sun
+// from it (the share of the ray, weighted by the air's density, whose sunward line crosses cloud),
+// written as negative light, so the tone map's scene × T + light takes it off the sky and the ground.
 // #include frame
 // #include world
 // #include noise
@@ -68,6 +72,18 @@ fn hg(c: f32, g: f32) -> f32 {
   return (1.0 - g * g) / (d * sqrt(d)); // × 4π: 1 on average
 }
 
+// how much sunlight reaches camera-relative point P (below the deck) through the clouds above it
+fn sunThrough(P: vec3f, L: vec3f) -> f32 {
+  let Cp = world.atC.xyz - P;
+  let a = sphereSpan(L, Cp, rBot).y;
+  let b = sphereSpan(L, Cp, rTop).y;
+  if (b <= a || a < 0.0) { return 1.0; }
+  var od = 0.0;
+  let ds = (b - a) / 3.0;
+  for (var i = 0; i < 3; i++) { od += density(P + L * (a + (f32(i) + 0.5) * ds)) * ds; }
+  return exp(-od * SIGMA * 0.5);
+}
+
 // where a ray from the camera along dir crosses the sphere of radius r round C: (near, far), or (1, 0)
 fn sphereSpan(dir: vec3f, C: vec3f, r: f32) -> vec2f {
   let b = dot(dir, C);
@@ -112,22 +128,36 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     t1 = min(t1, vp.near / d / max(dot(dir, fwd), 1e-4));
   }
   t1 = min(t1, t0 + MAX_DIST);
-  if (t1 <= t0) {
-    textureStore(outTex, px, vec4f(0.0, 0.0, 0.0, 1.0));
-    return;
-  }
   let L = normalize(world.light.xyz);
+  let j = fract(52.9829189 * fract(dot(vec2f(px) + vp.frameN * 5.588238, vec2f(0.06711056, 0.00583715))));
+  // light shafts (below the deck): the haze along the ray, less where the clouds shade the air
+  var dark = vec3f(0.0);
+  if (camR < rBot && world.atOn > 0.5) {
+    var tEnd = 60000.0;
+    if (d > 0.0) { tEnd = min(tEnd, vp.near / d / max(dot(dir, -normalize(frame.camRot[2].xyz)), 1e-4)); }
+    if (bot.y > 0.0) { tEnd = min(tEnd, bot.y); }
+    var shade = 0.0;
+    var wsum = 0.0;
+    for (var i = 0; i < 8; i++) {
+      let P = dir * (tEnd * (f32(i) + j) / 8.0);
+      let w = atDens(length(P - C));
+      shade += (1.0 - sunThrough(P, L)) * w;
+      wsum += w;
+    }
+    if (shade > 0.0) { dark = atInscatter(vec3f(0.0), dir * tEnd, L, 4) * (0.85 * shade / max(wsum, 1e-6)); }
+  }
+  // (a ray that misses the layer marches nothing, but still goes through the blend below)
+  let steps = select(0, STEPS, t1 > t0);
   let cosT = dot(dir, L);
   let mid = dir * (0.5 * (t0 + t1)) - C;
   let sunCol = atSunlightC(normalize(mid) * (world.radius + world.cloudH), L) * sunShade(mid) * world.atSunI / 45.0;
   let dayK = smoothstep(-0.15, 0.3, dot(normalize(mid), L));
   let dt = (t1 - t0) / f32(STEPS);
-  // start jitter (interleaved gradient noise, moving each frame): banding becomes fine grain
-  let j = fract(52.9829189 * fract(dot(vec2f(px) + vp.frameN * 5.588238, vec2f(0.06711056, 0.00583715))));
+  // (the start is jittered: banding becomes fine grain, averaged out over frames)
   var T = 1.0;
   var S = vec3f(0.0);
   var tFirst = -1.0;
-  for (var i = 0; i < STEPS; i++) {
+  for (var i = 0; i < steps; i++) {
     let t = t0 + (f32(i) + j) * dt;
     let P = dir * t;
     let dn = density(P);
@@ -167,10 +197,10 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     let haze = atInscatter(dir * span.x, dir * max(tFirst, span.x), L, 4);
     S = S * atTrans + haze * (1.0 - T);
   }
-  var res = vec4f(S * frame.exposure, T);
+  var res = vec4f((S - dark) * frame.exposure, T);
   // with last frame's: where this pixel's clouds were then (by their distance, or the layer's middle)
   if (vp.moved.w > 0.5) {
-    var tr = 0.5 * (t0 + t1);
+    var tr = select(30000.0, 0.5 * (t0 + t1), steps > 0); // (no layer here: a shaft's typical distance)
     if (tFirst > 0.0) { tr = tFirst; }
     let q = vp.prevVP * vec4f(dir * tr + vp.moved.xyz, 1.0);
     if (q.w > 0.0) {

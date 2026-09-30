@@ -19,7 +19,7 @@ fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
   var c = max(textureLoad(hdr, vec2i(pos.xy), 0).rgb, vec3f(0.0));
   if (tone.x > 0.5) {
     let cl = textureSampleLevel(clouds, cloudSamp, pos.xy / vec2f(textureDimensions(hdr)), 0.0);
-    c = c * cl.a + max(cl.rgb, vec3f(0.0));
+    c = max(c * cl.a + cl.rgb, vec3f(0.0)); // (the light can be negative: light shafts take haze off)
   }
   let s = 0.8 + 0.2 * (1.0 - exp(-(c - 0.8) / 0.2));
   return vec4f(select(c, s, c >= vec3f(0.8)), 1.0);

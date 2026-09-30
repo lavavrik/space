@@ -31,10 +31,13 @@ over the frame: scene × what the clouds let through + their light.
 - **Noise:** each ray starts at a jittered offset (interleaved gradient noise, moving each frame),
   and the result is blended 80/20 with last frame's, reprojected by the clouds' distance, so the
   grain averages out over a few frames.
-- **Cost** (M-series, 2400 × 1500): about 2 ms looking down from above the deck, 3 ms from 50 km.
+- **Light shafts:** below the deck, 8 samples along the ray through the air test whether the clouds
+  hide the sun from there (3 density samples up through the layer); the haze along the ray is dimmed
+  by that share, weighted by the air's density, and written as negative light, so the composite
+  takes it off the sky and the ground: shafts under broken cloud, a dim world under overcast.
+- **Cost** (M-series, 2400 × 1500): about 2 ms looking down from above the deck, 3 ms from 50 km,
+  1–2 ms from below.
 
 ## Next
 
-- Light shafts: the air's inscatter shadowed by the clouds (march the air too, reading the cloud
-  density toward the sun).
 - Cloud shadows on the ground from the volumes rather than the flat deck.
