@@ -42,6 +42,7 @@ export function orbitThrough(rel: THREE.Vector3, mu: number, e: number, nu0: num
 export function updateBodies(bodies: Body[], t: number) {
   for (const b of bodies) {
     if (b.kind !== 'star') keplerState(b.orb, t, b.parent.pos, b.parent.vel, b.pos, b.vel);
+    else if (b.orb && b.parent) keplerState(b.orb, t, b.parent.pos, b.parent.vel, b.pos, b.vel); // a pair's star round the barycentre
     // spin from the clock too (not accumulated), so a saved game's worlds face the same way on load
     b.rot = (b.spin * t) % (2 * Math.PI);
   }

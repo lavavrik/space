@@ -80,7 +80,10 @@ describe('galaxy', () => {
     expect(home.star.cls).toBe('G');
     const bodies = buildSystem(home);
     const planet = findHome(bodies);
-    expect(planet?.name).toBe('Venydes 5'); // pinned: the start hasn't changed since the first version
+    // pinned (it was Venydes 5 until Venydes became a close pair, docs/binaries.md)
+    expect(planet?.name).toBe('Venydes 2');
+    expect(home.companion?.close).toBe(true);
+    expect(home.companion?.star.cls).toBe('K');
     expect(planet?.kind).toBe('planet');
     expect(planet && planet.kind !== 'star' && planet.type).toBe(WT.EarthLike);
     expect(bodies.some((b) => b.kind === 'moon' && b.parent === planet)).toBe(true);
@@ -89,8 +92,10 @@ describe('galaxy', () => {
   it('builds physically sensible systems', () => {
     for (const sys of systemsNear(origin, JUMP_RANGE).slice(0, 20)) {
       const bodies = buildSystem(sys);
-      expect(bodies[0].kind).toBe('star');
-      for (const b of bodies.slice(1)) {
+      // the star, or a pair's two, first
+      const ns = sys.companion ? 2 : 1;
+      for (const s of bodies.slice(0, ns)) expect(s.kind).toBe('star');
+      for (const b of bodies.slice(ns)) {
         expect(b.kind === 'star').toBe(false);
         if (b.kind === 'star') continue;
         expect(b.radius).toBeGreaterThan(0);

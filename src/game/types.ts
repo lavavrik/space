@@ -57,6 +57,11 @@ export interface Star extends BodyBase {
   kind: 'star';
   color: Color;
   L: number; // luminosity, solar units
+  /** In a pair (docs/binaries.md): its orbit round the barycentre, which is its parent. */
+  orb?: KeplerOrbit;
+  parent?: Star;
+  /** The barycentre of a pair: a star-kind point (radius 0, no light) that's never in `bodies`. */
+  bary?: true;
 }
 
 export interface World extends BodyBase {
@@ -166,19 +171,36 @@ export interface StarInfo {
   color: Color;
 }
 
+/** A system's second star (universe/binary.ts, docs/binaries.md). */
+export interface Companion {
+  star: StarInfo;
+  a: number; // separation, AU (the relative orbit's semi-major axis)
+  e: number;
+  /** A close pair (planets orbit both) or a wide one (each star its own planets). */
+  close: boolean;
+}
+
 export interface StarSystem {
   id: string; // stable across sessions: "ix,iy,iz:k" (sector coordinates and index within it)
   seed: number;
   pos: Vec3; // ly, galactic frame
   name: string;
   star: StarInfo;
+  companion?: Companion;
 }
 
 /** The system the ship is currently in. */
 export interface CurrentSystem {
   sys: StarSystem;
   bodies: Body[];
+  /** The primary (the brighter star). */
   star: Star;
+  /** Every star: one, or a pair (primary first). */
+  stars: Star[];
+  /** The system's centre: the lone star, or a pair's barycentre (the frame everything hangs from). */
+  anchor: Star;
+  /** A close pair: both stars' gravity is summed outside the planets' SOIs. */
+  close: boolean;
   stations: Station[];
 }
 

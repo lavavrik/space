@@ -305,9 +305,14 @@ export function arriveAt(g: Game, sys: StarSystem, travel?: THREE.Vector3) {
   // drop in where the starlight is ARRIVE_FLUX × Earth's: close enough to see the star as a disc
   // (~2.4° for a Sun-like star) and just outside the corona scoop, far enough that the hull only
   // warms slowly (it would settle around 470 K side-on, over hours; see docs/thermal.md)
-  const s = g.cur.star;
-  ship.pos.copy(s.pos).addScaledVector(dir, fluxDist(s.L, ARRIVE_FLUX, s.radius));
-  if (!travel) lookAt(ship, g.cur.star.pos);
+  // (a close pair: by both stars' light, from their barycentre, and well outside their orbits; a
+  // wide pair: at the primary, as a lone star)
+  const cur = g.cur;
+  const s = cur.close ? cur.anchor : cur.star;
+  const L = cur.close ? cur.stars.reduce((t, x) => t + x.L, 0) : s.L;
+  const sep = cur.close ? cur.stars[0].pos.distanceTo(cur.stars[1].pos) : 0;
+  ship.pos.copy(s.pos).addScaledVector(dir, Math.max(fluxDist(L, ARRIVE_FLUX, Math.max(...cur.stars.map((x) => x.radius))), 3 * sep));
+  if (!travel) lookAt(ship, s.pos);
   ship.vel.set(0, 0, 0);
   resetFrame(g, dominantBody(g.cur, ship.pos));
   ship.mode = 'ftl';

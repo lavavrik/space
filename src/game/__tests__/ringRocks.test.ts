@@ -31,7 +31,9 @@ describe('ring rocks (CPU replica of the GPU generator)', () => {
     const guess = r0.pos.clone().addScaledVector(r0.vel, 0.5);
     rocksNear(w, 1, guess, guess, 500, 1235, later);
     const r1 = later.find((r) => r.id === r0.id)!;
-    expect(r1.pos.distanceTo(r0.pos.clone().addScaledVector(r0.vel, 0.5))).toBeLessThan(1);
+    // (off the straight line by the orbit's curvature over 0.5 s: v²/r × 0.5²/2)
+    const bend = (r0.vel.lengthSq() / r0.pos.length()) * 0.125;
+    expect(r1.pos.distanceTo(r0.pos.clone().addScaledVector(r0.vel, 0.5))).toBeLessThan(bend + 0.1);
   });
 
   it('a sweep through a rock hits it; one beside it misses', () => {

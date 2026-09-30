@@ -129,7 +129,7 @@ function pilotFor(game: Game): Game {
     aero: { ...game.aero },
     warned: {},
     msg: { text: '', kind: '', on: false, t: 0 },
-    frameBody: game.cur.star,
+    frameBody: game.cur.anchor,
     refFrame: null,
     _target: null,
     _jumpDest: null,

@@ -2,6 +2,7 @@ import { GALAXY_SEED, SECTOR_SIZE, STAR_DENSITY } from '../constants';
 import { mulberry32 } from '../lib/rng';
 import { THREE } from '../lib/three';
 import type { StarSystem } from '../types';
+import { homeCompanion, makeCompanion } from './binary';
 import { makeName, starName } from './names';
 import { makeStar } from './stars';
 import { buildSystem, findHome } from './system';
@@ -48,7 +49,8 @@ function makeHome(): StarSystem {
   const sr = mulberry32(seed);
   const name = makeName(sr, new Set()),
     star = makeStar(sr, true);
-  const sys: StarSystem = { id: HOME_ID, seed, pos: new THREE.Vector3(), name, star };
+  // (a close pair: double sunsets from the start, docs/binaries.md)
+  const sys: StarSystem = { id: HOME_ID, seed, pos: new THREE.Vector3(), name, star, companion: homeCompanion() };
   for (let k = 0; k < 400; k++) {
     if (findHome(buildSystem(sys))) break;
     sys.seed = seed + k + 1;
@@ -73,7 +75,9 @@ export function generateSector(ix: number, iy: number, iz: number): StarSystem[]
     }
     const seed = hash32(ix, iy, iz, k + 1);
     const sr = mulberry32(seed);
-    out.push({ id: `${ix},${iy},${iz}:${k}`, seed, pos, name: starName(sr), star: makeStar(sr, false) });
+    const name = starName(sr); // (before the star: the stream's order is the universe)
+    const star = makeStar(sr, false);
+    out.push({ id: `${ix},${iy},${iz}:${k}`, seed, pos, name, star, companion: makeCompanion(star, seed) });
   }
   return out;
 }

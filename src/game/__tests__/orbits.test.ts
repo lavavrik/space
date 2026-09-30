@@ -51,7 +51,9 @@ describe('orbits', () => {
           expect(w.orb.a * (1 + w.orb.e)).toBeLessThan(w.parent.soi);
         }
       }
+      // (each star's own, in a wide pair)
       for (let i = 1; i < planets.length; i++) {
+        if (planets[i].parent !== planets[i - 1].parent) continue;
         const [inner, outer] = [planets[i - 1].orb, planets[i].orb];
         expect(inner.a * (1 + inner.e)).toBeLessThan(outer.a * (1 - outer.e));
       }

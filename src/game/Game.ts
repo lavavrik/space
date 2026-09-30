@@ -30,7 +30,7 @@ import { systemsNear } from './universe/galaxy';
 import { updateBodies } from './sim/kepler';
 import { updateStations } from './sim/stations';
 import { buildStations } from './universe/stations';
-import { buildSystem } from './universe/system';
+import { buildSystem, systemAnchor } from './universe/system';
 import { TEMP, toggleRadiators, type HeatBudget } from './sim/thermal';
 import { BATTERIES, bestOutfit } from './outfit/catalog';
 import { ZOOM_START, updatePeriscope } from './sim/periscope';
@@ -340,8 +340,9 @@ export class Game {
     const stations = buildStations(sys, bodies);
     updateBodies(bodies, this.simTime);
     updateStations(stations, this.simTime);
-    this.cur = { sys, bodies, star: bodies[0] as CurrentSystem['star'], stations };
-    this.frameBody = this.cur.star; // callers place the ship and then pick its frame
+    const stars = bodies.filter((b): b is CurrentSystem['star'] => b.kind === 'star');
+    this.cur = { sys, bodies, star: stars[0], stars, anchor: systemAnchor(bodies), close: !!sys.companion?.close, stations };
+    this.frameBody = this.cur.anchor; // callers place the ship and then pick its frame
     this.dock = null;
     this.dockRequest = null;
     this.inStation = null;

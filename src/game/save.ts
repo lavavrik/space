@@ -297,7 +297,8 @@ export function loadGame(g: Game): boolean {
 
 /** Lookups by name in the current system; `need` throws on a name this universe doesn't have. */
 function finder(g: Game) {
-  const body = (n: string | null) => (n === null ? null : (g.cur.bodies.find((b) => b.name === n) ?? null));
+  // (a pair's barycentre, the frame between its stars, isn't in `bodies`)
+  const body = (n: string | null) => (n === null ? null : (g.cur.bodies.find((b) => b.name === n) ?? (g.cur.anchor.name === n ? g.cur.anchor : null)));
   const station = (n: string | null) => (n === null ? null : (g.cur.stations.find((s) => s.name === n) ?? null));
   const need = <T>(x: T | null, what: string): T => {
     if (x === null) throw new Error(`save names a missing ${what}`);
@@ -415,7 +416,16 @@ function restore(g: Game, d: SaveData, sys: NonNullable<ReturnType<typeof system
   minedRocks.clear();
   for (const [k, left] of d.mined ?? []) minedRocks.set(k, left);
   g.loadSystem(sys);
-  restoreFlight(g, d);
+  // (a system regenerated since the save, e.g. now a star pair, docs/binaries.md, may not have the
+  // body or station it names: the ship arrives afresh instead of the game starting over)
+  let moved = false;
+  try {
+    restoreFlight(g, d);
+  } catch (e) {
+    console.warn('Saved position no longer fits this system; arriving afresh', e);
+    arriveAt(g, sys);
+    moved = true;
+  }
 
   // what you know, and where you were looking
   for (const [k, p] of d.scans) g.scans.set(k, p);
@@ -445,6 +455,10 @@ function restore(g: Game, d: SaveData, sys: NonNullable<ReturnType<typeof system
   if (d.traffic) {
     g.traffic = d.traffic.map((s) => restoreNpc(g, s)).filter((n): n is Npc => !!n);
     g.traffic.push(...spawnTraffic(g, g.traffic)); // (a save from when systems had fewer ships: the rest join)
+  }
+  if (moved) {
+    g.showMsg(`${sys.name} has changed since your save · arrived afresh`);
+    return;
   }
   const where = g.dock?.docked ? `docked at ${g.dock.station.name}` : ship.landed ? `landed on ${ship.landed.name}` : `${sys.name}`;
   g.showMsg(`Resumed · ${where} · saved ${ago(d.savedAt)}`);
