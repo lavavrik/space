@@ -53,25 +53,39 @@ fn density(P: vec3f) -> f32 {
   if (h <= 0.0 || h >= 1.0) { return 0.0; }
   let lp = toLocalM() * Pc;
   let k = lp * 0.00045 + vec3f(world.time * 0.00002, 0.0, 0.0);
-  // the cube's cover, broken into ~20 km fields and ~4 km clumps (at full cover the layer read as
-  // one fog sheet): thicker cover leaves fewer, narrower gaps, but some
+  // the cube's cover: where the weather is (hundreds of km)
   let cov0 = cloudCover(textureSampleLevel(cloudTex, cloudSamp, lp / r, 0.0).r);
-  // (tnoise is value noise: mostly within ±0.35, so the thresholds are narrow)
-  // (a gentle cut: it's for texture, the cube's cover decides where the weather is)
-  let field = smoothstep(-0.35, -0.05, tnoise(k * 0.1 + 11.0) + 0.1 * cov0);
-  let clump = smoothstep(-0.35, -0.05, tnoise(k * 0.55 + 23.0) + 0.1 * cov0);
-  let cov = cov0 * field * clump;
+  // Shaped like weather, not a sponge (cutting holes all over the cover with one noise read as
+  // round craters of one size; tnoise is value noise, mostly within ±0.35, so thresholds are narrow;
+  // a noise texel is ~2.8 km at k × 0.1):
+  //   - the wind blows round the world's axis (its local y): shapes are stretched ~2× along it,
+  //     so clouds run in streets and bands, and a slow swirl warps them, so edges are ragged;
+  //   - the heart of a weather system (thick cover) stays a sheet: tens-of-km swells in how thick
+  //     it is, not holes (overcast is stratus);
+  //   - its edges (thinner cover) break up into clumps a few km across with gaps between (cumulus).
+  let east = normalize(vec3f(lp.z, 0.0, -lp.x) + vec3f(1e-3, 0.0, 0.0));
+  let ks = k - east * (dot(k, east) * 0.55);
+  let sw = tnoise(ks * 0.06 + 3.0);
+  let kw = ks + vec3f(sw, -0.7 * sw, 0.5 * sw) * 6.0;
+  let swell = tnoise(kw * 0.035 + 11.0);
+  let c = 0.7 * tnoise(kw * 0.18 + 23.0) + 0.3 * tnoise(kw * 0.5 + 7.0);
+  let broken = 1.0 - smoothstep(0.45, 0.8, cov0);
+  let clump = mix(1.0, smoothstep(-0.15, 0.1, c + 0.3 * swell), broken);
+  let cov = min(cov0 * clump * (0.9 + 0.6 * swell), 1.0);
   if (cov < 0.02) { return 0.0; }
   // towers: thicker cover rises higher, and ~8 km cells rise and fall, so the tops aren't one carpet
-  let cell = 0.5 + 0.5 * tnoise(k * 0.27 + 5.0);
+  let cell = 0.5 + 0.5 * tnoise(kw * 0.27 + 5.0);
   let top = clamp(mix(0.25, 1.0, cov) * (0.45 + 0.75 * cell), 0.15, 1.0);
   let profile = smoothstep(0.0, 0.08, h) * (1.0 - smoothstep(top * 0.5, top, h));
   let base = cov * profile;
   if (base < 0.01) { return 0.0; }
   // erosion: billows a couple of km across and finer wisps (drifting with the wind), strongest at
   // the edges, so what's left is lumpy cauliflower rather than fog
+  // (softer inside thick cover, or its tops were pocked all over with little shadowed pits, which
+  // from high up read as dashes)
   let n = 0.55 * tnoise(k) + 0.3 * tnoise(k * 3.1) + 0.15 * tnoise(k * 9.3);
-  return clamp((base - (1.0 - base) * (0.75 - 0.75 * n)) * 3.0, 0.0, 1.0);
+  let bite = mix(0.75, 0.45, smoothstep(0.5, 0.9, cov));
+  return clamp((base - (1.0 - base) * (bite - bite * n)) * 3.0, 0.0, 1.0);
 }
 
 fn hg(c: f32, g: f32) -> f32 {

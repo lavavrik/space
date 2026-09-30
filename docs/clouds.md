@@ -23,10 +23,17 @@ over the frame: scene × what the clouds let through + their light.
   cloudCover`: from a raw −0.2, not 0.02 as the others), with clear stretches between systems;
   `sim/clouds.ts` is the same function on the CPU (the debug jumps use it to land under or over
   thick cloud).
-- **Density:** the cube's cover, broken into ~20 km fields and ~4 km clumps (the cube alone gave
-  whole regions of full cover that read as one fog sheet), shaped by a height profile (thicker cover rises higher; ~8 km cells
-  rise and fall so the tops aren't one carpet; soft base, rounded tops) and eroded by three octaves of
-  3D noise (billows a couple of km across, finer wisps), drifting with the wind.
+- **Density:** the cube's cover (where the weather is, hundreds of km), shaped like weather rather
+  than a sponge (cutting holes all over it with one noise read as round craters of one size):
+  - the wind blows round the world's axis: shapes are stretched ~2× along it (streets, bands), and
+    a slow swirl warps them so edges are ragged;
+  - the heart of a system (thick cover) stays a sheet, with swells tens of km across in how thick
+    it is (stratus);
+  - its edges (thinner cover) break into clumps a few km across with gaps between (cumulus).
+
+  Then a height profile (thicker cover rises higher; ~8 km cells rise and fall; soft base, rounded
+  tops), eroded by three octaves of 3D noise (softer inside thick cover, or its tops were pocked
+  with shadowed pits), drifting with the wind.
 - **Light:** at each sample, the sun through the cloud above it (5 steps toward it, doubling from
   120 m), with multiple scattering approximated as octaves each less attenuated, weaker and less
   forward (Frostbite's): clouds are bright from every side, with a silver lining toward the sun. Plus
