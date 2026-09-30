@@ -45,7 +45,10 @@ hull showed dimly, as if beyond the clouds. Bloom and the lens flare see the clo
 - **Air:** the haze between the camera and the first cloud, as for the ground. All the air's
   inscatter (`atmo.wgsl atRolloff`) is compressed and paled over a knee: a grazing path low in the
   air saturates every colour at 3–5× white, and the horizon was a wide flat-white band.
-- **Steps:** 48, spaced quadratically along the ray's stretch in the layer (fine near, coarse far):
+- **Level of detail:** steps no finer than 0.4 % of the distance to the layer (150 m at least),
+  12–48 a ray, and 3 sun steps, not 5, from over 50 km. From 300 km a screen full of clouds cost
+  6.5 ms and pushed the dynamic resolution down to half; now it's ~1.9 ms at 1200 × 750.
+- **Steps:** up to 48, spaced quadratically along the ray's stretch in the layer (fine near, coarse far):
   evenly, from inside the layer rays skimming 250 km and rays ending at the nearby cloud base were
   sampled 12× apart, and the fog differed across the base's horizon as a hard line.
 - **Noise:** each ray starts at a jittered offset (interleaved gradient noise, moving each frame),

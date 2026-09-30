@@ -195,13 +195,17 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     skyDim = mix(skyDim, 1.0, fade);
     rays *= 1.0 - fade;
   }
-  // (a ray that misses the layer marches nothing, but still goes through the blend below)
-  let steps = select(0, STEPS, t1 > t0);
   let cosT = dot(dir, L);
   let mid = dir * (0.5 * (t0 + t1)) - C;
   let sunCol = atSunlightC(normalize(mid) * (world.radius + world.cloudH), L) * sunShade(mid) * world.atSunI / 45.0;
   let dayK = smoothstep(-0.15, 0.3, dot(normalize(mid), L));
   let span = t1 - t0;
+  // Level of detail: steps no finer than 0.4 % of the distance to the layer (150 m at least), so a
+  // ray from high up through a few km of layer takes ~12, not 48: from 300 km a screen full of
+  // clouds cost so much that the dynamic resolution dropped to half. (A ray that misses the layer
+  // marches nothing, but still goes through the blend below.)
+  let steps = select(0, clamp(i32(ceil(2.0 * span / max(150.0, 0.004 * t0))), 12, STEPS), t1 > t0);
+  let sunSteps = select(SUN_STEPS, 3, t0 > 50000.0);
   // (the start is jittered: banding becomes fine grain, averaged out over frames.) Steps are spaced
   // quadratically, fine near the camera and coarse far off: evenly, a ray skimming the layer 250 km
   // took 5 km steps and one ending 20 km off at the cloud base 400 m ones, so from inside the layer
@@ -212,9 +216,9 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   var tSum = 0.0; // distance weighted by how much each step shows (for the reprojection)
   var wSum = 0.0;
   for (var i = 0; i < steps; i++) {
-    let u = (f32(i) + j) / f32(STEPS);
+    let u = (f32(i) + j) / f32(steps);
     let t = t0 + span * u * u;
-    let dt = span * 2.0 * max(u, 0.5 / f32(STEPS)) / f32(STEPS);
+    let dt = span * 2.0 * max(u, 0.5 / f32(steps)) / f32(steps);
     let P = dir * t;
     let dn = density(P);
     if (dn <= 0.0) { continue; }
@@ -223,7 +227,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     var od = 0.0;
     var ls = 120.0;
     var lt = 0.0;
-    for (var k = 0; k < SUN_STEPS; k++) {
+    for (var k = 0; k < sunSteps; k++) {
       lt += ls;
       od += density(P + L * lt) * ls;
       ls *= 2.0;
