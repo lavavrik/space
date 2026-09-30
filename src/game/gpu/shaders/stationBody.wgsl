@@ -34,6 +34,12 @@ fn vs(@location(0) position: vec3f, @location(1) normal: vec3f) -> BodyOut {
   return o;
 }
 
+// into the shadow map (gpu/shadowmap.ts)
+@vertex
+fn vsShadow(@location(0) position: vec3f) -> @builtin(position) vec4f {
+  return caster.vp * (so.model * vec4f(position, 1.0));
+}
+
 fn shash(p: vec2f, seed: f32) -> f32 { return fract(sin(dot(p, vec2f(127.1, 311.7)) + seed) * 43758.5453); }
 
 // alpha: the physical share of the pixel, so the exposure meter ignores signal lights (render/hdr.ts)

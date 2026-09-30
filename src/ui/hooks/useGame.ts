@@ -7,6 +7,8 @@ declare global {
   interface Window {
     /** Console access for debugging: `farlight.step(seconds)` fast-forwards the simulation. */
     farlight?: Game;
+    /** Dev builds: camera poses for checking how things look (game/debug/poses.ts). */
+    farlightPose?: ReturnType<typeof import('../../game/debug/poses').poses>;
   }
 }
 
@@ -31,6 +33,10 @@ export function useGame() {
       }
       g = new Game(hostRef.current!, gpu);
       window.farlight = g;
+      if (import.meta.env.DEV) {
+        const game = g;
+        void import('../../game/debug/poses').then(({ poses }) => (window.farlightPose = poses(game)));
+      }
       setGame(g);
     })();
     return () => {

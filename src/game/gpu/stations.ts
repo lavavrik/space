@@ -18,6 +18,7 @@ import { SKY_PAD_COUNT, skyPadLocal } from '../sim/skyGeom';
 import { CORRIDOR_M, PAD_R, padLocal, stationQuat } from '../sim/stationGeom';
 import type { CurrentSystem, Station } from '../types';
 import { DEPTH_FORMAT, HDR_FORMAT, SAMPLES } from './formats';
+import { ShadowMap } from './shadowmap';
 import { CORRIDOR_WGSL, SKY_STATION_WGSL, STATION_INTERIOR_WGSL, STATION_WGSL } from './shaders';
 import type { WorldsLayer } from './worlds';
 
@@ -58,6 +59,8 @@ export class StationsLayer {
   private readonly skyPipe: GPURenderPipeline;
   private readonly corridorPipe: GPURenderPipeline;
   private readonly lampPipe: GPURenderPipeline;
+  private readonly hullShadow: GPURenderPipeline;
+  private readonly skyShadow: GPURenderPipeline;
   private views: View[] = [];
   private readonly q = new THREE.Quaternion();
   private readonly m = new THREE.Matrix4();
@@ -69,6 +72,7 @@ export class StationsLayer {
     private readonly device: GPUDevice,
     frameLayout: GPUBindGroupLayout,
     worldLayout: GPUBindGroupLayout,
+    casterLayout: GPUBindGroupLayout,
   ) {
     this.hull = this.mesh(hullGeometry());
     this.inside = this.mesh(interiorGeometry());
@@ -98,6 +102,17 @@ export class StationsLayer {
       });
     };
     this.hullPipe = solid('station', STATION_WGSL, pl);
+    // into the shadow map: hulls and sky stations (their positions only)
+    const caster = (label: string, code: string, layouts: GPUBindGroupLayout[]) =>
+      device.createRenderPipeline({
+        label,
+        layout: device.createPipelineLayout({ bindGroupLayouts: [casterLayout, ...layouts] }),
+        vertex: { module: device.createShaderModule({ label, code }), entryPoint: 'vsShadow', buffers: [posNrm[0]] },
+        primitive: { cullMode: 'none' },
+        depthStencil: ShadowMap.depth,
+      });
+    this.hullShadow = caster('station shadow', STATION_WGSL, [this.layout]);
+    this.skyShadow = caster('sky station shadow', SKY_STATION_WGSL, [worldLayout, this.layout]);
     this.innerPipe = solid('station interior', STATION_INTERIOR_WGSL, pl);
     this.skyPipe = solid('sky station', SKY_STATION_WGSL, skyPL);
     const corr = device.createShaderModule({ label: 'corridor', code: CORRIDOR_WGSL });
@@ -286,6 +301,30 @@ export class StationsLayer {
         pass.setBindGroup(2, v.group);
         draw(this.sky);
       }
+  }
+
+  /** Into shadow cascade c (half-width R): the stations within its reach. */
+  drawShadow(pass: GPURenderPassEncoder, R: number) {
+    for (const v of this.views) {
+      if (!v.show || v.dist > R * 4 + v.st.size) continue;
+      if (v.st.sky) {
+        pass.setPipeline(this.skyShadow);
+        pass.setBindGroup(1, v.worldGroup!);
+        pass.setBindGroup(2, v.group);
+        pass.setVertexBuffer(0, this.sky.pos);
+        pass.draw(this.sky.count);
+      } else {
+        pass.setPipeline(this.hullShadow);
+        pass.setBindGroup(1, v.group);
+        pass.setVertexBuffer(0, this.hull.pos);
+        pass.draw(this.hull.count);
+      }
+    }
+  }
+
+  /** Whether a station is within `d` (m): it and what's near it want shadows. */
+  near(d: number) {
+    return this.views.some((v) => v.dist < d + v.st.size);
   }
 
   /** The corridors and their lights (added light), far to near. */

@@ -104,6 +104,7 @@ export class WorldsLayer {
   constructor(
     private readonly device: GPUDevice,
     frameLayout: GPUBindGroupLayout,
+    casterLayout: GPUBindGroupLayout,
   ) {
     this.sphere = { hi: this.mesh(new THREE.SphereGeometry(1, 320, 160)), mid: this.mesh(new THREE.SphereGeometry(1, 96, 48)), lo: this.mesh(new THREE.SphereGeometry(1, 32, 16)) };
 
@@ -160,7 +161,7 @@ export class WorldsLayer {
       compute: { module: bakeModule, entryPoint: 'main' },
     });
     this.terrain = new TerrainShared(device, chunkLayout, chunkBakeLayout, bakePipe);
-    this.rocks = new RingFieldGpu(device, frameLayout, this.noiseTex, this.noiseSamp);
+    this.rocks = new RingFieldGpu(device, frameLayout, this.noiseTex, this.noiseSamp, casterLayout);
     this.oneBufLayout = device.createBindGroupLayout({ entries: [{ binding: 0, visibility: VS | FS, buffer: { type: 'uniform' } }] });
     const worldPL = device.createPipelineLayout({ bindGroupLayouts: [frameLayout, this.worldLayout] });
     const planetPL = device.createPipelineLayout({ bindGroupLayouts: [frameLayout, this.worldLayout, chunkLayout] });
@@ -539,6 +540,16 @@ export class WorldsLayer {
 
   /** Render pixels per CSS pixel (GpuRenderer.resize). */
   pr = 1;
+
+  /** Into shadow cascade c (half-width R, texel tx): the ring's rocks. */
+  drawShadow(pass: GPURenderPassEncoder, R: number, tx: number) {
+    this.rocks.drawShadow(pass, R, tx);
+  }
+
+  /** Whether any rocks are out this frame (they cast shadows). */
+  get rocksOut() {
+    return this.rocks.isActive;
+  }
 
   /** Opaque: surfaces and the star's disc. */
   drawOpaque(pass: GPURenderPassEncoder) {

@@ -27,6 +27,7 @@ import { DISC_FROM, RING_HALF_THICK, ROCK_LAYERS, type RockLayer, ringDensity } 
 import { METAL_RICH, minedRocks } from '../sim/ringRocks';
 import type { World } from '../types';
 import { DEPTH_FORMAT, HDR_FORMAT, SAMPLES } from './formats';
+import { ShadowMap } from './shadowmap';
 import { ROCKS_CULL_WGSL, ROCKS_WGSL } from './shaders';
 
 /** Above (or below) the belt by this much (m), the disc is back in full around you. */
@@ -104,6 +105,9 @@ interface Pipes {
   cullSpeck: GPUComputePipeline;
   mesh: GPURenderPipeline;
   speck: GPURenderPipeline;
+  shadow: GPURenderPipeline;
+  /** A coarse icosphere (detail 1) the shadow pass shapes every rock from: a shadow needs only its outline. */
+  shadowMesh: { pos: GPUBuffer; idx: GPUBuffer; n: number };
   cullLayout: GPUBindGroupLayout;
   drawLayout: GPUBindGroupLayout;
   noise: GPUTextureView;
@@ -118,9 +122,14 @@ class LayerGpu {
   private readonly bins: GPUBuffer;
   private readonly list: GPUBuffer;
   private readonly args: GPUBuffer;
+  /** The shadow pass's draw: the same instances with the coarse shadow mesh (its index count; the instance count copied in after the cull). */
+  private readonly shadowArgs: GPUBuffer;
   private readonly cullGroup: GPUBindGroup;
   private readonly drawGroup: GPUBindGroup;
   private readonly count: number;
+  /** Its band of distance starts here (m), and its biggest rock (m): which shadow cascades it's worth drawing into. */
+  readonly from: number;
+  readonly maxR: number;
   private readonly mesh: { pos: GPUBuffer; idx: GPUBuffer; n: number } | null;
   visible = false;
 
@@ -137,6 +146,8 @@ class LayerGpu {
     // a nearer copy covers just enough central cells to reach its cut (and a cell to spare)
     const window = lod.to < 1e29 ? Math.min(G, 2 * Math.ceil(lod.to / cell) + 2) : G;
     this.count = window * window * L.perCell;
+    this.from = lod.from;
+    this.maxR = L.maxR;
     const isMesh = L.detail >= 0;
     const u = this.u;
     u[3] = L.perCell;
@@ -160,6 +171,8 @@ class LayerGpu {
     this.bins = device.createBuffer({ label: 'rock bins', size: this.data.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
     this.list = device.createBuffer({ label: 'rock list', size: this.count * ITEM_BYTES, usage: GPUBufferUsage.STORAGE });
     this.args = device.createBuffer({ label: 'rock draw', size: 20, usage: GPUBufferUsage.INDIRECT | GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC });
+    this.shadowArgs = device.createBuffer({ label: 'rock shadow draw', size: 20, usage: GPUBufferUsage.INDIRECT | GPUBufferUsage.COPY_DST });
+    device.queue.writeBuffer(this.shadowArgs, 0, new Uint32Array([p.shadowMesh.n, 0, 0, 0, 0]));
     if (isMesh) {
       const g = sphereGeometry(lod.detail);
       const pos = g.attributes.position.array as Float32Array;
@@ -273,6 +286,18 @@ class LayerGpu {
     device.queue.writeBuffer(this.args, 0, args);
   }
 
+  /** Into a shadow cascade (the shadow pipeline and the cascade's group 0 set). */
+  drawShadow(pass: GPURenderPassEncoder) {
+    if (!this.mesh) return;
+    pass.setBindGroup(1, this.drawGroup);
+    pass.drawIndexedIndirect(this.shadowArgs, 0);
+  }
+
+  /** After the cull: its instance count into the shadow draw. */
+  copyCount(enc: GPUCommandEncoder) {
+    if (this.mesh) enc.copyBufferToBuffer(this.args, 4, this.shadowArgs, 4, 4);
+  }
+
   cull(pass: GPUComputePassEncoder) {
     pass.setPipeline(this.mesh ? this.p.cullMesh : this.p.cullSpeck);
     pass.setBindGroup(1, this.cullGroup);
@@ -297,6 +322,7 @@ class LayerGpu {
     this.bins.destroy();
     this.list.destroy();
     this.args.destroy();
+    this.shadowArgs.destroy();
     this.mesh?.pos.destroy();
     this.mesh?.idx.destroy();
   }
@@ -307,6 +333,8 @@ const X = new THREE.Vector3(1, 0, 0),
 
 export class RingFieldGpu {
   private readonly layers: LayerGpu[] = [];
+  private readonly shadowPipe: GPURenderPipeline;
+  private readonly shadowMesh: { pos: GPUBuffer; idx: GPUBuffer; n: number };
   private active = false;
   /** How far the flat disc should fade out around the camera (m; 0 when there are no rocks here). */
   nearFade = 0;
@@ -316,6 +344,7 @@ export class RingFieldGpu {
     frameLayout: GPUBindGroupLayout,
     noise: GPUTexture,
     noiseSamp: GPUSampler,
+    casterLayout: GPUBindGroupLayout,
   ) {
     const CS = GPUShaderStage.COMPUTE,
       VS = GPUShaderStage.VERTEX,
@@ -341,7 +370,16 @@ export class RingFieldGpu {
     const drawMod = device.createShaderModule({ label: 'rocks', code: ROCKS_WGSL });
     const drawPL = device.createPipelineLayout({ bindGroupLayouts: [frameLayout, drawLayout] });
     const depth: GPUDepthStencilState = { format: DEPTH_FORMAT, depthWriteEnabled: true, depthCompare: 'greater' };
+    const sg = sphereGeometry(1);
+    const sPos = sg.attributes.position.array as Float32Array,
+      sIdx = new Uint16Array(sg.index!.array);
+    sg.dispose();
+    const sp = device.createBuffer({ size: sPos.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+    device.queue.writeBuffer(sp, 0, sPos.buffer, sPos.byteOffset, sPos.byteLength);
+    const si = device.createBuffer({ size: Math.ceil(sIdx.byteLength / 4) * 4, usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST });
+    device.queue.writeBuffer(si, 0, sIdx.buffer, sIdx.byteOffset, Math.ceil(sIdx.byteLength / 4) * 4);
     const p: Pipes = {
+      shadowMesh: { pos: sp, idx: si, n: sIdx.length },
       cullLayout,
       drawLayout,
       noise: noise.createView(),
@@ -357,6 +395,13 @@ export class RingFieldGpu {
         depthStencil: depth,
         multisample: { count: SAMPLES },
       }),
+      shadow: device.createRenderPipeline({
+        label: 'rocks into the shadow map',
+        layout: device.createPipelineLayout({ bindGroupLayouts: [casterLayout, drawLayout] }),
+        vertex: { module: drawMod, entryPoint: 'vsShadow', buffers: [{ arrayStride: 12, attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x3' }] }] },
+        primitive: { cullMode: 'none' },
+        depthStencil: ShadowMap.depth,
+      }),
       speck: device.createRenderPipeline({
         label: 'specks',
         layout: drawPL,
@@ -366,6 +411,8 @@ export class RingFieldGpu {
         multisample: { count: SAMPLES },
       }),
     };
+    this.shadowPipe = p.shadow;
+    this.shadowMesh = p.shadowMesh;
     ROCK_LAYERS.forEach((L, k) => {
       // one copy per detail level, each drawing its band of distance (nearest finest)
       let from = 0;
@@ -411,6 +458,20 @@ export class RingFieldGpu {
     return true;
   }
 
+  /** The rocks into shadow cascade `c` (half-width R, texel tx): those whose band starts inside it and that are a few texels across. */
+  drawShadow(pass: GPURenderPassEncoder, R: number, tx: number) {
+    if (!this.active) return;
+    pass.setPipeline(this.shadowPipe);
+    pass.setVertexBuffer(0, this.shadowMesh.pos);
+    pass.setIndexBuffer(this.shadowMesh.idx, 'uint16');
+    // (rocks under a few texels across cast nothing that reads: the far cascades take only the big ones)
+    for (const l of this.layers) if (l.visible && l.from < R * 1.5 && l.maxR > tx * 4) l.drawShadow(pass);
+  }
+
+  get isActive() {
+    return this.active;
+  }
+
   /** Nothing to draw this frame (no ringed world near). */
   off() {
     this.active = false;
@@ -423,6 +484,7 @@ export class RingFieldGpu {
     pass.setBindGroup(0, frameGroup);
     for (const l of this.layers) if (l.visible) l.cull(pass);
     pass.end();
+    for (const l of this.layers) if (l.visible) l.copyCount(enc);
   }
 
   draw(pass: GPURenderPassEncoder) {
@@ -432,6 +494,8 @@ export class RingFieldGpu {
 
   dispose() {
     for (const l of this.layers) l.dispose();
+    this.shadowMesh.pos.destroy();
+    this.shadowMesh.idx.destroy();
   }
 }
 

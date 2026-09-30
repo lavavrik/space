@@ -44,13 +44,9 @@ struct MeshOut {
   @location(4) k: vec4f, // size, shadow, metal (0 or 1)
 }
 
-@vertex
-fn vsMesh(@location(0) position: vec3f, @builtin(instance_index) ii: u32) -> MeshOut {
+// a rock's vertex: its place (camera-relative) and, with `normals`, its normal and the rest
+fn rockVertex(position: vec3f, ii: u32, normals: bool) -> MeshOut {
   var o: MeshOut;
-  if (f32(ii) >= layer.cap) {
-    o.pos = vec4f(2.0, 2.0, 2.0, 1.0);
-    return o;
-  }
   let r = rocks[ii];
   rkS = r.s;
   // a random orientation (uniform quaternion), an elongation, and its own shape
@@ -68,7 +64,7 @@ fn vsMesh(@location(0) position: vec3f, @builtin(instance_index) ii: u32) -> Mes
   let d = normalize(position);
   let p0 = d * shape(d, off);
   var n = d; // far off (a few pixels): the sphere's normal will do
-  if (layer.fine > 0.5) {
+  if (normals && layer.fine > 0.5) {
     // up close: normals from the shape itself (finite differences on the sphere)
     var up = vec3f(1.0, 0.0, 0.0);
     if (abs(d.y) < 0.9) { up = vec3f(0.0, 1.0, 0.0); }
@@ -84,8 +80,26 @@ fn vsMesh(@location(0) position: vec3f, @builtin(instance_index) ii: u32) -> Mes
   o.obj = p0 + off;
   o.col = rockCol(r.tint);
   o.k = vec4f(r.size, ringShadow(r.p), select(0.0, 1.0, rockMetal(r.tint)), 0.0);
+  return o;
+}
+
+@vertex
+fn vsMesh(@location(0) position: vec3f, @builtin(instance_index) ii: u32) -> MeshOut {
+  if (f32(ii) >= layer.cap) {
+    var o: MeshOut;
+    o.pos = vec4f(2.0, 2.0, 2.0, 1.0);
+    return o;
+  }
+  var o = rockVertex(position, ii, true);
   o.pos = frame.viewProj * vec4f(o.wp, 1.0);
   return o;
+}
+
+// into the shadow map (gpu/shadowmap.ts): the shape only
+@vertex
+fn vsShadow(@location(0) position: vec3f, @builtin(instance_index) ii: u32) -> @builtin(position) vec4f {
+  if (f32(ii) >= layer.cap) { return vec4f(2.0, 2.0, 2.0, 1.0); }
+  return caster.vp * vec4f(rockVertex(position, ii, false).wp, 1.0);
 }
 
 // the noise filtered here at full precision (the GPU's own filter weights have only 8 bits, which
@@ -141,7 +155,7 @@ fn fsMesh(in: MeshOut, @builtin(front_facing) front: bool) -> @location(0) vec4f
   let V = normalize(-in.wp);
   let mu0 = max(dot(N, L), 0.0);
   let mu = max(dot(N, V), 0.05);
-  let sun = mix(mu0, 2.0 * mu0 / (mu0 + mu), 0.6) * sh; // Lommel–Seeliger, a little Lambert
+  let sun = mix(mu0, 2.0 * mu0 / (mu0 + mu), 0.6) * sh * shadowAt(in.wp, N); // Lommel–Seeliger, a little Lambert; other rocks' shadows
   // planetshine: the giant's sunlit face, seen from here (rough), falling off with distance
   let toPl = layer.pc.xyz - in.wp;
   let dp = length(toPl);

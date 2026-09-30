@@ -17,6 +17,7 @@ import { sunFraction } from '../sim/eclipse';
 import { occluder } from '../sim/sight';
 import { FLASH_S, type Npc } from '../sim/traffic';
 import { DEPTH_FORMAT, HDR_FORMAT, SAMPLES } from './formats';
+import { ShadowMap } from './shadowmap';
 import { FX_WGSL } from './shaders';
 import type { WorldsLayer } from './worlds';
 
@@ -70,6 +71,7 @@ export class EffectsLayer {
   private readonly fxData = new Float32Array(8);
   private readonly group: GPUBindGroup;
   private readonly hullPipe: GPURenderPipeline;
+  private readonly hullShadow: GPURenderPipeline;
   private readonly trailPipe: GPURenderPipeline;
   private readonly orbitPipe: GPURenderPipeline;
   private readonly beamPipe: GPURenderPipeline;
@@ -105,6 +107,7 @@ export class EffectsLayer {
   constructor(
     private readonly device: GPUDevice,
     frameLayout: GPUBindGroupLayout,
+    casterLayout: GPUBindGroupLayout,
   ) {
     this.fxBuf = device.createBuffer({ label: 'fx', size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     const layout = device.createBindGroupLayout({
@@ -140,6 +143,24 @@ export class EffectsLayer {
       primitive: { cullMode: 'back' },
       depthStencil: opaque,
       multisample: ms,
+    });
+    this.hullShadow = device.createRenderPipeline({
+      label: 'ship hulls into the shadow map',
+      layout: device.createPipelineLayout({ bindGroupLayouts: [casterLayout] }),
+      vertex: {
+        module,
+        entryPoint: 'vsHullShadow',
+        buffers: [
+          v3(0),
+          {
+            arrayStride: 68,
+            stepMode: 'instance',
+            attributes: [0, 1, 2, 3].map((k) => ({ shaderLocation: 2 + k, offset: k * 16, format: 'float32x4' as const })),
+          },
+        ],
+      },
+      primitive: { cullMode: 'none' },
+      depthStencil: ShadowMap.depth,
     });
     const lineLayout: GPUVertexBufferLayout = {
       arrayStride: LINE_FLOATS * 4,
@@ -395,6 +416,20 @@ export class EffectsLayer {
       this.lineData.set([centre.x + a.x * c + b.x * s, centre.y + a.y * c + b.y * s, centre.z + a.z * c + b.z * s, col.r, col.g, col.b, 0.8], this.lineN++ * LINE_FLOATS);
     }
     this.orbitRun = [first, RING_N + 1];
+  }
+
+  /** Into a shadow cascade: other ships' hulls. */
+  drawShadow(pass: GPURenderPassEncoder) {
+    if (!this.hulls) return;
+    pass.setPipeline(this.hullShadow);
+    pass.setVertexBuffer(0, this.hull.pos);
+    pass.setVertexBuffer(1, this.inst);
+    pass.draw(this.hull.count, this.hulls);
+  }
+
+  /** How many ships' hulls are drawn this frame (they cast shadows). */
+  get hullCount() {
+    return this.hulls;
   }
 
   drawOpaque(pass: GPURenderPassEncoder) {

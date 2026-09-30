@@ -220,6 +220,7 @@ fn fs(in: Out) -> @location(0) vec4f {
   // most of what you see)
   let shade = eclipse(Pc) * ringShade(p * (world.radius + elev), world.lightL.xyz);
   sunC *= shade;
+  if (terr) { sunC *= shadowAt(in.wp, N); } // up close: sky stations', ships' and rocks' shadows on the ground
   let sky = select(0.0, 0.07 * smoothstep(-0.12, 0.35, ndl0), world.atOn > 0.5);
   let R = reflect(-L, N);
   let s = pow(max(dot(R, V), 0.0), 60.0) * 0.7 * spec * diff;

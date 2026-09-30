@@ -47,3 +47,44 @@ fn viewDir(px: vec2f) -> vec3f {
   let v = vec3f(ndc.x / frame.proj.x, ndc.y / frame.proj.y, -1.0);
   return normalize((frame.camRot * vec4f(v, 0.0)).xyz);
 }
+
+// The shadow map (gpu/shadowmap.ts; docs/shadows.md): three cascades round the camera, rendered
+// from the star, which rocks, ships and stations cast into and they and the ground near you read.
+struct ShadowMap {
+  vp: array<mat4x4f, 3>, // camera-relative position → the cascade's clip space (depth: 0 at the sun's end)
+  radius: vec4f,         // each cascade's half-width (m); w: 1 while it's on
+  texel: vec4f,          // each cascade's texel (m); w: the map's size (px)
+  bias: vec4f,           // each cascade's depth bias (depth units)
+}
+@group(0) @binding(1) var shadowTex: texture_depth_2d_array;
+@group(0) @binding(2) var shadowSamp: sampler_comparison;
+@group(0) @binding(3) var<uniform> shadowU: ShadowMap;
+// the shadow passes' own: the cascade being drawn (only their vertex stages read it)
+struct Caster {
+  vp: mat4x4f,
+}
+@group(0) @binding(4) var<uniform> caster: Caster;
+
+// how lit a camera-relative point with normal n is by the star past what's near (1 lit, 0 shadowed)
+fn shadowAt(wp: vec3f, n: vec3f) -> f32 {
+  if (shadowU.radius.w < 0.5) { return 1.0; }
+  let dist = length(wp);
+  var c = 0;
+  if (dist > shadowU.radius.x * 0.9) { c = 1; }
+  if (dist > shadowU.radius.y * 0.9) { c = 2; }
+  if (dist > shadowU.radius.z * 0.95) { return 1.0; }
+  let tx = shadowU.texel[c];
+  let q = shadowU.vp[c] * vec4f(wp + n * tx * 1.5, 1.0); // (pushed off the surface a little: no acne)
+  let uv = vec2f(q.x * 0.5 + 0.5, 0.5 - q.y * 0.5);
+  if (uv.x <= 0.0 || uv.y <= 0.0 || uv.x >= 1.0 || uv.y >= 1.0 || q.z >= 1.0) { return 1.0; }
+  // 3 × 3 percentage-closer filtering: soft edges a couple of texels wide
+  let st = 1.0 / shadowU.texel.w;
+  var s = 0.0;
+  for (var y = -1; y <= 1; y++) {
+    for (var x = -1; x <= 1; x++) {
+      s += textureSampleCompareLevel(shadowTex, shadowSamp, uv + vec2f(f32(x), f32(y)) * st, c, q.z - shadowU.bias[c]);
+    }
+  }
+  // fading out toward the last cascade's edge
+  return mix(s / 9.0, 1.0, smoothstep(0.75, 0.95, dist / shadowU.radius.z));
+}

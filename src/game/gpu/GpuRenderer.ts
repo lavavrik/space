@@ -29,6 +29,7 @@ import { DEPTH_FORMAT, HDR_FORMAT, SAMPLES } from './formats';
 import { HyperspaceLayer } from './hyperspace';
 import { Meter } from './meter';
 import { TONEMAP_WGSL } from './shaders';
+import { ShadowMap } from './shadowmap';
 import { SkyLayer } from './sky';
 import { StationsLayer } from './stations';
 import { GpuTimer } from './timing';
@@ -49,6 +50,7 @@ export class GpuRenderer implements GameRenderer {
   private readonly frameLayout: GPUBindGroupLayout;
   private readonly tonePipe: GPURenderPipeline;
   private readonly sky: SkyLayer;
+  private readonly shadows: ShadowMap;
   private readonly worlds: WorldsLayer;
   private readonly stations: StationsLayer;
   private readonly fx: EffectsLayer;
@@ -81,10 +83,26 @@ export class GpuRenderer implements GameRenderer {
     this.context.configure({ device, format, alphaMode: 'opaque' });
 
     this.frameBuf = device.createBuffer({ size: FRAME_BYTES, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    // group 0: the frame's uniforms, and the shadow map (gpu/shadowmap.ts) for whatever reads it
+    this.shadows = new ShadowMap(device);
+    const ALL = GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE;
     this.frameLayout = device.createBindGroupLayout({
-      entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } }],
+      entries: [
+        { binding: 0, visibility: ALL, buffer: { type: 'uniform' } },
+        { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'depth', viewDimension: '2d-array' } },
+        { binding: 2, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'comparison' } },
+        { binding: 3, visibility: ALL, buffer: { type: 'uniform' } },
+      ],
     });
-    this.frameGroup = device.createBindGroup({ layout: this.frameLayout, entries: [{ binding: 0, resource: { buffer: this.frameBuf } }] });
+    this.frameGroup = device.createBindGroup({
+      layout: this.frameLayout,
+      entries: [
+        { binding: 0, resource: { buffer: this.frameBuf } },
+        { binding: 1, resource: this.shadows.texture.createView({ dimension: '2d-array' }) },
+        { binding: 2, resource: this.shadows.sampler },
+        { binding: 3, resource: { buffer: this.shadows.uniform } },
+      ],
+    });
 
     // tone map to the canvas
     const toneModule = device.createShaderModule({ label: 'tonemap', code: TONEMAP_WGSL });
@@ -96,9 +114,9 @@ export class GpuRenderer implements GameRenderer {
     });
 
     this.sky = new SkyLayer(device, this.frameLayout);
-    this.worlds = new WorldsLayer(device, this.frameLayout);
-    this.stations = new StationsLayer(device, this.frameLayout, this.worlds.worldLayout);
-    this.fx = new EffectsLayer(device, this.frameLayout);
+    this.worlds = new WorldsLayer(device, this.frameLayout, this.shadows.casterLayout);
+    this.stations = new StationsLayer(device, this.frameLayout, this.worlds.worldLayout, this.shadows.casterLayout);
+    this.fx = new EffectsLayer(device, this.frameLayout, this.shadows.casterLayout);
     this.hyper = new HyperspaceLayer(device, this.frameLayout);
     this.meter = new Meter(device);
     this.timer = gpu.timestamps ? new GpuTimer(device, (slot, parts) => perf.gpuResult(slot, parts)) : null;
@@ -176,13 +194,28 @@ export class GpuRenderer implements GameRenderer {
       this.stations.update(g, this.worlds);
       this.fx.update(g, this.worlds, this.PR);
       this.worlds.flushDots();
+      // shadows while something near can cast them: rocks, other ships, a station
+      this.shadows.update(g, this.worlds.rocksOut || this.fx.hullCount > 0 || this.stations.near(30e3));
     }
 
     const enc = device.createCommandEncoder({ label: 'frame' });
     // timing (the overlay up): each pass's timestamps, and the scene split into passes
     const timed = !!this.timer && this.perf.splitting && this.timer.begin();
     const tw = (label: string) => this.timer?.pass(label, timed);
-    if (!inTunnel) this.worlds.bake(enc, this.frameGroup, tw);
+    if (!inTunnel) {
+      this.worlds.bake(enc, this.frameGroup, tw);
+      // the shadow map, from the star (after the rock culling: the rocks' lists)
+      this.shadows.render(
+        enc,
+        (pass, c) => {
+          const R = this.shadows.radii[c];
+          this.worlds.drawShadow(pass, R, (2 * R) / 2048);
+          this.stations.drawShadow(pass, R);
+          this.fx.drawShadow(pass);
+        },
+        tw,
+      );
+    }
     const hdrView = this.hdr.createView(),
       depthView = this.depth.createView();
     const scene = (label: string, first: boolean, last: boolean, draw: (pass: GPURenderPassEncoder) => void) => {

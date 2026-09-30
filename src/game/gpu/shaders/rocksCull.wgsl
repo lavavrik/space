@@ -46,7 +46,14 @@ fn cullMeshes(@builtin(global_invocation_id) gid: vec3u) {
   if (f32(id) >= layer.count) { return; }
   if (!ringRock(id) || rkFade <= 0.0) { return; }
   let s = rkS;
-  if (!inView(rkP, rkSize * 1.6)) { return; }
+  // in view, or (with shadows on) its shadow could be: where it falls along the sun's ray, a rock's
+  // shadow reaching ~40 sizes (past that it's a penumbra too faint to matter), checked at its end and middle
+  var seen = inView(rkP, rkSize * 1.6);
+  if (!seen && shadowU.radius.w > 0.5) {
+    let back = -normalize(layer.light.xyz) * min(rkSize * 40.0, shadowU.radius.z);
+    seen = inView(rkP + back, rkSize * 1.6) || inView(rkP + back * 0.5, rkSize * 1.6);
+  }
+  if (!seen) { return; }
   let k = atomicAdd(&args[1], 1u);
   if (f32(k) >= layer.cap) { return; }
   rocks[k] = Rock(rkP, rkSize, rkTint, rkFade, s, 0u);

@@ -107,7 +107,7 @@ fn fs(in: BodyOut) -> @location(0) vec4f {
   }
 
   // sunlight through the air, skylight by day, a little floodlight on the deck at night
-  let sunC = atSunlight(in.wp, L);
+  let sunC = atSunlight(in.wp, L) * shadowAt(in.wp, N);
   let ndl = max(dot(N, L), 0.0);
   let day = smoothstep(-0.12, 0.35, dot(up, L));
   let sky = select(0.0, 0.07 * day * (0.6 + 0.4 * nUp), world.atOn > 0.5);

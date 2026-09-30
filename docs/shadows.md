@@ -21,6 +21,22 @@ Two kinds, for two scales.
   rock.wgsl `ringShadow`).
 - Terrain shadows its own ground: the chunk bake marches toward the sun (terrainBake.wgsl).
 
-## Up close: a shadow map
+## Up close: a shadow map (`gpu/shadowmap.ts`)
 
-(Next: ring rocks, ships and stations shadowing each other and the ground near the camera.)
+Three cascades round the camera (half-widths 300 m, 3 km, 30 km; 2048² each, one depth texture
+array), each an orthographic view from the star, drawn while something near can cast (rocks out,
+another ship, a station within 30 km).
+
+- **Casters:** ring rocks (every rock's own shape, from a coarse icosphere: a shadow needs only its
+  outline; into a cascade only if its layer's band starts inside it and its biggest rocks are a few
+  texels across), other ships' hulls, station hulls and sky stations. Their `vsShadow` stages read
+  the cascade's matrix from group 0 (frame.wgsl `Caster`).
+- **Receivers** (frame.wgsl `shadowAt`): rocks, ships, station hulls, sky stations, and terrain up
+  close. The cascade by distance, a normal offset of 1.5 texels and a small depth bias against
+  acne, 3 × 3 PCF for soft edges, faded out toward the last cascade's edge.
+- **Culling:** the rock cull (rocksCull.wgsl) keeps a rock that's out of view if its shadow may fall
+  into view (checked at the middle and end of ~40 of its sizes along the sun's ray).
+- **Cost** (Apple M-series, 2400 × 1500, inside a ring): about 1 ms per cascade. Ideas if it matters:
+  re-draw the far cascades every other frame, or a per-cascade cull.
+- A sky station's shadow on the ground only shows with the sun high: at a 10° sun it falls ~60 km
+  away, past the cascades.

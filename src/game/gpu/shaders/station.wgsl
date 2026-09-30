@@ -26,7 +26,8 @@ fn envColor(R: vec3f, L: vec3f) -> vec3f {
 fn fs(in: BodyOut) -> @location(0) vec4f {
   let seed = so.v[1].w;
   let time = so.v[3].w;
-  let lit = so.v[0].w;
+  // sunlit share (eclipses), and shadows from what's near (other ships, rocks)
+  let lit = so.v[0].w * shadowAt(in.wp, normalize(in.wn));
   let starC = so.v[1].rgb;
   let planetDir = so.v[2].xyz;
   let planetC = so.v[3].rgb;
