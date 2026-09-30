@@ -31,6 +31,7 @@ import { Meter } from './meter';
 import { TONEMAP_WGSL } from './shaders';
 import { ShadowMap } from './shadowmap';
 import { SkyLayer } from './sky';
+import { VolumetricClouds } from './vclouds';
 import { StationsLayer } from './stations';
 import { GpuTimer } from './timing';
 import { WorldsLayer } from './worlds';
@@ -51,6 +52,9 @@ export class GpuRenderer implements GameRenderer {
   private readonly tonePipe: GPURenderPipeline;
   private readonly sky: SkyLayer;
   private readonly shadows: ShadowMap;
+  private readonly vclouds: VolumetricClouds;
+  private readonly toneBuf: GPUBuffer;
+  private readonly toneSamp: GPUSampler;
   private readonly worlds: WorldsLayer;
   private readonly stations: StationsLayer;
   private readonly fx: EffectsLayer;
@@ -61,7 +65,7 @@ export class GpuRenderer implements GameRenderer {
   private hdr!: GPUTexture;
   private resolved!: GPUTexture;
   private depth!: GPUTexture;
-  private toneGroup!: GPUBindGroup;
+  private toneGroups: GPUBindGroup[] = [];
   private W = 1;
   private H = 1;
   private PR = 1;
@@ -117,6 +121,9 @@ export class GpuRenderer implements GameRenderer {
     this.worlds = new WorldsLayer(device, this.frameLayout, this.shadows.casterLayout);
     this.stations = new StationsLayer(device, this.frameLayout, this.worlds.worldLayout, this.shadows.casterLayout);
     this.fx = new EffectsLayer(device, this.frameLayout, this.shadows.casterLayout);
+    this.vclouds = new VolumetricClouds(device, this.frameLayout, this.worlds.worldLayout, NEAR);
+    this.toneBuf = device.createBuffer({ label: 'tone', size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    this.toneSamp = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
     this.hyper = new HyperspaceLayer(device, this.frameLayout);
     this.meter = new Meter(device);
     this.timer = gpu.timestamps ? new GpuTimer(device, (slot, parts) => perf.gpuResult(slot, parts)) : null;
@@ -147,8 +154,21 @@ export class GpuRenderer implements GameRenderer {
     const size = [this.W, this.H];
     this.hdr = this.device.createTexture({ label: 'hdr', size, format: HDR_FORMAT, sampleCount: SAMPLES, usage: GPUTextureUsage.RENDER_ATTACHMENT });
     this.resolved = this.device.createTexture({ label: 'hdr resolved', size, format: HDR_FORMAT, usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
-    this.depth = this.device.createTexture({ label: 'depth', size, format: DEPTH_FORMAT, sampleCount: SAMPLES, usage: GPUTextureUsage.RENDER_ATTACHMENT });
-    this.toneGroup = this.device.createBindGroup({ layout: this.tonePipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: this.resolved.createView() }] });
+    // (the depth is read after the scene by the volumetric clouds)
+    this.depth = this.device.createTexture({ label: 'depth', size, format: DEPTH_FORMAT, sampleCount: SAMPLES, usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
+    this.vclouds.resize(this.depth, this.W, this.H);
+    // one per volumetric-cloud texture (they ping-pong)
+    this.toneGroups = [0, 1].map((k) =>
+      this.device.createBindGroup({
+        layout: this.tonePipe.getBindGroupLayout(0),
+        entries: [
+          { binding: 0, resource: this.resolved.createView() },
+          { binding: 1, resource: this.vclouds.view(k) },
+          { binding: 2, resource: this.toneSamp },
+          { binding: 3, resource: { buffer: this.toneBuf } },
+        ],
+      }),
+    );
     this.meter.resize(this.resolved, this.W, this.H);
   }
 
@@ -218,11 +238,14 @@ export class GpuRenderer implements GameRenderer {
     }
     const hdrView = this.hdr.createView(),
       depthView = this.depth.createView();
+    // volumetric clouds near a clouded world (they read the scene's depth, so it's kept)
+    const clouds = !inTunnel && this.worlds.vcOn > 0;
+    device.queue.writeBuffer(this.toneBuf, 0, new Float32Array([clouds ? 1 : 0, 0, 0, 0]));
     const scene = (label: string, first: boolean, last: boolean, draw: (pass: GPURenderPassEncoder) => void) => {
       const pass = enc.beginRenderPass({
         label,
         colorAttachments: [{ view: hdrView, resolveTarget: last ? this.resolved.createView() : undefined, loadOp: first ? 'clear' : 'load', storeOp: last ? 'discard' : 'store', clearValue: [0, 0, 0, 1] }],
-        depthStencilAttachment: { view: depthView, depthLoadOp: first ? 'clear' : 'load', depthStoreOp: last ? 'discard' : 'store', depthClearValue: 0 },
+        depthStencilAttachment: { view: depthView, depthLoadOp: first ? 'clear' : 'load', depthStoreOp: last && !clouds ? 'discard' : 'store', depthClearValue: 0 },
         timestampWrites: tw(label),
       });
       pass.setBindGroup(0, this.frameGroup);
@@ -259,6 +282,7 @@ export class GpuRenderer implements GameRenderer {
         craft(pass);
         transparent(pass);
       });
+    this.vclouds.dispatch(enc, this.frameGroup, clouds ? this.worlds.vcGroup : null, this.worlds.vcOn, this.vp, g.ship.pos, tw);
     if (AUTO_EXPOSURE) this.meter.encode(enc, e);
 
     const tone = enc.beginRenderPass({
@@ -267,7 +291,7 @@ export class GpuRenderer implements GameRenderer {
       timestampWrites: tw('post'),
     });
     tone.setPipeline(this.tonePipe);
-    tone.setBindGroup(0, this.toneGroup);
+    tone.setBindGroup(0, this.toneGroups[this.vclouds.current]);
     tone.draw(3);
     tone.end();
     if (timed) this.timer!.end(enc, this.perf.slot);
@@ -303,6 +327,8 @@ export class GpuRenderer implements GameRenderer {
     this.fx.dispose();
     this.hyper.dispose();
     this.meter.dispose();
+    this.vclouds.dispose();
+    this.toneBuf.destroy();
     this.timer?.dispose();
     this.hdr?.destroy();
     this.resolved?.destroy();

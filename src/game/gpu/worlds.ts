@@ -124,8 +124,8 @@ export class WorldsLayer {
         { binding: 0, visibility: VS | FS | CS, buffer: { type: 'uniform' } },
         { binding: 1, visibility: VS | FS | CS, texture: { viewDimension: '3d' } },
         { binding: 2, visibility: VS | FS | CS, sampler: {} },
-        { binding: 3, visibility: FS, texture: { viewDimension: 'cube' } },
-        { binding: 4, visibility: FS, sampler: {} },
+        { binding: 3, visibility: FS | CS, texture: { viewDimension: 'cube' } },
+        { binding: 4, visibility: FS | CS, sampler: {} },
       ],
     });
     // terrain chunks (chunk.wgsl): the uniforms and the bake, read when drawing, written by the bake
@@ -435,6 +435,8 @@ export class WorldsLayer {
       device.queue.writeBuffer(st.buf, 0, f);
     }
     this.dotCount = 0;
+    this.vcOn = 0;
+    this.vcGroup = null;
     let ringDone = false;
     this.rocks.off();
     for (const w of this.worlds) {
@@ -465,6 +467,15 @@ export class WorldsLayer {
       const occ = occludersOf(b, cur.bodies, cur.star);
       occ.forEach((o, k) => f.set([o.pos.x - b.pos.x, o.pos.y - b.pos.y, o.pos.z - b.pos.z, o.radius], 176 + k * 4));
       f.set([b.ring?.inner ?? 0, b.ring?.outer ?? 0, b.ring?.seed ?? 0, occ.length], 192);
+      // volumetric clouds (gpu/vclouds.ts): the nearest clouded world within 8 deck heights; its flat
+      // deck fades out as they fade in (from 8 down to 4 deck heights)
+      const deckH = f[91];
+      const vc = deckH > 0 ? 1 - THREE.MathUtils.smoothstep(d - b.radius, 4 * deckH, 8 * deckH) : 0;
+      f[101] = vc;
+      if (vc > this.vcOn) {
+        this.vcOn = vc;
+        this.vcGroup = w.group;
+      }
       // up close, LOD terrain replaces the sphere: big on screen and actually close (render/look.ts)
       w.terrOn = !!w.terrain && pxR > TERRAIN_PX && d < b.radius * TERRAIN_NEAR;
       if (w.terrOn) {
@@ -511,6 +522,10 @@ export class WorldsLayer {
       }
     }
   }
+
+  /** The world whose clouds are marched as volumes this frame (its bind group), and how far faded in. */
+  vcGroup: GPUBindGroup | null = null;
+  vcOn = 0;
 
   /** The stars' share of the exposure (render/exposure.ts STAR_EXP_P): planets' dots follow it. */
   starExp = 1;

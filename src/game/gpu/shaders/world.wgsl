@@ -33,7 +33,7 @@ struct World {
   cloudR: f32,        // the cloud layer's radius (m)
   wtype: i32,         // world type (uType)
   oct: i32,           // octaves for this size on screen (uOct)
-  _p0: f32,
+  deckHide: f32,      // 0…1: the flat cloud deck fades out as the volumetric clouds take over (vclouds.wgsl)
   _p1: f32,
   _p2: f32,
   tOff: array<vec4f, 17>, // per-octave noise offsets (terrain.wgsl)

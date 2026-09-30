@@ -60,5 +60,5 @@ fn fs(in: Out) -> @location(0) vec4f {
   let below = length(C) < world.cloudR;
   let col = vec3f(0.97) * lit * atSunlight(P, L) * select(1.0, 0.3 + 0.55 * (1.0 - cov), below);
   let haze = atInscatter(dir * atSpan(dir).x, P, L, 5);
-  return vec4f(col * atTrans + haze, cov * 0.95);
+  return vec4f(col * atTrans + haze, cov * 0.95 * (1.0 - world.deckHide));
 }

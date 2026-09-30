@@ -35,6 +35,7 @@ import fx from './fx.wgsl?raw';
 import meter from './meter.wgsl?raw';
 import ringband from './ringband.wgsl?raw';
 import shadow from './shadow.wgsl?raw';
+import vclouds from './vclouds.wgsl?raw';
 
 const parts: Record<string, string> = { noise, frame, world, chunk, rock, stationBody, ringband, shadow, noise3d, terrain, atmo, clouds, city };
 const build = (src: string) => src.replace(/^\/\/ #include (\w+)$/gm, (_, name: string) => parts[name] ?? `// (no ${name})`);
@@ -59,3 +60,4 @@ export const CORRIDOR_WGSL = build(corridor);
 export const SKY_STATION_WGSL = build(skyStation);
 export const FX_WGSL = build(fx);
 export const METER_WGSL = build(meter);
+export const VCLOUDS_WGSL = build(vclouds);
