@@ -7,10 +7,13 @@
 // #include noise
 
 struct Bake {
-  face: u32,
+  face: u32,       // 0…5 a cube face; 6 the periscope's patch (a perspective view)
   size: f32,       // face size (px)
   pxPerRad: f32,   // resolution of what's baked (px per radian): fine layers fade in by it
   _pad: f32,
+  rot: mat4x4f,    // the patch: its camera's orientation (camera → world)
+  tanHalf: vec2f,  // and the tangents of its half fields of view
+  px: vec2f,       // and its size (px)
 }
 @group(0) @binding(0) var<uniform> bake: Bake;
 
@@ -106,6 +109,13 @@ fn milkyWay(d: vec3f) -> vec3f {
 
 @fragment
 fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
-  let d = normalize(faceDir(bake.face, pos.xy / bake.size));
+  var d: vec3f;
+  if (bake.face == 6u) {
+    // the patch: row 0 at the top
+    let ndc = vec2f(pos.x / bake.px.x * 2.0 - 1.0, 1.0 - pos.y / bake.px.y * 2.0);
+    d = normalize((bake.rot * vec4f(ndc * bake.tanHalf, -1.0, 0.0)).xyz);
+  } else {
+    d = normalize(faceDir(bake.face, pos.xy / bake.size));
+  }
   return vec4f(sqrt(max(milkyWay(d), vec3f(0.0))), 1.0);
 }

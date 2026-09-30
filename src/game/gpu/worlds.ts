@@ -29,7 +29,7 @@ const WORLD_BYTES = 688;
 const STAR_BYTES = 128;
 const RING_BYTES = 128;
 const CLOUD_CUBE = 1024;
-const MAXDOTS = 256;
+const MAXDOTS = 2048; // bodies, stations, ships, dust, the laser's plume
 
 interface Mesh {
   pos: GPUBuffer;

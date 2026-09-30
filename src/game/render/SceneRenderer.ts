@@ -78,15 +78,15 @@ const PATCH_SCALE = 0.5;
 /** Most pixels the 3D view renders per frame (≈ 2980×1680); see setPixelRatio. */
 const MAX_RENDER_PIXELS = 5e6;
 /** Vertices in the orbit preview ring (spaced densely near the ship; see updateRing). */
-const RING_N = 720;
-const RING_PLAN = new THREE.Color(1, 0.65, 0.23); // amber while planning
-const RING_AP = new THREE.Color(0.5, 0.86, 1); // cyan once the autopilot flies it
+export const RING_N = 720;
+export const RING_PLAN = new THREE.Color(1, 0.65, 0.23); // amber while planning
+export const RING_AP = new THREE.Color(0.5, 0.86, 1); // cyan once the autopilot flies it
 /** Colour of a distant station's beacon dot (and its overlay marker): mint, unlike any body. */
 export const STATION_RGB = new THREE.Color(0.45, 1, 0.7);
-const DUST = 700,
+export const DUST = 700,
   DUSTBOX = 3000;
 /** Dust fades out between these speeds (m/s), see updateDust. The boost limit (15 km/s) keeps it all. */
-const DUST_FADE_FROM = 20e3,
+export const DUST_FADE_FROM = 20e3,
   DUST_FADE_TO = 60e3;
 
 /**
