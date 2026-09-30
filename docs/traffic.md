@@ -1,6 +1,32 @@
 # Traffic
 
-Other ships go about their business in each system (`sim/traffic.ts`, drawn by `render/Traffic.ts`). There are 3 + 2 per station of them, at most 12, with a kind (freighter, courier, tanker…) and a name, the same every time you visit a system.
+Other ships go about their business in each system (`sim/traffic.ts`, drawn by `gpu/effects.ts`). There are 4, plus 14 per station (8 per sky station), plus 2 per world, at most 200 (`trafficCount`; ~120 in a system with 7 stations), each with a kind (freighter, courier, tanker…) and a name (48 names, then numbered: *Kestrel II*), the same every time you visit a system. A save from when systems had fewer ships gets the rest added on loading.
+
+## Scale
+
+Every ship is flown by the real flight code, on the CPU: that's cheap (a flight step ~10 µs), so the
+count isn't limited by the flying (moving it to the GPU was considered and isn't worth it). What
+did limit it, and what's done about it:
+
+- **A station's slot:** one ship at a time, ~50 s a pass (in ~30, out ~20): at most ~35 arrivals
+  and ~35 departures an hour. So ships stay docked 2–20 min, and a captain only heads for a station
+  with room: under 85 % of its pads held or granted, and fewer than 4 ships already on their way
+  in. Otherwise it goes and orbits a world for a while. Fast-forwarded 20 min with 118 ships:
+  queues of at most 3–4 per station, none lost.
+- **CPU per frame (118 ships):** ~0.75 ms.
+  - A ship on a pad at a station you're over 100 km from just keeps its offset from the station
+    (not turned with the hangar's spin). It's held on its pad properly again once you're near, or
+    when it leaves.
+  - A ship coasting in orbit, or on a pad, is on rails at any speed, its nose turned along the
+    orbit.
+  - Traffic control's list of pilots is made once a step.
+  - Under time warp the step-by-step ships share 600 flight steps a frame (~5 ms).
+- **Collisions:** sort and sweep along x, not every pair.
+- **On screen:**
+  - A ship on a pad is inside its station: no marker, and no dot on the system map. Its hull shows
+    only from inside that station.
+  - Up to 256 hulls are drawn in one instanced draw, with room for all their FTL trails.
+  - Only the nearest 16 found ships get labels, plus the target.
 
 ## What they do
 
@@ -12,15 +38,15 @@ Each ship is flown by the same code as yours (`sim/traffic.ts`): gravity and pat
 
 | Task | What happens |
 |---|---|
-| **docked** | on a pad for 40–240 s, tanks filled, then launches (K) |
+| **docked** | on a pad for 2–20 min, tanks filled, then launches (K) |
 | **launch** | the docking computer lifts it off the pad and flies it out through the slot |
-| **travel** | picks somewhere else: a station (60 %: autopilot rendezvous) or a world (autopilot into a circular equatorial orbit). The autopilot takes an FTL leg when it's worth it, climbing out of any mass lock first, exactly as for you |
+| **travel** | picks somewhere else: a station with room (60 %: autopilot rendezvous) or a world (autopilot into a circular equatorial orbit). The autopilot takes an FTL leg when it's worth it, climbing out of any mass lock first, exactly as for you |
 | **dock** | matched with the station, the docking computer takes over: request, wait for the pad, hold point, slot, pad |
-| **orbit** | in orbit round the world for 60–300 s, then travel again |
+| **orbit** | in orbit round the world for 1–7 min, then travel again |
 
 A leg taking over 30 min is given up for another destination. A ship that crashes (it shouldn't) is replaced by a new one docked at a station. At first most ships are docked and the rest in orbit, with their waits staggered so the first leave within a minute or so.
 
-**Time warp:** a ship on a pad or coasting in orbit takes the warped step at once (on rails, like yours). One that's manoeuvring is stepped at most 10 × 0.1 s per frame, so under high warp it falls behind the clock (still carried with its frame body).
+**Time warp:** a ship on a pad or coasting in orbit takes each step at once (on rails, like yours). One that's manoeuvring is stepped at most 10 × 0.1 s per frame, fewer when the 600-step budget is shared out, so under high warp it falls behind the clock (still carried with its frame body).
 
 At stations they go through traffic control like you (docs/docking.md): a free pad each, and the slot one ship at a time, queueing on its axis. **Collisions (`sim/shipContact.ts`):** every ship, yours included, is a sphere of 30 m (their ~60 m hulls).
 - A contact bounces the two apart, keeping momentum and returning 30 % of the closing speed. The lighter ship is thrown further.

@@ -24,14 +24,14 @@ import { ShadowMap } from './shadowmap';
 import { FX_WGSL } from './shaders';
 import type { WorldsLayer } from './worlds';
 
-const MAX_SHIPS = 16;
+const MAX_SHIPS = 256; // hulls drawn (sim/traffic.ts has at most 200 ships)
 /** Turns the model (nose +z) to a ship's attitude (nose −z). */
 const FLIP = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
 /** The laser's emitter, in the ship's axes (m): under the nose, a little ahead of the camera. */
 const MUZZLE = new THREE.Vector3(0, -4, -6);
 /** Line vertices: position + colour (rgba). */
 const LINE_FLOATS = 7;
-const MAX_LINE_VERTS = 8192;
+const MAX_LINE_VERTS = 65536; // (a couple of hundred ships' FTL trails)
 
 /** The ship model's triangles (render/Traffic.ts shipModel), nose along +z. */
 function shipModel() {
@@ -232,9 +232,17 @@ export class EffectsLayer {
     const p = tr.pos,
       f = tr.fade;
     const first = this.lineN;
+    const L = this.lineData;
     for (let i = 0; i < n; i++) {
       const a = f[i] * f[i] * 0.9;
-      this.lineData.set([p[i * 3], p[i * 3 + 1], p[i * 3 + 2], 0.45 * a, 0.85 * a, 1.0 * a, 0], (this.lineN + i) * LINE_FLOATS);
+      const o = (this.lineN + i) * LINE_FLOATS;
+      L[o] = p[i * 3];
+      L[o + 1] = p[i * 3 + 1];
+      L[o + 2] = p[i * 3 + 2];
+      L[o + 3] = 0.45 * a;
+      L[o + 4] = 0.85 * a;
+      L[o + 5] = a;
+      L[o + 6] = 0;
     }
     this.lineN += n;
     this.trailRuns.push([first, n]);
@@ -263,15 +271,19 @@ export class EffectsLayer {
     const light = this.tmp2.subVectors(g.cur.star.pos, ship.pos).normalize();
     this.fxData.set([light.x, light.y, light.z], 0);
     this.hulls = 0;
-    for (const npc of g.traffic.slice(0, MAX_SHIPS)) {
+    for (const npc of g.traffic) {
+      // on a pad: inside the station, seen only from in there (its hull on the pad, no marker)
+      const docked = npc.task === 'docked';
+      if (docked && npc.at !== g.inStation && !(g.dock?.docked && g.dock.station === npc.at)) continue;
       // behind a world: nothing of it shows
       if (occluder(g.cur.bodies, ship.pos, npc.pos)) continue;
       const rel = new THREE.Vector3().subVectors(npc.pos, ship.pos);
-      if (rel.length() < 200e3) {
+      if (rel.length() < 200e3 && this.hulls < MAX_SHIPS) {
         this.m.compose(rel, this.q.copy(npc.q).multiply(FLIP), this.one);
         this.instData.set(this.m.elements, this.hulls * 17);
         this.instData[this.hulls++ * 17 + 16] = sunFraction(g.cur.bodies, g.cur.star, npc.pos);
       }
+      if (docked) continue;
       // marker, and the engines: main at the tail while thrusting, retro at the nose while braking
       const ftl = npc.ftl;
       const mc = ftl ? [0.5, 0.9, 1.0] : [0.85, 0.85, 0.8];

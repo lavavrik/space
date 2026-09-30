@@ -25,11 +25,15 @@ const va = new THREE.Vector3(),
 const flying = (p: Game) => !p.ship.dead && p.ship.mode === 'normal' && !p.dock?.docked && !p.ship.landed;
 
 export function shipContacts(g: Game) {
+  // sort and sweep along x: only ships within a contact's reach of each other in x are compared
+  // (with a couple of hundred ships, every pair was ~20,000 checks a step)
   const all = pilots(g).filter(flying);
+  all.sort((a, b) => a.ship.pos.x - b.ship.pos.x);
   for (let i = 0; i < all.length; i++) {
     for (let j = i + 1; j < all.length; j++) {
       const a = all[i],
         b = all[j];
+      if (b.ship.pos.x - a.ship.pos.x >= 2 * SHIP_HIT_R) break;
       n.subVectors(b.ship.pos, a.ship.pos);
       const d = n.length();
       if (d >= 2 * SHIP_HIT_R || d < 1e-6) continue;

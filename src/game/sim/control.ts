@@ -24,14 +24,17 @@ export const SLOT_QUEUE = 400;
 /** The game itself, from any pilot context (a context is Object.create(game): the game owns `traffic`). */
 export const rootOf = (g: Game): Game => (Object.prototype.hasOwnProperty.call(g, 'traffic') ? g : (Object.getPrototypeOf(g) as Game));
 
-/** Every pilot: you, then each other ship's context. */
+/** Every pilot: you, then each other ship's context. Made once per sim step (it's asked often). */
+let cache: { root: Game; t: number; n: number; list: Game[] } | null = null;
 export function pilots(g: Game): Game[] {
   const root = rootOf(g);
+  if (cache && cache.root === root && cache.t === root.simTime && cache.n === root.traffic.length) return cache.list;
   const out = [root];
   for (const npc of root.traffic) {
     const c = pilotOf(npc);
     if (c && !c.ship.dead) out.push(c);
   }
+  cache = { root, t: root.simTime, n: root.traffic.length, list: out };
   return out;
 }
 

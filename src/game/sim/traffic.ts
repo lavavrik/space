@@ -23,8 +23,8 @@
  * A leg that takes far too long is given up (another destination); a ship that crashes is replaced
  * by a new one docked at a station.
  *
- * Time warp: a ship sitting on a pad or coasting in orbit takes the warped step at once (on rails,
- * as yours does); a ship that's manoeuvring is stepped at most MAX_SUB × MAX_STEP of sim time per
+ * Time warp: a ship sitting on a pad or coasting in orbit takes each step at once (on rails, as
+ * yours does, warped or not); a ship that's manoeuvring is stepped at most MAX_SUB × MAX_STEP of sim time per
  * frame, so under high warp it falls behind the clock (it still moves with its frame body).
  */
 import type { Game } from '../Game';
@@ -48,6 +48,7 @@ import { ascent, catapultLaunch } from './catapult';
 import { laserOff } from './laser';
 import { mapClosed } from '../render/SystemMap';
 import { railsStep } from './timewarp';
+import { rootOf } from './control';
 
 export type { Npc };
 /** Where ships go. */
@@ -63,18 +64,53 @@ const MAX_STEP = 0.1,
 /** Power the ship's bus has (kW): plenty, so a captain never has to manage it. */
 const NPC_POWER = 20e3;
 /** How long it stays docked, or in orbit, before moving on (s). */
-const DOCKED_S = [40, 240],
-  ORBIT_S = [60, 300];
+const DOCKED_S = [120, 1200],
+  ORBIT_S = [60, 400];
+/**
+ * How many ships: a few, a crowd per station (its pads kept about half full), a couple per world,
+ * at most MAX_TRAFFIC. Each costs ~10 µs of CPU per flight step, so the count isn't limited by the
+ * flying; a station's slot is: one ship at a time, ~50 s a pass (in ~30, out ~20), about 35
+ * arrivals and 35 departures an hour at most. Hence the long stays on a pad, and captains going
+ * where there's room (setOff).
+ */
+const MAX_TRAFFIC = 200,
+  PER_STATION = 14,
+  PER_SKY_STATION = 8,
+  PER_WORLD = 2,
+  BASE_SHIPS = 4;
+/** A station counts as full once this share of its pads is held or spoken for… */
+const FULL = 0.85;
+/** …or this many ships are already on their way in (in transit or queueing to dock). */
+const INBOUND_MAX = 4;
+/**
+ * Flight steps for all the ships together per frame. Unwarped each ship takes one or two; under time
+ * warp they share this (≈ 5 ms), each at most MAX_SUB steps, and a manoeuvring one falls behind the
+ * clock when its share runs out (still carried with its frame body; one on rails doesn't need it).
+ */
+const STEP_BUDGET = 600;
 /** A leg taking longer than this (sim s) is given up. */
 const GIVE_UP = 1800;
 
 const KINDS = ['Freighter', 'Courier', 'Tanker', 'Survey ship', 'Hauler', 'Liner'];
-const NAMES = ['Kestrel', 'Meridian', 'Halcyon', 'Ostrava', 'Tamsin', 'Blue Heron', 'Corvid', 'Anselm', 'Petrel', 'Lodestar', 'Varuna', 'Ilse', 'Marrow', 'Sable', 'Quillon', 'Juniper'];
+const NAMES = [
+  'Kestrel', 'Meridian', 'Halcyon', 'Ostrava', 'Tamsin', 'Blue Heron', 'Corvid', 'Anselm', 'Petrel', 'Lodestar', 'Varuna', 'Ilse', 'Marrow', 'Sable', 'Quillon', 'Juniper',
+  'Albatross', 'Brightwater', 'Cassia', 'Dunlin', 'Ember', 'Fennec', 'Gannet', 'Harrier', 'Iona', 'Jacana', 'Kittiwake', 'Larkspur', 'Mistral', 'Nightjar', 'Osprey', 'Pelagia',
+  'Quiver', 'Rook', 'Sirocco', 'Tern', 'Umber', 'Vesper', 'Wren', 'Xanthe', 'Yarrow', 'Zephyr', 'Arden', 'Bittern', 'Coriander', 'Dogger', 'Egret', 'Fastnet',
+];
+/** The `i`th of a system's names: each once, then again with a number (Kestrel II, III…). */
+const ROMAN = ['', ' II', ' III', ' IV', ' V', ' VI', ' VII', ' VIII'];
+function shipName(order: string[], i: number) {
+  return order[i % order.length] + ROMAN[Math.floor(i / order.length) % ROMAN.length];
+}
 
 /** Each ship's pilot context: a Game whose flight state is its own (see the top). */
 const pilots = new WeakMap<Npc, Game>();
 /** Its offset from its frame body before the bodies move (rideTraffic). */
 const rides = new WeakMap<Npc, THREE.Vector3>();
+/** On a pad: its offset from the station, as last held there (updateTraffic). */
+const dockOffs = new WeakMap<Npc, THREE.Vector3>();
+/** A docked ship this far from you (m) isn't held on its pad each frame (updateTraffic). */
+const PARKED_FAR = 100e3;
 
 /** The orbit a ship takes round a world: a little above the autopilot's default. */
 const orbitAlt = (b: Body) => defaultOrbitAlt(b) * 1.1;
@@ -140,21 +176,38 @@ function pilotFor(game: Game): Game {
   return c;
 }
 
-/** The ships in a system: a few, more with more stations. Who and where is deterministic per system. */
-export function spawnTraffic(game: Game): Npc[] {
+/** How many ships a system has (see MAX_TRAFFIC). */
+export function trafficCount(cur: CurrentSystem) {
+  return Math.min(MAX_TRAFFIC, BASE_SHIPS + cur.stations.reduce((s, st) => s + (st.sky ? PER_SKY_STATION : PER_STATION), 0) + orbitable(cur).length * PER_WORLD);
+}
+
+/**
+ * The ships in a system: a few, a crowd per station. Who and where is deterministic per system.
+ * `have`: ships already here (a save from before there were this many): only the rest are made,
+ * clear of their pads.
+ */
+export function spawnTraffic(game: Game, have: Npc[] = []): Npc[] {
   const cur = game.cur;
   const worlds = orbitable(cur);
   if (cur.stations.length + worlds.length < 2) return [];
   const g = mulberry32(cur.sys.seed * 7 + 11);
-  const n = Math.min(12, 3 + cur.stations.length * 2);
+  const n = trafficCount(cur);
   const out: Npc[] = [];
-  const names = [...NAMES];
-  for (let i = 0; i < n; i++) {
+  // the names in this system's order
+  const order = [...NAMES];
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(g() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  const taken = new Set(have.map((h) => h.name));
+  for (let k = 0; out.length < n - have.length; ) {
+    const name = shipName(order, k++);
+    if (taken.has(name)) continue;
     const c = pilotFor(game);
     const npc: Npc = {
       kind: 'ship',
       radius: SHIP_R,
-      name: names.splice(Math.floor(g() * names.length), 1)[0], // each name once per system
+      name,
       cls: KINDS[Math.floor(g() * KINDS.length)],
       pos: c.ship.pos,
       vel: new THREE.Vector3(),
@@ -170,9 +223,12 @@ export function spawnTraffic(game: Game): Npc[] {
     };
     pilots.set(npc, c);
     rides.set(npc, new THREE.Vector3());
-    // most start on a pad, the rest in orbit; the first to leave go within a minute or so
-    if (cur.stations.length && (g() < 0.65 || !worlds.length)) dockAt(npc, c, cur.stations[Math.floor(g() * cur.stations.length)], g);
-    else placeInOrbit(npc, c, worlds[Math.floor(g() * worlds.length)], g);
+    // most start on a pad (a free one: a crowded station sends the rest into orbit), the rest in
+    // orbit; departures are staggered over their stays
+    const st = cur.stations.length && (g() < 0.65 || !worlds.length) ? cur.stations[Math.floor(g() * cur.stations.length)] : null;
+    const pad = st ? freePad([...have, ...out], st, g) : -1;
+    if (st && pad >= 0) dockAt(npc, c, st, g, pad);
+    else placeInOrbit(npc, c, st && worlds.includes(st.parent) ? st.parent : worlds[Math.floor(g() * worlds.length)], g);
     npc.t = npc.wait * g() * 0.9;
     syncView(npc, c);
     out.push(npc);
@@ -180,13 +236,24 @@ export function spawnTraffic(game: Game): Npc[] {
   return out;
 }
 
-/** Put it on a pad at `st`, tanks full. */
-function dockAt(npc: Npc, c: Game, st: Station, g: () => number) {
+/** A pad at `st` none of `ships` is on (-1: all taken), at random. */
+function freePad(ships: Npc[], st: Station, g: () => number) {
+  const held = new Set<number>();
+  for (const n of ships) {
+    const d = pilots.get(n)?.dock;
+    if (d?.station === st) held.add(d.pad);
+  }
+  const free = [...Array(padCount(st)).keys()].filter((i) => !held.has(i));
+  return free.length ? free[Math.floor(g() * free.length)] : -1;
+}
+
+/** Put it on a pad at `st` (a given one, or any), tanks full. */
+function dockAt(npc: Npc, c: Game, st: Station, g: () => number, pad = Math.floor(g() * padCount(st))) {
   c.ship.ap = null;
   c.ship.mode = 'normal';
   c.autodock = null;
   c.dockRequest = null;
-  c.dock = { station: st, pad: Math.floor(g() * padCount(st)), docked: true };
+  c.dock = { station: st, pad, docked: true };
   resetFrame(c, gravityAt(c.cur, st.pos).body);
   holdDocked(c);
   refuel(c);
@@ -234,9 +301,33 @@ function orbit(c: Game, b: Body) {
   engageAutopilot(c, { body: b, type: 'equatorial', r0, period: 2 * Math.PI * Math.sqrt(r0 ** 3 / b.mu), n: orbitNormal(b, 'equatorial', 1, u), point: null, station: null }, true);
 }
 
-/** Pick somewhere else to go and hand it to the autopilot. */
+/**
+ * How busy `st` is for a captain deciding whether to go there: the share of its pads held or
+ * spoken for (docked, or granted to a ship on its way in), and how many ships are headed in.
+ */
+function load(root: Game, st: Station, self: Npc) {
+  let held = 0,
+    inbound = 0;
+  for (const n of root.traffic) {
+    if (n === self) continue;
+    const c = pilots.get(n);
+    if (c?.dock?.station === st) held++;
+    if (n.to === st && (n.task === 'travel' || n.task === 'dock')) inbound++;
+  }
+  return { share: held / padCount(st), inbound };
+}
+
+/**
+ * Pick somewhere else to go and hand it to the autopilot: a station with room (not nearly full,
+ * not too many already on their way in), or a world to orbit for a while.
+ */
 function setOff(npc: Npc, c: Game) {
-  const stations = c.cur.stations.filter((s) => s !== npc.at);
+  const root = rootOf(c);
+  const stations = c.cur.stations.filter((s) => {
+    if (s === npc.at) return false;
+    const l = load(root, s, npc);
+    return l.share < FULL && l.inbound < INBOUND_MAX;
+  });
   const worlds = orbitable(c.cur).filter((b) => b !== npc.at);
   const toStation = stations.length > 0 && (Math.random() < 0.6 || !worlds.length);
   const dest: Dest = toStation ? stations[Math.floor(Math.random() * stations.length)] : worlds[Math.floor(Math.random() * worlds.length)];
@@ -256,32 +347,55 @@ export function rideTraffic(g: Game) {
   }
 }
 
+const ORIGIN = new THREE.Vector3(),
+  tmpM = new THREE.Matrix4();
 const tmpV0 = new THREE.Vector3(),
   tmpV1 = new THREE.Vector3(),
   tmpN = new THREE.Vector3();
 
 /** After the bodies moved (dt: this step, s): carry each ship with its frame body, then fly it. */
 export function updateTraffic(g: Game, dt: number) {
+  // this frame's share of the step budget for each ship that has to be flown step by step
+  const want = Math.min(MAX_SUB, Math.max(1, Math.ceil(dt / MAX_STEP)));
+  const perShip = want * g.traffic.length <= STEP_BUDGET ? want : Math.max(1, Math.floor(STEP_BUDGET / g.traffic.length));
   for (const npc of g.traffic) {
     const c = pilots.get(npc)!;
     const { ship } = c;
     ship.pos.addVectors(c.frameBody.pos, rides.get(npc)!);
+    // on a pad at a station you're nowhere near, and not leaving yet: it just stays at its pad's
+    // offset from the station (not turned with the hangar's spin; that's put right when it's seen
+    // or leaves). A full hold on the pad each frame cost more than all the flying ships together.
+    const d = c.dock;
+    if (d?.docked && npc.t + dt <= npc.wait && !npc.ftl && g.inStation !== d.station && d.station.pos.distanceToSquared(g.ship.pos) > PARKED_FAR ** 2) {
+      const off = dockOffs.get(npc);
+      if (off) {
+        ship.pos.addVectors(d.station.pos, off);
+        npc.t += dt;
+        syncView(npc, c);
+        continue;
+      }
+    }
     const wasFtl = ship.mode === 'ftl';
     sysVel(c, tmpV0);
     npc.t += dt;
     captain(npc, c);
-    const calm = !!c.dock?.docked || (ship.mode === 'normal' && !c.autodock && ship.ftlCharge <= 0 && !!ship.ap?.settled && ship.ap.type !== 'rendezvous');
+    // (in orbit round a world, the autopilot's hold needn't fly it: its orbit is circular already)
+    const calm = !!c.dock?.docked || (ship.mode === 'normal' && !c.autodock && ship.ftlCharge <= 0 && !!ship.ap && ship.ap.type !== 'rendezvous' && (ship.ap.settled || npc.task === 'orbit'));
     let flown = 0; // sim time flown step by step (gravity's share of the velocity change)
-    if (calm && dt > MAX_STEP) {
-      // warped, and nothing to fly: on rails like yours
+    if (calm) {
+      // nothing to fly (on a pad, or coasting in a settled orbit): on rails like yours, at any speed
+      // (step by step, a hundred parked ships cost ~1 ms a frame for nothing)
       ship.grav = gravityAt(c.cur, ship.pos);
       if (c.dock?.docked) holdDocked(c);
       else {
         c.warp = g.warp;
         railsStep(c, dt);
+        // nose along the orbit, as the autopilot holds it (rails alone keep it fixed in space)
+        tmpN.subVectors(ship.pos, c.frameBody.pos).normalize();
+        if (ship.vel.lengthSq() > 1) ship.q.setFromRotationMatrix(tmpM.lookAt(ORIGIN, ship.vel, tmpN));
       }
     } else {
-      const n = Math.min(MAX_SUB, Math.max(1, Math.ceil(dt / MAX_STEP)));
+      const n = perShip;
       const h = Math.min(MAX_STEP, dt / n);
       for (let i = 0; i < n && !ship.dead; i++) fly(c, h);
       flown = h * n;
@@ -290,7 +404,8 @@ export function updateTraffic(g: Game, dt: number) {
       // lost (it hit something): a replacement turns up docked at a station
       ship.dead = null;
       const st = c.cur.stations[Math.floor(Math.random() * c.cur.stations.length)];
-      if (st) dockAt(npc, c, st, Math.random);
+      const pad = st ? freePad(g.traffic, st, Math.random) : -1;
+      if (st && pad >= 0) dockAt(npc, c, st, Math.random, pad);
       else placeInOrbit(npc, c, orbitable(c.cur)[0], Math.random);
     }
     // thrust: the velocity change gravity doesn't explain, along the nose (main engine) or against it
@@ -301,6 +416,8 @@ export function updateTraffic(g: Game, dt: number) {
       if (dv.length() > 2 * flown) npc.thrust = dv.dot(tmpN.set(0, 0, -1).applyQuaternion(ship.q)) >= 0 ? 1 : -1;
     }
     if (wasFtl !== (ship.mode === 'ftl')) npc.flashAt = g.simTime;
+    if (c.dock?.docked) dockOffs.set(npc, (dockOffs.get(npc) ?? new THREE.Vector3()).subVectors(ship.pos, c.dock.station.pos));
+    else dockOffs.delete(npc);
     syncView(npc, c);
   }
 }

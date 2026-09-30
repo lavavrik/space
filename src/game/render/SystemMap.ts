@@ -309,7 +309,8 @@ export class SystemMap {
       label(s.x, s.y, st.name, MINT + '0.8)');
     }
     for (const npc of g.traffic) {
-      if (!known(g, npc) || !this.project(npc.pos, s)) continue;
+      // (one on a pad is inside its station: its square stands for it)
+      if ((npc.task === 'docked' && npc !== g.target) || !known(g, npc) || !this.project(npc.pos, s)) continue;
       ctx.fillStyle = 'rgba(255,230,199,0.6)';
       ctx.fillRect(s.x - 1.5 * ui, s.y - 1.5 * ui, 3 * ui, 3 * ui);
       this.picks.push({ x: s.x, y: s.y, t: npc });

@@ -12,7 +12,7 @@ import { relVel } from '../sim/frame';
 import { transitState, type TransitState } from '../sim/hyperspace';
 import { scanProgress } from '../sim/scanner';
 import { galPos, hiddenBy, occluders, reachable } from '../sim/navigation';
-import type { Jump, StarSystem } from '../types';
+import type { Jump, Npc, StarSystem } from '../types';
 import type { GameRenderer } from './api';
 import { PAD_R, SLOT_H, SLOT_W, toWorld } from '../sim/stationGeom';
 import { padWorld } from '../sim/docking';
@@ -32,6 +32,8 @@ const SANS = '"Chakra Petch", system-ui, sans-serif';
 /** 2D canvas drawn over the 3D view: reticle, markers, labels, and full-screen effects. */
 /** Other ships get a label within this distance (m). */
 const TRAFFIC_LABEL = 5e8;
+/** At most this many ships labelled, the nearest (a busy system has a couple of hundred). */
+const TRAFFIC_LABELS = 16;
 
 /**
  * Every label drawn on the overlay (and the system map, which shares its canvas) gets a dark
@@ -668,9 +670,16 @@ export class Overlay {
   private drawTraffic(g: Game) {
     const { ctx, W, H } = this;
     ctx.font = this.font(10, SANS);
-    for (const npc of g.traffic) {
+    // the nearest found ones not sitting on a pad (inside a station) get labels, and the target
+    const near = g.traffic
+      .filter((n) => n.task !== 'docked' && known(g, n))
+      .map((n) => [n, n.pos.distanceToSquared(g.ship.pos)] as const)
+      .sort((a, b) => a[1] - b[1])
+      .slice(0, TRAFFIC_LABELS)
+      .map(([n]) => n);
+    if (g.target?.kind === 'ship' && !near.includes(g.target as Npc)) near.push(g.target as Npc);
+    for (const npc of near) {
       const isT = npc === g.target;
-      if (!isT && !known(g, npc)) continue;
       if (occluder(g.cur.bodies, g.ship.pos, npc.pos)) continue; // behind a world: not seen at all
       const rel = this.tmp.subVectors(npc.pos, g.ship.pos);
       const d = rel.length();

@@ -34,7 +34,7 @@ import { arriveAt } from './sim/navigation';
 import { startDockGuide, startOrbitGuide } from './sim/guide';
 import type { AutoPhase } from './sim/autodock';
 import type { NavMode } from './sim/navroute';
-import { blankNpc, pilotOf, syncNpc } from './sim/traffic';
+import { blankNpc, pilotOf, spawnTraffic, syncNpc } from './sim/traffic';
 
 /** localStorage key; bump the version when the format changes incompatibly (old saves are ignored). */
 export const SAVE_KEY = 'farlight.save';
@@ -442,7 +442,10 @@ function restore(g: Game, d: SaveData, sys: NonNullable<ReturnType<typeof system
     }
   }
   // the other ships as they were (loadSystem spawned fresh ones: keep those only for an old save)
-  if (d.traffic) g.traffic = d.traffic.map((s) => restoreNpc(g, s)).filter((n): n is Npc => !!n);
+  if (d.traffic) {
+    g.traffic = d.traffic.map((s) => restoreNpc(g, s)).filter((n): n is Npc => !!n);
+    g.traffic.push(...spawnTraffic(g, g.traffic)); // (a save from when systems had fewer ships: the rest join)
+  }
   const where = g.dock?.docked ? `docked at ${g.dock.station.name}` : ship.landed ? `landed on ${ship.landed.name}` : `${sys.name}`;
   g.showMsg(`Resumed · ${where} · saved ${ago(d.savedAt)}`);
 }
