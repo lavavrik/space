@@ -83,6 +83,13 @@ fn ringShadow(p: vec3f) -> f32 {
   return 1.0;
 }
 
+// sin and cos of a tiny angle (a rock's angle round the ring from the camera: its distance ÷ the
+// ring's radius, ~10⁻⁶ rad at 10⁸ m) by their series, exact there. The built-in sin is accurate only
+// to ~10⁻⁶ absolute on NVIDIA (D3D's fast sine): mostly noise at these angles, so there the rocks
+// jumped between quantised places as you moved, like a slideshow (Apple's is fine small).
+fn sinT(x: f32) -> f32 { let x2 = x * x; return x * (1.0 - x2 / 6.0 * (1.0 - x2 / 20.0)); }
+fn cosT(x: f32) -> f32 { let x2 = x * x; return 1.0 - x2 / 2.0 * (1.0 - x2 / 12.0); }
+
 var<private> rkP: vec3f;     // camera-relative place
 var<private> rkSize: f32;    // radius (m)
 var<private> rkTint: f32;    // tint draw (rockCol)
@@ -117,8 +124,8 @@ fn ringRock(id: i32) -> bool {
   // in the ring's axes turned to the camera (it's at radius rc, height hc, angle 0)
   let dphi = (f32(jrel) + u - A.y) * A.w;
   let rr = A.x + du;
-  let sh2 = sin(0.5 * dphi);
-  let p = layer.e1.xyz * (rr * cos(dphi) - 2.0 * layer.rc * sh2 * sh2) + layer.e2.xyz * ((layer.rc + rr) * sin(dphi)) + layer.n.xyz * (zz - layer.hc);
+  let sh2 = sinT(0.5 * dphi);
+  let p = layer.e1.xyz * (rr * cosT(dphi) - 2.0 * layer.rc * sh2 * sh2) + layer.e2.xyz * ((layer.rc + rr) * sinT(dphi)) + layer.n.xyz * (zz - layer.hc);
   let d = length(p);
   if (d > layer.range || d < layer.inner || d < layer.cutMin || d > layer.cutMax) { return false; }
   var size = layer.minR * pow(layer.maxR / layer.minR, pow(rnd(), 2.2));
