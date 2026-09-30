@@ -28,6 +28,7 @@ import { EffectsLayer } from './effects';
 import { DEPTH_FORMAT, HDR_FORMAT, SAMPLES } from './formats';
 import { HyperspaceLayer } from './hyperspace';
 import { Particles } from './particles';
+import { Bloom, postParams } from './post';
 import { Meter } from './meter';
 import { TONEMAP_WGSL } from './shaders';
 import { ShadowMap } from './shadowmap';
@@ -56,6 +57,7 @@ export class GpuRenderer implements GameRenderer {
   private readonly vclouds: VolumetricClouds;
   private readonly toneBuf: GPUBuffer;
   private readonly toneSamp: GPUSampler;
+  private readonly bloom: Bloom;
   private readonly worlds: WorldsLayer;
   private readonly stations: StationsLayer;
   private readonly fx: EffectsLayer;
@@ -125,7 +127,8 @@ export class GpuRenderer implements GameRenderer {
     this.stations = new StationsLayer(device, this.frameLayout, this.worlds.worldLayout, this.shadows.casterLayout);
     this.fx = new EffectsLayer(device, this.frameLayout, this.shadows.casterLayout);
     this.vclouds = new VolumetricClouds(device, this.frameLayout, this.worlds.worldLayout, NEAR);
-    this.toneBuf = device.createBuffer({ label: 'tone', size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    this.toneBuf = device.createBuffer({ label: 'post', size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    this.bloom = new Bloom(device);
     this.toneSamp = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
     this.hyper = new HyperspaceLayer(device, this.frameLayout);
     this.particles = new Particles(device, this.frameLayout);
@@ -162,6 +165,8 @@ export class GpuRenderer implements GameRenderer {
     this.depth = this.device.createTexture({ label: 'depth', size, format: DEPTH_FORMAT, sampleCount: SAMPLES, usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
     this.vclouds.resize(this.depth, this.W, this.H);
     // one per volumetric-cloud texture (they ping-pong)
+    this.bloom.resize(this.resolved, this.W, this.H);
+    const bl = this.bloom.views;
     this.toneGroups = [0, 1].map((k) =>
       this.device.createBindGroup({
         layout: this.tonePipe.getBindGroupLayout(0),
@@ -170,6 +175,8 @@ export class GpuRenderer implements GameRenderer {
           { binding: 1, resource: this.vclouds.view(k) },
           { binding: 2, resource: this.toneSamp },
           { binding: 3, resource: { buffer: this.toneBuf } },
+          { binding: 4, resource: bl.bloom },
+          { binding: 5, resource: bl.small },
         ],
       }),
     );
@@ -248,7 +255,7 @@ export class GpuRenderer implements GameRenderer {
       depthView = this.depth.createView();
     // volumetric clouds near a clouded world (they read the scene's depth, so it's kept)
     const clouds = !inTunnel && this.worlds.vcOn > 0;
-    device.queue.writeBuffer(this.toneBuf, 0, new Float32Array([clouds ? 1 : 0, 0, 0, 0]));
+    device.queue.writeBuffer(this.toneBuf, 0, postParams(g, this.vp, clouds));
     const scene = (label: string, first: boolean, last: boolean, draw: (pass: GPURenderPassEncoder) => void) => {
       const pass = enc.beginRenderPass({
         label,
@@ -294,6 +301,7 @@ export class GpuRenderer implements GameRenderer {
     this.vclouds.dispatch(enc, this.frameGroup, clouds ? this.worlds.vcGroup : null, this.worlds.vcOn, this.vp, g.ship.pos, tw);
     if (AUTO_EXPOSURE) this.meter.encode(enc, e);
 
+    this.bloom.render(enc, tw);
     const tone = enc.beginRenderPass({
       label: 'tonemap',
       colorAttachments: [{ view: this.context.getCurrentTexture().createView(), loadOp: 'clear', storeOp: 'store', clearValue: [0, 0, 0, 1] }],
@@ -339,6 +347,7 @@ export class GpuRenderer implements GameRenderer {
     this.meter.dispose();
     this.vclouds.dispose();
     this.toneBuf.destroy();
+    this.bloom.dispose();
     this.timer?.dispose();
     this.hdr?.destroy();
     this.resolved?.destroy();
