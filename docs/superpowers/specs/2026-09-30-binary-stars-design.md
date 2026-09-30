@@ -7,13 +7,14 @@ Most stars in the Milky Way have a companion. Farlight's systems get one too, in
 
 The generator can reshape systems freely: saves in changed systems get a fallback (below). The start system, Venydes, becomes a close pair.
 
-Decisions taken (2026-09-30):
+Decisions taken (2026-09-30; the barycentre model on review):
 
 - Both kinds of pair.
 - Existing systems are regenerated freely.
 - Venydes is a close G + K pair.
 - In a wide pair, the companion gets its own planets.
 - Two full lights: both suns have their own shadows and their own light in the air.
+- Both stars orbit their shared centre of mass.
 
 ## 1. Model
 
@@ -28,11 +29,13 @@ companion?: {
 }
 ```
 
-`buildSystem` still returns the primary first.
+The two stars orbit their shared centre of mass (as real pairs do):
 
-- **The companion is a body.** It is a `Star` with a Kepler orbit whose `parent` is the primary. Its period comes from the pair's combined mass. The primary stays at the origin as the frame's anchor.
-- **Why not a barycentre.** The true motion would have both stars orbiting a barycentre. Seen from anywhere in the system, the difference is the primary's small wobble. A barycentre "body" would touch every `kind` switch, while a child star reuses the Kepler, frame and SOI machinery that moons already use.
-- **`CurrentSystem` gains `stars: Star[]`.** It holds one or two stars. `cur.star` stays as the primary, so code that means "the main star" keeps working. Code that means "the light" or "the heat" moves to `cur.stars`.
+- **The barycentre is fixed.** It sits at the system's origin, at rest: the frame's inertial anchor, where the lone star sits today.
+- **Both stars move on it.** Each is on a Kepler orbit round it: the relative orbit (a, e, the combined mass), split by mass. The primary is at −m₂/M of the separation, the companion at +m₁/M. `updateBodies` propagates both, so in a close pair both suns visibly swing round each other.
+- **It's a parent, not a body.** The barycentre is a non-drawn object with pos = vel = 0 and μ = G·(m₁ + m₂) (`sim/barycentre.ts`). It is *not* in `cur.bodies`, so the render, label and nav loops never meet it. Only `parent` links and the frame logic see it, as they see a star today.
+- **`CurrentSystem` gains the list and the anchor.** `stars: Star[]` (one or two) and `anchor: Body` (the lone star, or the barycentre). `cur.star` stays as the primary (the brighter), so code that means "the main star" keeps working. Code that means "the light" or "the heat" moves to `cur.stars`, and code that means "the system's centre" (arrival, the default frame, maps) moves to `cur.anchor`.
+- **A lone star is its own anchor.** In a system with one star, nothing changes.
 
 ## 2. Generation (`universe/galaxy.ts`, `stars.ts`, `system.ts`)
 
@@ -47,14 +50,14 @@ companion?: {
 - **Separation.** A pair is close with probability 0.35: a = 0.03–0.4 AU, log-uniform, e < 0.1. Otherwise it's wide: a = 20–400 AU, log-uniform, e < 0.4. Real separations between these bins mostly have few planets, so none are generated.
 
 **Planets in close pairs.**
-- Planets orbit both stars, with `parent` = the primary and μ = the pair's combined mass.
+- Planets orbit both stars, with `parent` = the barycentre (combined μ).
 - The first orbit is at least 3.5 × the separation. Closer in, orbits are unstable (Holman & Wiegert).
 - Temperatures, snow line and the habitable zone use the combined L.
 
 **Planets in wide pairs.**
 - Each star gets its own planets, out to 0.3 × the periapsis separation (stable S-type orbits). Each star's own L sets their temperatures.
 - The companion's planets are named with its letter, e.g. `Venydes B 2`.
-- The companion's `soi` is its Hill radius: a·(1−e)·(m₂/3m₁)^⅓.
+- Each star's `soi` is its Hill radius, e.g. the companion's a·(1−e)·(m₂/3M)^⅓, and the primary's likewise with m₁. (The mass sets how large it is; the primary's is larger.)
 
 **Stations.** Both stars in a wide pair host them, by the same rules as today. In a close pair, stations stay at planets.
 
@@ -69,12 +72,13 @@ companion?: {
 ## 3. Physics
 
 **Close pairs.**
-- Outside any planet's SOI, the ship feels **both** stars: `gravityAt` sums them. The frame body is the primary, as before.
-- Planet and moon SOIs work as today.
-- The orbit readouts and the system map's predicted path use the pair's combined μ. Within 3 separations of the stars, they say the orbit is "perturbed" instead of drawing a conic.
+- Outside any planet's SOI, the ship's frame body is the barycentre and it feels **both** stars: `gravityAt` sums them.
+- Planet and moon SOIs work as today; the planets' parent is the barycentre.
+- The orbit readouts and the system map's predicted path use the barycentre's combined μ. Within 3 separations of the stars, they say the orbit is "perturbed" instead of drawing a conic.
 
 **Wide pairs.**
-- Patched conics, unchanged in kind: inside the companion's SOI it is the dominant body and the frame, and its planets nest inside it. Everywhere else the primary rules.
+- Patched conics, unchanged in kind. Each star's SOI is its Hill radius about the barycentre, and its planets nest inside it.
+- Outside both SOIs, the barycentre rules, with the combined μ.
 
 **Other physics.**
 - Time warp's stability check treats a close pair's stellar region like a planet's: high warp is refused where the summed pull changes quickly.
@@ -132,7 +136,7 @@ Every place is lit by up to two stars.
 - The companion is a destination: nav routes, guide and approach warnings.
 
 **FTL arrival.**
-- A close pair: at `ARRIVE_FLUX` of the combined light, from the primary, facing the pair.
+- A close pair: at `ARRIVE_FLUX` of the combined light, from the barycentre, facing it.
 - A wide pair: at the primary, as today. Reaching the companion is an in-system flight.
 
 ## 7. Saves
@@ -149,7 +153,7 @@ Unit tests (vitest):
   - Names are unique.
   - Venydes is a close G + K pair with an Earth-like start world.
 - **Physics.**
-  - The companion's Kepler period matches the combined mass.
+  - Both stars' orbits about the barycentre: the period matches the combined mass, and the barycentre stays at the origin (m₁r₁ + m₂r₂ = 0).
   - `gravityAt` in a close pair equals the two stars' sum, and SOI nesting holds in a wide pair.
 - **Lighting and heat.** Two stars' flux adds, with each star's eclipse applied separately.
 
