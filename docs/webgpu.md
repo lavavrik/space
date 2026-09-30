@@ -69,7 +69,12 @@ Both renderers live side by side until WebGPU matches WebGL: the game stays play
 - [x] **3. Terrain** (`gpu/terrain.ts`): the cube-sphere quadtree of chunks as in WebGL, baked by a
   compute shader (terrainBake.wgsl) into a storage buffer per chunk that the vertex shader reads;
   index, grid and skirt buffers shared by every chunk. Checked on a cratered moon from 4 km up.
-- [ ] [ ] 4. Ring belt · [ ] 5. Stations · [ ] 6. Ships and effects · [ ] 7. Auto-exposure, timings, remove WebGL
+- [x] **4. Ring belt** (`gpu/rings.ts`, rock.wgsl, rocksCull.wgsl, rocks.wgsl): the same layers, bins and
+  rocks as WebGL; a compute pass per layer copy lists only the rocks that are there and in view
+  (frustum-tested as spheres) and counts them into an indirect draw. Lists are sized for every
+  candidate (the far speck layers ~30 MB each), so they can't overflow. Checked inside a giant's
+  ring: identical to WebGL.
+- [ ] 5. Stations · [ ] 6. Ships and effects · [ ] 7. Auto-exposure, timings, remove WebGL
 
 **Dev note:** the preview tooling serves the main checkout. For this worktree, run
 `npx vite --port 5175` in it and open `http://localhost:5175/?gpu=webgpu`.
