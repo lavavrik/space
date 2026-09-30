@@ -6,6 +6,7 @@
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import { skyColor, skyLook } from '../sim/hyperspace';
+import { pairLight } from '../universe/binary';
 import type { CurrentSystem, StarSystem } from '../types';
 import { DEPTH_FORMAT, HDR_FORMAT, SAMPLES } from './formats';
 import { SKY_BAKE_WGSL, SKY_WGSL, STARS_WGSL } from './shaders';
@@ -155,9 +156,10 @@ export class SkyLayer {
     const data = new Float32Array(Math.max(1, others.length) * 7);
     others.forEach((s, i) => {
       const d = s.pos.clone().sub(cur.sys.pos);
-      const { size, k } = skyLook(s.star.L, d.length());
+      const pl = pairLight(s); // (a pair: one point, both stars' light)
+      const { size, k } = skyLook(pl.L, d.length());
       d.normalize();
-      const c = skyColor(s.star.color, k);
+      const c = skyColor(pl.color, k);
       data.set([d.x, d.y, d.z, c.r, c.g, c.b, size], i * 7);
     });
     this.starBuf?.destroy();

@@ -1,3 +1,4 @@
+import { pairSpec } from '../universe/binary';
 import { threatNow } from '../sim/belt';
 import { rockLabel } from '../sim/ringRocks';
 import { SystemMap } from './SystemMap';
@@ -892,7 +893,7 @@ export class Overlay {
     ctx.textAlign = left ? 'right' : 'left';
     ctx.fillStyle = CYA + '1)';
     ctx.font = this.font(12, SANS);
-    ctx.fillText(`${best.name} · ${best.star.spec}`, lx, by - 4);
+    ctx.fillText(`${best.name} · ${pairSpec(best)}`, lx, by - 4);
     ctx.fillStyle = CYA + '0.75)';
     ctx.font = this.font(11, SANS);
     // how far from you, and (with a route planned) from where it would go on from: the route's last

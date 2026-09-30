@@ -14,6 +14,7 @@
  * needed), an autopilot hold skimming a star's corona to refuel, and finally the autopilot's orbit
  * or station rendezvous. Disengaging the autopilot during a leg cancels the route.
  */
+import { pairSpec } from '../universe/binary';
 import { JUMP_CHARGE_TIME, JUMP_RANGE, JUMP_TUNNEL_BASE, JUMP_TUNNEL_PER_LY, LY, SCOOP_FLUX_FULL, SHIP, fluxDist, jumpCost } from '../constants';
 import { THREE } from '../lib/three';
 import { scoopFitted } from '../outfit/catalog';
@@ -169,7 +170,7 @@ export function planRoute(g: Game, mode: NavMode): Route | string {
       at = to;
     }
     const via = points.length > 1 ? ` · via ${points.length - 1} waypoint${points.length > 2 ? 's' : ''}` : '';
-    destName = `${destSys.name} · ${destSys.star.spec} · ${destSys.pos.distanceTo(g.cur.sys.pos).toFixed(1)} ly${via}`;
+    destName = `${destSys.name} · ${pairSpec(destSys)} · ${destSys.pos.distanceTo(g.cur.sys.pos).toFixed(1)} ly${via}`;
     // ending at a body or station there: orbit it or rendezvous with it after the last jump
     if (fin && fin.sysId === destSys.id) {
       legs.push(finalLeg(fin));
@@ -315,7 +316,7 @@ export function searchNav(g: Game, query: string, from: 'ship' | 'last', limit =
 
   // stars
   for (const s of g.sky) {
-    if (s.id !== here.id && s.id !== last?.id && match(s.name)) out.push({ key: `star:${s.id}`, kind: 'star', name: s.name, detail: `${s.star.spec} star · ${ly(s).toFixed(1)} ly`, sys: s, dist: ly(s) });
+    if (s.id !== here.id && s.id !== last?.id && match(s.name)) out.push({ key: `star:${s.id}`, kind: 'star', name: s.name, detail: `${pairSpec(s)}${s.companion ? ' pair' : ' star'} · ${ly(s).toFixed(1)} ly`, sys: s, dist: ly(s) });
   }
 
   // bodies and stations of other systems: those within jump range, the last stop, and any the query names

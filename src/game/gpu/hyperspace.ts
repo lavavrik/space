@@ -11,6 +11,7 @@ import { SKY_RADIUS } from '../constants';
 import { THREE } from '../lib/three';
 import { skyColor, skyLook, transitState, type TransitState } from '../sim/hyperspace';
 import type { Jump, StarSystem } from '../types';
+import { pairLight } from '../universe/binary';
 import { systemsNear } from '../universe/galaxy';
 import { DEPTH_FORMAT, HDR_FORMAT, SAMPLES } from './formats';
 import { FX_WGSL } from './shaders';
@@ -88,8 +89,9 @@ export class HyperspaceLayer {
       const rel = this.rel.subVectors(s.pos, st.pos);
       const d = Math.max(rel.length(), 1e-4);
       // same look as the normal sky, so nothing pops at the start or the end
-      const { size, k } = skyLook(s.star.L, d);
-      const c = skyColor(s.star.color, k, this.c);
+      const pl = pairLight(s); // (a pair: one point, both stars' light)
+      const { size, k } = skyLook(pl.L, d);
+      const c = skyColor(pl.color, k, this.c);
       const hk = 1 - 0.45 * blur;
       hd.set([rel.x / d, rel.y / d, rel.z / d, c.r * hk, c.g * hk, c.b * hk, size], i * 7);
       // the tail is where the star appeared a moment ago, capped below its distance so a streak

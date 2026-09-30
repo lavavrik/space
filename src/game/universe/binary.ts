@@ -11,6 +11,7 @@
  * universe/system.ts builds the pair: both stars round their barycentre.
  */
 import { lr, mulberry32, rr } from '../lib/rng';
+import type { THREE } from '../lib/three';
 import type { Companion, StarInfo, StarSystem } from '../types';
 import { starFromMass } from './stars';
 
@@ -36,6 +37,18 @@ export function makeCompanion(primary: StarInfo, seed: number): Companion | unde
 /** Venydes' companion: an orange K star two weeks round the Sun-like primary, close enough for double sunsets. */
 export function homeCompanion(): Companion {
   return { star: starFromMass(0.73), a: 0.15, e: 0.03, close: true };
+}
+
+const lights = new WeakMap<StarSystem, { L: number; color: THREE.Color }>();
+/** How a system shines from afar (one point in the sky or on the map): both stars' light, its colour by their shares. */
+export function pairLight(sys: StarSystem) {
+  let l = lights.get(sys);
+  if (!l) {
+    const c = sys.companion;
+    l = c ? { L: sys.star.L + c.star.L, color: sys.star.color.clone().lerp(c.star.color, c.star.L / (sys.star.L + c.star.L)) } : { L: sys.star.L, color: sys.star.color };
+    lights.set(sys, l);
+  }
+  return l;
 }
 
 /** "G4 V + K3 V", or the lone star's class. */

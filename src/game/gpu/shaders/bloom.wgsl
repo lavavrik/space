@@ -31,7 +31,7 @@ fn vs(@builtin(vertex_index) i: u32) -> V {
 // spread by the low mips into a black block a fifth of the screen across)
 fn tap(uv: vec2f) -> vec3f {
   let c = textureSampleLevel(src, samp, uv, 0.0).rgb;
-  return select(vec3f(0.0), c, c >= vec3f(0.0) & c < vec3f(1e30));
+  return select(vec3f(0.0), c, (c >= vec3f(0.0)) & (c < vec3f(1e30)));
 }
 
 // the part over the threshold, with a soft knee

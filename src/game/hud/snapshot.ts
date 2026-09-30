@@ -1,4 +1,5 @@
 /* Turns game state into the display strings and flags the HUD shows. */
+import { pairSpec } from '../universe/binary';
 import { AU, FTL_CHARGE_TIME, JUMP_CHARGE_TIME, LY, JUMP_DEPART_TIME, NORMAL_ACC, NORMAL_BOOST, NORMAL_MAX, SHIP, ftlBurn, jumpCost } from '../constants';
 import { DEBUG, debugSpots } from '../debug/poses';
 import { fmtArea, fmtClock, fmtEnergy, fmtDist, fmtFlow, fmtMass, fmtPower, fmtSpeed, fmtSpeedText, fmtTime } from '../format';
@@ -101,13 +102,15 @@ export function buildSnapshot(g: Game): HudSnapshot {
 
 function location(g: Game): LocationView {
   const st = g.cur.sys.star;
+  const comp = g.cur.sys.companion;
   const gp = galPos(g);
   const d = g.jump?.dest ?? g.jumpDest;
   return {
     system: g.cur.sys.name,
-    star: `${st.spec} · ${st.R.toFixed(2)} R☉ · ${Math.round(st.T)} K`,
+    // (a pair: both classes, both temperatures and how far apart, docs/binaries.md)
+    star: comp ? `${pairSpec(g.cur.sys)} · ${Math.round(st.T)} / ${Math.round(comp.star.T)} K · ${comp.a < 1 ? comp.a.toFixed(2) : Math.round(comp.a)} AU apart` : `${st.spec} · ${st.R.toFixed(2)} R☉ · ${Math.round(st.T)} K`,
     sub: `${gp.x.toFixed(2)} ${gp.y.toFixed(2)} ${gp.z.toFixed(2)} ly · ${fmtClock(g.simTime)}`,
-    jump: d ? { text: `JUMP → ${d.name} · ${d.star.spec} · ${d.pos.distanceTo(gp).toFixed(1)} ly` } : { text: 'N or click a star to set a jump · U ship · Tab controls', warn: false },
+    jump: d ? { text: `JUMP → ${d.name} · ${pairSpec(d)} · ${d.pos.distanceTo(gp).toFixed(1)} ly` } : { text: 'N or click a star to set a jump · U ship · Tab controls', warn: false },
   };
 }
 

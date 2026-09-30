@@ -1,5 +1,6 @@
 /* Maneuver guide: a read-only checklist of what the ship is doing. Each step reports progress
    as 1 − error/initial error, and an ETA from how fast that error is shrinking (or a timer). */
+import { pairSpec } from '../universe/binary';
 import { AP_ACC, AP_TAU, SHIP } from '../constants';
 import { fmtDist, fmtFlow, fmtMass, fmtPower, fmtSpeedText, fmtTime } from '../format';
 import type { Game } from '../Game';
@@ -206,7 +207,7 @@ export function startOrbitGuide(g: Game, ap: Autopilot) {
 export function startJumpGuide(g: Game, j: Jump, ly: number) {
   startGuide(g, {
     title: 'HYPERJUMP',
-    sub: `${j.dest.name} · ${j.dest.star.spec} · ${ly.toFixed(2)} ly`,
+    sub: `${j.dest.name} · ${pairSpec(j.dest)} · ${ly.toFixed(2)} ly`,
     abort: () => null,
     doneText: `Arrived at ${j.dest.name}`,
     steps: [

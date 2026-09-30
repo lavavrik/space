@@ -95,7 +95,8 @@ export class WorldsLayer {
   private readonly dotData = new Float32Array(MAXDOTS * 7);
   private dotCount = 0;
   private worlds: WorldView[] = [];
-  private star: StarView | null = null;
+  /** One per star (a pair has two, docs/binaries.md). */
+  private stars: StarView[] = [];
   private readonly m = new THREE.Matrix4();
   private readonly q = new THREE.Quaternion();
   private readonly v = new THREE.Vector3();
@@ -316,7 +317,7 @@ export class WorldsLayer {
     for (const b of cur.bodies) {
       if (b.kind === 'star') {
         const buf = device.createBuffer({ size: STAR_BYTES, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-        this.star = { b, buf, group: device.createBindGroup({ layout: this.oneBufLayout, entries: [{ binding: 0, resource: { buffer: buf } }] }), dist: Infinity, pxR: 0 };
+        this.stars.push({ b, buf, group: device.createBindGroup({ layout: this.oneBufLayout, entries: [{ binding: 0, resource: { buffer: buf } }] }), dist: Infinity, pxR: 0 });
         continue;
       }
       const air = atmoOf(b);
@@ -414,8 +415,7 @@ export class WorldsLayer {
     const pxPerRad = g.view.pxPerRad;
     const starPos = cur.star.pos;
     const { device, m, q, v, s } = this;
-    if (this.star) {
-      const st = this.star;
+    for (const st of this.stars) {
       const b = st.b;
       const rel = v.subVectors(b.pos, ship.pos);
       const d = rel.length();
@@ -591,9 +591,10 @@ export class WorldsLayer {
 
   /** Opaque: surfaces and the star's disc. */
   drawOpaque(pass: GPURenderPassEncoder) {
-    if (this.star && this.star.pxR > 0.6) {
+    for (const st of this.stars) {
+      if (st.pxR <= 0.6) continue;
       pass.setPipeline(this.discPipe);
-      pass.setBindGroup(1, this.star.group);
+      pass.setBindGroup(1, st.group);
       this.drawMesh(pass, this.sphere.mid, true);
     }
     pass.setPipeline(this.planetPipe);
@@ -621,9 +622,10 @@ export class WorldsLayer {
    */
   drawTransparent(pass: GPURenderPassEncoder, more: (pass: GPURenderPassEncoder) => void) {
     const far = [...this.worlds].sort((a, b) => b.dist - a.dist);
-    if (this.star) {
+    // (far to near, a pair's glows over each other)
+    for (const st of [...this.stars].sort((a, b) => b.dist - a.dist)) {
       pass.setPipeline(this.glowPipe);
-      pass.setBindGroup(1, this.star.group);
+      pass.setBindGroup(1, st.group);
       pass.draw(6);
     }
     pass.setPipeline(this.ringPipe);
@@ -661,7 +663,8 @@ export class WorldsLayer {
 
   /** How far a body is and how big it looks (for the overlay). */
   view(b: Body) {
-    if (this.star?.b === b) return this.star;
+    const st = this.stars.find((x) => x.b === b);
+    if (st) return st;
     return this.worlds.find((w) => w.b === b);
   }
 
@@ -676,8 +679,8 @@ export class WorldsLayer {
       }
     }
     this.worlds = [];
-    this.star?.buf.destroy();
-    this.star = null;
+    for (const st of this.stars) st.buf.destroy();
+    this.stars = [];
   }
 
   dispose() {
