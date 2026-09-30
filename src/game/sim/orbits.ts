@@ -16,7 +16,7 @@ export function minOrbitAlt(b: Body) {
 }
 
 export function maxOrbitR(b: Body) {
-  return b.kind === 'star' ? 150 * AU : b.soi * 0.8;
+  return b.kind === 'star' ? Math.min(150 * AU, b.soi * 0.8) : b.soi * 0.8; // (a wide pair's star: within its Roche lobe)
 }
 
 export function defaultOrbitAlt(b: Body) {

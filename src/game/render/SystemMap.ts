@@ -283,6 +283,12 @@ export class SystemMap {
       // rings
       if (b.ring) for (const r of [b.ring.inner, b.ring.outer]) this.path(circle(b.pos, b.radius * r, b.axis, fp, m.dist), 'rgba(210,190,150,0.35)');
     }
+    // a pair's stars round their barycentre (docs/binaries.md), faint in their own colour
+    for (const s of cur.stars) {
+      if (!s.orb || !s.parent) continue;
+      const c = s.color;
+      this.path(ellipse(s.parent.pos, s.orb.a, s.orb.e, s.orb.P, s.orb.Q, fp, m.dist), `rgba(${Math.round(c.r * 255)},${Math.round(c.g * 255)},${Math.round(c.b * 255)},0.35)`);
+    }
     // station orbits
     for (const st of cur.stations) {
       if (st.sky || !known(g, st)) continue;
@@ -290,7 +296,7 @@ export class SystemMap {
     }
     // your orbit round the world you're in the sphere of influence of
     const fb = g.frameBody;
-    const mine = shipOrbit(g.ship.pos.clone().sub(fb.pos), g.ship.vel.clone(), fb.mu, fb.kind === 'star' ? Infinity : fb.soi, fb, m.dist);
+    const mine = shipOrbit(g.ship.pos.clone().sub(fb.pos), g.ship.vel.clone(), fb.mu, fb.soi, fb, m.dist); // (a lone star's and a pair's barycentre's: infinite; a wide pair's star's: its Roche lobe)
     if (mine) this.path(mine, CYA + '0.85)', 1.4);
     // the autopilot's target orbit (dashed)
     const ap = g.ship.ap;

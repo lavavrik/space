@@ -245,7 +245,8 @@ export function removeNavPoint(g: Game) {
 /** A nav search hit: a star, or a planet, moon or station (in this system or a nearby one). */
 export interface NavResult {
   key: string;
-  kind: 'star' | 'planet' | 'moon' | 'station';
+  /** 'star': another system (a waypoint); 'sun': a star here, a wide pair's (docs/binaries.md). */
+  kind: 'star' | 'sun' | 'planet' | 'moon' | 'station';
   name: string; // as shown (may be "Unidentified …" until scanned)
   /** The object's real name, for routing (system ids contain colons, so it can't come from the key). */
   real?: string;
@@ -298,13 +299,16 @@ export function searchNav(g: Game, query: string, from: 'ship' | 'last', limit =
   const here = g.cur.sys;
   const hereDetail = (m: number) => (fromLast ? `here · ${ly(here).toFixed(1)} ly from ${last.name}` : fmtNear(m));
   const hereKey = (m: number) => (fromLast ? ly(here) : m / LY);
+  // (a wide pair's stars are destinations too, tens to hundreds of AU apart; a lone star or a close
+  // pair's aren't: you arrive beside them)
+  const suns = g.cur.stars.length > 1 && !g.cur.close;
   for (const b of g.cur.bodies) {
-    if (b.kind === 'star' || !radarSeen(g, b)) continue;
+    if (b.kind === 'star' ? !suns : !radarSeen(g, b)) continue; // (a star is always in view)
     const label = contactLabel(g, b),
       known = label === b.name;
     if (!match(label)) continue;
     const m = Math.max(0, b.pos.distanceTo(g.ship.pos) - b.radius);
-    out.push({ key: `${b.kind}:${here.id}:${b.name}`, kind: b.kind, name: label, real: b.name, detail: `${known ? b.typeName : 'radar contact'} · ${hereDetail(m)}`, sys: here, dist: hereKey(m) });
+    out.push({ key: `${b.kind}:${here.id}:${b.name}`, kind: b.kind === 'star' ? 'sun' : b.kind, name: label, real: b.name, detail: `${known ? b.typeName : 'radar contact'} · ${hereDetail(m)}`, sys: here, dist: hereKey(m) });
   }
   for (const st of g.cur.stations) {
     if (!radarSeen(g, st)) continue;

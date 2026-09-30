@@ -105,9 +105,18 @@ function bodyPhysical(g: Game, b: Body): [string, string][] {
     ['ESCAPE VELOCITY', fmtSpeedText(Math.sqrt((2 * b.mu) / b.radius))],
   ];
   if (b.kind === 'star') {
-    rows.push(['LUMINOSITY', `${b.L.toFixed(b.L < 10 ? 3 : 0)} L☉ · ${Math.round(g.cur.sys.star.T)} K`]);
+    // (a pair's star: its own class and temperature, the pair's orbit, and its own planets or the
+    // pair's, docs/binaries.md)
+    const comp = g.cur.sys.companion;
+    const info = comp && b !== g.cur.star ? comp.star : g.cur.sys.star;
+    rows.push(['LUMINOSITY', `${b.L.toFixed(b.L < 10 ? 3 : 0)} L☉ · ${Math.round(info.T)} K`]);
     rows.push(['DAY', fmtTime((2 * Math.PI) / b.spin)]);
-    rows.push(['PLANETS', String(g.cur.bodies.filter((m) => m.kind === 'planet').length)]);
+    if (comp && b.orb) {
+      const other = g.cur.stars.find((s) => s !== b)!;
+      rows.push(['PAIRED WITH', `${other.name} · ${comp.a < 1 ? comp.a.toFixed(2) : Math.round(comp.a)} AU apart · every ${fmtTime((2 * Math.PI) / b.orb.n)}`]);
+    }
+    const own = g.cur.bodies.filter((m) => m.kind === 'planet' && (m.parent === b || (comp?.close && m.parent === g.cur.anchor))).length;
+    rows.push([comp?.close ? 'PLANETS (ROUND BOTH)' : 'PLANETS', String(own)]);
     return rows;
   }
   const air = atmoOf(b);

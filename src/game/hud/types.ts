@@ -224,7 +224,7 @@ export interface NavView {
   points: string[]; // waypoints, in order
   query: string;
   sortFrom: 'ship' | 'last';
-  results: { key: string; kind: 'star' | 'planet' | 'moon' | 'station'; name: string; detail: string }[];
+  results: { key: string; kind: 'star' | 'sun' | 'planet' | 'moon' | 'station'; name: string; detail: string }[];
 }
 
 export interface PlannerView {
