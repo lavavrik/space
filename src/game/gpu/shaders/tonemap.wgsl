@@ -35,7 +35,10 @@ fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     c = s / 12.0;
   }
   if (post.a.x > 0.5) {
-    let cl = textureSampleLevel(clouds, samp, uv, 0.0);
+    // four bilinear taps round the pixel (a soft 4 × 4 half-res texel filter): what's left of the
+    // march's jitter after the temporal blend would show as static inside the clouds
+    let ct = 0.75 / vec2f(textureDimensions(clouds));
+    let cl = 0.25 * (textureSampleLevel(clouds, samp, uv + vec2f(-ct.x, -ct.y), 0.0) + textureSampleLevel(clouds, samp, uv + vec2f(ct.x, -ct.y), 0.0) + textureSampleLevel(clouds, samp, uv + vec2f(-ct.x, ct.y), 0.0) + textureSampleLevel(clouds, samp, uv + vec2f(ct.x, ct.y), 0.0));
     c = max(c * cl.a + cl.rgb, vec3f(0.0)); // (the light can be negative: light shafts take haze off)
   }
   // bloom

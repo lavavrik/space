@@ -36,7 +36,9 @@ over the frame: scene × what the clouds let through + their light.
   sampled 12× apart, and the fog differed across the base's horizon as a hard line.
 - **Noise:** each ray starts at a jittered offset (interleaved gradient noise, moving each frame),
   and the result is blended 80/20 with last frame's, reprojected by the clouds' distance, so the
-  grain averages out over a few frames. The reprojection follows the world's turn and orbit (the
+  grain averages out over a few frames. It's reprojected by where the visible cloud mostly is (distance weighted by each step's share; by the
+  first cloud sample, inside fog metres off, moving fetched the wrong history and the jitter showed as
+  static), and the composite takes four bilinear taps round each pixel. The reprojection follows the world's turn and orbit (the
   clouds move with it): taken as still in space, they were off by the orbit's 30 km/s and smeared
   upward whenever the game ran.
 - **Light shafts:** below the deck, 12 samples along the first 30 km of the ray through the air test whether the clouds

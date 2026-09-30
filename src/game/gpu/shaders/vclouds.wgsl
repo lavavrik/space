@@ -166,6 +166,8 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   var T = 1.0;
   var S = vec3f(0.0);
   var tFirst = -1.0;
+  var tSum = 0.0; // distance weighted by how much each step shows (for the reprojection)
+  var wSum = 0.0;
   for (var i = 0; i < steps; i++) {
     let u = (f32(i) + j) / f32(STEPS);
     let t = t0 + span * u * u;
@@ -199,6 +201,8 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     let light = sunCol * (sun * 0.6 + 0.12 * (0.4 + 0.6 * h)) * dayK * 0.97;
     let tStep = exp(-dn * SIGMA * dt);
     S += T * light * (1.0 - tStep);
+    tSum += t * T * (1.0 - tStep);
+    wSum += T * (1.0 - tStep);
     T *= tStep;
     if (T < 0.01) { break; }
   }
@@ -212,7 +216,9 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   // with last frame's: where this pixel's clouds were then (by their distance, or the layer's middle)
   if (vp.moved.w > 0.5) {
     var tr = select(15000.0, 0.5 * (t0 + t1), steps > 0); // (no layer here: a shaft's typical distance)
-    if (tFirst > 0.0) { tr = tFirst; }
+    // (where the visible cloud mostly is: inside fog the first sample is metres off, and reprojecting
+    // by it while moving fetched the wrong history, leaving the jitter as static)
+    if (wSum > 0.02) { tr = tSum / wSum; } else if (tFirst > 0.0) { tr = tFirst; }
     let q = vp.prevVP * vec4f(dir * tr + vp.moved.xyz, 1.0);
     if (q.w > 0.0) {
       let uv = vec2f(q.x / q.w * 0.5 + 0.5, 0.5 - q.y / q.w * 0.5);
