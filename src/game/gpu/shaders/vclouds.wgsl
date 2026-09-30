@@ -139,7 +139,7 @@ fn cirrus(lq: vec3f) -> f32 {
 fn sunThrough(P: vec3f, L: vec3f) -> f32 {
   let Cp = world.atC.xyz - P;
   let a = select(sphereSpan(L, Cp, rBot).y, 0.0, length(Cp) >= rBot);
-  let b = sphereSpan(L, Cp, rTop).y;
+  let b = sphereSpan(L, Cp, rTop + vp.lift).y; // (the lifted top: from a point above the unlifted one it saw clear sky)
   if (b <= a || a < 0.0) { return 1.0; }
   var od = 0.0;
   let ds = (b - a) / 3.0;
@@ -177,7 +177,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   if (camR < rBot) {
     t0 = bot.y;
     t1 = top.y;
-  } else if (camR < rTop) {
+  } else if (camR < rTop + vp.lift) { // (the lifted layer's top: by the unlifted one, a camera just above it counted as above the layer and marched nothing)
     t0 = 0.0;
     t1 = select(top.y, bot.x, bot.y > bot.x && bot.x > 0.0);
   } else if (top.y > top.x && top.x > 0.0) {
@@ -201,7 +201,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   // it fades out toward the deck's top, where the view down is through the clouds themselves)
   var skyDim = 1.0;
   var rays = vec3f(0.0);
-  if (camR < rTop && world.atOn > 0.5) {
+  if (camR < rTop + vp.lift && world.atOn > 0.5) {
     // the air under the deck along the ray: to the ground or to the cloud base (toward the horizon
     // ~200 km); the shade is sampled over its first 30 km and taken for all of it (only the first
     // 30 km were dimmed, and the rest, reddened by its long path, glowed as a yellow band along the
@@ -235,7 +235,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     // the clouds to take away, and it darkened the night's own glow to nothing)
     let camDay = smoothstep(-0.1, 0.1, dot(normalize(-C), L));
     skyDim = 1.0 - 0.8 * camDay * shade / max(wsum, 1e-6);
-    let fade = smoothstep(mix(rBot, rTop, 0.6), rTop, camR);
+    let fade = smoothstep(mix(rBot, rTop, 0.6) + vp.lift, rTop + vp.lift, camR);
     skyDim = mix(skyDim, 1.0, fade);
     rays *= 1.0 - fade;
   }
@@ -288,7 +288,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
       bw *= 0.5;
       g *= 0.5;
     }
-    let h = clamp((length(P - C) - rBot) / (rTop - rBot), 0.0, 1.0);
+    let h = clamp((length(P - C) - liftAt(P) - rBot) / (rTop - rBot), 0.0, 1.0);
     // plus, near you, your own lamps scattered in the cloud (the path from them is the path from the
     // camera: × T again), and at night the night's own faint light
     let lamp = vec3f(1.0, 0.97, 0.92) * shipLightAt(P) * T * 0.08;
