@@ -60,7 +60,7 @@ Both renderers live side by side until WebGPU matches WebGL: the game stays play
   - The HDR frame (rgba16float, 4× MSAA) with reversed-Z depth32float, and the tone map.
   - The Milky Way cube map baked in WGSL (a port of the GLSL noise and sky), and the stars as instanced quads.
   - Checked against WebGL at the galactic centre and at a nebula on another cube face: identical.
-  - Not yet: the periscope's sharper sky patch, the performance overlay's GPU timing, hyperspace.
+  - (The periscope patch and hyperspace came in phase 6.)
 - [x] **2. Worlds** (`gpu/worlds.ts`, the WGSL in `gpu/shaders/`):
   - Ported from GLSL: the star (disc and glow), the planets' far sphere (surface, terrain as bumps, city lights), the sky shell, the cloud decks (a cube-map bake per world), the ring discs, and dots for distant bodies.
   - The GLSL includes (noise3d, terrain, atmo, clouds, city) are WGSL parts; per-world uniforms are one `World` block (world.wgsl).
@@ -78,7 +78,13 @@ Both renderers live side by side until WebGPU matches WebGL: the game stays play
   interiors, the approach corridor and its lights (instanced quads), sky stations in their world's
   air (bound as group 1), and the mint beacon dots. One uniform block per station for all its
   materials. Checked: a hull from outside (as WebGL), the hangar, a sky station.
-- [ ] · [ ] 6. Ships and effects · [ ] 7. Auto-exposure, timings, remove WebGL
+- [x] **6. Ships and effects** (`gpu/effects.ts`, `gpu/hyperspace.ts`, `gpu/sky.ts`; fx.wgsl): other
+  ships' hulls (instanced), FTL trails and the orbit preview (line strips), the laser's beam, and
+  every point-like thing (markers, engine glows, flashes, dust, the laser's plume) through the
+  worlds' dots; hyperspace heads (the stars' pipeline) and streaks (lines, positions scaled past the
+  near plane); the periscope's sky patch. Checked: a ship up close, the periscope at 40× (as WebGL),
+  a hyperspace transit.
+- [ ] 7. Auto-exposure, timings, remove WebGL
 
 **Dev note:** the preview tooling serves the main checkout. For this worktree, run
 `npx vite --port 5175` in it and open `http://localhost:5175/?gpu=webgpu`.
