@@ -27,6 +27,7 @@ import type { Gpu } from './device';
 import { EffectsLayer } from './effects';
 import { DEPTH_FORMAT, HDR_FORMAT, SAMPLES } from './formats';
 import { HyperspaceLayer } from './hyperspace';
+import { Particles } from './particles';
 import { Meter } from './meter';
 import { TONEMAP_WGSL } from './shaders';
 import { ShadowMap } from './shadowmap';
@@ -59,6 +60,8 @@ export class GpuRenderer implements GameRenderer {
   private readonly stations: StationsLayer;
   private readonly fx: EffectsLayer;
   private readonly hyper: HyperspaceLayer;
+  private readonly particles: Particles;
+  private lastSim = 0;
   private readonly exposure = new AutoExposure();
   private readonly meter: Meter;
   private readonly timer: GpuTimer | null;
@@ -125,6 +128,7 @@ export class GpuRenderer implements GameRenderer {
     this.toneBuf = device.createBuffer({ label: 'tone', size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     this.toneSamp = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
     this.hyper = new HyperspaceLayer(device, this.frameLayout);
+    this.particles = new Particles(device, this.frameLayout);
     this.meter = new Meter(device);
     this.timer = gpu.timestamps ? new GpuTimer(device, (slot, parts) => perf.gpuResult(slot, parts)) : null;
     perf.gpuTimed = !!this.timer;
@@ -212,7 +216,8 @@ export class GpuRenderer implements GameRenderer {
       this.hyper.release();
       this.worlds.update(g);
       this.stations.update(g, this.worlds);
-      this.fx.update(g, this.worlds, this.PR);
+      this.particles.begin();
+      this.fx.update(g, this.worlds, this.particles, this.PR);
       this.worlds.flushDots();
       // shadows while something near can cast them: rocks, other ships, a station
       this.shadows.update(g, this.worlds.rocksOut || this.fx.hullCount > 0 || this.stations.near(30e3));
@@ -222,8 +227,11 @@ export class GpuRenderer implements GameRenderer {
     // timing (the overlay up): each pass's timestamps, and the scene split into passes
     const timed = !!this.timer && this.perf.splitting && this.timer.begin();
     const tw = (label: string) => this.timer?.pass(label, timed);
+    const dt = Math.max(0, Math.min(0.1, g.simTime - this.lastSim));
+    this.lastSim = g.simTime;
     if (!inTunnel) {
       this.worlds.bake(enc, this.frameGroup, tw);
+      this.particles.compute(enc, this.frameGroup, g, dt);
       // the shadow map, from the star (after the rock culling: the rocks' lists)
       this.shadows.render(
         enc,
@@ -262,6 +270,7 @@ export class GpuRenderer implements GameRenderer {
       this.worlds.drawTransparent(pass, (p) => {
         this.stations.drawTransparent(p);
         this.fx.drawTransparent(p);
+        this.particles.draw(p);
       });
     if (inTunnel)
       scene('hyperspace', true, true, (pass) => {
@@ -326,6 +335,7 @@ export class GpuRenderer implements GameRenderer {
     this.stations.dispose();
     this.fx.dispose();
     this.hyper.dispose();
+    this.particles.dispose();
     this.meter.dispose();
     this.vclouds.dispose();
     this.toneBuf.destroy();

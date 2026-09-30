@@ -2,13 +2,13 @@
  * Ships and effects in WebGPU (docs/webgpu.md phase 6), ported from the WebGL renderer:
  *   - other ships (render/Traffic.ts): hulls within 200 km, marker dots, engine glows, the FTL flash,
  *     and FTL trails (render/Trail.ts records them) for them and for you;
- *   - dust round the ship in normal space (SceneRenderer.ts updateDust);
- *   - the mining laser's beam, hot spot and plume (render/Laser.ts);
+ *   - grains and particles (gpu/particles.ts): dust, the ring's dust, wrecks' debris, re-entry
+ *     plasma, other ships' exhaust;
+ *   - the mining laser's beam, hot spot, sparks and plume (render/Laser.ts);
  *   - the orbit preview ring (SceneRenderer.ts updateRing).
- * Point-like things (markers, glows, dust, plume) all go into the worlds' dots (one soft-dot shader).
+ * Point-like marks (markers, glows, the hot spot) go into the worlds' dots (one soft-dot shader).
  */
 import type { Game } from '../Game';
-import { mulberry32 } from '../lib/rng';
 import { THREE } from '../lib/three';
 import { DUST, DUSTBOX, DUST_FADE_FROM, DUST_FADE_TO, RING_AP, RING_N, RING_PLAN } from '../render/look';
 import { FtlTrail } from '../render/Trail';
@@ -16,6 +16,9 @@ import { orbitPreview } from '../sim/planner';
 import { sunFraction } from '../sim/eclipse';
 import { occluder } from '../sim/sight';
 import { FLASH_S, type Npc } from '../sim/traffic';
+import { RING_HALF_THICK, ringDensity } from '../sim/rings';
+import { wrecksHere } from '../sim/wreck';
+import type { Particles } from './particles';
 import { DEPTH_FORMAT, HDR_FORMAT, SAMPLES } from './formats';
 import { ShadowMap } from './shadowmap';
 import { FX_WGSL } from './shaders';
@@ -26,18 +29,9 @@ const MAX_SHIPS = 16;
 const FLIP = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
 /** The laser's emitter, in the ship's axes (m): under the nose, a little ahead of the camera. */
 const MUZZLE = new THREE.Vector3(0, -4, -6);
-const PUFFS = 90,
-  PUFF_LIFE = 2.5;
 /** Line vertices: position + colour (rgba). */
 const LINE_FLOATS = 7;
 const MAX_LINE_VERTS = 8192;
-
-interface Puff {
-  off: THREE.Vector3; // from the rock's centre (m)
-  vel: THREE.Vector3; // m/s, relative to the rock
-  age: number;
-  size: number;
-}
 
 /** The ship model's triangles (render/Traffic.ts shipModel), nose along +z. */
 function shipModel() {
@@ -93,11 +87,9 @@ export class EffectsLayer {
   private readonly own = new FtlTrail();
   private readonly trails = new Map<Npc, FtlTrail>();
   private sys = '';
-  private readonly dustSeed: [number, number, number][] = [];
-  private readonly puffs: Puff[] = [];
-  private spawn = 0;
+  /** The belt's dust box's place in the ring's orbiting space (null: not in a belt). */
+  private ringAnchor: THREE.Vector3 | null = null;
   private lastT = 0;
-  private hitId = '';
   private readonly tmp = new THREE.Vector3();
   private readonly tmp2 = new THREE.Vector3();
   private readonly m = new THREE.Matrix4();
@@ -213,20 +205,20 @@ export class EffectsLayer {
     this.beamBuf = device.createBuffer({ label: 'beam', size: 4 * 20, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
     this.beamIdx = device.createBuffer({ size: 12, usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST });
     device.queue.writeBuffer(this.beamIdx, 0, new Uint16Array([0, 1, 2, 2, 1, 3]));
-    const rnd = mulberry32(99);
-    for (let i = 0; i < DUST; i++) this.dustSeed.push([rnd() * DUSTBOX, rnd() * DUSTBOX, rnd() * DUSTBOX]);
   }
 
   /** Per frame: everything's geometry and dots; `pr` is render px per CSS px. */
-  update(g: Game, worlds: WorldsLayer, pr: number) {
+  update(g: Game, worlds: WorldsLayer, px: Particles, pr: number) {
     this.lineN = 0;
     this.trailRuns = [];
     this.orbitRun = null;
     const now = performance.now() / 1000;
     this.fxData[4] = now;
-    this.updateTraffic(g, worlds, pr);
-    this.updateDust(g, worlds, pr);
-    this.updateLaser(g, worlds, pr, now);
+    const dt = Math.max(0, Math.min(0.1, g.simTime - this.lastT));
+    this.lastT = g.simTime;
+    this.updateTraffic(g, worlds, px, pr, dt);
+    this.updateGrains(g, px, pr, dt);
+    this.updateLaser(g, worlds, px, pr, now, dt);
     this.updateOrbit(g);
     this.device.queue.writeBuffer(this.fxBuf, 0, this.fxData);
     if (this.lineN) this.device.queue.writeBuffer(this.lineBuf, 0, this.lineData, 0, this.lineN * LINE_FLOATS);
@@ -248,7 +240,7 @@ export class EffectsLayer {
     this.trailRuns.push([first, n]);
   }
 
-  private updateTraffic(g: Game, worlds: WorldsLayer, pr: number) {
+  private updateTraffic(g: Game, worlds: WorldsLayer, px: Particles, pr: number, dt: number) {
     const { ship, simTime } = g;
     // a new system: the trails laid in the last one go
     if (g.cur.sys.id !== this.sys) {
@@ -289,6 +281,12 @@ export class EffectsLayer {
         const at = rel.clone().addScaledVector(nose, npc.thrust > 0 ? -36 : 34);
         const c = ftl ? [0.6, 0.95, 1.4] : npc.thrust > 0 ? [1.4, 0.8, 0.4] : [1.0, 0.7, 0.45];
         worlds.addDot(at, c[0], c[1], c[2], (ftl ? 9 : npc.thrust > 0 ? 6 : 4) * pr);
+        // its exhaust: a plume of glowing gas behind it (particles; in normal space, within 60 km)
+        if (!ftl && rel.length() < 60e3) {
+          const base = new THREE.Vector3().subVectors(npc.vel, g.frameBody.vel ?? new THREE.Vector3());
+          const k = npc.thrust > 0 ? 1 : 0.5;
+          px.emit({ key: `x${g.traffic.indexOf(npc)}`, pos: at, vel: base, dir: nose.clone().multiplyScalar(npc.thrust > 0 ? -1 : 1), speed: 250, spread: 30, count: 300 * k * dt, life: 1.0, color: [0.6 * k, 0.35 * k, 0.18 * k], size: 2.5, growth: 2.5, drag: 0.5, streak: 0.02 });
+        }
       }
       // the flash of entering or leaving FTL: a burst that swells and fades
       const fu = (simTime - npc.flashAt) / FLASH_S;
@@ -301,34 +299,63 @@ export class EffectsLayer {
   }
 
   /**
-   * Dust round the ship in a wrapping box, fading toward its edges and out with speed (past a few
-   * km per frame the grains would just re-scatter each frame and read as faint stars).
+   * Grains and particles (gpu/particles.ts):
+   *   - dust round the ship in normal space, in a repeating box fixed in space, fading with speed
+   *     (past a few km per frame it would read as faint stars);
+   *   - in a ring's belt, its fine ice dust, in a box that orbits with the ring (so it hangs still
+   *     round rocks you're matched with), as dense as the ring is there;
+   *   - round a wreck, its debris, glinting;
+   *   - re-entry: plasma streaming past once the air heats the hull (from ~0.1 MW/m²).
    */
-  private updateDust(g: Game, worlds: WorldsLayer, pr: number) {
+  private updateGrains(g: Game, px: Particles, pr: number, dt: number) {
     const { ship } = g;
     const fade = 1 - THREE.MathUtils.smoothstep(g.curSpeed, DUST_FADE_FROM, DUST_FADE_TO);
-    if (ship.mode !== 'normal' || fade <= 0) return;
-    const mx = ((ship.pos.x % DUSTBOX) + DUSTBOX) % DUSTBOX,
-      my = ((ship.pos.y % DUSTBOX) + DUSTBOX) % DUSTBOX,
-      mz = ((ship.pos.z % DUSTBOX) + DUSTBOX) % DUSTBOX;
-    const h = DUSTBOX / 2;
-    const p = this.tmp;
-    for (const s of this.dustSeed) {
-      p.set(((((s[0] - mx) % DUSTBOX) + DUSTBOX) % DUSTBOX) - h, ((((s[1] - my) % DUSTBOX) + DUSTBOX) % DUSTBOX) - h, ((((s[2] - mz) % DUSTBOX) + DUSTBOX) % DUSTBOX) - h);
-      const f = Math.max(0, 1 - p.length() / h) * 0.55 * fade;
-      if (f > 0) worlds.addDot(p, f, f * 0.92, f * 0.85, 2.2 * pr);
+    if (ship.mode === 'normal' && fade > 0) {
+      const f = 0.55 * 0.8 * fade;
+      px.field({ mode: 'wrap', at: ship.pos, size: DUSTBOX, count: DUST * 2, seed: 99, grain: -2.2 * pr, color: [f, f * 0.92, f * 0.85] });
+    }
+    // the belt's dust, orbiting with the ring
+    const b = g.frameBody;
+    const sun = sunFraction(g.cur.bodies, g.cur.star, ship.pos);
+    if (b.kind !== 'star' && b.ring && ship.mode === 'normal') {
+      const rel = this.tmp.subVectors(ship.pos, b.pos);
+      const n = this.tmp2.set(b.axis.x, b.axis.y, b.axis.z).normalize();
+      const h = rel.dot(n);
+      const radial = rel.clone().addScaledVector(n, -h);
+      const r = radial.length();
+      const dens = (ringDensity(b, r / b.radius) / 0.85) * (1 - THREE.MathUtils.smoothstep(Math.abs(h), RING_HALF_THICK, RING_HALF_THICK * 2));
+      if (dens > 0.01) {
+        const vOrb = new THREE.Vector3().crossVectors(n, radial).normalize().multiplyScalar(Math.sqrt(b.mu / r));
+        if (!this.ringAnchor) this.ringAnchor = new THREE.Vector3(Math.random() * 1e4, 0, 0);
+        this.ringAnchor.addScaledVector(ship.vel.clone().sub(vOrb), dt);
+        const c = b.ring.color;
+        const k = 5 * sun * Math.min(1, dens);
+        px.field({ mode: 'wrap', at: this.ringAnchor, size: 500, count: Math.round(60000 * Math.min(1, dens)), seed: 7, grain: -1.3 * pr, color: [c.r * k, c.g * k, c.b * k], glint: 4 });
+      } else this.ringAnchor = null;
+    } else this.ringAnchor = null;
+    // wrecks' debris
+    for (const w of wrecksHere(g)) {
+      const at = new THREE.Vector3().subVectors(w.pos, ship.pos);
+      if (at.length() > 40e3) continue;
+      const k = 0.35 * sunFraction(g.cur.bodies, g.cur.star, w.pos);
+      px.field({ mode: 'ball', at, size: 90, count: 2500, seed: w.lostAt | 0, grain: 0.35, color: [0.55 * k + 0.004, 0.55 * k + 0.004, 0.58 * k + 0.004], glint: 8 });
+    }
+    // re-entry plasma: the air ahead heated past glowing, streaming past the ship
+    const a = g.aero;
+    if (a.body && a.speed > 1500 && a.rho > 0 && !g.inStation) {
+      const q = 0.5 * a.rho * a.speed ** 3;
+      const k = THREE.MathUtils.clamp((Math.log10(q) - 5) / 2, 0, 1);
+      if (k > 0) {
+        const dir = ship.vel.clone().normalize();
+        px.emit({ key: 'plasma', pos: dir.multiplyScalar(140), vel: new THREE.Vector3(), region: 70, count: 8000 * k * dt, life: 0.12, lifeJitter: 0.5, color: [5 * k, 2.2 * k, 0.8 * k], size: 0.8, streak: 0.012 });
+      }
     }
   }
 
-  private updateLaser(g: Game, worlds: WorldsLayer, pr: number, now: number) {
+  private updateLaser(g: Game, worlds: WorldsLayer, px: Particles, pr: number, now: number, dt: number) {
     const L = g.laser;
-    const dt = Math.max(0, Math.min(0.1, g.simTime - this.lastT));
-    this.lastT = g.simTime;
     this.beamOn = !!(L.on && L.end);
-    if (!L.on || !L.end) {
-      this.puffs.length = 0;
-      return;
-    }
+    if (!L.on || !L.end) return;
     const { ship } = g;
     const w = g.frameBody;
     const pxPerRad = g.view.pxPerRad;
@@ -348,36 +375,14 @@ export class EffectsLayer {
     v.set([b.x + sb.x, b.y + sb.y, b.z + sb.z, 1, len], 15);
     this.device.queue.writeBuffer(this.beamBuf, 0, v);
     this.fxData[3] = L.hit ? 1.2 : 0.6;
-    // the plume: specks thrown off along the rock's surface normal where it's hit
+    // where it hits: a white-hot spot, sparks, and the plume, ice boiling off along the surface's normal
     if (L.hit) {
-      if (L.hit.id !== this.hitId) this.puffs.length = 0;
-      this.hitId = L.hit.id;
-      // the hot spot, flickering
       const spot = Math.max(8, Math.min(60, (L.hit.size * 0.25 * pxPerRad) / b.length()));
       const f = 0.8 + 0.2 * Math.sin(now * 37) * Math.sin(now * 23);
       worlds.addDot(b, 1.6 * f, 1.3 * f, 1.0 * f, spot * pr);
-      this.spawn += dt * 40;
       const nrm = L.hit.normal;
-      while (this.spawn >= 1) {
-        this.spawn -= 1;
-        const vel = nrm.clone().multiplyScalar(15 + Math.random() * 35);
-        vel.add(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(25));
-        if (this.puffs.length >= PUFFS) this.puffs.shift();
-        this.puffs.push({ off: L.end.clone().sub(L.hit.center), vel, age: 0, size: 2 + Math.random() * 3 });
-      }
-    } else this.puffs.length = 0;
-    for (const p of this.puffs) {
-      p.age += dt;
-      p.off.addScaledVector(p.vel, dt);
-    }
-    for (let i = this.puffs.length - 1; i >= 0; i--) if (this.puffs[i].age > PUFF_LIFE) this.puffs.splice(i, 1);
-    // the rock's centre, camera-relative (the specks ride along with it)
-    const c = L.hit ? L.hit.center.clone().add(w.pos).sub(ship.pos) : b;
-    for (const p of this.puffs) {
-      const at = this.tmp.copy(c).add(p.off);
-      const k = 1 - p.age / PUFF_LIFE;
-      const size = Math.max(2, Math.min(40, (p.size * (1 + p.age) * pxPerRad) / at.length())) * pr;
-      worlds.addDot(at, 0.22 * k, 0.28 * k, 0.34 * k, size); // ice vapour
+      px.emit({ key: 'plume', pos: b, vel: ship.vel, dir: nrm, speed: 30, spread: 25, count: 600 * dt, life: 2.5, color: [0.26, 0.33, 0.4], size: 2.5, growth: 1, drag: 0.2, fadeIn: 0.1 });
+      px.emit({ key: 'sparks', pos: b, vel: ship.vel, dir: nrm, speed: 40, spread: 70, count: 250 * dt, life: 0.4, color: [3, 1.5, 0.5], size: 0.15, streak: 0.04, drag: 2 });
     }
   }
 
