@@ -413,7 +413,10 @@ export function updateTraffic(g: Game, dt: number) {
     if (flown > 0 && ship.mode === 'normal' && !c.dock?.docked) {
       const dv = sysVel(c, tmpV1).sub(tmpV0);
       if (ship.grav) dv.addScaledVector(ship.grav.vec, -flown);
-      if (dv.length() > 2 * flown) npc.thrust = dv.dot(tmpN.set(0, 0, -1).applyQuaternion(ship.q)) >= 0 ? 1 : -1;
+      if (dv.length() > 2 * flown) {
+        npc.thrust = dv.dot(tmpN.set(0, 0, -1).applyQuaternion(ship.q)) >= 0 ? 1 : -1;
+        npc.thrustDir = (npc.thrustDir ?? new THREE.Vector3()).copy(dv).normalize();
+      }
     }
     if (wasFtl !== (ship.mode === 'ftl')) npc.flashAt = g.simTime;
     if (c.dock?.docked) dockOffs.set(npc, (dockOffs.get(npc) ?? new THREE.Vector3()).subVectors(ship.pos, c.dock.station.pos));

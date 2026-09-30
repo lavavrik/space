@@ -143,6 +143,8 @@ export interface Npc {
   /** In FTL, and its thrust this step: +1 along the nose (main engine), −1 against it, 0 coasting. */
   ftl: boolean;
   thrust: number;
+  /** Which way (world axes, unit) that thrust pushes it: along the nose, against it, or across (lift jets, hovering). */
+  thrustDir?: Vec3;
   /** What its captain is doing (sim/traffic.ts), where it is or last was, and where it's going. */
   task: 'docked' | 'launch' | 'travel' | 'dock' | 'orbit';
   at: Body | Station | null;

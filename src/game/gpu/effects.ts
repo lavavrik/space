@@ -273,9 +273,11 @@ export class EffectsLayer {
     this.fxData.set([light.x, light.y, light.z], 0);
     this.hulls = 0;
     for (const npc of g.traffic) {
-      // on a pad: inside the station, seen only from in there (its hull on the pad, no marker)
+      // on a pad inside an orbital station: seen only from in there (its hull on the pad, no marker).
+      // On a sky station's open deck it's in plain view (hidden, it vanished as it touched down)
       const docked = npc.task === 'docked';
-      if (docked && npc.at !== g.inStation && !(g.dock?.docked && g.dock.station === npc.at)) continue;
+      const inside = docked && npc.at?.kind === 'station' && !npc.at.sky;
+      if (inside && npc.at !== g.inStation && !(g.dock?.docked && g.dock.station === npc.at)) continue;
       // behind a world: nothing of it shows
       if (occluder(g.cur.bodies, ship.pos, npc.pos)) continue;
       const rel = new THREE.Vector3().subVectors(npc.pos, ship.pos);
@@ -290,15 +292,22 @@ export class EffectsLayer {
       const mc = ftl ? [0.5, 0.9, 1.0] : [0.85, 0.85, 0.8];
       worlds.addDot(rel, mc[0], mc[1], mc[2], (ftl ? 5 : 3.5) * pr);
       if (npc.thrust !== 0) {
+        // where it fires from: the main engine at the tail (pushing along the nose), the retros at
+        // the nose (against it), or the lift jets under the hull (across it: hovering down onto a
+        // deck, which fired from the nose when only along/against was known)
         const nose = new THREE.Vector3(0, 0, -1).applyQuaternion(npc.q);
-        const at = rel.clone().addScaledVector(nose, npc.thrust > 0 ? -36 : 34);
-        const c = ftl ? [0.6, 0.95, 1.4] : npc.thrust > 0 ? [1.4, 0.8, 0.4] : [1.0, 0.7, 0.45];
-        worlds.addDot(at, c[0], c[1], c[2], (ftl ? 9 : npc.thrust > 0 ? 6 : 4) * pr);
-        // its exhaust: a plume of glowing gas behind it (particles; in normal space, within 60 km)
+        const td = npc.thrustDir ? new THREE.Vector3(npc.thrustDir.x, npc.thrustDir.y, npc.thrustDir.z) : nose.clone().multiplyScalar(npc.thrust);
+        const along = td.dot(nose);
+        const kind = ftl || along > 0.6 ? 'main' : along < -0.6 ? 'retro' : 'lift';
+        const at = kind === 'main' ? rel.clone().addScaledVector(nose, -36) : kind === 'retro' ? rel.clone().addScaledVector(nose, 34) : rel.clone().addScaledVector(td, -8);
+        const c = ftl ? [0.6, 0.95, 1.4] : kind === 'main' ? [1.4, 0.8, 0.4] : [1.0, 0.7, 0.45];
+        worlds.addDot(at, c[0], c[1], c[2], (ftl ? 9 : kind === 'main' ? 6 : 4) * pr);
+        // its exhaust: a plume of glowing gas, the other way from the push (particles; in normal
+        // space, within 60 km)
         if (!ftl && rel.length() < 60e3) {
           const base = new THREE.Vector3().subVectors(npc.vel, g.frameBody.vel ?? new THREE.Vector3());
-          const k = npc.thrust > 0 ? 1 : 0.5;
-          px.emit({ key: `x${g.traffic.indexOf(npc)}`, pos: at, vel: base, dir: nose.clone().multiplyScalar(npc.thrust > 0 ? -1 : 1), speed: 250, spread: 30, count: 300 * k * dt, life: 1.0, color: [0.6 * k, 0.35 * k, 0.18 * k], size: 2.5, growth: 2.5, drag: 0.5, streak: 0.02 });
+          const k = kind === 'main' ? 1 : 0.5;
+          px.emit({ key: `x${g.traffic.indexOf(npc)}`, pos: at, vel: base, dir: td.clone().negate(), speed: kind === 'lift' ? 150 : 250, spread: kind === 'lift' ? 40 : 30, count: 300 * k * dt, life: 1.0, color: [0.6 * k, 0.35 * k, 0.18 * k], size: 2.5, growth: 2.5, drag: 0.5, streak: 0.02 });
         }
       }
       // the flash of entering or leaving FTL: a burst that swells and fades
