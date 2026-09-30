@@ -56,8 +56,10 @@ over the frame: scene × what the clouds let through + their light.
   of the ray test whether the clouds hide the sun from there (3 density samples up through the
   layer). That share, weighted by the air's density, is taken for the whole stretch of air under
   the deck (to the ground, or to the cloud base: ~200 km toward the horizon).
-  - The sky behind is dimmed by it as a whole (the composite's transmittance). So is far ground,
-    fading in from 2 to 30 km (near, the ground's own cloud shadow does it).
+  - What's behind, sky or ground, is dimmed by 80 % of that share as a whole (the composite's
+    transmittance). The ground is dimmed evenly: its ambient light and the sea's sky reflection
+    aren't shaded in its own shader, and dimmed only past a few km the ground near you stood in a
+    lighter circle. A fifth is left, so an overcast day doesn't look like night.
   - So is the haze in front of the clouds.
   - This gives shafts under broken cloud and a dim world under overcast.
   - Dimming only the first 30 km, or taking that stretch's compressed haze off (`atmo.wgsl

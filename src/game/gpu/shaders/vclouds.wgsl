@@ -152,7 +152,6 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   let L = normalize(world.light.xyz);
   let j = fract(52.9829189 * fract(dot(vec2f(px) + vp.frameN * 5.588238, vec2f(0.06711056, 0.00583715))));
   // light shafts (below the deck): the haze along the ray, less where the clouds shade the air
-  var dark = vec3f(0.0);
   var skyDim = 1.0;
   if (camR < rBot && world.atOn > 0.5) {
     // the air under the deck along the ray: to the ground or to the cloud base (toward the horizon
@@ -171,16 +170,12 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
       shade += (1.0 - sunThrough(P, L)) * w;
       wsum += w;
     }
-    let frac = 0.92 * shade / max(wsum, 1e-6);
-    // to the ground: that stretch's haze taken off (the ground itself has the clouds' shadow). Into
-    // the sky: the sky dimmed as a whole instead (the sky's haze is compressed over a knee, atmo.wgsl
-    // atRolloff, and taking a stretch's compressed haze off it left a reddish line on the horizon)
-    if (d > 0.0) {
-      // (mostly: the far ground is mostly haze; near, the ground's own shading does it)
-      skyDim = 1.0 - frac * smoothstep(2000.0, 30000.0, tFull);
-    } else {
-      skyDim = 1.0 - frac;
-    }
+    // what's behind (sky or ground) is dimmed by that share as a whole: taking the stretch's haze off
+    // instead left a reddish line on the horizon (the haze is compressed over a knee, atmo.wgsl
+    // atRolloff), and the ground is dimmed evenly too (its ambient light and the sea's sky
+    // reflection aren't shaded by the clouds in its own shader; faded in with distance, the ground
+    // near you stood in a lighter circle)
+    skyDim = 1.0 - 0.8 * shade / max(wsum, 1e-6); // (a fifth left: an overcast day, not night)
   }
   // (a ray that misses the layer marches nothing, but still goes through the blend below)
   let steps = select(0, STEPS, t1 > t0);
@@ -242,7 +237,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     let haze = atInscatter(dir * span.x, dir * max(tFirst, span.x), L, 4);
     S = S * atTrans + haze * (1.0 - T) * skyDim; // (under the deck, that air is shaded too)
   }
-  var res = vec4f((S - dark) * frame.exposure, T * skyDim);
+  var res = vec4f(S * frame.exposure, T * skyDim);
   // with last frame's: where this pixel's clouds were then (by their distance, or the layer's middle)
   if (vp.moved.w > 0.5) {
     var tr = select(15000.0, 0.5 * (t0 + t1), steps > 0); // (no layer here: a shaft's typical distance)
