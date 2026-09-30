@@ -236,10 +236,13 @@ fn fs(in: Out) -> @location(0) vec4f {
     var h2 = 0.0;
     if (!dark) { h2 = fbmF(sp * 3.1 + 4.0, min(max(oct - 2, 3), 5)); }
     let lat = abs(p.y);
+    // (cr: 1 − |noise|, slightly negative where the noise overshoots ±1, and pow of a negative is
+    // NaN on NVIDIA (D3D): on rocky moons it blinked black blocks, bloom's low mips spreading one bad
+    // pixel over a fifth of the screen; hence the max(…, 0) in each pow)
     if (ty == 0) {
       let cr = 1.0 - abs(snoise(sp * 5.0 + h));
       col = mix(A, B, sm(-0.5, 0.6, h));
-      col *= 0.78 + 0.35 * pow(cr, 4.0);
+      col *= 0.78 + 0.35 * pow(max(cr, 0.0), 4.0);
       col = mix(col, C, sm(0.25, 0.7, h2) * 0.4);
     } else if (ty == 1) {
       let d = sin((p.x + p.z) * 90.0 + h * 14.0) * 0.5 + 0.5;
@@ -265,13 +268,13 @@ fn fs(in: Out) -> @location(0) vec4f {
       let cr = 1.0 - abs(snoise(sp * 3.0 + h));
       let cr2 = 1.0 - abs(snoise(sp * 9.0 + h2 * 2.0));
       col = mix(A, B, sm(-0.3, 0.6, h));
-      let glow = pow(cr, 14.0) + pow(cr2, 18.0) * 0.6;
+      let glow = pow(max(cr, 0.0), 14.0) + pow(max(cr2, 0.0), 18.0) * 0.6;
       emit = C * glow * 1.4;
       col *= 1.0 - glow * 0.6;
     } else {
       let cr = 1.0 - abs(snoise(sp * 4.0 + h * 2.0));
       col = mix(A, B, sm(-0.5, 0.5, h));
-      col = mix(col, C, pow(cr, 22.0) * 0.75);
+      col = mix(col, C, pow(max(cr, 0.0), 22.0) * 0.75);
     }
   }
   col *= mix(det, 1.0, spec);

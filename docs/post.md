@@ -12,6 +12,9 @@ the final pass `tonemap.wgsl`:
    Both the bloom and the flare are made from the scene before the volumetric clouds are laid
    over it, so each is dimmed by what the clouds let through (the bloom where it lands, the flare
    at the star): the sun didn't glare through an overcast.
+   Any tap that isn't a finite, non-negative number is taken as black. One NaN pixel, from any
+   shader, was spread by the low mips into a black block a fifth of the screen across. On NVIDIA
+   (D3D), the rocky moons' `pow` of a slightly negative value (planet.wgsl) blinked them.
 2. **Lens flare, from the star only:** four small tinted ghosts along the line from the star through
    the screen's centre, as bright as the star shows in the frame there, so a rock
    or a world in front of it dims them. From every bright spot (as a pseudo lens flare) the laser's

@@ -27,7 +27,12 @@ fn vs(@builtin(vertex_index) i: u32) -> V {
   return o;
 }
 
-fn tap(uv: vec2f) -> vec3f { return textureSampleLevel(src, samp, uv, 0.0).rgb; }
+// (anything not a finite, non-negative number taken as black: one NaN pixel, from any shader, was
+// spread by the low mips into a black block a fifth of the screen across)
+fn tap(uv: vec2f) -> vec3f {
+  let c = textureSampleLevel(src, samp, uv, 0.0).rgb;
+  return select(vec3f(0.0), c, c >= vec3f(0.0) & c < vec3f(1e30));
+}
 
 // the part over the threshold, with a soft knee
 fn over(c: vec3f) -> vec3f {
