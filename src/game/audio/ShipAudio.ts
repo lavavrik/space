@@ -26,6 +26,11 @@ export class ShipAudio {
   muted = false;
 
   constructor() {
+    // one ship's sound per page: a game made again (a hot reload in development, say) closes the
+    // last one's, which otherwise played on, beyond the mute key's reach
+    const prev = (globalThis as { __farlightAudio?: ShipAudio }).__farlightAudio;
+    prev?.dispose();
+    (globalThis as { __farlightAudio?: ShipAudio }).__farlightAudio = this;
     try {
       this.muted = localStorage.getItem(MUTE_KEY) === '1';
     } catch {
@@ -84,10 +89,11 @@ export class ShipAudio {
       return { gain, ...build(gain) };
     };
     this.layers = {
-      // life support: a low mains-like hum and fans (quiet, always there)
+      // life support: a low mains-like hum and, barely, its fans (always there; the fans' noise was
+      // loud enough to read as a hiss with the ship at rest)
       hum: L((out) => {
-        const f = this.filter('lowpass', 400, 0.7, out);
-        this.loop('brown', f, 0.5);
+        const f = this.filter('lowpass', 300, 0.7, out);
+        this.loop('brown', f, 0.15);
         return { osc: [this.osc('sine', 50, out, 0.25), this.osc('triangle', 100, out, 0.08)] };
       }),
       // the drive idling in normal space: a warbling, resonant hum (a nod to a certain delivery
