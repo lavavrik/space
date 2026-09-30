@@ -115,9 +115,10 @@ export class Bloom {
 
 /**
  * The final pass's settings for this frame: FTL's zoom blur toward the point you're heading for,
- * as strong as your speed (from ~1,000 to ~1,000,000 km/s), and the bloom and flare strengths.
+ * as strong as your speed (from ~1,000 to ~1,000,000 km/s), the bloom and flare strengths, and
+ * the canvas's size (CW × CH px).
  */
-export function postParams(g: Game, vp: THREE.Matrix4, clouds: boolean) {
+export function postParams(g: Game, vp: THREE.Matrix4, clouds: boolean, CW: number, CH: number) {
   const out = new Float32Array(12);
   let blur = 0;
   let fx = 0.5,
@@ -132,7 +133,8 @@ export function postParams(g: Game, vp: THREE.Matrix4, clouds: boolean) {
       fy = 0.5 - (d.y / d.w) * 0.5;
     }
   }
-  out.set([clouds ? 1 : 0, BLOOM_K, FLARE_K, blur, fx, fy, side, 0]);
+  out.set([clouds ? 1 : 0, BLOOM_K, FLARE_K, blur, fx, fy, side, CW]);
+  out[11] = CH; // (the canvas's size: the scene may be rendered smaller, gpu/dynres.ts)
   // the star on screen, for its lens flare
   const r = g.cur.star.pos.clone().sub(g.ship.pos);
   const q = new THREE.Vector4(r.x, r.y, r.z, 0).applyMatrix4(vp);

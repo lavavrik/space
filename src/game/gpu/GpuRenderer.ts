@@ -22,6 +22,7 @@ import type { PerfMonitor } from '../debug/Perf';
 import type { GameRenderer, ViewInfo } from '../render/api';
 import { AUTO_EXPOSURE, AutoExposure, FLOOD_K, HEAD_K, INT_K, MAX_EXP, SKY_EXP_P, SKY_K, STAR_EXP_P, WINDOW_K } from '../render/exposure';
 import { MAX_RENDER_PIXELS } from '../render/look';
+import { DynamicResolution } from './dynres';
 import type { Body, CurrentSystem, StarSystem, Station } from '../types';
 import type { Gpu } from './device';
 import { EffectsLayer } from './effects';
@@ -71,9 +72,16 @@ export class GpuRenderer implements GameRenderer {
   private resolved!: GPUTexture;
   private depth!: GPUTexture;
   private toneGroups: GPUBindGroup[] = [];
+  /** The 3D scene's render size (px) and pixels per CSS px: the canvas's × the dynamic scale. */
   private W = 1;
   private H = 1;
   private PR = 1;
+  /** The canvas: its size (px) and pixels per CSS px. */
+  private CW = 1;
+  private CH = 1;
+  private basePR = 1;
+  /** The scene's resolution, kept up with the display (gpu/dynres.ts). */
+  readonly dynres = new DynamicResolution();
   private readonly views = new Map<Body | Station, ViewInfo>();
   private readonly proj = new THREE.Matrix4();
   private readonly viewM = new THREE.Matrix4();
@@ -135,7 +143,7 @@ export class GpuRenderer implements GameRenderer {
     this.meter = new Meter(device);
     this.timer = gpu.timestamps ? new GpuTimer(device, (slot, parts) => perf.gpuResult(slot, parts)) : null;
     perf.gpuTimed = !!this.timer;
-    perf.info = () => `WebGPU ${this.W}×${this.H} @${this.PR.toFixed(2)}`;
+    perf.info = () => `WebGPU ${this.W}×${this.H} @${this.PR.toFixed(2)}${this.dynres.scale < 1 ? ` (${Math.round(this.dynres.scale * 100)} %)` : ''}`;
   }
 
   setSystem(cur: CurrentSystem, sky: StarSystem[]) {
@@ -145,16 +153,33 @@ export class GpuRenderer implements GameRenderer {
     this.stations.setSystem(cur, this.worlds);
   }
 
-  /** Up to 1.5× the CSS resolution, at most MAX_RENDER_PIXELS (render/look.ts). */
+  /** The canvas: up to 1.5× the CSS resolution, at most MAX_RENDER_PIXELS (render/look.ts). */
   resize(W: number, H: number) {
-    this.PR = Math.min(devicePixelRatio || 1, 1.5, Math.sqrt(MAX_RENDER_PIXELS / Math.max(1, W * H)));
-    this.W = Math.max(1, Math.round(W * this.PR));
-    this.H = Math.max(1, Math.round(H * this.PR));
-    this.worlds.pr = this.PR;
-    this.canvas.width = this.W;
-    this.canvas.height = this.H;
+    this.basePR = Math.min(devicePixelRatio || 1, 1.5, Math.sqrt(MAX_RENDER_PIXELS / Math.max(1, W * H)));
+    this.CW = Math.max(1, Math.round(W * this.basePR));
+    this.CH = Math.max(1, Math.round(H * this.basePR));
+    this.canvas.width = this.CW;
+    this.canvas.height = this.CH;
     this.canvas.style.width = `${W}px`;
     this.canvas.style.height = `${H}px`;
+    this.setScale(this.dynres.scale);
+  }
+
+  /**
+   * At the end of each frame (Game.frame): its start (rAF time, ms) and the CPU's time over it (ms),
+   * for the dynamic resolution; the render targets are remade when it changes.
+   */
+  pace(now: number, cpuMs: number) {
+    const s = this.dynres.frame(now, cpuMs);
+    if (s !== null) this.setScale(s);
+  }
+
+  /** The scene's render targets at `scale` × the canvas's resolution (the final pass scales up). */
+  private setScale(scale: number) {
+    this.PR = this.basePR * scale;
+    this.W = Math.max(1, Math.round(this.CW * scale));
+    this.H = Math.max(1, Math.round(this.CH * scale));
+    this.worlds.pr = this.PR;
     this.hdr?.destroy();
     this.resolved?.destroy();
     this.depth?.destroy();
@@ -254,7 +279,7 @@ export class GpuRenderer implements GameRenderer {
       depthView = this.depth.createView();
     // volumetric clouds near a clouded world (they read the scene's depth, so it's kept)
     const clouds = !inTunnel && this.worlds.vcOn > 0;
-    device.queue.writeBuffer(this.toneBuf, 0, postParams(g, this.vp, clouds));
+    device.queue.writeBuffer(this.toneBuf, 0, postParams(g, this.vp, clouds, this.CW, this.CH));
     const scene = (label: string, first: boolean, last: boolean, draw: (pass: GPURenderPassEncoder) => void) => {
       const pass = enc.beginRenderPass({
         label,

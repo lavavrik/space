@@ -746,6 +746,7 @@ export class Game {
     if (this.hudT <= 0) this.publishHud();
     perf.mark('hud');
     perf.frameEnd();
+    this.scene.pace(now, performance.now() - now);
     this.raf = requestAnimationFrame(this.frame);
   };
 

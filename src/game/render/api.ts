@@ -18,6 +18,8 @@ export interface GameRenderer {
   /** A new system: everything in it, and every other system within sight as a star in the sky. */
   setSystem(cur: CurrentSystem, sky: StarSystem[]): void;
   resize(W: number, H: number): void;
+  /** At the end of each frame: its start (ms) and the CPU's time over it (ms), for the dynamic resolution. */
+  pace(now: number, cpuMs: number): void;
   render(g: Game): void;
   dispose(): void;
   bodyView(b: Body): ViewInfo | undefined;

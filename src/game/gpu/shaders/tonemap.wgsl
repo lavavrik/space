@@ -5,8 +5,8 @@
 
 struct Post {
   a: vec4f, // clouds on, bloom strength, flare strength, blur strength
-  b: vec4f, // the screen point you're heading for (uv), and whether it's in front (1) or behind (−1)
-  c: vec4f, // the star on screen (uv); z: 1 if it's in front
+  b: vec4f, // the screen point you're heading for (uv), whether it's in front (1) or behind (−1); w: the canvas's width (px)
+  c: vec4f, // the star on screen (uv); z: 1 if it's in front; w: the canvas's height (px)
 }
 @group(0) @binding(0) var hdr: texture_2d<f32>;
 @group(0) @binding(1) var clouds: texture_2d<f32>;
@@ -22,9 +22,10 @@ fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
 
 @fragment
 fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
-  let size = vec2f(textureDimensions(hdr));
+  // (the scene may be rendered smaller than the canvas, gpu/dynres.ts: sampled, it's scaled up)
+  let size = vec2f(post.b.w, post.c.w);
   let uv = pos.xy / size;
-  var c = max(textureLoad(hdr, vec2i(pos.xy), 0).rgb, vec3f(0.0));
+  var c = max(textureSampleLevel(hdr, samp, uv, 0.0).rgb, vec3f(0.0));
   // FTL: a zoom blur toward (or away from) the point you're heading for, stronger toward the edges
   if (post.a.w > 0.0) {
     let toF = (post.b.xy - uv) * post.b.z;
