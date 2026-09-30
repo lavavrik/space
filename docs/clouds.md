@@ -61,6 +61,10 @@ over the frame: scene × what the clouds let through + their light.
     aren't shaded in its own shader, and dimmed only past a few km the ground near you stood in a
     lighter circle. A fifth is left, so an overcast day doesn't look like night.
   - So is the haze in front of the clouds.
+  - The lit stretches glow with sunlight scattered forward by the haze's particles (Mie,
+    `MIE_B`: white to golden, strongest toward the sun). Otherwise the shafts were just the blue
+    sky showing between the shaded stretches. It only appears where clouds shade some of the air
+    (from 10 % of it), so a clear sky is left as the sky shader draws it (without Mie haze).
   - This gives shafts under broken cloud and a dim world under overcast.
   - Dimming only the first 30 km, or taking that stretch's compressed haze off (`atmo.wgsl
     atRolloff`), left a yellow line along the horizon under overcast.
