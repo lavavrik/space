@@ -70,7 +70,7 @@ export class Game {
   /** Systems around the current one that a jump could reach (with a margin for moving within it). */
   nearby: StarSystem[] = [];
   readonly ship = newShip();
-  readonly power: Power = { solar: 0, shore: 0, cos: 0, shadow: null, sunlit: 1, draw: 0, net: 0, thrustKW: 0, ftlKW: 0, chargeKW: 0, pumpKW: 0, radarKW: 0, lightsKW: 0, shieldKW: 0, guardKW: 0, laserKW: 0, turnKW: 0, electrolysisKW: 0, cryoKW: 0, fcOn: false, fcOffer: 0, fcKW: 0, burn: 0, flux: 0, cap: 0, left: 0, limited: null, curtailed: 0, ftlShort: 0 };
+  readonly power: Power = { solar: 0, shore: 0, cos: 0, shadow: null, sunlit: 1, suns: [], draw: 0, net: 0, thrustKW: 0, ftlKW: 0, chargeKW: 0, pumpKW: 0, radarKW: 0, lightsKW: 0, shieldKW: 0, guardKW: 0, laserKW: 0, turnKW: 0, electrolysisKW: 0, cryoKW: 0, fcOn: false, fcOffer: 0, fcKW: 0, burn: 0, flux: 0, cap: 0, left: 0, limited: null, curtailed: 0, ftlShort: 0 };
   /**
    * One selection at a time: a body or station (target) or a star to jump to (jumpDest). Setting
    * either clears the other. A hyperjump in progress keeps its own destination (jump.dest).

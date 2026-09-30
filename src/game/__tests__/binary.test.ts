@@ -4,6 +4,7 @@ import { mulberry32, rr } from '../lib/rng';
 import { THREE } from '../lib/three';
 import { gravityAt, dominantBody } from '../sim/gravity';
 import { updateBodies } from '../sim/kepler';
+import { sunsAt } from '../sim/starlight';
 import type { CurrentSystem, Star, StarSystem, World } from '../types';
 import { makeCompanion, pairSpec } from '../universe/binary';
 import { homeSystem } from '../universe/galaxy';
@@ -132,6 +133,25 @@ describe('binary stars: orbits', () => {
     expect(bodies.filter((b) => b.kind === 'star')).toHaveLength(1);
     expect(systemAnchor(bodies)).toBe(bodies[0]);
     expect(bodies[0].pos.length()).toBe(0);
+  });
+});
+
+describe('binary stars: light', () => {
+  it("takes the brighter sun as the main light, the other's relative to it", () => {
+    const sys = pairSys(false);
+    const bodies = buildSystem(sys);
+    const [A, B] = bodies as Star[];
+    // beside B, far from A: B is the main light and A a faint second
+    const nearB = B.pos.clone().add(V(0.5 * AU, 0, 0));
+    const s = sunsAt([A, B], nearB);
+    expect(s.s1).toBe(B);
+    expect(s.s2).toBe(A);
+    const k = A.L / A.pos.distanceToSquared(nearB) / (B.L / B.pos.distanceToSquared(nearB));
+    const lumC2 = 0.2126 * s.c2.r + 0.7152 * s.c2.g + 0.0722 * s.c2.b;
+    expect(lumC2 / k).toBeGreaterThan(0.5);
+    expect(lumC2 / k).toBeLessThan(2);
+    // a lone star: no second light
+    expect(sunsAt([A], nearB).s2).toBeNull();
   });
 });
 

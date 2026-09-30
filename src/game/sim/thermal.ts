@@ -160,20 +160,22 @@ export function heatBudget(g: Game, inTunnel: boolean): HeatBudget {
     planetFlux = 0, // W per m² of absorbing hull, averaged over directions
     radStar = 0;
   if (!inTunnel) {
-    const s = cur.star;
-    const toS = s.pos.clone().sub(ship.pos).normalize();
-    if (power.sunlit > 0 && !g.inStation) {
-      star = HULL.absorb * crossSection(g, toS) * power.flux * power.sunlit * S0;
+    // every star's light (a pair's both, docs/binaries.md)
+    for (const sl of power.suns) {
+      if (sl.sunlit <= 0 || g.inStation) continue;
+      const toS = sl.toS;
+      star += HULL.absorb * crossSection(g, toS) * sl.flux * sl.sunlit * S0;
       // the fins lie in the plane of the nose and the top: their faces point along the ship's x axis
       const c = Math.abs(side.set(1, 0, 0).applyQuaternion(ship.q).dot(toS));
-      radStar = RADIATOR_SURFACE.absorb * finFace * c * power.flux * power.sunlit * S0;
+      radStar += RADIATOR_SURFACE.absorb * finFace * c * sl.flux * sl.sunlit * S0;
     }
     for (const b of cur.bodies) {
       if (b.kind === 'star') continue;
       const d = b.pos.distanceTo(ship.pos);
       if (d > b.radius * 30) continue; // view factor (R/d)² under 0.1%: negligible
       const view = (b.radius / d) ** 2;
-      const Fb = s.L * (AU / b.pos.distanceTo(s.pos)) ** 2; // starlight on the body, Earth units
+      let Fb = 0; // starlight on the body, Earth units
+      for (const s of cur.stars) Fb += s.L * (AU / b.pos.distanceTo(s.pos)) ** 2;
       const glow = HULL.emit * SIGMA * bodyTemp(b, Fb) ** 4;
       const reflected = HULL.absorb * 0.5 * b.albedo * Fb * S0; // about half its disc is sunlit
       planetFlux += view * (glow + reflected);
@@ -289,7 +291,8 @@ export function updateThermal(g: Game, dt: number, inTunnel: boolean) {
   alarm('heatDrives', TEMP.drives, `Hull ${TEMP.drives} K · FTL drive and hyperdrive can't be charged`);
   alarm('heatCritical', TEMP.critical, `HULL ${TEMP.critical} K · STRUCTURE WEAKENING · get away from the star`);
   if (T >= TEMP.fail && !ship.dead) {
-    destroyShip(g, `Hull failed at ${TEMP.fail} K · overheated near ${g.cur.star.name}`, g.cur.star);
+    const hot = g.power.suns[0]?.star ?? g.cur.star; // (the brightest: a pair's nearer)
+    destroyShip(g, `Hull failed at ${TEMP.fail} K · overheated near ${hot.name}`, hot);
     ship.temp = TEMP.start;
   }
 }

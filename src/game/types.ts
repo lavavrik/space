@@ -292,6 +292,12 @@ export interface Power {
   shadow: Body | null;
   /** The share of the star's disc the ship sees (sim/eclipse.ts): 1 in full sun, 0 in a total eclipse. */
   sunlit: number;
+  /**
+   * Each star's light at the ship (a pair's both, docs/binaries.md; set by sim/resources.ts
+   * solarPower), the brightest first: direction, flux (Earth units), the share of its disc in view.
+   * `flux`, `sunlit`, `cos` and `shadow` above are the brightest's.
+   */
+  suns: { star: Star; toS: Vec3; flux: number; sunlit: number }[];
   draw: number;
   net: number;
   thrustKW: number;

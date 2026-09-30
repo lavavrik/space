@@ -86,10 +86,13 @@ export function buildInfluences(g: Game): InfluencesView {
   ftl.push(['FTL SPEED LIMIT', `${vmax >= C ? (vmax / C).toFixed(vmax < 10 * C ? 2 : 0) + ' c' : fmtSpeedText(vmax)}${capBody ? ` · set by ${capBody.name}'s well` : ''}`]);
 
   // star, light and fuel
-  const star = g.cur.star;
+  // (the brightest here; a pair's each gets its own starlight row, docs/binaries.md)
+  const star = power.suns[0]?.star ?? g.cur.star;
   const starAlt = ship.pos.distanceTo(star.pos) - star.radius;
   const light: [string, string | Readout][] = [];
-  light.push(['STARLIGHT', `${power.flux.toFixed(power.flux < 10 ? 2 : 0)} × Earth's · ${(ship.pos.distanceTo(star.pos) / AU).toFixed(3)} AU from ${star.name}`]);
+  const fx = (f: number) => f.toFixed(f < 10 ? 2 : 0);
+  if (power.suns.length > 1) for (const s of power.suns) light.push([`STARLIGHT · ${s.star.name.split(' ').pop()}`, `${fx(s.flux)} × Earth's · ${(ship.pos.distanceTo(s.star.pos) / AU).toFixed(3)} AU from ${s.star.name}${s.sunlit < 0.5 ? ' · eclipsed' : ''}`]);
+  else light.push(['STARLIGHT', `${fx(power.flux)} × Earth's · ${(ship.pos.distanceTo(star.pos) / AU).toFixed(3)} AU from ${star.name}`]);
   light.push(['SOLAR POWER', power.shadow ? { text: `none · in ${power.shadow.name}'s shadow`, warn: true } : `${fmtPower(power.solar)} (panels ${Math.round((Math.acos(Math.max(-1, Math.min(1, power.cos))) * 180) / Math.PI)}° off the star)`]);
   const scoopAt = fluxDist(star.L, SCOOP_FLUX_MIN, star.radius) - star.radius;
   const unit = scoopFitted(ship.outfit);

@@ -72,17 +72,33 @@ export function applyThrust(g: Game, T: THREE.Vector3, dt: number) {
  */
 export function solarPower(g: Game) {
   const { ship, power, cur } = g;
-  const s = cur.star;
-  const toS = s.pos.clone().sub(ship.pos);
-  const d = toS.length();
-  toS.divideScalar(d);
-  const worst = { body: null as Body | null };
-  power.sunlit = sunFraction(cur.bodies, s, ship.pos, undefined, worst);
-  power.shadow = power.sunlit < 0.5 ? worst.body : null;
-  power.flux = s.L * (AU / d) ** 2;
-  power.cos = new THREE.Vector3(0, 1, 0).applyQuaternion(ship.q).dot(toS);
-  if (power.shadow || ship.temp >= TEMP.panels) return 0; // too hot: panels feathered edge-on
-  return Math.min(SHIP.solarMax, SHIP.solarRated * power.flux * power.sunlit * Math.max(0, power.cos));
+  // each star's light (a pair's both, docs/binaries.md), the brightest first: it's the one the
+  // readouts (flux, sunlit, the panels' angle, "in X's shadow") are about
+  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(ship.q);
+  let mainShadow: Body | null = null;
+  power.suns = cur.stars
+    .map((s) => {
+      const toS = s.pos.clone().sub(ship.pos);
+      const d = toS.length();
+      toS.divideScalar(d);
+      const worst = { body: null as Body | null };
+      const sunlit = sunFraction(cur.bodies, s, ship.pos, undefined, worst);
+      return { star: s, toS, flux: s.L * (AU / d) ** 2, sunlit, shadow: worst.body };
+    })
+    .sort((a, b) => b.flux - a.flux)
+    .map(({ shadow, ...rest }, i) => {
+      if (i === 0) mainShadow = shadow;
+      return rest;
+    });
+  const main = power.suns[0];
+  power.sunlit = main.sunlit;
+  power.shadow = power.sunlit < 0.5 ? mainShadow : null;
+  power.flux = main.flux;
+  power.cos = up.dot(main.toS);
+  if (ship.temp >= TEMP.panels) return 0; // too hot: panels feathered edge-on
+  let watts = 0;
+  for (const s of power.suns) if (s.sunlit >= 0.5) watts += SHIP.solarRated * s.flux * s.sunlit * Math.max(0, up.dot(s.toS));
+  return Math.min(SHIP.solarMax, watts);
 }
 
 /**

@@ -66,5 +66,6 @@ export function heatDamageRate(T: number) {
 /** Each step: heat wear. */
 export function updateDamage(g: Game, dt: number) {
   const r = heatDamageRate(g.ship.temp);
-  if (r > 0 && dt > 0) hurt(g, r * dt, `Hull failed from heat near ${g.cur.star.name}`, g.cur.star);
+  const hot = g.power.suns[0]?.star ?? g.cur.star; // (the brightest: a pair's nearer)
+  if (r > 0 && dt > 0) hurt(g, r * dt, `Hull failed from heat near ${hot.name}`, hot);
 }

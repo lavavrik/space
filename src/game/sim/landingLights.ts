@@ -20,7 +20,8 @@ export const LAND_KW = 1.2;
 function darkness(g: Game) {
   const b = g.frameBody;
   const up = g.ship.pos.clone().sub(b.pos).normalize();
-  const sunEl = Math.asin(Math.min(1, Math.max(-1, up.dot(g.cur.star.pos.clone().sub(g.ship.pos).normalize()))));
+  // (a pair: the higher of the two, docs/binaries.md)
+  const sunEl = Math.max(...g.cur.stars.map((s) => Math.asin(Math.min(1, Math.max(-1, up.dot(s.pos.clone().sub(g.ship.pos).normalize()))))));
   // (the sun ~5° under the horizon: dark)
   let dark = 1 - Math.min(1, Math.max(0, (sunEl + 0.08) / 0.16));
   const air = b.kind !== 'star' ? atmoOf(b) : null;

@@ -280,7 +280,11 @@ export function update(g: Game, dt: number, realDt = dt) {
   // --- power, fuel, refuelling
   if (ship.sunTrack && !apSteering && !inTunnel && !departing && !g.jump) {
     const up = new THREE.Vector3(0, 1, 0).applyQuaternion(ship.q);
-    const toS = g.cur.star.pos.clone().sub(ship.pos).normalize();
+    // (a pair: toward both, weighted by their light, docs/binaries.md)
+    const toS = new THREE.Vector3();
+    for (const s of g.power.suns) toS.addScaledVector(s.toS, s.flux * s.sunlit);
+    if (toS.lengthSq() === 0) toS.subVectors(g.cur.star.pos, ship.pos);
+    toS.normalize();
     const dq = new THREE.Quaternion().setFromUnitVectors(up, toS);
     ship.q.slerp(dq.multiply(ship.q), Math.min(1, 1.2 * dt)).normalize();
   }
