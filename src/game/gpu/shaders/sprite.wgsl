@@ -5,6 +5,10 @@
 
 const MIN_PX: f32 = 1.5;
 
+// the scene's depth, for sprites drawn after the volumetric clouds are laid over the frame (into the
+// resolved frame, with no depth attachment: tested here by hand; gpu/particles.ts drawOver)
+@group(2) @binding(0) var sceneDepth: texture_depth_multisampled_2d;
+
 struct SpriteOut {
   @builtin(position) pos: vec4f,
   @location(0) uv: vec2f,   // −1…1 across, −1…1 along (streaks)
@@ -50,4 +54,10 @@ fn spriteLight(in: SpriteOut) -> vec4f {
   var a = exp(-r * r * 3.5) * (1.0 - smoothstep(0.8, 1.0, r)) * (1.0 - smoothstep(0.7, 1.0, abs(in.uv.y)) * 0.6);
   if (in.w < 3.0) { a = 0.6; } // (a couple of pixels: a soft profile would only show its dim edge)
   return vec4f(in.col * a, 0.0); // (alpha 0: out of the exposure meter)
+}
+
+// spriteLight, hidden behind the scene (reversed Z: the scene's depth bigger is nearer)
+fn spriteLightOver(in: SpriteOut) -> vec4f {
+  if (in.pos.z < textureLoad(sceneDepth, vec2i(in.pos.xy), 0)) { discard; }
+  return spriteLight(in);
 }

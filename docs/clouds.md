@@ -17,7 +17,10 @@ ways:
 A compute pass after the scene, at half the frame's resolution (at most 0.4 MP), marches each
 pixel's ray through the cloud layer (0.4 to 1.05 deck heights up) in 48 steps, stopping at the
 scene's depth (so mountains and stations poke through) or 250 km out. The tone map lays the result
-over the frame: scene × what the clouds let through + their light.
+over the frame (scene × what the clouds let through + their light) in their own pass on the resolved
+frame. The particles (plasma, exhaust, dust) are drawn after that, over them, depth-tested by hand
+against the scene: drawn in the scene, the clouds went over them too, and plasma streaming past the
+hull showed dimly, as if beyond the clouds. Bloom and the lens flare see the clouds.
 
 - **Cover:** Earth-like and ocean worlds are clouded over most of their face (`clouds.wgsl
   cloudCover`: from a raw −0.2, not 0.02 as the others), with clear stretches between systems;

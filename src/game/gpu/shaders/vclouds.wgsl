@@ -95,10 +95,12 @@ fn hg(c: f32, g: f32) -> f32 {
   return (1.0 - g * g) / (d * sqrt(d)); // × 4π: 1 on average
 }
 
-// how much sunlight reaches camera-relative point P (below the deck) through the clouds above it
+// how much sunlight reaches camera-relative point P (below the deck or in it) through the clouds
+// above it (in the layer the march starts at P: it counted as clear there, and the ground under
+// you brightened as you rose into the clouds)
 fn sunThrough(P: vec3f, L: vec3f) -> f32 {
   let Cp = world.atC.xyz - P;
-  let a = sphereSpan(L, Cp, rBot).y;
+  let a = select(sphereSpan(L, Cp, rBot).y, 0.0, length(Cp) >= rBot);
   let b = sphereSpan(L, Cp, rTop).y;
   if (b <= a || a < 0.0) { return 1.0; }
   var od = 0.0;
@@ -153,17 +155,19 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   t1 = min(t1, t0 + MAX_DIST);
   let L = normalize(world.light.xyz);
   let j = fract(52.9829189 * fract(dot(vec2f(px) + vp.frameN * 5.588238, vec2f(0.06711056, 0.00583715))));
-  // light shafts (below the deck): the haze along the ray, less where the clouds shade the air
+  // light shafts (below the deck, or in it): the haze along the ray, less where the clouds shade
+  // the air (in the deck too: skipped there, the sea below brightened as you rose into the clouds;
+  // it fades out toward the deck's top, where the view down is through the clouds themselves)
   var skyDim = 1.0;
   var rays = vec3f(0.0);
-  if (camR < rBot && world.atOn > 0.5) {
+  if (camR < rTop && world.atOn > 0.5) {
     // the air under the deck along the ray: to the ground or to the cloud base (toward the horizon
     // ~200 km); the shade is sampled over its first 30 km and taken for all of it (only the first
     // 30 km were dimmed, and the rest, reddened by its long path, glowed as a yellow band along the
     // horizon under overcast)
     var tFull = atSpan(dir).y;
     if (d > 0.0) { tFull = min(tFull, vp.near / d / max(dot(dir, -normalize(frame.camRot[2].xyz)), 1e-4)); }
-    if (bot.y > 0.0) { tFull = min(tFull, bot.y); }
+    if (camR < rBot && bot.y > 0.0) { tFull = min(tFull, bot.y); }
     let tEnd = min(tFull, 30000.0);
     var shade = 0.0;
     var wsum = 0.0;
@@ -187,6 +191,9 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     // reflection aren't shaded by the clouds in its own shader; faded in with distance, the ground
     // near you stood in a lighter circle)
     skyDim = 1.0 - 0.8 * shade / max(wsum, 1e-6); // (a fifth left: an overcast day, not night)
+    let fade = smoothstep(mix(rBot, rTop, 0.6), rTop, camR);
+    skyDim = mix(skyDim, 1.0, fade);
+    rays *= 1.0 - fade;
   }
   // (a ray that misses the layer marches nothing, but still goes through the blend below)
   let steps = select(0, STEPS, t1 > t0);

@@ -67,6 +67,10 @@ export class Particles {
   private readonly fieldData = new Float32Array(MAX_FIELDS * 20);
   private readonly fieldGroup: GPUBindGroup;
   private readonly fieldPipe: GPURenderPipeline;
+  private readonly drawOverPipe: GPURenderPipeline;
+  private readonly fieldOverPipe: GPURenderPipeline;
+  private readonly depthLayout: GPUBindGroupLayout;
+  private depthGroup: GPUBindGroup | null = null;
   private emitters: Emitter[] = [];
   private fields: Field[] = [];
   private readonly carry = new Map<string, number>();
@@ -122,6 +126,16 @@ export class Particles {
     this.spawnPipe = device.createComputePipeline({ label: 'particles spawn', layout: cpl, compute: { module: mod, entryPoint: 'spawn' } });
     this.simPipe = device.createComputePipeline({ label: 'particles simulate', layout: cpl, compute: { module: mod, entryPoint: 'simulate' } });
     const tested: GPUDepthStencilState = { format: DEPTH_FORMAT, depthWriteEnabled: false, depthCompare: 'greater' };
+    // the same, drawn after the volumetric clouds into the resolved frame (drawOver): one sample, the
+    // scene's depth read by hand
+    this.depthLayout = device.createBindGroupLayout({ entries: [{ binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'depth', multisampled: true } }] });
+    const over = (label: string, module: GPUShaderModule, groupLayout: GPUBindGroupLayout) =>
+      device.createRenderPipeline({
+        label,
+        layout: device.createPipelineLayout({ bindGroupLayouts: [frameLayout, groupLayout, this.depthLayout] }),
+        vertex: { module, entryPoint: 'vs' },
+        fragment: { module, entryPoint: 'fsOver', targets: [{ format: HDR_FORMAT, blend: blendAdd }] },
+      });
     this.drawPipe = device.createRenderPipeline({
       label: 'particles',
       layout: device.createPipelineLayout({ bindGroupLayouts: [frameLayout, drawLayout] }),
@@ -130,6 +144,7 @@ export class Particles {
       depthStencil: tested,
       multisample: { count: SAMPLES },
     });
+    this.drawOverPipe = over('particles over clouds', mod, drawLayout);
     // fields
     this.fieldBuf = device.createBuffer({ label: 'fields', size: this.fieldData.byteLength, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     const fieldLayout = device.createBindGroupLayout({ entries: [{ binding: 0, visibility: VS, buffer: { type: 'uniform' } }] });
@@ -143,6 +158,12 @@ export class Particles {
       depthStencil: tested,
       multisample: { count: SAMPLES },
     });
+    this.fieldOverPipe = over('fields over clouds', fmod, fieldLayout);
+  }
+
+  /** The scene's depth (a new frame size), for drawOver. */
+  setDepth(depth: GPUTexture) {
+    this.depthGroup = this.device.createBindGroup({ layout: this.depthLayout, entries: [{ binding: 0, resource: depth.createView() }] });
   }
 
   /** Start a frame's list of emitters and fields. */
@@ -217,15 +238,24 @@ export class Particles {
     pass.end();
   }
 
-  /** Transparent, added light: the living particles, then the fields. */
-  draw(pass: GPURenderPassEncoder) {
+  /**
+   * Transparent, added light: the living particles, then the fields. In the scene pass (`over`
+   * false), or with volumetric clouds, after they're laid over the frame (into the resolved frame,
+   * `over` true): drawn in the scene, the clouds went over them too, and plasma streaming past the
+   * hull showed only dimly, as if beyond the clouds.
+   */
+  draw(pass: GPURenderPassEncoder, over = false) {
+    if (over) {
+      if (!this.depthGroup) return;
+      pass.setBindGroup(2, this.depthGroup);
+    }
     if (this.live) {
-      pass.setPipeline(this.drawPipe);
+      pass.setPipeline(over ? this.drawOverPipe : this.drawPipe);
       pass.setBindGroup(1, this.drawGroup);
       pass.drawIndirect(this.args, 0);
     }
     if (this.fields.length) {
-      pass.setPipeline(this.fieldPipe);
+      pass.setPipeline(over ? this.fieldOverPipe : this.fieldPipe);
       pass.setBindGroup(1, this.fieldGroup);
       this.fields.forEach((fl, k) => pass.draw(6, fl.count, 0, k << 20));
     }

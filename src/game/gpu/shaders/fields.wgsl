@@ -67,3 +67,9 @@ fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> Sprit
 fn fs(in: SpriteOut) -> @location(0) vec4f {
   return spriteLight(in);
 }
+
+// after the volumetric clouds (gpu/particles.ts drawOver)
+@fragment
+fn fsOver(in: SpriteOut) -> @location(0) vec4f {
+  return spriteLightOver(in);
+}

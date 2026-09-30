@@ -1,10 +1,34 @@
 /**
  * Volumetric clouds (docs/clouds.md; vclouds.wgsl): a half-resolution (at most MAX_PIXELS) compute pass over the frame,
- * after the scene (it reads the scene's depth), for the one clouded world you're near. The tone map
- * lays its result over the frame (scene × transmittance + cloud light).
+ * after the scene (it reads the scene's depth), for the one clouded world you're near. `composite`
+ * then lays its result over the resolved frame (scene × transmittance + cloud light), before the
+ * particles are drawn over that (gpu/particles.ts drawOver), the bloom and the tone map.
  */
 import { THREE } from '../lib/three';
 import { VCLOUDS_WGSL } from './shaders';
+
+/** Laying the result over the frame: frame × a + rgb (a blend), filtered over four bilinear taps. */
+const COMPOSITE_WGSL = /* wgsl */ `
+@group(0) @binding(0) var clouds: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+struct V { @builtin(position) pos: vec4f, @location(0) uv: vec2f }
+@vertex
+fn vs(@builtin(vertex_index) i: u32) -> V {
+  let p = vec2f(f32((i << 1u) & 2u), f32(i & 2u));
+  var o: V;
+  o.pos = vec4f(p * 2.0 - 1.0, 0.0, 1.0);
+  o.uv = vec2f(p.x, 1.0 - p.y);
+  return o;
+}
+@fragment
+fn fs(in: V) -> @location(0) vec4f {
+  // (a soft 4 × 4 half-res texel filter: what's left of the march's jitter after the temporal blend
+  // would show as static inside the clouds)
+  let ct = 0.75 / vec2f(textureDimensions(clouds));
+  let uv = in.uv;
+  return 0.25 * (textureSampleLevel(clouds, samp, uv + vec2f(-ct.x, -ct.y), 0.0) + textureSampleLevel(clouds, samp, uv + vec2f(ct.x, -ct.y), 0.0) + textureSampleLevel(clouds, samp, uv + vec2f(-ct.x, ct.y), 0.0) + textureSampleLevel(clouds, samp, uv + vec2f(ct.x, ct.y), 0.0));
+}
+`;
 
 /** vclouds.wgsl VParams: a mat4, a vec4, 8 floats. */
 const PARAM_BYTES = 64 + 16 + 32;
@@ -19,6 +43,8 @@ export class VolumetricClouds {
   /** Ping-pong: this frame's result and last frame's (the history it's blended with). */
   private tex: GPUTexture[] = [];
   private groups: GPUBindGroup[] = [];
+  private readonly compPipe: GPURenderPipeline;
+  private compGroups: GPUBindGroup[] = [];
   private cur = 0;
   private readonly samp: GPUSampler;
   /** Last frame's view-projection and camera position (doubles), for the reprojection. */
@@ -59,6 +85,14 @@ export class VolumetricClouds {
       layout: device.createPipelineLayout({ bindGroupLayouts: [frameLayout, worldLayout, this.layout] }),
       compute: { module: device.createShaderModule({ label: 'volumetric clouds', code: VCLOUDS_WGSL }), entryPoint: 'main' },
     });
+    const cm = device.createShaderModule({ label: 'clouds composite', code: COMPOSITE_WGSL });
+    this.compPipe = device.createRenderPipeline({
+      label: 'clouds composite',
+      layout: 'auto',
+      vertex: { module: cm, entryPoint: 'vs' },
+      // frame × a + rgb
+      fragment: { module: cm, entryPoint: 'fs', targets: [{ format: 'rgba16float', blend: { color: { srcFactor: 'one', dstFactor: 'src-alpha' }, alpha: { srcFactor: 'zero', dstFactor: 'one' } } }] },
+    });
     this.params = device.createBuffer({ label: 'volumetric clouds', size: PARAM_BYTES, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
   }
 
@@ -83,7 +117,23 @@ export class VolumetricClouds {
         ],
       }),
     );
+    this.compGroups = [0, 1].map((k) =>
+      this.device.createBindGroup({
+        layout: this.compPipe.getBindGroupLayout(0),
+        entries: [
+          { binding: 0, resource: this.tex[k].createView() },
+          { binding: 1, resource: this.samp },
+        ],
+      }),
+    );
     this.hasPrev = false;
+  }
+
+  /** Lay this frame's clouds over the frame (a pass on the resolved frame, after dispatch). */
+  composite(pass: GPURenderPassEncoder) {
+    pass.setPipeline(this.compPipe);
+    pass.setBindGroup(0, this.compGroups[this.cur]);
+    pass.draw(3);
   }
 
   /** This frame's result (rgb: the clouds' light, a: what they let through), for the tone map; `k`: which of the two. */

@@ -189,6 +189,7 @@ export class GpuRenderer implements GameRenderer {
     // (the depth is read after the scene by the volumetric clouds)
     this.depth = this.device.createTexture({ label: 'depth', size, format: DEPTH_FORMAT, sampleCount: SAMPLES, usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
     this.vclouds.resize(this.depth, this.W, this.H);
+    this.particles.setDepth(this.depth);
     // one per volumetric-cloud texture (they ping-pong)
     this.bloom.resize(this.resolved, this.W, this.H);
     const bl = this.bloom.views;
@@ -279,7 +280,8 @@ export class GpuRenderer implements GameRenderer {
       depthView = this.depth.createView();
     // volumetric clouds near a clouded world (they read the scene's depth, so it's kept)
     const clouds = !inTunnel && this.worlds.vcOn > 0;
-    device.queue.writeBuffer(this.toneBuf, 0, postParams(g, this.vp, clouds, this.CW, this.CH));
+    // (the clouds are laid over the frame in their own pass, before the particles, not by the tone map)
+    device.queue.writeBuffer(this.toneBuf, 0, postParams(g, this.vp, false, this.CW, this.CH));
     const scene = (label: string, first: boolean, last: boolean, draw: (pass: GPURenderPassEncoder) => void) => {
       const pass = enc.beginRenderPass({
         label,
@@ -301,7 +303,7 @@ export class GpuRenderer implements GameRenderer {
       this.worlds.drawTransparent(pass, (p) => {
         this.stations.drawTransparent(p);
         this.fx.drawTransparent(p);
-        this.particles.draw(p);
+        if (!clouds) this.particles.draw(p);
       });
     if (inTunnel)
       scene('hyperspace', true, true, (pass) => {
@@ -323,6 +325,15 @@ export class GpuRenderer implements GameRenderer {
         transparent(pass);
       });
     this.vclouds.dispatch(enc, this.frameGroup, clouds ? this.worlds.vcGroup : null, this.worlds.vcOn, this.vp, this.worlds.vcRel, this.worlds.vcQ, tw);
+    if (clouds) {
+      // the clouds over the frame, then the particles over them (they're near: plasma, exhaust)
+      const over = enc.beginRenderPass({ label: 'clouds over', colorAttachments: [{ view: this.resolved.createView(), loadOp: 'load', storeOp: 'store' }] });
+      over.setBindGroup(0, this.frameGroup);
+      this.vclouds.composite(over);
+      over.setBindGroup(0, this.frameGroup);
+      this.particles.draw(over, true);
+      over.end();
+    }
     if (AUTO_EXPOSURE) this.meter.encode(enc, e);
 
     this.bloom.render(enc, tw);
