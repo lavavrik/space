@@ -28,7 +28,7 @@ struct VParams {
   frameN: f32,     // frame counter (the start jitter moves)
   near: f32,       // the projection's near plane (depth = near / distance along the view axis)
   scale: f32,      // frame pixels per march pixel
-  _p1: f32,
+  lift: f32,       // how far the layer's lifted over the high ground under you (m; see liftAt)
   _p2: f32,
 }
 @group(2) @binding(0) var sceneDepth: texture_depth_multisampled_2d;
@@ -38,6 +38,9 @@ struct VParams {
 @group(2) @binding(4) var histSamp: sampler;
 
 const STEPS: i32 = 48;
+/** Inside the layer: more steps over a shorter reach (48 over 250 km banded the clouds across a gap). */
+const STEPS_IN: i32 = 64;
+const MAX_DIST_IN: f32 = 100000.0;
 const SUN_STEPS: i32 = 5;
 /** The haze's particles' scattering at ground density (1/m, grey): the god rays' light. */
 const MIE_B: f32 = 6e-6;
@@ -47,10 +50,21 @@ const MAX_DIST: f32 = 250000.0;
 var<private> rBot: f32;
 var<private> rTop: f32;
 
+// The layer is lifted over high ground near you (vp.lift: enough for its base to clear the ground
+// under you by ~1.2 km), fading back to its own height 30–80 km away: it doesn't know the terrain,
+// and over a plateau or in the mountains it sat on the ground. (Distant peaks can still rise
+// into it, as mountains do.)
+fn liftAt(P: vec3f) -> f32 {
+  if (vp.lift <= 0.0) { return 0.0; }
+  let up = normalize(-world.atC.xyz);
+  let hd = length(P - up * dot(P, up));
+  return vp.lift * (1.0 - smoothstep(30000.0, 80000.0, hd));
+}
+
 // (0…1) cloud density at a camera-relative point
 fn density(P: vec3f) -> f32 {
   let Pc = P - world.atC.xyz;
-  let r = length(Pc);
+  let r = length(Pc) - liftAt(P);
   let h = (r - rBot) / (rTop - rBot);
   if (h <= 0.0 || h >= 1.0) { return 0.0; }
   // in the weather's own turning frame (clouds.wgsl cloudDir): the cover and all its shapes blow along
@@ -156,7 +170,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   rTop = world.radius + world.cloudH * 1.05;
   // the segment of the ray inside the layer (the near one)
   let camR = length(C);
-  let top = sphereSpan(dir, C, rTop);
+  let top = sphereSpan(dir, C, rTop + vp.lift); // (the lifted layer's top: the march must reach it)
   let bot = sphereSpan(dir, C, rBot);
   var t0 = 0.0;
   var t1 = 0.0;
@@ -178,7 +192,8 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     sceneT = vp.near / d / max(dot(dir, fwd), 1e-4);
     t1 = min(t1, sceneT);
   }
-  t1 = min(t1, t0 + MAX_DIST);
+  let inLayer = camR >= rBot && camR < rTop + vp.lift;
+  t1 = min(t1, t0 + select(MAX_DIST, MAX_DIST_IN, inLayer));
   let L = normalize(world.light.xyz);
   let j = fract(52.9829189 * fract(dot(vec2f(px) + vp.frameN * 5.588238, vec2f(0.06711056, 0.00583715))));
   // light shafts (below the deck, or in it): the haze along the ray, less where the clouds shade
@@ -233,7 +248,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   // ray from high up through a few km of layer takes ~12, not 48: from 300 km a screen full of
   // clouds cost so much that the dynamic resolution dropped to half. (A ray that misses the layer
   // marches nothing, but still goes through the blend below.)
-  let steps = select(0, clamp(i32(ceil(2.0 * span / max(150.0, 0.004 * t0))), 12, STEPS), t1 > t0);
+  let steps = select(0, clamp(i32(ceil(2.0 * span / max(150.0, 0.004 * t0))), 12, select(STEPS, STEPS_IN, inLayer)), t1 > t0);
   let sunSteps = select(SUN_STEPS, 3, t0 > 50000.0);
   // (the start is jittered: banding becomes fine grain, averaged out over frames.) Steps are spaced
   // quadratically, fine near the camera and coarse far off: evenly, a ray skimming the layer 250 km
@@ -334,7 +349,10 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     if (q.w > 0.0) {
       let uv = vec2f(q.x / q.w * 0.5 + 0.5, 0.5 - q.y / q.w * 0.5);
       if (uv.x > 0.0 && uv.y > 0.0 && uv.x < 1.0 && uv.y < 1.0) {
-        res = mix(textureSampleLevel(history, histSamp, uv, 0.0), res, 0.2);
+        // (where last frame's differs a lot in what shows through, it was something else there, a
+        // cloud's edge that's since moved across: this frame's counts for more, or it trailed ghosts)
+        let hist = textureSampleLevel(history, histSamp, uv, 0.0);
+        res = mix(hist, res, mix(0.2, 0.6, smoothstep(0.25, 0.6, abs(hist.a - res.a))));
       }
     }
   }

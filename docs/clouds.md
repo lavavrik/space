@@ -54,6 +54,13 @@ hull showed dimly, as if beyond the clouds. Bloom and the lens flare see the clo
   once slower, round a tilted axis and from another part of the map. The two slide past each other,
   so weather systems grow, merge and die away over hours. Swells evolve over ~an hour, clumps and
   towers over ~15 min, the finest detail over a few minutes.
+- **Over high ground:** the layer doesn't know the terrain, so near you it's lifted enough for its
+  base to clear the ground under you by ~1.2 km (`liftAt`, `vp.lift`), fading back to its own
+  height 30–80 km away. Over a plateau or in mountains it sat on the ground. Distant peaks can
+  still rise into it.
+- **Inside the layer:** 64 steps over at most 100 km (48 over 250 km banded the clouds across a
+  gap). The blend with last frame's result trusts this frame more (0.2 → 0.6) where the two differ
+  a lot in what shows through: a cloud edge moved across, and the old one trailed as a ghost.
 - **Wind:** the weather turns round the world's axis 2.5 × 10⁻⁶ rad/s faster than the ground (~16 m/s
   at an Earth's equator; `clouds.wgsl cloudDir`, `sim/clouds.ts CLOUD_WIND`). The deck, the
   volumetric clouds and their shadows on the ground all read the cloud map through it, so they move

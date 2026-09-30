@@ -101,6 +101,9 @@ export function railsStep(g: Game, dt: number) {
       rel.subVectors(ship.pos, lb.pos).applyAxisAngle(lb.axis, ang);
       ship.pos.addVectors(lb.pos, rel);
       ship.q.premultiply(qSpin.setFromAxisAngle(lb.axis, ang));
+      // and moving with the ground where it is now: the velocity kept its old heading, and back at
+      // ×1 the ship slid off the turned ground and flew up ~80 m before it settled
+      ship.vel.copy(lb.axis).multiplyScalar(lb.spin).cross(rel).add(lb.vel).sub(g.frameBody.vel);
     }
     return;
   }

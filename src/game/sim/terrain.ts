@@ -25,10 +25,13 @@ import { THREE } from '../lib/three';
 import type { Body, World } from '../types';
 
 /** Relief amplitude by world type, as a fraction of the radius. With mountain ranges h reaches
- * ~2.5 at the very highest peaks, so an Earth-sized world tops out near 12 km and a Moon-sized
- * rocky one near 6 km, under the lowest safe orbit (orbits.ts minOrbitAlt: 0.5% of the radius for
- * airless worlds). Rocky, desert, Earth-like, ocean, volcanic, icy; giants none. */
-export const RELIEF = [0.0015, 0.0012, 0.0008, 0.0006, 0.0015, 0.001, 0, 0];
+ * ~2.5 at the very highest peaks, so a Moon-sized rocky world tops out near 6 km, under the lowest
+ * safe orbit (orbits.ts minOrbitAlt: 0.5% of the radius for airless worlds). Worlds with air (their
+ * orbits are above it anyway) got ~40 % more: Earth-like 0.0008 → 0.0011, ocean 0.0006 → 0.00085,
+ * desert 0.0012 → 0.0015 (the land read as rolling hills); an Earth-sized one now peaks near
+ * 17 km. Scaled, the coasts stay where they were (the sea is at h = sea level either way). Rocky,
+ * desert, Earth-like, ocean, volcanic, icy; giants none. */
+export const RELIEF = [0.0015, 0.0015, 0.0011, 0.00085, 0.0015, 0.001, 0, 0];
 /** Continents: each octave's weight against the one before; mountains (terrain.glsl has the same). */
 const TERR_GAIN = 0.55,
   MTN_FROM = 3,

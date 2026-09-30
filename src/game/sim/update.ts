@@ -39,6 +39,8 @@ import { updateWrecks } from './wreck';
 /** A turn asked for (rad/s) above this cancels sun tracking (below: jitter, a turn coasting down). */
 const STEER_CANCEL = 0.05;
 
+const tmpUp = new THREE.Vector3(),
+  tmpNose = new THREE.Vector3();
 const qa = new THREE.Quaternion();
 const AX = new THREE.Vector3(1, 0, 0),
   AY = new THREE.Vector3(0, 1, 0),
@@ -153,6 +155,18 @@ export function update(g: Game, dt: number, realDt = dt) {
     // (something else turned the ship since steering last did: the pivot, an autopilot, docking...)
     const turnedElsewhere = !ship.q.equals(g.steerQ);
     ship.q.multiply(qa.setFromAxisAngle(AY, yaw)).multiply(qa.setFromAxisAngle(AX, pitch)).multiply(qa.setFromAxisAngle(AZ, roll)).normalize();
+    // landed: the nose goes no lower than the horizon (it turned down into the ground). Past it, it's
+    // turned back up, and the pitch that took it there stops
+    if (ship.landed) {
+      const up = tmpUp.subVectors(ship.pos, ship.landed.pos).normalize();
+      const nose = tmpNose.set(0, 0, -1).applyQuaternion(ship.q);
+      const below = -nose.dot(up);
+      if (below > 0) {
+        const axis = nose.clone().cross(up);
+        if (axis.lengthSq() > 1e-12) ship.q.premultiply(qa.setFromAxisAngle(axis.normalize(), Math.asin(Math.min(1, below)))).normalize();
+        if (av.x < 0) av.x = 0;
+      }
+    }
     // (something else turning the ship takes over its turn; a roll under way moves the reference)
     if (turnedElsewhere) av.set(0, 0, 0);
     if (av.z !== 0 || turnedElsewhere || !g.steerUp) g.steerUp = new THREE.Vector3(0, 1, 0).applyQuaternion(ship.q);

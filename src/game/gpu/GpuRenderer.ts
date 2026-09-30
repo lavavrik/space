@@ -328,7 +328,7 @@ export class GpuRenderer implements GameRenderer {
         craft(pass);
         transparent(pass);
       });
-    this.vclouds.dispatch(enc, this.frameGroup, clouds ? this.worlds.vcGroup : null, this.worlds.vcOn, this.vp, this.worlds.vcRel, this.worlds.vcQ, tw);
+    this.vclouds.dispatch(enc, this.frameGroup, clouds ? this.worlds.vcGroup : null, this.worlds.vcOn, this.vp, this.worlds.vcRel, this.worlds.vcQ, this.worlds.vcLift, tw);
     if (clouds) {
       // the clouds over the frame, then the particles over them (they're near: plasma, exhaust)
       const over = enc.beginRenderPass({ label: 'clouds over', colorAttachments: [{ view: this.resolved.createView(), loadOp: 'load', storeOp: 'store' }] });

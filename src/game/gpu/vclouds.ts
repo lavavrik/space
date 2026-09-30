@@ -149,9 +149,10 @@ export class VolumetricClouds {
   /**
    * March the clouds of the world bound by `worldGroup`, faded in by `on` (0: skip); `vp` is this
    * frame's view-projection, `rel` the world's centre (camera-relative) and `q` its turn: for next
-   * frame's reprojection, which follows the clouds as they turn and orbit with their world.
+   * frame's reprojection, which follows the clouds as they turn and orbit with their world. `lift`
+   * (m): the layer raised over the high ground under you (vclouds.wgsl liftAt).
    */
-  dispatch(enc: GPUCommandEncoder, frameGroup: GPUBindGroup, worldGroup: GPUBindGroup | null, on: number, vp: THREE.Matrix4, rel: THREE.Vector3, q: THREE.Quaternion, tw: (label: string) => GPUComputePassTimestampWrites | undefined) {
+  dispatch(enc: GPUCommandEncoder, frameGroup: GPUBindGroup, worldGroup: GPUBindGroup | null, on: number, vp: THREE.Matrix4, rel: THREE.Vector3, q: THREE.Quaternion, lift: number, tw: (label: string) => GPUComputePassTimestampWrites | undefined) {
     if (!worldGroup || on <= 0 || !this.groups.length) {
       this.hasPrev = false;
       return;
@@ -167,7 +168,7 @@ export class VolumetricClouds {
     this.reproj.premultiply(this.tmpM.fromArray(this.prevVP));
     d.set(this.reproj.elements, 0);
     d.set([0, 0, 0, this.hasPrev ? 1 : 0], 16);
-    d.set([this.w, this.h, on, this.n++, this.near, this.scale], 20);
+    d.set([this.w, this.h, on, this.n++, this.near, this.scale, lift, 0], 20);
     this.device.queue.writeBuffer(this.params, 0, d);
     this.prevVP.set(vp.elements);
     this.prevRel.copy(rel);

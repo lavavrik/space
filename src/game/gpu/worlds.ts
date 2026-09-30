@@ -17,7 +17,7 @@ import { airBeta, CLOUD_H, TERRAIN_NEAR, TERRAIN_PX } from '../render/look';
 import { CITY_K } from '../render/exposure';
 import { atmoOf } from '../sim/atmosphere';
 import { populated } from '../sim/population';
-import { hasCraters, reliefAmp, terrainOffsets, worldQuat } from '../sim/terrain';
+import { hasCraters, reliefAmp, surfaceRadius, terrainOffsets, worldQuat } from '../sim/terrain';
 import { occludersOf } from '../sim/eclipse';
 import type { Body, CurrentSystem, Star, World } from '../types';
 import { ATMO_WGSL, CLOUD_BAKE_WGSL, CLOUD_WGSL, DOTS_WGSL, PLANET_WGSL, RING_WGSL, STAR_WGSL, TERRAIN_BAKE_WGSL } from './shaders';
@@ -437,6 +437,7 @@ export class WorldsLayer {
     this.dotCount = 0;
     this.vcOn = 0;
     this.vcGroup = null;
+    this.vcLift = 0;
     let ringDone = false;
     this.rocks.off();
     for (const w of this.worlds) {
@@ -478,6 +479,9 @@ export class WorldsLayer {
         this.vcGroup = w.group;
         this.vcRel.copy(rel);
         this.vcQ.copy(wq);
+        // the ground under you, if it's high: the cloud base (0.4 deck heights) kept ~1.2 km over it
+        const ground = surfaceRadius(b, ship.pos) - b.radius;
+        this.vcLift = Math.max(0, ground + 1200 - 0.4 * deckH);
       }
       // up close, LOD terrain replaces the sphere: big on screen and actually close (render/look.ts)
       w.terrOn = !!w.terrain && pxR > TERRAIN_PX && d < b.radius * TERRAIN_NEAR;
@@ -532,6 +536,8 @@ export class WorldsLayer {
   /** …and where that world is (camera-relative) and how it's turned: the clouds move with it. */
   readonly vcRel = new THREE.Vector3();
   readonly vcQ = new THREE.Quaternion();
+  /** …and how far its clouds are lifted over the ground under you (m; vclouds.wgsl liftAt). */
+  vcLift = 0;
 
   /** The stars' share of the exposure (render/exposure.ts STAR_EXP_P): planets' dots follow it. */
   starExp = 1;

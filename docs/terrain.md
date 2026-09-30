@@ -101,3 +101,13 @@ ground, and are drawn by the planet shader on both the far sphere and the terrai
   They draw 1.2 kW and say "Landing lights on/off" when they switch.
 - The star's lens flare is off while a world hides the star: it reads the frame at the star, and
   there the ground lit by the landing lights flared.
+
+## Landed
+
+- The nose goes no lower than the horizon while you're on the ground: past it, it's turned back up
+  and the pitch stops (`sim/update.ts`).
+- Under time warp a landed ship turns with the world (`sim/timewarp.ts railsStep`). Its velocity now
+  turns with it too, matching the ground where it is. Before, it kept its old heading, and back at
+  ×1 the ship slid off the turned ground and flew up ~80 m.
+- Relief on worlds with air is ~40 % more than it was (`RELIEF`): Earth-like 0.0011 of the
+  radius, ocean 0.00085, desert 0.0015. Scaling it leaves the coasts where they were.
