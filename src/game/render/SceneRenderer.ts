@@ -66,9 +66,9 @@ export function airBeta(b: World) {
 
 const MAXDOTS = 256;
 /** Apparent radius (px) above which a world with relief is drawn as LOD terrain instead of a sphere. */
-const TERRAIN_PX = 200;
+export const TERRAIN_PX = 200;
 /** …and only within this many radii of its centre (without the periscope it turns on at ~7). */
-const TERRAIN_NEAR = 10;
+export const TERRAIN_NEAR = 10;
 /** Face size of the baked Milky Way cube map (6 × 1024² × 4 bytes ≈ 25 MB of GPU memory). */
 const SKY_CUBE_SIZE = 1024;
 /** ms a new periscope sky patch takes to fade in over the last one (also the least time between bakes). */

@@ -242,6 +242,7 @@ export class GpuRenderer implements GameRenderer {
     this.worlds.update(g);
 
     const enc = device.createCommandEncoder({ label: 'frame' });
+    this.worlds.bake(enc, this.frameGroup);
     const pass = enc.beginRenderPass({
       label: 'scene',
       colorAttachments: [{ view: this.hdr.createView(), resolveTarget: this.resolved.createView(), loadOp: 'clear', storeOp: 'discard', clearValue: [0, 0, 0, 1] }],

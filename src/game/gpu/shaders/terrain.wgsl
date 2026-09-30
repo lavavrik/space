@@ -20,11 +20,11 @@ var<private> tOffDir: vec3f;  // the point's direction minus the chunk centre's 
 var<private> tUseOff: bool = false;
 
 fn terrQ(d: vec3f, i: i32, k: f32) -> vec3f {
-  if (tUseOff) { return world.qn[i].xyz + tOffDir * k; }
+  if (tUseOff) { return chunk.qn[i].xyz + tOffDir * k; }
   return d * k + world.tOff[i].xyz;
 }
 fn terrQC(d: vec3f, i: i32, k: f32) -> vec3f {
-  if (tUseOff) { return world.qc[i].xyz + tOffDir * k; }
+  if (tUseOff) { return chunk.qc[i].xyz + tOffDir * k; }
   return d * k + world.tOff[i].xyz;
 }
 

@@ -66,7 +66,10 @@ Both renderers live side by side until WebGPU matches WebGL: the game stays play
   - The GLSL includes (noise3d, terrain, atmo, clouds, city) are WGSL parts; per-world uniforms are one `World` block (world.wgsl).
   - Checked against WebGL for an Earth-like world from orbit, the star and a ringed giant: matching.
   - Not yet: the auto-exposure (phase 7; exposure stays 1), the ring's near fade (it comes with the rocks, phase 4).
-- [ ] 3. Terrain · [ ] 4. Ring belt · [ ] 5. Stations · [ ] 6. Ships and effects · [ ] 7. Auto-exposure, timings, remove WebGL
+- [x] **3. Terrain** (`gpu/terrain.ts`): the cube-sphere quadtree of chunks as in WebGL, baked by a
+  compute shader (terrainBake.wgsl) into a storage buffer per chunk that the vertex shader reads;
+  index, grid and skirt buffers shared by every chunk. Checked on a cratered moon from 4 km up.
+- [ ] [ ] 4. Ring belt · [ ] 5. Stations · [ ] 6. Ships and effects · [ ] 7. Auto-exposure, timings, remove WebGL
 
 **Dev note:** the preview tooling serves the main checkout. For this worktree, run
 `npx vite --port 5175` in it and open `http://localhost:5175/?gpu=webgpu`.

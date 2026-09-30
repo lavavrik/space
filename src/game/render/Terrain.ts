@@ -25,17 +25,17 @@ import { PLANET_FS, PLANET_VS, TERRAIN_BAKE_FS } from './shaders';
 
 type Uniforms = Record<string, THREE.IUniform>;
 
-const N = 32; // quads per chunk edge
-const SPLIT_K = 1.6; // split when the camera is within this many edge lengths (quads ~15–20 px on screen)
-const MIN_SPACING = 8; // m between vertices at the finest level
-const MAX_BUILDS = 12; // chunk meshes built per frame at most (the rest wait a frame)
-const KEEP_FRAMES = 240; // free a chunk unused this long
-const SUN_REBAKE = Math.cos(0.004); // re-bake a chunk's shadows once the sun has moved ~0.2° over it
-const MAX_REBAKES = 8; // shadow re-bakes per frame
-const SKIRT_SPACINGS = 1; // skirt depth beyond the missing octaves' amplitude, in vertex spacings
+export const N = 32; // quads per chunk edge
+export const SPLIT_K = 1.6; // split when the camera is within this many edge lengths (quads ~15–20 px on screen)
+export const MIN_SPACING = 8; // m between vertices at the finest level
+export const MAX_BUILDS = 12; // chunk meshes built per frame at most (the rest wait a frame)
+export const KEEP_FRAMES = 240; // free a chunk unused this long
+export const SUN_REBAKE = Math.cos(0.004); // re-bake a chunk's shadows once the sun has moved ~0.2° over it
+export const MAX_REBAKES = 8; // shadow re-bakes per frame
+export const SKIRT_SPACINGS = 1; // skirt depth beyond the missing octaves' amplitude, in vertex spacings
 
 /** Cube faces: normal n and in-face axes u, v with u × v = n (so triangles face outward). */
-const FACES: [number, number, number][][] = [
+export const FACES: [number, number, number][][] = [
   [[1, 0, 0], [0, 0, -1], [0, 1, 0]],
   [[-1, 0, 0], [0, 0, 1], [0, 1, 0]],
   [[0, 1, 0], [1, 0, 0], [0, 0, -1]],
@@ -45,7 +45,7 @@ const FACES: [number, number, number][][] = [
 ];
 
 /** Unit direction for face f at face coordinates s, t ∈ [−1, 1] (tan-warped, so cells are ~even). */
-function faceDir(f: number, s: number, t: number, out: number[]) {
+export function faceDir(f: number, s: number, t: number, out: number[]) {
   const [n, u, v] = FACES[f];
   const a = Math.tan((s * Math.PI) / 4),
     b = Math.tan((t * Math.PI) / 4);

@@ -27,7 +27,7 @@ struct World {
   radius: f32,
   craters: f32,
   terrA: f32,         // relief amplitude (m)
-  useQc: f32,
+  _pq: f32,
   city: f32,          // 1: populated (uCity)
   cityK: f32,
   cloudR: f32,        // the cloud layer's radius (m)
@@ -37,8 +37,6 @@ struct World {
   _p1: f32,
   _p2: f32,
   tOff: array<vec4f, 17>, // per-octave noise offsets (terrain.wgsl)
-  qn: array<vec4f, 17>,
-  qc: array<vec4f, 17>,
 }
 
 @group(1) @binding(0) var<uniform> world: World;

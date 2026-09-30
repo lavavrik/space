@@ -1,10 +1,12 @@
-// Planets and moons from afar: the unit sphere, scaled and turned (render/shaders/planet.*.glsl, the
-// far-sphere path; LOD terrain chunks come in phase 3). Per pixel: the terrain height (as bumps), the
+// Planets and moons (render/shaders/planet.*.glsl): from afar the unit sphere, scaled and turned (vs);
+// up close the terrain's LOD chunks (vsChunk; gpu/terrain.ts), their heights, normals and shadows
+// baked per vertex (terrainBake.wgsl) and only the finer octaves worked out here. Per pixel: the terrain height (as bumps), the
 // surface by world type (gas and ice giants' bands, rock, desert, oceans and land, lava, ice), the
 // cloud layer's shadow, sunlight through the air, city lights at night, then the air's haze.
 diagnostic(off, derivative_uniformity);
 // #include frame
 // #include world
+// #include chunk
 // #include noise
 // #include noise3d
 // #include terrain
@@ -12,11 +14,20 @@ diagnostic(off, derivative_uniformity);
 // #include clouds
 // #include city
 
+// the chunk's bake (terrainBake.wgsl): two vec4s per grid vertex
+@group(2) @binding(1) var<storage, read> bake: array<vec4f>;
+
 struct Out {
   @builtin(position) pos: vec4f,
   @location(0) obj: vec3f,
   @location(1) wn: vec3f,
   @location(2) wp: vec3f,
+  @location(3) offDir: vec3f,   // chunks: direction minus the chunk centre's (terrain.wgsl terrQ)
+  @location(4) haze: vec3f,     // chunks: the air's haze, its transmittance and the sunlight, per vertex
+  @location(5) hazeT: vec3f,
+  @location(6) sun: vec3f,
+  @location(7) t: vec4f,        // skirt (0 surface … 1 down a skirt), octaves the geometry has (0: far sphere), shadow, hc
+  @location(8) mask: f32,       // the range mask the geometry has
 }
 
 @vertex
@@ -26,6 +37,35 @@ fn vs(@location(0) position: vec3f, @location(1) normal: vec3f) -> Out {
   o.obj = position;
   o.wp = wp.xyz;
   o.wn = normalize((world.rotN * vec4f(normal, 0.0)).xyz);
+  o.t = vec4f(0.0, 0.0, 1.0, 0.0);
+  o.pos = frame.viewProj * wp;
+  return o;
+}
+
+// A terrain chunk: `position` is the undisplaced point relative to the chunk's centre (m), `dir` its
+// unit direction, `grid` its place in the chunk's grid (skirt vertices share their edge vertex's).
+@vertex
+fn vsChunk(@location(0) position: vec3f, @location(1) dir: vec3f, @location(2) grid: vec2f, @location(3) skirt: f32) -> Out {
+  var o: Out;
+  let gi = u32(grid.y + 0.5) * u32(chunk.gridW + 0.5) + u32(grid.x + 0.5);
+  let A = bake[2u * gi];
+  let B = bake[2u * gi + 1u];
+  let pos = position + dir * (A.w - skirt * chunk.skirtD);
+  let wp = chunk.model * vec4f(pos, 1.0);
+  o.obj = dir;
+  o.wp = wp.xyz;
+  o.wn = normalize((world.rotN * vec4f(A.xyz, 0.0)).xyz);
+  o.offDir = position / world.radius;
+  o.t = vec4f(skirt, chunk.vOct, B.x, B.y);
+  o.mask = B.z;
+  // the air between the camera and here varies smoothly: per vertex, not per pixel (at the ground:
+  // skirt vertices hang far below it, where the air's density would blow up)
+  let ground = (chunk.model * vec4f(pos + dir * skirt * chunk.skirtD, 1.0)).xyz;
+  let L = normalize(world.light.xyz);
+  let vd = normalize(ground);
+  o.haze = atInscatter(vd * atSpan(vd).x, ground, L, 5);
+  o.hazeT = atTrans;
+  o.sun = atSunlight(ground, L);
   o.pos = frame.viewProj * wp;
   return o;
 }
@@ -35,10 +75,15 @@ fn toLocal3() -> mat3x3f { return mat3x3f(world.toLocal[0].xyz, world.toLocal[1]
 // bump mapping from a height field H (m) over the surface (Mikkelsen): the far sphere's derivatives
 // come from the object-space position, turned to world axes (camera-relative positions are too
 // coarse across the system)
-fn bumpN(N: vec3f, H: f32, obj: vec3f) -> vec3f {
+fn bumpN(N: vec3f, H: f32, obj: vec3f, wp: vec3f, terr: bool) -> vec3f {
   let toWorld = transpose(toLocal3());
-  let dpx = toWorld * dpdx(obj * world.radius);
-  let dpy = toWorld * dpdy(obj * world.radius);
+  var dpx = toWorld * dpdx(obj * world.radius);
+  var dpy = toWorld * dpdy(obj * world.radius);
+  if (terr) {
+    // chunks are near: camera-relative positions are precise
+    dpx = dpdx(wp);
+    dpy = dpdy(wp);
+  }
   let dhx = dpdx(H);
   let dhy = dpdy(H);
   let r1 = cross(dpy, N);
@@ -51,6 +96,14 @@ fn bumpN(N: vec3f, H: f32, obj: vec3f) -> vec3f {
 
 @fragment
 fn fs(in: Out) -> @location(0) vec4f {
+  let terr = in.t.y > 0.5;
+  // Skirts hang below every chunk's edge to hide the cracks between levels; a crack only ever shows
+  // a skirt's top, so that keeps the full shader and the rest gets plain lit ground colour.
+  if (terr && in.t.x > 0.5) {
+    let d0 = clamp(dot(normalize(in.wn), normalize(world.light.xyz)) * 1.05 + 0.03, 0.0, 1.0);
+    let c0 = mix(world.pa.rgb, world.pb.rgb, 0.5) * (d0 * in.t.z * in.sun + 0.0002);
+    return vec4f((c0 * in.hazeT + in.haze) * frame.exposure, 1.0);
+  }
   let p = normalize(in.obj);
   var N = normalize(in.wn);
   let V = normalize(-in.wp);
@@ -90,10 +143,15 @@ fn fs(in: Out) -> @location(0) vec4f {
     let storm = sm(0.16, 0.05, sd + 0.03 * turb);
     col = mix(col, D, storm * select(0.6, 0.85, gas));
   } else {
-    let h = terrHFrom(p, 0, oct, 0.0, 0.0);
+    // only the octaves finer than the geometry are worked out here; the rest come baked
+    tUseOff = terr;
+    tOffDir = in.offDir;
+    let hc = in.t.w;
+    let h = terrHFrom(p, i32(in.t.y + 0.5), oct, hc, in.mask);
+    tUseOff = false;
     let seaOn = ty == 2 || ty == 3;
     elev = terrElev(h, world.sea, seaOn);
-    N = bumpN(N, elev - terrElev(0.0, world.sea, seaOn), in.obj);
+    N = bumpN(N, elev - terrElev(hc, world.sea, seaOn), in.obj, in.wp, terr);
     det = 1.0 + 0.1 * tDet;
     var h2 = 0.0;
     if (!dark) { h2 = fbmF(sp * 3.1 + 4.0, min(max(oct - 2, 3), 5)); }
@@ -138,7 +196,7 @@ fn fs(in: Out) -> @location(0) vec4f {
   }
   col *= mix(det, 1.0, spec);
   ndl = dot(N, L);
-  var diff = clamp(ndl * 1.05 + 0.03, 0.0, 1.0);
+  var diff = clamp(ndl * 1.05 + 0.03, 0.0, 1.0) * in.t.z;
   // the cloud layer's shadow: the cover where the sun's ray from here crosses the deck
   if (world.cloudH > 0.0 && !dark) {
     let up = dot(p, world.lightL.xyz);
@@ -149,8 +207,10 @@ fn fs(in: Out) -> @location(0) vec4f {
     }
   }
   // sunlight through the air, from the surface point relative to the centre (precise)
+  // the far sphere: from the surface point relative to the centre (object space, precise)
   let C1 = transpose(toLocal3()) * (in.obj * world.radius);
-  let sunC = atSunlightC(C1, L);
+  var sunC = in.sun;
+  if (!terr) { sunC = atSunlightC(C1, L); }
   let sky = select(0.0, 0.07 * smoothstep(-0.12, 0.35, ndl0), world.atOn > 0.5);
   let R = reflect(-L, N);
   let s = pow(max(dot(R, V), 0.0), 60.0) * 0.7 * spec * diff;
@@ -162,7 +222,9 @@ fn fs(in: Out) -> @location(0) vec4f {
       col += mix(vec3f(1.0, 0.62, 0.3), vec3f(1.0, 0.88, 0.7), cityWhite) * lights * night * world.cityK;
     }
   }
-  if (world.atOn > 0.5) {
+  if (world.atOn > 0.5 && terr) {
+    col = col * in.hazeT + in.haze;
+  } else if (world.atOn > 0.5) {
     let vd = normalize(in.wp);
     let C1s = normalize(C1) * atR();
     let k = dot(C1s, vd);

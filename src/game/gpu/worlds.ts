@@ -2,8 +2,8 @@
  * The system's bodies in WebGPU (docs/webgpu.md, phase 2): the star (disc and glow), planets and moons
  * (the far sphere: surface, terrain as bumps, city lights), their skies (a scattering shell), cloud
  * decks (a cube-map bake per world, a shell at the deck), ring discs, and dots for distant bodies.
- * Mirrors render/SceneRenderer.ts attachStar / attachWorld / renderScene; LOD terrain (up close) is
- * phase 3, the ring's rocks phase 4.
+ * Mirrors render/SceneRenderer.ts attachStar / attachWorld / renderScene. Up close, a world with
+ * relief is LOD terrain chunks instead of its sphere (gpu/terrain.ts); the ring's rocks are phase 4.
  *
  * Draw order: opaque (surfaces, the star's disc), then the transparent layers far to near within
  * each (as three.js sorts them): glow, rings, dots; skies; cloud decks.
@@ -12,19 +12,20 @@ import type { Game } from '../Game';
 import { AU, WT } from '../constants';
 import { THREE } from '../lib/three';
 import { noise3dBytes, NOISE3D_SIZE } from '../lib/noise3d';
-import { airBeta, CLOUD_H } from '../render/SceneRenderer';
+import { airBeta, CLOUD_H, TERRAIN_NEAR, TERRAIN_PX } from '../render/SceneRenderer';
 import { CITY_K } from '../render/exposure';
 import { atmoOf } from '../sim/atmosphere';
 import { populated } from '../sim/population';
 import { hasCraters, reliefAmp, terrainOffsets, worldQuat } from '../sim/terrain';
 import type { Body, CurrentSystem, Star, World } from '../types';
-import { ATMO_WGSL, CLOUD_BAKE_WGSL, CLOUD_WGSL, DOTS_WGSL, PLANET_WGSL, RING_WGSL, STAR_WGSL } from './shaders';
+import { ATMO_WGSL, CLOUD_BAKE_WGSL, CLOUD_WGSL, DOTS_WGSL, PLANET_WGSL, RING_WGSL, STAR_WGSL, TERRAIN_BAKE_WGSL } from './shaders';
+import { CHUNK_BYTES, TerrainGpu, TerrainShared } from './terrain';
 
 export const HDR_FORMAT: GPUTextureFormat = 'rgba16float';
 export const DEPTH_FORMAT: GPUTextureFormat = 'depth32float';
 export const SAMPLES = 4;
 
-const WORLD_BYTES = 1232;
+const WORLD_BYTES = 688;
 const STAR_BYTES = 128;
 const RING_BYTES = 128;
 const CLOUD_CUBE = 1024;
@@ -47,6 +48,9 @@ interface WorldView {
   air: boolean;
   ring: { buf: GPUBuffer; group: GPUBindGroup; mesh: Mesh } | null;
   dotColor: THREE.Color;
+  /** Up close, LOD terrain in place of the sphere (worlds with relief). */
+  terrain: TerrainGpu | null;
+  terrOn: boolean;
   dist: number;
   pxR: number;
   mesh: Mesh;
@@ -73,6 +77,11 @@ export class WorldsLayer {
   private readonly worldLayout: GPUBindGroupLayout;
   private readonly oneBufLayout: GPUBindGroupLayout;
   private readonly planetPipe: GPURenderPipeline;
+  private readonly chunkPipe: GPURenderPipeline;
+  private readonly terrain: TerrainShared;
+  /** The far sphere's (unused) terrain-chunk group: the planet shader binds one either way. */
+  private readonly noChunk: GPUBindGroup;
+  private readonly noChunkBufs: GPUBuffer[];
   private readonly atmoPipe: GPURenderPipeline;
   private readonly cloudPipe: GPURenderPipeline;
   private readonly cloudBakePipe: GPURenderPipeline;
@@ -105,18 +114,53 @@ export class WorldsLayer {
     this.noCloud = device.createTexture({ label: 'no clouds', size: [1, 1, 6], format: 'r16float', usage: GPUTextureUsage.TEXTURE_BINDING });
 
     const FS = GPUShaderStage.FRAGMENT,
-      VS = GPUShaderStage.VERTEX;
+      VS = GPUShaderStage.VERTEX,
+      CS = GPUShaderStage.COMPUTE;
     this.worldLayout = device.createBindGroupLayout({
       entries: [
-        { binding: 0, visibility: VS | FS, buffer: { type: 'uniform' } },
-        { binding: 1, visibility: FS, texture: { viewDimension: '3d' } },
-        { binding: 2, visibility: FS, sampler: {} },
+        { binding: 0, visibility: VS | FS | CS, buffer: { type: 'uniform' } },
+        { binding: 1, visibility: VS | FS | CS, texture: { viewDimension: '3d' } },
+        { binding: 2, visibility: VS | FS | CS, sampler: {} },
         { binding: 3, visibility: FS, texture: { viewDimension: 'cube' } },
         { binding: 4, visibility: FS, sampler: {} },
       ],
     });
+    // terrain chunks (chunk.wgsl): the uniforms and the bake, read when drawing, written by the bake
+    const chunkLayout = device.createBindGroupLayout({
+      entries: [
+        { binding: 0, visibility: VS | FS, buffer: { type: 'uniform' } },
+        { binding: 1, visibility: VS, buffer: { type: 'read-only-storage' } },
+      ],
+    });
+    const chunkBakeLayout = device.createBindGroupLayout({
+      entries: [
+        { binding: 0, visibility: CS, buffer: { type: 'uniform' } },
+        { binding: 1, visibility: CS, buffer: { type: 'storage' } },
+        { binding: 2, visibility: CS, buffer: { type: 'read-only-storage' } },
+        { binding: 3, visibility: CS, buffer: { type: 'read-only-storage' } },
+      ],
+    });
+    this.noChunkBufs = [
+      device.createBuffer({ size: CHUNK_BYTES, usage: GPUBufferUsage.UNIFORM }),
+      device.createBuffer({ size: 32, usage: GPUBufferUsage.STORAGE }),
+    ];
+    this.noChunk = device.createBindGroup({
+      layout: chunkLayout,
+      entries: [
+        { binding: 0, resource: { buffer: this.noChunkBufs[0] } },
+        { binding: 1, resource: { buffer: this.noChunkBufs[1] } },
+      ],
+    });
+    const bakeModule = device.createShaderModule({ label: 'terrain bake', code: TERRAIN_BAKE_WGSL });
+    const bakePipe = device.createComputePipeline({
+      label: 'terrain bake',
+      layout: device.createPipelineLayout({ bindGroupLayouts: [frameLayout, this.worldLayout, chunkBakeLayout] }),
+      compute: { module: bakeModule, entryPoint: 'main' },
+    });
+    this.terrain = new TerrainShared(device, chunkLayout, chunkBakeLayout, bakePipe);
     this.oneBufLayout = device.createBindGroupLayout({ entries: [{ binding: 0, visibility: VS | FS, buffer: { type: 'uniform' } }] });
     const worldPL = device.createPipelineLayout({ bindGroupLayouts: [frameLayout, this.worldLayout] });
+    const planetPL = device.createPipelineLayout({ bindGroupLayouts: [frameLayout, this.worldLayout, chunkLayout] });
     const onePL = device.createPipelineLayout({ bindGroupLayouts: [frameLayout, this.oneBufLayout] });
 
     const posNrm: GPUVertexBufferLayout[] = [
@@ -132,8 +176,26 @@ export class WorldsLayer {
     const planet = mod('planet', PLANET_WGSL);
     this.planetPipe = device.createRenderPipeline({
       label: 'planet',
-      layout: worldPL,
+      layout: planetPL,
       vertex: { module: planet, entryPoint: 'vs', buffers: posNrm },
+      fragment: { module: planet, entryPoint: 'fs', targets: [{ format: HDR_FORMAT }] },
+      primitive: { cullMode: 'back' },
+      depthStencil: opaque,
+      multisample: ms,
+    });
+    this.chunkPipe = device.createRenderPipeline({
+      label: 'terrain',
+      layout: planetPL,
+      vertex: {
+        module: planet,
+        entryPoint: 'vsChunk',
+        buffers: [
+          posNrm[0],
+          { arrayStride: 12, attributes: [{ shaderLocation: 1, offset: 0, format: 'float32x3' }] },
+          { arrayStride: 8, attributes: [{ shaderLocation: 2, offset: 0, format: 'float32x2' }] },
+          { arrayStride: 4, attributes: [{ shaderLocation: 3, offset: 0, format: 'float32' }] },
+        ],
+      },
       fragment: { module: planet, entryPoint: 'fs', targets: [{ format: HDR_FORMAT }] },
       primitive: { cullMode: 'back' },
       depthStencil: opaque,
@@ -280,7 +342,8 @@ export class WorldsLayer {
         ring = { buf: rbuf, group: device.createBindGroup({ layout: this.oneBufLayout, entries: [{ binding: 0, resource: { buffer: rbuf } }] }), mesh: this.mesh(new THREE.RingGeometry(b.ring.inner, b.ring.outer, 256, 1)) };
       }
       const dotColor = b.pal.a.clone().lerp(b.pal.b, 0.5).lerp(new THREE.Color(1, 1, 1), 0.4);
-      this.worlds.push({ b, buf, data, group, cloud, air: !!air, ring, dotColor, dist: Infinity, pxR: 0, mesh: this.sphere.mid });
+      const terrain = reliefAmp(b) > 0 ? new TerrainGpu(b, this.terrain, group) : null;
+      this.worlds.push({ b, buf, data, group, cloud, air: !!air, ring, dotColor, terrain, terrOn: false, dist: Infinity, pxR: 0, mesh: this.sphere.mid });
     }
   }
 
@@ -313,7 +376,7 @@ export class WorldsLayer {
     f[98] = b.radius + cloudH;
     i[99] = b.type;
     i[100] = 5;
-    const off = terrainOffsets(b.seed);
+    const off = terrainOffsets(b.seed); // (qn and qc, per chunk, are in chunk.wgsl)
     for (let k = 0; k < 17; k++) f.set([off[k * 3], off[k * 3 + 1], off[k * 3 + 2], 0], 104 + k * 4);
   }
 
@@ -391,6 +454,12 @@ export class WorldsLayer {
       const lightL = light.clone().applyQuaternion(qInv);
       f.set([lightL.x, lightL.y, lightL.z, 0], 72);
       f.set([rel.x, rel.y, rel.z, b.radius], 76);
+      // up close, LOD terrain replaces the sphere: big on screen and actually close (render/SceneRenderer.ts)
+      w.terrOn = !!w.terrain && pxR > TERRAIN_PX && d < b.radius * TERRAIN_NEAR;
+      if (w.terrOn) {
+        const cam = new THREE.Vector3().subVectors(ship.pos, b.pos).applyQuaternion(qInv);
+        w.terrain!.update(cam, lightL, rel, wq);
+      }
       f[89] = simTime;
       f[90] = d - b.radius;
       i[100] = Math.max(4, Math.min(17, Math.round(4 + Math.log2(Math.max(pxR, 1) / 30))));
@@ -427,6 +496,11 @@ export class WorldsLayer {
     if (nd) device.queue.writeBuffer(this.dotBuf, 0, this.dotData, 0, nd * 7);
   }
 
+  /** Compute work before the frame's render pass: terrain chunks' bakes. */
+  bake(enc: GPUCommandEncoder, frameGroup: GPUBindGroup) {
+    for (const w of this.worlds) if (w.terrOn) w.terrain!.bake(enc, frameGroup);
+  }
+
   /** Render pixels per CSS pixel (GpuRenderer.resize). */
   pr = 1;
 
@@ -438,10 +512,19 @@ export class WorldsLayer {
       this.drawMesh(pass, this.sphere.mid, true);
     }
     pass.setPipeline(this.planetPipe);
+    pass.setBindGroup(2, this.noChunk);
     for (const w of this.worlds) {
-      if (w.pxR <= 0.6) continue;
+      if (w.pxR <= 0.6 || w.terrOn) continue;
       pass.setBindGroup(1, w.group);
       this.drawMesh(pass, w.mesh, true);
+    }
+    const near = this.worlds.filter((w) => w.terrOn);
+    if (near.length) {
+      pass.setPipeline(this.chunkPipe);
+      for (const w of near) {
+        pass.setBindGroup(1, w.group);
+        w.terrain!.draw(pass);
+      }
     }
   }
 
@@ -493,6 +576,7 @@ export class WorldsLayer {
 
   private clear() {
     for (const w of this.worlds) {
+      w.terrain?.dispose();
       w.buf.destroy();
       w.cloud?.destroy();
       if (w.ring) {
@@ -509,6 +593,8 @@ export class WorldsLayer {
     this.clear();
     for (const mesh of Object.values(this.sphere)) this.freeMesh(mesh);
     this.noiseTex.destroy();
+    this.terrain.dispose();
+    for (const b of this.noChunkBufs) b.destroy();
     this.noCloud.destroy();
     this.dotBuf.destroy();
   }
