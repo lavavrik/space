@@ -7,26 +7,43 @@
 import { THREE } from '../lib/three';
 import { VCLOUDS_WGSL } from './shaders';
 
-/** Laying the result over the frame: frame × a + rgb (a blend), filtered over four bilinear taps. */
+/** Laying the result over the frame: frame × a + rgb (a blend), upsampled depth-aware (below). */
 const COMPOSITE_WGSL = /* wgsl */ `
 @group(0) @binding(0) var clouds: texture_2d<f32>;
-@group(0) @binding(1) var samp: sampler;
-struct V { @builtin(position) pos: vec4f, @location(0) uv: vec2f }
-@vertex
-fn vs(@builtin(vertex_index) i: u32) -> V {
-  let p = vec2f(f32((i << 1u) & 2u), f32(i & 2u));
-  var o: V;
-  o.pos = vec4f(p * 2.0 - 1.0, 0.0, 1.0);
-  o.uv = vec2f(p.x, 1.0 - p.y);
-  return o;
-}
+@group(0) @binding(1) var sceneDepth: texture_depth_multisampled_2d;
 @fragment
-fn fs(in: V) -> @location(0) vec4f {
-  // (a soft 4 × 4 half-res texel filter: what's left of the march's jitter after the temporal blend
-  // would show as static inside the clouds)
-  let ct = 0.75 / vec2f(textureDimensions(clouds));
-  let uv = in.uv;
-  return 0.25 * (textureSampleLevel(clouds, samp, uv + vec2f(-ct.x, -ct.y), 0.0) + textureSampleLevel(clouds, samp, uv + vec2f(ct.x, -ct.y), 0.0) + textureSampleLevel(clouds, samp, uv + vec2f(-ct.x, ct.y), 0.0) + textureSampleLevel(clouds, samp, uv + vec2f(ct.x, ct.y), 0.0));
+fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+  // Depth-aware upsampling: a soft 3 × 3 over the half-res march (what's left of its jitter after
+  // the temporal blend would show as static inside the clouds), each texel weighted by how alike
+  // the scene's depth is where it was marched and here. Blurred across an edge (the far terrain's
+  // against the sky), sky clouds bled onto the ground and the ground's onto the sky, a soft, low-res
+  // band all along the horizon.
+  let full = vec2f(textureDimensions(sceneDepth));
+  let half = vec2i(textureDimensions(clouds));
+  let k = full / vec2f(half);
+  let dc = textureLoad(sceneDepth, vec2i(pos.xy), 0);
+  let c = pos.xy / k - 0.5;
+  let base = vec2i(floor(c + 0.5));
+  var sum = vec4f(0.0);
+  var wsum = 0.0;
+  for (var y = -1; y <= 1; y++) {
+    for (var x = -1; x <= 1; x++) {
+      let t = clamp(base + vec2i(x, y), vec2i(0), half - 1);
+      let tp = (vec2f(t) + 0.5) * k; // (where it was marched: vclouds.wgsl full)
+      let dt = textureLoad(sceneDepth, vec2i(min(tp, full - 1.0)), 0);
+      let g = (2.0 - f32(abs(x))) * (2.0 - f32(abs(y)));
+      let same = exp(-abs(dt - dc) / (0.03 * max(dt, dc) + 1e-7));
+      let w = g * (same + 1e-3);
+      sum += textureLoad(clouds, t, 0) * w;
+      wsum += w;
+    }
+  }
+  return sum / wsum;
+}
+@vertex
+fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
+  let p = vec2f(f32((i << 1u) & 2u), f32(i & 2u));
+  return vec4f(p * 2.0 - 1.0, 0.0, 1.0);
 }
 `;
 
@@ -122,7 +139,7 @@ export class VolumetricClouds {
         layout: this.compPipe.getBindGroupLayout(0),
         entries: [
           { binding: 0, resource: this.tex[k].createView() },
-          { binding: 1, resource: this.samp },
+          { binding: 1, resource: depth.createView() },
         ],
       }),
     );
