@@ -60,6 +60,13 @@ fn fs(in: BodyOut) -> @location(0) vec4f {
   let gloss = pow(max(dot(Np, H), 0.0), 140.0) * 2.5;
   let planetShine = max(dot(N, planetDir), 0.0) * 0.12 * lit;
   var col = envColor(R, L) * F + base * starC * ndl * lit * 0.55 + F * starC * gloss * lit * ndl + base * planetC * planetShine;
+  // a pair's second sun, in its colour (docs/binaries.md)
+  if (so.v[14].w > 0.5) {
+    let L2 = so.v[14].xyz;
+    let ndl2 = max(dot(Np, L2), 0.0);
+    let gloss2 = pow(max(dot(Np, normalize(L2 + V)), 0.0), 140.0) * 2.5;
+    col += (base * 0.55 + F * gloss2) * so.v[15].rgb * starC * ndl2 * shadowAt(in.wp, N);
+  }
   // the station's own floodlights: pools of warm light from lamps at each face's edge midpoints
   let e = uv - 0.5;
   let e1 = vec2f(abs(e.x) - 0.5, e.y);

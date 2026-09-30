@@ -8,6 +8,10 @@ struct Fx {
   _p0: f32,
   _p1: f32,
   _p2: f32,
+  // a pair's second sun (docs/binaries.md): its direction (w: 1 if there is one), its light relative
+  // to the first's (colour × strength)
+  light2: vec4f,
+  lightC2: vec4f,
 }
 @group(1) @binding(0) var<uniform> fx: Fx;
 
@@ -38,8 +42,10 @@ fn vsHullShadow(@location(0) position: vec3f, @location(2) m0: vec4f, @location(
 
 @fragment
 fn fsHull(in: HullOut) -> @location(0) vec4f {
-  let d = max(dot(normalize(in.n), fx.light.xyz), 0.0) * in.lit * shadowAt(in.wp, normalize(in.n));
-  return vec4f(vec3f(0.62, 0.64, 0.68) * (0.04 + 0.6 * d), 1.0);
+  let N = normalize(in.n);
+  let d = max(dot(N, fx.light.xyz), 0.0) * in.lit * shadowAt(in.wp, N);
+  let d2 = select(vec3f(0.0), max(dot(N, fx.light2.xyz), 0.0) * fx.lightC2.rgb, fx.light2.w > 0.5);
+  return vec4f(vec3f(0.62, 0.64, 0.68) * (0.04 + 0.6 * (d + d2)), 1.0);
 }
 
 // Lines: FTL trails and hyperspace streaks (added), the orbit preview (blended). Colours come per

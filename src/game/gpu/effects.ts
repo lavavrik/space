@@ -8,6 +8,7 @@
  *   - the orbit preview ring (SceneRenderer.ts updateRing).
  * Point-like marks (markers, glows, the hot spot) go into the worlds' dots (one soft-dot shader).
  */
+import { sunsAt, type Suns } from '../sim/starlight';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import { DUST, DUSTBOX, DUST_FADE_FROM, DUST_FADE_TO, RING_AP, RING_N, RING_PLAN } from '../render/look';
@@ -63,7 +64,8 @@ const blendAlpha: GPUBlendState = { color: { srcFactor: 'src-alpha', dstFactor: 
 
 export class EffectsLayer {
   private readonly fxBuf: GPUBuffer;
-  private readonly fxData = new Float32Array(8);
+  private readonly fxData = new Float32Array(16);
+  private readonly suns: Suns = { s1: null as unknown as Suns['s1'], s2: null, c2: new THREE.Color() };
   private readonly group: GPUBindGroup;
   private readonly hullPipe: GPURenderPipeline;
   private readonly hullShadow: GPURenderPipeline;
@@ -102,7 +104,7 @@ export class EffectsLayer {
     frameLayout: GPUBindGroupLayout,
     casterLayout: GPUBindGroupLayout,
   ) {
-    this.fxBuf = device.createBuffer({ label: 'fx', size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    this.fxBuf = device.createBuffer({ label: 'fx', size: 64, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     const layout = device.createBindGroupLayout({
       entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } }],
     });
@@ -269,8 +271,14 @@ export class EffectsLayer {
       if (!occluder(g.cur.bodies, ship.pos, npc.pos)) this.addTrail(tr);
     }
     for (const npc of [...this.trails.keys()]) if (!g.traffic.includes(npc)) this.trails.delete(npc); // gone from the system
-    const light = this.tmp2.subVectors(g.cur.star.pos, ship.pos).normalize();
+    // the hulls' light: the brighter sun here, and a pair's other (sim/starlight.ts)
+    const suns = sunsAt(g.cur.stars, ship.pos, this.suns);
+    const light = this.tmp2.subVectors(suns.s1.pos, ship.pos).normalize();
     this.fxData.set([light.x, light.y, light.z], 0);
+    if (suns.s2) {
+      const l2 = new THREE.Vector3().subVectors(suns.s2.pos, ship.pos).normalize();
+      this.fxData.set([l2.x, l2.y, l2.z, 1, suns.c2.r, suns.c2.g, suns.c2.b, 0], 8);
+    } else this.fxData.fill(0, 8, 16);
     this.hulls = 0;
     for (const npc of g.traffic) {
       // on a pad inside an orbital station: seen only from in there (its hull on the pad, no marker).
@@ -284,7 +292,7 @@ export class EffectsLayer {
       if (rel.length() < 200e3 && this.hulls < MAX_SHIPS) {
         this.m.compose(rel, this.q.copy(npc.q).multiply(FLIP), this.one);
         this.instData.set(this.m.elements, this.hulls * 17);
-        this.instData[this.hulls++ * 17 + 16] = sunFraction(g.cur.bodies, g.cur.star, npc.pos);
+        this.instData[this.hulls++ * 17 + 16] = sunFraction(g.cur.bodies, suns.s1, npc.pos);
       }
       if (docked) continue;
       // marker, and the engines: main at the tail while thrusting, retro at the nose while braking
@@ -341,7 +349,7 @@ export class EffectsLayer {
     }
     // the belt's dust, orbiting with the ring
     const b = g.frameBody;
-    const sun = sunFraction(g.cur.bodies, g.cur.star, ship.pos);
+    const sun = sunFraction(g.cur.bodies, this.suns.s1, ship.pos);
     if (b.kind !== 'star' && b.ring && ship.mode === 'normal') {
       const rel = this.tmp.subVectors(ship.pos, b.pos);
       const n = this.tmp2.set(b.axis.x, b.axis.y, b.axis.z).normalize();
@@ -366,7 +374,7 @@ export class EffectsLayer {
     for (const w of wrecksHere(g)) {
       const at = new THREE.Vector3().subVectors(w.pos, ship.pos);
       if (at.length() > 40e3) continue;
-      const k = 0.35 * sunFraction(g.cur.bodies, g.cur.star, w.pos);
+      const k = 0.35 * sunFraction(g.cur.bodies, this.suns.s1, w.pos);
       px.field({ mode: 'ball', at, size: 90, count: 2500, seed: w.lostAt | 0, grain: 0.35, color: [0.55 * k + 0.004, 0.55 * k + 0.004, 0.58 * k + 0.004], glint: 8 });
     }
     // re-entry plasma: the air ahead heated past glowing, streaming past the ship

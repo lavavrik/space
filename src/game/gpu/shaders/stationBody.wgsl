@@ -13,7 +13,7 @@
 
 struct Obj {
   model: mat4x4f, // unit coordinates → camera-relative (position, turn, the station's size)
-  v: array<vec4f, 14>,
+  v: array<vec4f, 16>, // (14: a pair's second sun's direction, w 1 if there is one; 15: its light relative to the first's, docs/binaries.md)
 }
 
 struct BodyOut {

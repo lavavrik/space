@@ -142,6 +142,11 @@ fn fs(in: BodyOut) -> @location(0) vec4f {
   let H = normalize(L + V);
   let spec = pow(max(dot(N, H), 0.0), 60.0) * gloss;
   var col = base * (ndl * sunC + sky + 0.0002) + sunC * spec * ndl;
+  // a pair's second sun, in its colour (docs/binaries.md)
+  if (so.v[14].w > 0.5) {
+    let L2 = so.v[14].xyz;
+    col += base * max(dot(N, L2), 0.0) * atSunlight(in.wp, L2) * so.v[15].rgb;
+  }
   if (deckTop) { col += base * vec3f(1.0, 0.9, 0.75) * frame.floodK * 0.6; }
   col += headlight(N, in.wp, base, frame.headK);
   col += emit;

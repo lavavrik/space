@@ -6,6 +6,7 @@
  *
  * Each station has one uniform block (stationBody.wgsl Obj) that all its materials read.
  */
+import { sunsAt, type Suns } from '../sim/starlight';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import { STATION_RGB } from '../render/look';
@@ -22,7 +23,7 @@ import { ShadowMap } from './shadowmap';
 import { CORRIDOR_WGSL, SKY_STATION_WGSL, STATION_INTERIOR_WGSL, STATION_WGSL } from './shaders';
 import type { WorldsLayer } from './worlds';
 
-const OBJ_BYTES = 64 + 14 * 16;
+const OBJ_BYTES = 64 + 16 * 16;
 
 interface Mesh {
   pos: GPUBuffer;
@@ -220,10 +221,11 @@ export class StationsLayer {
   }
 
   /** Per frame: place and light each station, pick its parts, and its beacon dot if far (renderScene). */
+  private readonly suns: Suns = { s1: null as unknown as Suns['s1'], s2: null, c2: new THREE.Color() };
+
   update(g: Game, worlds: WorldsLayer) {
     const { ship, cur, simTime } = g;
     const pxPerRad = g.view.pxPerRad;
-    const starPos = cur.star.pos;
     const now = performance.now() / 1000;
     const dk = g.dock;
     for (const v of this.views) {
@@ -236,8 +238,14 @@ export class StationsLayer {
       const f = v.data;
       this.m.compose(rel, stationQuat(st, simTime, this.q), this.s.setScalar(st.size));
       f.set(this.m.elements, 0);
-      const toStar = this.b.subVectors(starPos, st.pos).normalize();
+      // its suns (sim/starlight.ts): the brighter here, and a pair's other
+      const suns = sunsAt(cur.stars, st.pos, this.suns);
+      const toStar = this.b.subVectors(suns.s1.pos, st.pos).normalize();
       f.set([toStar.x, toStar.y, toStar.z], 16);
+      if (suns.s2) {
+        const l2 = this.b.subVectors(suns.s2.pos, st.pos).normalize();
+        f.set([l2.x, l2.y, l2.z, 1, suns.c2.r, suns.c2.g, suns.c2.b, 0], 16 + 56);
+      } else f.fill(0, 16 + 56, 16 + 64);
       f[16 + 15] = now;
       if (st.sky) {
         // a sky station: its up, the sun, and your pad lit up while it's granted
@@ -264,7 +272,7 @@ export class StationsLayer {
         const w = this.b.subVectors(par.pos, st.pos);
         const pd = w.length();
         // lit: the share of the star in view (sim/eclipse.ts: the parent's shadow, moons, a penumbra)
-        f[16 + 3] = sunFraction(cur.bodies, cur.star, st.pos);
+        f[16 + 3] = sunFraction(cur.bodies, suns.s1, st.pos);
         f.set([w.x / pd, w.y / pd, w.z / pd, Math.cos(Math.asin(Math.min(1, par.radius / pd)))], 16 + 8);
       }
       this.device.queue.writeBuffer(v.buf, 0, f);
