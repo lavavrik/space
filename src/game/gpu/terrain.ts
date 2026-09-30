@@ -162,6 +162,14 @@ function edgeLoops() {
   return edges;
 }
 
+/** What the terrain's detail follows (worlds.ts): the view's resolution (CSS px per radian, zoomed), the unzoomed one, the nose (the world's frame) and the field's half-angle (rad, the wider way). */
+export interface TerrainView {
+  pxPerRad: number;
+  basePxPerRad: number;
+  fwd: THREE.Vector3;
+  halfFov: number;
+}
+
 export class TerrainGpu {
   private readonly chunks = new Map<string, Chunk>();
   private readonly R: number;
@@ -171,7 +179,10 @@ export class TerrainGpu {
   private builds = 0;
   /** This frame's split threshold (px per quad) and the view's resolution (CSS px per radian). */
   private target = TARGET_PX;
-  private pxPerRad = 1000;
+  private view: TerrainView = { pxPerRad: 1000, basePxPerRad: 1000, fwd: new THREE.Vector3(0, 0, -1), halfFov: 1 };
+  /** Chunks split last frame (their keys): they stay split until their quads are well under the threshold. */
+  private split = new Set<string>();
+  private nextSplit = new Set<string>();
   private rebakes = 0;
   private readonly tmp: number[] = [0, 0, 0];
   private readonly sun = new THREE.Vector3(0, 1, 0);
@@ -198,13 +209,13 @@ export class TerrainGpu {
    * (same frame); queue new chunks and ones the sun has moved over for baking; place the chosen ones
    * for a world at `rel` (camera-relative) turned by `q`.
    */
-  update(cam: THREE.Vector3, sun: THREE.Vector3, rel: THREE.Vector3, q: THREE.Quaternion, pxPerRad: number) {
+  update(cam: THREE.Vector3, sun: THREE.Vector3, rel: THREE.Vector3, q: THREE.Quaternion, view: TerrainView) {
     this.frame++;
-    this.pxPerRad = pxPerRad;
-    // over budget last frame: coarser; well under: finer again
+    this.view = view;
+    // over budget last frame: coarser; well under: finer again, slowly (quick both ways, it hunted)
     const n = this.shown.length;
-    if (n > CHUNK_BUDGET) this.target = Math.min(TARGET_MAX, this.target * 1.08);
-    else if (n < CHUNK_BUDGET * 0.8) this.target = Math.max(TARGET_PX, this.target / 1.03);
+    if (n > CHUNK_BUDGET) this.target = Math.min(TARGET_MAX, this.target * 1.03);
+    else if (n < CHUNK_BUDGET * 0.7) this.target = Math.max(TARGET_PX, this.target / 1.01);
     this.builds = 0;
     this.rebakes = 0;
     this.shown = [];
@@ -214,7 +225,9 @@ export class TerrainGpu {
     const camDir = cam.clone().divideScalar(camDist);
     // the horizon, allowing for mountains: beyond it nothing is visible
     const horizon = Math.acos(Math.min(1, (this.R - this.A) / Math.max(camDist, this.R)));
+    this.nextSplit = new Set();
     for (let f = 0; f < 6; f++) this.visit(f, 0, 0, 0, cam, camDir, horizon);
+    this.split = this.nextSplit;
     for (const [k, c] of this.chunks)
       if (this.frame - c.used > KEEP_FRAMES) {
         this.free(c);
@@ -238,8 +251,24 @@ export class TerrainGpu {
     if (ang - (edge / this.R) * 0.8 > horizon) return;
     const dist = Math.hypot(cam.x - c[0] * this.R, cam.y - c[1] * this.R, cam.z - c[2] * this.R);
     const canSplit = edge / N / 2 >= MIN_SPACING;
-    // (its quads' size on screen: edge / N seen from `dist`)
-    if (canSplit && (edge / N / Math.max(dist, 1)) * this.pxPerRad > this.target) {
+    // its quads' size on screen: edge / N seen from `dist`, by the view's resolution if it's in the
+    // view (the periscope's, zoomed in), else the unzoomed one (everything round you refined for the
+    // periscope's 100×, over the budget, and back, every frame: the terrain flickered as you zoomed)
+    const vx = c[0] * this.R - cam.x,
+      vy = c[1] * this.R - cam.y,
+      vz = c[2] * this.R - cam.z;
+    const inView = Math.acos(Math.max(-1, Math.min(1, (vx * this.view.fwd.x + vy * this.view.fwd.y + vz * this.view.fwd.z) / Math.max(dist, 1)))) < this.view.halfFov + edge / Math.max(dist, 1);
+    const px = (edge / N / Math.max(dist, 1)) * (inView ? this.view.pxPerRad : this.view.basePxPerRad);
+    // split over the threshold; once split, merged back only well under it (not both ways by a hair)
+    const k = key(f, L, i, j);
+    // (in use while its subtree is, drawn or not: only drawn chunks were marked, so the ones split
+    // into finer were freed after KEEP_FRAMES, and when the detail changed, zooming, they had to be
+    // built again, the frame's build budget ran out and whole areas fell back to coarse ones)
+    const own = this.chunks.get(k);
+    if (own) own.used = this.frame;
+    const want = px > this.target * (this.split.has(k) ? 0.7 : 1);
+    if (canSplit && want) {
+      this.nextSplit.add(k);
       // split, if all four children are ready (or can be built this frame); else draw this one
       const kids: [number, number][] = [
         [2 * i, 2 * j],
@@ -248,7 +277,10 @@ export class TerrainGpu {
         [2 * i + 1, 2 * j + 1],
       ];
       const missing = kids.filter(([a, b2]) => !this.chunks.has(key(f, L + 1, a, b2))).length;
-      if (this.builds + missing <= MAX_BUILDS) {
+      // (short of the frame's build budget, it's drawn itself for now, but only if it exists: a chunk
+      // that's only ever been a step to finer ones never was built, and falling back to it built it,
+      // a whole cube face at the coarsest level, in place of the finer ones already there)
+      if (this.builds + missing <= MAX_BUILDS || !own) {
         for (const [a, b2] of kids) this.visit(f, L + 1, a, b2, cam, camDir, horizon);
         return;
       }

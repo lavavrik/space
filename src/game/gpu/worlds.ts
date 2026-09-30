@@ -10,7 +10,7 @@
  * each (as three.js sorts them): glow, rings, dots; skies; cloud decks.
  */
 import type { Game } from '../Game';
-import { AU, WT } from '../constants';
+import { AU, FOV, WT } from '../constants';
 import { THREE } from '../lib/three';
 import { noise3dBytes, NOISE3D_SIZE } from '../lib/noise3d';
 import { airBeta, CLOUD_H, TERRAIN_NEAR, TERRAIN_PX } from '../render/look';
@@ -487,7 +487,12 @@ export class WorldsLayer {
       w.terrOn = !!w.terrain && pxR > TERRAIN_PX && d < b.radius * TERRAIN_NEAR;
       if (w.terrOn) {
         const cam = new THREE.Vector3().subVectors(ship.pos, b.pos).applyQuaternion(qInv);
-        w.terrain!.update(cam, lightL, rel, wq, pxPerRad);
+        // the view (for the terrain's detail: only what's in it gets the periscope's): the nose in the
+        // world's frame, the field's half-angle, and the unzoomed resolution
+        const fwdL = new THREE.Vector3(0, 0, -1).applyQuaternion(ship.q).applyQuaternion(qInv);
+        const halfFov = Math.atan(g.view.W / g.view.H * Math.tan((g.fov * Math.PI) / 360));
+        const basePxPerRad = g.view.H / 2 / Math.tan((FOV * Math.PI) / 360);
+        w.terrain!.update(cam, lightL, rel, wq, { pxPerRad, basePxPerRad, fwd: fwdL, halfFov });
       }
       f[89] = simTime;
       f[90] = d - b.radius;

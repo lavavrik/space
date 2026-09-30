@@ -40,6 +40,12 @@ The old shader chain `sp = 1.6·dir + seedOffset`, multiplied by 2.03 per octave
   - By distance alone (within 1.6 chunk edges) the quads were 15–20 px wherever you looked, and on a big screen the far ground and the mountains' silhouette against the sky read as low-res.
   - With more than 900 chunks the threshold eases up (to 20 px at most) and comes back down when there's room.
   - Up to 24 chunks are built a frame.
+  - Zooming the periscope made the LOD flicker. The fixes that keep it steady:
+    - only chunks inside the zoomed view use its resolution; the rest use the unzoomed one, so a zoom doesn't split the whole world;
+    - a split chunk merges only once its quads fall under 0.7× the threshold (hysteresis);
+    - the budget eases slowly (×1.03 up, ÷1.01 down), with a band where it rests;
+    - split chunks are marked in use, so their children's parents aren't freed and rebuilt;
+    - when a split can't finish this frame, it falls back to the chunk if it already exists, and never builds a coarse one to stand in.
 - **Chunks:** each is a 32×32 grid. Positions are built on the CPU in double precision relative to the chunk centre, and the mesh sits at that centre, so there's no jitter on a 6,000 km world.
 - **Vertices:** the vertex shader (`planet.vert.glsl` with `TERRAIN`) raises each vertex by the height, using only the octaves its spacing can show (`uVOct`). Normals come from two nearby height samples.
 - **Finer detail:** the fragment shader computes the full height. It bump-maps the octaves the vertices don't have, using screen-space derivatives (Mikkelsen's surface-gradient method). Shading therefore doesn't change when a chunk splits; only the silhouette sharpens.
