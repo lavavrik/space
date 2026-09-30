@@ -22,7 +22,7 @@
 // (The index, grid and skirt buffers are the same for every chunk, so they're shared; each chunk's
 // transform is written per frame, camera-relative, from doubles on the CPU.)
 import { THREE } from '../lib/three';
-import { reliefAmp, T_OCT_MAX, terrainOffsets } from '../sim/terrain';
+import { elevationLocal, reliefAmp, T_OCT_MAX, terrainOffsets } from '../sim/terrain';
 import type { World } from '../types';
 
 const N = 32; // quads per chunk edge
@@ -172,9 +172,17 @@ export interface TerrainView {
 
 export class TerrainGpu {
   private readonly chunks = new Map<string, Chunk>();
+  private readonly b: World;
   private readonly R: number;
   private readonly A: number;
   private readonly off: Float32Array;
+  /**
+   * The ground's height at each chunk's centre (m, by key; octaves down to about the chunk's size):
+   * its distance is measured from there. From the sphere's radius, on a highland 7.5 km up the
+   * ground beside you counted as 7.5 km away and stayed coarse (46 m between vertices); only the
+   * periscope's zoom refined it, and when zooming tightened the budget, hills 100 m away merged away.
+   */
+  private readonly elev = new Map<string, number>();
   private frame = 0;
   private builds = 0;
   /** This frame's split threshold (px per quad) and the view's resolution (CSS px per radian). */
@@ -199,6 +207,7 @@ export class TerrainGpu {
     private readonly sh: TerrainShared,
     private readonly worldGroup: GPUBindGroup,
   ) {
+    this.b = b;
     this.R = b.radius;
     this.A = reliefAmp(b);
     this.off = terrainOffsets(b.seed);
@@ -223,8 +232,13 @@ export class TerrainGpu {
     this.sun.copy(sun);
     const camDist = cam.length();
     const camDir = cam.clone().divideScalar(camDist);
-    // the horizon, allowing for mountains: beyond it nothing is visible
-    const horizon = Math.acos(Math.min(1, (this.R - this.A) / Math.max(camDist, this.R)));
+    // the horizon, allowing for mountains: beyond it nothing is visible. The ground reaches ~1.3 × the
+    // relief either way: from you over the lowest ground, plus from there up to the highest peaks
+    // (the first part alone, ~360 km from the ground on an Earth-like world, cut off the mountains
+    // behind it; a big coarse chunk across the line still drew them, and zoomed in, split finer,
+    // they vanished and showed what was behind)
+    const low = this.R - 1.4 * this.A;
+    const horizon = Math.acos(Math.min(1, low / Math.max(camDist, low))) + Math.acos(Math.min(1, low / (this.R + 1.4 * this.A)));
     this.nextSplit = new Set();
     for (let f = 0; f < 6; f++) this.visit(f, 0, 0, 0, cam, camDir, horizon);
     this.split = this.nextSplit;
@@ -249,18 +263,25 @@ export class TerrainGpu {
     // beyond the horizon (with the chunk's own angular size): skip it and everything under it
     const ang = Math.acos(Math.max(-1, Math.min(1, c[0] * camDir.x + c[1] * camDir.y + c[2] * camDir.z)));
     if (ang - (edge / this.R) * 0.8 > horizon) return;
-    const dist = Math.hypot(cam.x - c[0] * this.R, cam.y - c[1] * this.R, cam.z - c[2] * this.R);
+    const k = key(f, L, i, j);
+    let e = this.elev.get(k);
+    if (e === undefined) {
+      if (this.elev.size > 200_000) this.elev.clear();
+      e = this.A ? elevationLocal(this.b, c[0], c[1], c[2], Math.min(L + 2, 12)) : 0;
+      this.elev.set(k, e);
+    }
+    const r = this.R + e;
+    const dist = Math.hypot(cam.x - c[0] * r, cam.y - c[1] * r, cam.z - c[2] * r);
     const canSplit = edge / N / 2 >= MIN_SPACING;
     // its quads' size on screen: edge / N seen from `dist`, by the view's resolution if it's in the
     // view (the periscope's, zoomed in), else the unzoomed one (everything round you refined for the
     // periscope's 100×, over the budget, and back, every frame: the terrain flickered as you zoomed)
-    const vx = c[0] * this.R - cam.x,
-      vy = c[1] * this.R - cam.y,
-      vz = c[2] * this.R - cam.z;
+    const vx = c[0] * r - cam.x,
+      vy = c[1] * r - cam.y,
+      vz = c[2] * r - cam.z;
     const inView = Math.acos(Math.max(-1, Math.min(1, (vx * this.view.fwd.x + vy * this.view.fwd.y + vz * this.view.fwd.z) / Math.max(dist, 1)))) < this.view.halfFov + edge / Math.max(dist, 1);
     const px = (edge / N / Math.max(dist, 1)) * (inView ? this.view.pxPerRad : this.view.basePxPerRad);
     // split over the threshold; once split, merged back only well under it (not both ways by a hair)
-    const k = key(f, L, i, j);
     // (in use while its subtree is, drawn or not: only drawn chunks were marked, so the ones split
     // into finer were freed after KEEP_FRAMES, and when the detail changed, zooming, they had to be
     // built again, the frame's build budget ran out and whole areas fell back to coarse ones)

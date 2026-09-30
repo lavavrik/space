@@ -497,7 +497,10 @@ export class WorldsLayer {
       }
       f[89] = simTime;
       f[90] = d - b.radius;
-      i[100] = Math.max(4, Math.min(17, Math.round(4 + Math.log2(Math.max(pxR, 1) / 30))));
+      // (terrain chunks: all of them, their fragment shader drops what a pixel can't show by its own
+      // derivatives; by the apparent radius, landed it was ~9, so the nearest ground was plain until the
+      // periscope multiplied the radius)
+      i[100] = w.terrOn ? 17 : Math.max(4, Math.min(17, Math.round(4 + Math.log2(Math.max(pxR, 1) / 30))));
       device.queue.writeBuffer(w.buf, 0, w.data);
       if (w.ring && b.ring) {
         // the disc: in the world's tilted plane (not spinning), radii in planet radii

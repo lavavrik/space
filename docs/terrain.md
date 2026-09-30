@@ -40,6 +40,9 @@ The old shader chain `sp = 1.6·dir + seedOffset`, multiplied by 2.03 per octave
   - By distance alone (within 1.6 chunk edges) the quads were 15–20 px wherever you looked, and on a big screen the far ground and the mountains' silhouette against the sky read as low-res.
   - With more than 900 chunks the threshold eases up (to 20 px at most) and comes back down when there's room.
   - Up to 24 chunks are built a frame.
+  - A chunk's distance is measured from the ground at its centre (its height cached per chunk, octaves down to about its size), not from the sphere's radius. On a highland 7.5 km up, the ground beside you counted as 7.5 km away and stayed at 46 m between vertices. Only the periscope refined it, and when zooming tightened the budget, hills 100 m away merged away.
+  - The horizon for culling allows for the ground reaching ~1.3 × the relief both ways: past the lowest ground, and up to the highest peaks. From the ground, it had cut off mountains ~360 km out. A big coarse chunk across the line still drew them; zoomed in and split finer, they vanished.
+  - The fragment shader's octaves aren't capped by the world's apparent size when chunks are drawn (landed that allowed ~9, i.e. nothing finer than ~50 km beyond the vertices, until the periscope raised it); its own derivatives decide.
   - Zooming the periscope made the LOD flicker. The fixes that keep it steady:
     - only chunks inside the zoomed view use its resolution; the rest use the unzoomed one, so a zoom doesn't split the whole world;
     - a split chunk merges only once its quads fall under 0.7× the threshold (hysteresis);
