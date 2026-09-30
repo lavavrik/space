@@ -6,11 +6,21 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 SERVICE=10d32890-180a-40c1-9467-081b442622ff
 
+# occ reports overwriting an existing file as "failed (204)": 204 is the server's success. Anything
+# else stops the deploy (an asset that didn't overwrite stopped it before the new script went up, and
+# index.html, uploaded by hand, pointed at a script that wasn't there)
+upload() {
+  local out
+  if ! out=$(occ services webserver files upload "$SERVICE" "$1" "$2" 2>&1); then
+    grep -q 'failed (204)' <<<"$out" || { echo "$out" >&2; return 1; }
+  fi
+  echo "Uploaded $1"
+}
+
 npm run build
 # assets first, index.html last: a visitor never gets an index pointing at assets not uploaded yet
 for f in $(cd dist && find assets -type f); do
-  occ services webserver files upload "$SERVICE" "dist/$f" "$f"
+  upload "dist/$f" "$f"
 done
-# (occ reports overwriting an existing file as "failed (204)": 204 is the server's success)
-occ services webserver files upload "$SERVICE" dist/index.html index.html || true
+upload dist/index.html index.html
 echo "Deployed: https://commonsafe-ui-10d32890.orbcloud.io"
