@@ -19,6 +19,10 @@ pixel's ray through the cloud layer (0.4 to 1.05 deck heights up) in 48 steps, s
 scene's depth (so mountains and stations poke through) or 250 km out. The tone map lays the result
 over the frame: scene × what the clouds let through + their light.
 
+- **Cover:** Earth-like and ocean worlds are clouded over most of their face (`clouds.wgsl
+  cloudCover`: from a raw −0.2, not 0.02 as the others), with clear stretches between systems;
+  `sim/clouds.ts` is the same function on the CPU (the debug jumps use it to land under or over
+  thick cloud).
 - **Density:** the cube's cover, broken into ~20 km fields and ~4 km clumps (the cube alone gave
   whole regions of full cover that read as one fog sheet), shaped by a height profile (thicker cover rises higher; ~8 km cells
   rise and fall so the tops aren't one carpet; soft base, rounded tops) and eroded by three octaves of

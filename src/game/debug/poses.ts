@@ -18,6 +18,7 @@ import type { Game } from '../Game';
 import { WT } from '../constants';
 import { THREE } from '../lib/three';
 import { atmoOf } from '../sim/atmosphere';
+import { cloudCoverAt } from '../sim/clouds';
 import { resetFrame } from '../sim/frame';
 import { stationQuat } from '../sim/stationGeom';
 import { surfaceRadius } from '../sim/terrain';
@@ -58,6 +59,32 @@ function fromSunward(g: Game, b: Body, a: number) {
   const toS = g.cur.star.pos.clone().sub(b.pos).normalize();
   const side = V(0, 1, 0).cross(toS).normalize();
   return toS.multiplyScalar(Math.cos(a)).addScaledVector(side, Math.sin(a)).normalize();
+}
+
+/**
+ * A daylit spot on `b` under thick cloud (sim/clouds.ts, the cloud cube's cover): the most clouded of
+ * a few hundred directions within ~35° of the sunward one (a fixed spot kept landing in clear sky).
+ * `low`: over low ground too (under the deck, not in it on a mountain).
+ */
+function cloudySpot(g: Game, b: World, low: boolean) {
+  const c = fromSunward(g, b, 0.9);
+  const u = V(0, 1, 0).cross(c).normalize(),
+    w = V().crossVectors(c, u);
+  let best = c,
+    score = -Infinity;
+  for (let i = 0; i < 300; i++) {
+    // a sunflower spiral over the cap
+    const r = 0.6 * Math.sqrt((i + 0.5) / 300),
+      a = i * 2.39996;
+    const d = c.clone().addScaledVector(u, r * Math.cos(a)).addScaledVector(w, r * Math.sin(a)).normalize();
+    let s = cloudCoverAt(b, d);
+    if (low) s -= Math.max(0, surfaceRadius(b, b.pos.clone().addScaledVector(d, b.radius)) - b.radius) / 1000;
+    if (s > score) {
+      score = s;
+      best = d;
+    }
+  }
+  return best;
 }
 
 export function debugSpots(g: Game): Spot[] {
@@ -101,8 +128,8 @@ export function debugSpots(g: Game): Spot[] {
   if (clouded) {
     const b = clouded;
     const deck = (atmoOf(b)?.H ?? 8000) * 1.3;
-    const over = (alt: number, pitch: number) => {
-      const up = fromSunward(g, b, 1);
+    const over = (alt: number, pitch: number, low: boolean) => {
+      const up = cloudySpot(g, b, low);
       const side = V(0, 1, 0).cross(g.cur.star.pos.clone().sub(b.pos).normalize()).normalize();
       const ground = Math.max(b.radius, surfaceRadius(b, b.pos.clone().addScaledVector(up, b.radius)));
       const pos = b.pos.clone().addScaledVector(up, ground + alt);
@@ -111,8 +138,8 @@ export function debugSpots(g: Game): Spot[] {
       const spin = V(b.axis.x, b.axis.y, b.axis.z).multiplyScalar(b.spin).cross(pos.clone().sub(b.pos));
       place(g, b, pos, spin, t.multiplyScalar(Math.cos(pitch)).addScaledVector(up, Math.sin(pitch)), up);
     };
-    out.push({ id: 'cloudsabove', label: 'Above the clouds', hint: `${b.name}, ${Math.round((deck * 1.6) / 1000)} km up`, go: () => over(deck * 1.6, -0.45) });
-    out.push({ id: 'cloudsbelow', label: 'Under the clouds', hint: `${b.name}, 1.5 km over the ground`, go: () => over(1500, 0.3) });
+    out.push({ id: 'cloudsabove', label: 'Above the clouds', hint: `${b.name}, ${Math.round((deck * 1.6) / 1000)} km up`, go: () => over(deck * 1.6, -0.45, false) });
+    out.push({ id: 'cloudsbelow', label: 'Under the clouds', hint: `${b.name}, 1.5 km over the ground`, go: () => over(1500, 0.3, true) });
   }
   if (aired) {
     const b = aired;

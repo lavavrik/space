@@ -57,8 +57,9 @@ fn density(P: vec3f) -> f32 {
   // one fog sheet): thicker cover leaves fewer, narrower gaps, but some
   let cov0 = cloudCover(textureSampleLevel(cloudTex, cloudSamp, lp / r, 0.0).r);
   // (tnoise is value noise: mostly within ±0.35, so the thresholds are narrow)
-  let field = smoothstep(-0.2, 0.1, tnoise(k * 0.1 + 11.0) + 0.1 * cov0);
-  let clump = smoothstep(-0.25, 0.05, tnoise(k * 0.55 + 23.0) + 0.1 * cov0);
+  // (a gentle cut: it's for texture, the cube's cover decides where the weather is)
+  let field = smoothstep(-0.35, -0.05, tnoise(k * 0.1 + 11.0) + 0.1 * cov0);
+  let clump = smoothstep(-0.35, -0.05, tnoise(k * 0.55 + 23.0) + 0.1 * cov0);
   let cov = cov0 * field * clump;
   if (cov < 0.02) { return 0.0; }
   // towers: thicker cover rises higher, and ~8 km cells rise and fall, so the tops aren't one carpet
