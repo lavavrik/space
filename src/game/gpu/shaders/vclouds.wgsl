@@ -216,7 +216,10 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     // atRolloff), and the ground is dimmed evenly too (its ambient light and the sea's sky
     // reflection aren't shaded by the clouds in its own shader; faded in with distance, the ground
     // near you stood in a lighter circle)
-    skyDim = 1.0 - 0.8 * shade / max(wsum, 1e-6); // (a fifth left: an overcast day, not night)
+    // (a fifth left: an overcast day, not night; and only by day: at night there's no sunlight for
+    // the clouds to take away, and it darkened the night's own glow to nothing)
+    let camDay = smoothstep(-0.1, 0.1, dot(normalize(-C), L));
+    skyDim = 1.0 - 0.8 * camDay * shade / max(wsum, 1e-6);
     let fade = smoothstep(mix(rBot, rTop, 0.6), rTop, camR);
     skyDim = mix(skyDim, 1.0, fade);
     rays *= 1.0 - fade;
@@ -271,7 +274,10 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
       g *= 0.5;
     }
     let h = clamp((length(P - C) - rBot) / (rTop - rBot), 0.0, 1.0);
-    let light = sunCol * (sun * 0.6 + 0.12 * (0.4 + 0.6 * h)) * dayK * 0.97;
+    // plus, near you, your own lamps scattered in the cloud (the path from them is the path from the
+    // camera: × T again), and at night the night's own faint light
+    let lamp = vec3f(1.0, 0.97, 0.92) * shipLightAt(P) * T * 0.08;
+    let light = sunCol * (sun * 0.6 + 0.12 * (0.4 + 0.6 * h)) * dayK * 0.97 + lamp + vec3f(0.55, 0.7, 1.0) * 0.05 * (1.0 - dayK);
     let tStep = exp(-dn * SIGMA * dt);
     S += T * light * (1.0 - tStep);
     tSum += t * T * (1.0 - tStep);

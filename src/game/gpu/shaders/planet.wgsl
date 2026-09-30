@@ -96,6 +96,9 @@ fn bumpN(N: vec3f, H: f32, obj: vec3f, wp: vec3f, terr: bool) -> vec3f {
   return normalize(abs(det) * N - g);
 }
 
+/** The night's own light on the ground (starlight, airglow), in daylight's units. */
+const NIGHT_AMB: f32 = 0.15; // (the ground's dark: 0.02 of it was lost in black)
+
 @fragment
 fn fs(in: Out) -> @location(0) vec4f {
   let terr = in.t.y > 0.5;
@@ -224,7 +227,13 @@ fn fs(in: Out) -> @location(0) vec4f {
   let sky = select(0.0, 0.07 * smoothstep(-0.12, 0.35, ndl0), world.atOn > 0.5);
   let R = reflect(-L, N);
   let s = pow(max(dot(R, V), 0.0), 60.0) * 0.7 * spec * diff;
-  col = col * (diff * sunC + sky + 0.0002) + vec3f(1.0, 0.95, 0.85) * s * sunC;
+  // (the ship's lamps, near: headlights and landing lights; world.wgsl lights up close only matter
+  // for the ground under you)
+  let lamps = select(vec3f(0.0), shipLights(N, in.wp, col), terr);
+  // the night's own light, where the sun's gone: starlight and airglow, so the ground under an
+  // overcast night isn't pitch black (it was 0.0002)
+  let nightAmb = NIGHT_AMB * vec3f(0.55, 0.7, 1.0) * (1.0 - smoothstep(-0.2, 0.05, ndl0));
+  col = col * (diff * sunC + sky + 0.0002 + nightAmb) + vec3f(1.0, 0.95, 0.85) * s * sunC + lamps;
   if (pop > 0.0) {
     let night = sm(0.1, -0.08, ndl0);
     if (night > 0.0) {

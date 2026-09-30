@@ -37,7 +37,11 @@ fn fs(in: Out) -> @location(0) vec4f {
   // an eclipse or the ring's shadow dims the sky too: taken where the ray meets the ground, or
   // halfway along it through the air
   let at = select(0.5 * (s.x + s.y), s.y, ground);
-  let sky = atInscatter(dir * s.x, dir * s.y, normalize(world.light.xyz), 8) * sunShade(dir * at - C);
+  var sky = atInscatter(dir * s.x, dir * s.y, normalize(world.light.xyz), 8) * sunShade(dir * at - C);
+  // the night sky's own faint glow (airglow, starlight in the air): as much as there's air along the
+  // ray, where the sun's gone (at night the sky was pitch black, and so was everything under it)
+  let night = 1.0 - smoothstep(-0.15, 0.1, dot(normalize(-C), normalize(world.light.xyz)));
+  sky += vec3f(0.03, 0.045, 0.09) * (1.0 - dot(atTrans, vec3f(0.333))) * night;
   let lum = dot(sky, vec3f(0.2126, 0.7152, 0.0722));
   let keep = clamp(1.0 - lum * 5.0, 0.0, 1.0) * dot(atTrans, vec3f(0.333));
   return vec4f(sky, keep);

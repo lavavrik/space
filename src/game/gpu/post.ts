@@ -4,6 +4,7 @@
  */
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
+import { occluder } from '../sim/sight';
 import { BLOOM_WGSL } from './shaders';
 
 const LEVELS = 6;
@@ -138,6 +139,8 @@ export function postParams(g: Game, vp: THREE.Matrix4, clouds: boolean, CW: numb
   // the star on screen, for its lens flare
   const r = g.cur.star.pos.clone().sub(g.ship.pos);
   const q = new THREE.Vector4(r.x, r.y, r.z, 0).applyMatrix4(vp);
-  if (q.w > 0) out.set([(q.x / q.w) * 0.5 + 0.5, 0.5 - (q.y / q.w) * 0.5, 1], 8);
+  // (not behind a world: the flare reads the frame at the star, and the ground there, lit by your
+  // landing lights at night, flared)
+  if (q.w > 0 && !occluder(g.cur.bodies, g.ship.pos, g.cur.star.pos)) out.set([(q.x / q.w) * 0.5 + 0.5, 0.5 - (q.y / q.w) * 0.5, 1], 8);
   return out;
 }

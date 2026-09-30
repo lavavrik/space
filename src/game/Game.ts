@@ -137,6 +137,8 @@ export class Game {
   radar: { sweep: number; seen: Set<string>; rocks: Prospect[] } = { sweep: 0, seen: new Set(), rocks: [] };
   /** Headlights (Shift+L): a floodlight cone along the nose (gpu/shaders/frame.wgsl headlight). */
   lights = true;
+  /** Landing lights: on by themselves low over a world in the dark (sim/landingLights.ts). */
+  landingLights = false;
   /** Your lost ships' wrecks, with the metal they carried (sim/wreck.ts): all systems, the newest few. */
   wrecks: Wreck[] = [];
   /** Your contracts (sim/contracts.ts), the board jobs you've taken or finished (not offered again), and the contracts window (Shift+J). */

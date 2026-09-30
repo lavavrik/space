@@ -42,7 +42,7 @@ import { WorldsLayer } from './worlds';
 /** Near plane (m): with reversed-Z and 32-bit float depth, precision barely depends on it. */
 const NEAR = 0.5;
 /** Bytes in the per-frame uniform block (frame.wgsl Frame): two mat4, 12 floats, a vec4, 4 floats. */
-const FRAME_BYTES = 208;
+const FRAME_BYTES = 224;
 
 export class GpuRenderer implements GameRenderer {
   readonly kind = 'webgpu' as const;
@@ -88,6 +88,7 @@ export class GpuRenderer implements GameRenderer {
   private readonly rot = new THREE.Matrix4();
   private readonly vp = new THREE.Matrix4();
   private readonly head = new THREE.Vector3();
+  private readonly land = new THREE.Vector3();
 
   constructor(
     readonly canvas: HTMLCanvasElement,
@@ -240,6 +241,9 @@ export class GpuRenderer implements GameRenderer {
     f.set([this.W, this.H, P.elements[0], P.elements[5], this.PR, g.simTime, e, skyExp, starExp, HEAD_K, FLOOD_K, HEAD_K / INT_K], 32);
     this.head.set(0, 0, -1).applyQuaternion(ship.q);
     f.set([this.head.x, this.head.y, this.head.z, g.lights ? 1 : 0, INT_K, WINDOW_K, SKY_K], 44);
+    // the landing lights: down from under the hull, a little forward (sim/landingLights.ts)
+    this.land.set(0, -1, -0.35).normalize().applyQuaternion(ship.q);
+    f.set([this.land.x, this.land.y, this.land.z, g.landingLights ? 1 : 0], 52);
     device.queue.writeBuffer(this.frameBuf, 0, f);
     this.updateViews(g);
     this.sky.update(g, this.W, this.H);

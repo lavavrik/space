@@ -17,6 +17,7 @@ import { updateNav } from './navroute';
 import { scoop, shipMass, solarPower, turnThrust } from './resources';
 import { crossSection, updateThermal } from './thermal';
 import { battCap, beginPower, grant, loadShed, settleBattery } from './power';
+import { LAND_KW, updateLandingLights } from './landingLights';
 import { railsStep, stopWarp, warpBlocked } from './timewarp';
 import { updatePivot } from './pivot';
 import { updateRadar } from './radar';
@@ -91,6 +92,8 @@ export function update(g: Game, dt: number, realDt = dt) {
   beginPower(g); // this frame's power budget (sim/power.ts)
   updateRadar(g, dt);
   power.lightsKW = g.lights ? grant(g, LIGHTS_KW, 'headlights') : 0;
+  updateLandingLights(g);
+  if (g.landingLights) power.lightsKW += grant(g, LAND_KW, 'landing lights');
 
   // --- rotation
   let [mdx, mdy] = input.consumeMouse();

@@ -82,3 +82,22 @@ ground, and are drawn by the planet shader on both the far sphere and the terrai
 - Shadows are per vertex: finer relief (bump-mapped) shades itself but casts nothing.
 - Contact is radial, so you don't slide down steep slopes.
 - Orbits, holds and the planner still measure from the mean radius. They stay above the peaks (`minOrbitAlt` > the highest terrain; tested).
+
+## At night, and your lamps
+
+- **The night's own light:** where the sun's gone, the ground gets a faint bluish ambient
+  (starlight, airglow; `planet.wgsl NIGHT_AMB`, 15 % of albedo). The sky glows faintly with as much
+  air as the ray crosses (`atmosphere.wgsl`), and the clouds are lit dimly (`vclouds.wgsl`). The
+  overcast's dimming of what's behind the clouds (docs/clouds.md) only applies by day. Before, an
+  overcast night was pitch black.
+- **Your lamps light the ground and the clouds:**
+  - The headlights, a cone along the nose, and the landing lights, a wide cone down under the
+    hull, a little forward (`frame.wgsl shipLights`).
+  - The ground near you is lit by both (terrain only: the far sphere is too far for them to reach).
+  - In cloud and fog their light scatters (`shipLightAt`): beams in the murk.
+- **Landing lights (`sim/landingLights.ts`):** they switch themselves on under 2 km above the
+  ground when it's dark there (the sun 5° under the horizon, or thick cover overhead while under
+  the deck), and off again when it's light or you climb (with a margin, so they don't flicker).
+  They draw 1.2 kW and say "Landing lights on/off" when they switch.
+- The star's lens flare is off while a world hides the star: it reads the frame at the star, and
+  there the ground lit by the landing lights flared.

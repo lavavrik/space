@@ -21,6 +21,7 @@ struct Frame {
   winK: f32,
   skyK: f32,
   _pad0: f32,
+  landDir: vec4f,   // the landing lights' axis (world axes); w: on (0 or 1)
 }
 
 // The ship's headlights, as a physical lamp (render/shaders/headlight.glsl): a cone along the nose
@@ -33,6 +34,33 @@ fn headlight(N: vec3f, wp: vec3f, albedo: vec3f, K: f32) -> vec3f {
   let ndl = max(dot(N, -toSurf), 0.0);
   return albedo * vec3f(1.0, 0.96, 0.88) * cone * ndl * frame.headDir.w * K / (d * d);
 }
+// The landing lights (sim/landingLights.ts): a wide cone (~40–60° half-angle) down under the hull,
+// a third as bright as the headlights and spread from a few metres off the ship (the lamps sit
+// apart under the hull; as one point they blew the ground under a landed ship out to white)
+const LAND_REL: f32 = 0.35;
+fn landingLight(N: vec3f, wp: vec3f, albedo: vec3f) -> vec3f {
+  let d = max(length(wp), 3.0);
+  let toSurf = wp / d;
+  let cone = smoothstep(0.5, 0.75, dot(toSurf, frame.landDir.xyz));
+  let ndl = max(dot(N, -toSurf), 0.0);
+  return albedo * vec3f(1.0, 0.97, 0.92) * cone * ndl * frame.landDir.w * frame.headK * LAND_REL / (d * d + 900.0);
+}
+
+// all the ship's lamps on a surface: the headlights and the landing lights
+fn shipLights(N: vec3f, wp: vec3f, albedo: vec3f) -> vec3f {
+  return headlight(N, wp, albedo, frame.headK) + landingLight(N, wp, albedo);
+}
+
+// how much of the ship's lamps' light reaches a point in the air (its cones, 1/d²; for scattering
+// in fog and cloud, vclouds.wgsl)
+fn shipLightAt(wp: vec3f) -> f32 {
+  let d = max(length(wp), 3.0);
+  let toP = wp / d;
+  let head = smoothstep(0.91, 0.96, dot(toP, frame.headDir.xyz)) * frame.headDir.w;
+  let land = smoothstep(0.5, 0.75, dot(toP, frame.landDir.xyz)) * frame.landDir.w;
+  return head * frame.headK / (d * d) + land * frame.headK * LAND_REL / (d * d + 900.0);
+}
+
 @group(0) @binding(0) var<uniform> frame: Frame;
 
 // one triangle covering the viewport (vertex_index 0, 1, 2)
