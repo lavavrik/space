@@ -74,7 +74,8 @@ function timeToImpact(g: Game) {
   const rel = ship.pos.clone().sub(b.pos);
   const r = rel.length();
   const vr = ship.vel.dot(rel) / r;
-  if (ship.landed || vr >= 0) return Infinity;
+  // (on the ground, or docked: held up, not falling; a sky station's pad counted as a free fall)
+  if (ship.landed || g.dock?.docked || vr >= 0) return Infinity;
   // falling: time to cover the altitude at the current radial speed plus gravity's pull (an
   // underestimate of the time, so it errs on the side of stopping early)
   const h = r - surfaceRadius(b, ship.pos),

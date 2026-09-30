@@ -814,10 +814,14 @@ export class Overlay {
     }
   }
 
-  /** Route waypoints (nav computer): numbered double diamonds on their stars, arrows when off-screen. */
+  /**
+   * Route waypoints (nav computer): numbered double diamonds on their stars, arrows when off-screen.
+   * Only while you're planning (the nav panel open) or a route is flying: a plan left unflown stays
+   * planned (it's there when you open the panel again) but off the view.
+   */
   private drawNavDest(g: Game) {
     const pts = g.navPoints;
-    if (!pts.length) return;
+    if (!pts.length || !(g.navPanel || g.route?.running)) return;
     const { ctx, W, H } = this;
     const gp = galPos(g);
     ctx.font = this.font(11, SANS);
