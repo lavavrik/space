@@ -4,6 +4,7 @@
  */
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
+import type { Settings } from '../settings';
 import { occluder } from '../sim/sight';
 import { BLOOM_WGSL } from './shaders';
 
@@ -119,7 +120,7 @@ export class Bloom {
  * as strong as your speed (from ~1,000 to ~1,000,000 km/s), the bloom and flare strengths, and
  * the canvas's size (CW × CH px).
  */
-export function postParams(g: Game, vp: THREE.Matrix4, clouds: boolean, CW: number, CH: number) {
+export function postParams(g: Game, vp: THREE.Matrix4, clouds: boolean, CW: number, CH: number, set: Settings) {
   const out = new Float32Array(12);
   let blur = 0;
   let fx = 0.5,
@@ -134,7 +135,7 @@ export function postParams(g: Game, vp: THREE.Matrix4, clouds: boolean, CW: numb
       fy = 0.5 - (d.y / d.w) * 0.5;
     }
   }
-  out.set([clouds ? 1 : 0, BLOOM_K, FLARE_K, blur, fx, fy, side, CW]);
+  out.set([clouds ? 1 : 0, set.bloom ? BLOOM_K : 0, set.flare ? FLARE_K : 0, set.ftlBlur ? blur : 0, fx, fy, side, CW]);
   out[11] = CH; // (the canvas's size: the scene may be rendered smaller, gpu/dynres.ts)
   // the star on screen, for its lens flare
   const r = g.cur.star.pos.clone().sub(g.ship.pos);

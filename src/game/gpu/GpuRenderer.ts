@@ -23,6 +23,7 @@ import type { GameRenderer, ViewInfo } from '../render/api';
 import { AUTO_EXPOSURE, AutoExposure, FLOOD_K, HEAD_K, INT_K, MAX_EXP, SKY_EXP_P, SKY_K, STAR_EXP_P, WINDOW_K } from '../render/exposure';
 import { MAX_RENDER_PIXELS } from '../render/look';
 import { DynamicResolution } from './dynres';
+import { DEFAULT_SETTINGS, type Settings } from '../settings';
 import type { Body, CurrentSystem, StarSystem, Station } from '../types';
 import type { Gpu } from './device';
 import { EffectsLayer } from './effects';
@@ -82,6 +83,10 @@ export class GpuRenderer implements GameRenderer {
   private basePR = 1;
   /** The scene's resolution, kept up with the display (gpu/dynres.ts). */
   readonly dynres = new DynamicResolution();
+  /** The Settings panel's (applySettings), and the CSS size last given to resize. */
+  private settings: Settings = { ...DEFAULT_SETTINGS };
+  private cssW = 1;
+  private cssH = 1;
   private readonly views = new Map<Body | Station, ViewInfo>();
   private readonly proj = new THREE.Matrix4();
   private readonly viewM = new THREE.Matrix4();
@@ -157,6 +162,8 @@ export class GpuRenderer implements GameRenderer {
 
   /** The canvas: up to 1.5× the CSS resolution, at most MAX_RENDER_PIXELS (render/look.ts). */
   resize(W: number, H: number) {
+    this.cssW = W;
+    this.cssH = H;
     this.basePR = Math.min(devicePixelRatio || 1, 1.5, Math.sqrt(MAX_RENDER_PIXELS / Math.max(1, W * H)));
     this.CW = Math.max(1, Math.round(W * this.basePR));
     this.CH = Math.max(1, Math.round(H * this.basePR));
@@ -176,11 +183,22 @@ export class GpuRenderer implements GameRenderer {
     if (s !== null) this.setScale(s);
   }
 
+  /** The Settings panel's graphics options (game/settings.ts), applied now. */
+  applySettings(s: Settings) {
+    this.settings = s;
+    this.dynres.enable(s.dynres);
+    this.worlds.cloudsOn = s.clouds !== 'off';
+    this.vclouds.quality = s.clouds === 'low' ? 0.5 : 1;
+    this.resize(this.cssW, this.cssH);
+  }
+
   /** The scene's render targets at `scale` × the canvas's resolution (the final pass scales up). */
   private setScale(scale: number) {
-    this.PR = this.basePR * scale;
-    this.W = Math.max(1, Math.round(this.CW * scale));
-    this.H = Math.max(1, Math.round(this.CH * scale));
+    // (at most the Settings panel's resolution: the dynamic one scales within it)
+    const k = scale * this.settings.resScale;
+    this.PR = this.basePR * k;
+    this.W = Math.max(1, Math.round(this.CW * k));
+    this.H = Math.max(1, Math.round(this.CH * k));
     this.worlds.pr = this.PR;
     this.hdr?.destroy();
     this.resolved?.destroy();
@@ -286,7 +304,7 @@ export class GpuRenderer implements GameRenderer {
     // volumetric clouds near a clouded world (they read the scene's depth, so it's kept)
     const clouds = !inTunnel && this.worlds.vcOn > 0;
     // (the clouds are laid over the frame in their own pass, before the particles, not by the tone map)
-    device.queue.writeBuffer(this.toneBuf, 0, postParams(g, this.vp, false, this.CW, this.CH));
+    device.queue.writeBuffer(this.toneBuf, 0, postParams(g, this.vp, false, this.CW, this.CH, this.settings));
     const scene = (label: string, first: boolean, last: boolean, draw: (pass: GPURenderPassEncoder) => void) => {
       const pass = enc.beginRenderPass({
         label,
@@ -341,7 +359,7 @@ export class GpuRenderer implements GameRenderer {
     }
     if (AUTO_EXPOSURE) this.meter.encode(enc, e);
 
-    this.bloom.render(enc, tw);
+    if (this.settings.bloom) this.bloom.render(enc, tw);
     const tone = enc.beginRenderPass({
       label: 'tonemap',
       colorAttachments: [{ view: this.context.getCurrentTexture().createView(), loadOp: 'clear', storeOp: 'store', clearValue: [0, 0, 0, 1] }],

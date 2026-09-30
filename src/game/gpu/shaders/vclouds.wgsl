@@ -29,7 +29,7 @@ struct VParams {
   near: f32,       // the projection's near plane (depth = near / distance along the view axis)
   scale: f32,      // frame pixels per march pixel
   lift: f32,       // how far the layer's lifted over the high ground under you (m; see liftAt)
-  _p2: f32,
+  quality: f32,    // the share of the steps marched (Settings: 1, or 0.5)
 }
 @group(2) @binding(0) var sceneDepth: texture_depth_multisampled_2d;
 @group(2) @binding(1) var outTex: texture_storage_2d<rgba16float, write>;
@@ -248,7 +248,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   // ray from high up through a few km of layer takes ~12, not 48: from 300 km a screen full of
   // clouds cost so much that the dynamic resolution dropped to half. (A ray that misses the layer
   // marches nothing, but still goes through the blend below.)
-  let steps = select(0, clamp(i32(ceil(2.0 * span / max(150.0, 0.004 * t0))), 12, select(STEPS, STEPS_IN, inLayer)), t1 > t0);
+  let steps = select(0, i32(f32(clamp(i32(ceil(2.0 * span / max(150.0, 0.004 * t0))), 12, select(STEPS, STEPS_IN, inLayer))) * vp.quality), t1 > t0);
   let sunSteps = select(SUN_STEPS, 3, t0 > 50000.0);
   // (the start is jittered: banding becomes fine grain, averaged out over frames.) Steps are spaced
   // quadratically, fine near the camera and coarse far off: evenly, a ray skimming the layer 250 km

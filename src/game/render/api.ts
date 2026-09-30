@@ -3,6 +3,7 @@
  * debug tools see it through this.
  */
 import type { Game } from '../Game';
+import type { Settings } from '../settings';
 import type { Body, CurrentSystem, Station, StarSystem } from '../types';
 
 /** How far a body or station is and how big it looks this frame (for the overlay's markers). */
@@ -20,6 +21,8 @@ export interface GameRenderer {
   resize(W: number, H: number): void;
   /** At the end of each frame: its start (ms) and the CPU's time over it (ms), for the dynamic resolution. */
   pace(now: number, cpuMs: number): void;
+  /** The Settings panel's graphics options (game/settings.ts). */
+  applySettings(s: Settings): void;
   render(g: Game): void;
   dispose(): void;
   bodyView(b: Body): ViewInfo | undefined;

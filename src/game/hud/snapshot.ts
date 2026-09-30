@@ -47,7 +47,7 @@ const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 
 export function buildSnapshot(g: Game): HudSnapshot {
   return {
-    pause: g.paused ? { sound: !g.audio.muted, names: g.showNames, system: g.cur.sys.name, credits: fmtCr(g.credits), spots: DEBUG ? debugSpots(g).map(({ id, label, hint }) => ({ id, label, hint })) : null } : null,
+    pause: g.paused ? { sound: !g.audio.muted, names: g.showNames, settings: g.settings, system: g.cur.sys.name, credits: fmtCr(g.credits), spots: DEBUG ? debugSpots(g).map(({ id, label, hint }) => ({ id, label, hint })) : null } : null,
     helpVisible: g.helpVisible,
     save: { status: g.savedAt ? `Saved ${ago(g.savedAt)} · autosaves every ${AUTOSAVE_S} s` : `Not saved yet · autosaves every ${AUTOSAVE_S} s`, confirm: g.newGameConfirm > 0 },
     info: g.infoVisible && g.target ? buildInfo(g, g.target) : null,

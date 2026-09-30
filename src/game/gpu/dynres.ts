@@ -34,8 +34,14 @@ const UP_WAIT = 3,
 
 export class DynamicResolution {
   scale = 1;
-  /** Off: always the full resolution (?fullres in the URL). */
-  readonly on = typeof location === 'undefined' || !new URLSearchParams(location.search).has('fullres');
+  /** Off: always the full resolution (?fullres in the URL, or the Settings panel). */
+  private readonly allowed = typeof location === 'undefined' || !new URLSearchParams(location.search).has('fullres');
+  on = this.allowed;
+  /** Settings: switch it (the URL's ?fullres still wins). */
+  enable(on: boolean) {
+    this.on = this.allowed && on;
+    if (!this.on) this.scale = 1;
+  }
   private readonly long: number[] = [];
   private win: number[] = [];
   private cpu: number[] = [];

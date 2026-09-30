@@ -24,6 +24,9 @@ export class ShipAudio {
   private lastMsg = { text: '', at: -1 };
   private beepT = 0;
   muted = false;
+  /** Settings (game/settings.ts): the overall level and the cabin hum's, 0…1. */
+  private volume = 1;
+  private humK = 1;
 
   constructor() {
     // one ship's sound per page: a game made again (a hot reload in development, say) closes the
@@ -59,8 +62,15 @@ export class ShipAudio {
     } catch {
       /* not remembered */
     }
-    if (this.ctx) this.master.gain.setTargetAtTime(this.muted ? 0 : VOLUME, this.ctx.currentTime, 0.05);
+    if (this.ctx) this.master.gain.setTargetAtTime(this.muted ? 0 : VOLUME * this.volume, this.ctx.currentTime, 0.05);
     return !this.muted;
+  }
+
+  /** The Settings panel's levels (0…1): everything, and the life support's hum. */
+  setLevels(volume: number, hum: number) {
+    this.volume = volume;
+    this.humK = hum;
+    if (this.ctx) this.master.gain.setTargetAtTime(this.muted ? 0 : VOLUME * volume, this.ctx.currentTime, 0.05);
   }
 
   /** Hidden tab: stop (and don't burn CPU); back: carry on. */
@@ -78,7 +88,7 @@ export class ShipAudio {
     comp.ratio.value = 4;
     comp.connect(ctx.destination);
     this.master = ctx.createGain();
-    this.master.gain.value = this.muted ? 0 : VOLUME;
+    this.master.gain.value = this.muted ? 0 : VOLUME * this.volume;
     this.master.connect(comp);
     this.noise = { white: noiseBuffer(ctx, 'white'), brown: noiseBuffer(ctx, 'brown') };
 
@@ -222,7 +232,7 @@ export class ShipAudio {
   private steer(v: Levels, t: number) {
     const set = (p: AudioParam, x: number, tau = 0.08) => p.setTargetAtTime(x, t, tau);
     const { layers: L } = this;
-    set(L.hum.gain.gain, 0.12 * v.hum, 0.5);
+    set(L.hum.gain.gain, 0.12 * v.hum * this.humK, 0.5);
     // the drive's warble: only while it works, louder and higher with thrust (at rest it droned on
     // as a constant "wawawa")
     set(L.idle.gain.gain, 0.16 * v.idle * v.engine, 0.3);

@@ -472,7 +472,7 @@ export class WorldsLayer {
       // on an Earth); its flat deck fades out as they fade in (from 40 down to 25). From 8 down to 4
       // they switched to the flat deck abruptly while still close enough to see how much plainer it is
       const deckH = f[91];
-      const vc = deckH > 0 ? 1 - THREE.MathUtils.smoothstep(d - b.radius, 25 * deckH, 40 * deckH) : 0;
+      const vc = deckH > 0 && this.cloudsOn ? 1 - THREE.MathUtils.smoothstep(d - b.radius, 25 * deckH, 40 * deckH) : 0;
       f[101] = vc;
       if (vc > this.vcOn) {
         this.vcOn = vc;
@@ -538,6 +538,8 @@ export class WorldsLayer {
   readonly vcQ = new THREE.Quaternion();
   /** …and how far its clouds are lifted over the ground under you (m; vclouds.wgsl liftAt). */
   vcLift = 0;
+  /** Settings: volumetric clouds at all (off: the flat deck all the way down). */
+  cloudsOn = true;
 
   /** The stars' share of the exposure (render/exposure.ts STAR_EXP_P): planets' dots follow it. */
   starExp = 1;

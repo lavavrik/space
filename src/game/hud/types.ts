@@ -1,4 +1,5 @@
 import type { ComputerKind } from '../avionics/catalog';
+import type { Settings } from '../settings';
 import type { MsgKind, OrbitType } from '../types';
 
 /** A text readout, optionally flagged as a warning. */
@@ -282,7 +283,7 @@ export interface Lamp {
 
 export interface HudSnapshot {
   /** The pause menu (Esc), while it's up: the switches it shows. */
-  pause: { sound: boolean; names: boolean; system: string; credits: string; /** Debug builds: where the menu can jump to (debug/poses.ts). */ spots: { id: string; label: string; hint: string }[] | null } | null;
+  pause: { sound: boolean; names: boolean; system: string; credits: string; /** Sound and graphics options (game/settings.ts). */ settings: Settings; /** Debug builds: where the menu can jump to (debug/poses.ts). */ spots: { id: string; label: string; hint: string }[] | null } | null;
   /** The system map is open: the flight HUD steps aside (render/SystemMap.ts). */
   mapOpen: boolean;
   lamps: Lamp[];

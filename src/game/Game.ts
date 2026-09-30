@@ -1,4 +1,5 @@
 import { spawnTraffic, type Npc } from './sim/traffic';
+import { loadSettings, saveSettings, type Settings } from './settings';
 import { debugSpots } from './debug/poses';
 import { noAero, type AeroState } from './sim/atmosphere';
 import { FOV, HUD_INTERVAL, JUMP_RANGE, MSG_TIME, SHIP, SKY_RADIUS } from './constants';
@@ -252,6 +253,8 @@ export class Game {
   readonly overlay: Overlay;
   /** The ship's sound (audio/ShipAudio.ts; Shift+P on / off). */
   readonly audio = new ShipAudio();
+  /** Sound and graphics options (game/settings.ts; the pause menu's Settings panel). */
+  settings: Settings = loadSettings();
   private readonly glCanvas: HTMLCanvasElement;
   private readonly overlayCanvas: HTMLCanvasElement;
   private hudT = 0;
@@ -300,6 +303,7 @@ export class Game {
     addEventListener('resize', this.resize);
 
     this.resize();
+    this.applySettings();
     // resume the saved game if there is one (save.ts), otherwise start at home
     if (loadGame(this)) {
       if (this.dock?.docked) this.openStation(); // resumed on a pad: the station window, as on docking
@@ -615,6 +619,17 @@ export class Game {
     s.temp = TEMP.start;
     this.showMsg('Repaired · tanks and battery full');
   }
+  /** Settings panel: change one, apply it now, remember it. */
+  setSetting<K extends keyof Settings>(key: K, value: Settings[K]) {
+    this.settings = { ...this.settings, [key]: value };
+    saveSettings(this.settings);
+    this.applySettings();
+    this.invalidateHud();
+  }
+  private applySettings() {
+    this.audio.setLevels(this.settings.volume, this.settings.hum);
+    this.scene.applySettings(this.settings);
+  }
   toggleSound() {
     this.audio.toggleMute();
     this.invalidateHud();
@@ -716,6 +731,11 @@ export class Game {
   };
 
   private frame = (now: number) => {
+    // held to 60 fps (Settings): skip the display's in-between refreshes
+    if (this.settings.fps === '60' && now - this.last < 1000 / 60 - 2) {
+      this.raf = requestAnimationFrame(this.frame);
+      return;
+    }
     const perf = this.perf;
     perf.frameStart(now - this.last);
     const dt = Math.min(0.05, (now - this.last) / 1000);

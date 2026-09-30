@@ -79,6 +79,8 @@ export class VolumetricClouds {
   private n = 0;
   /** Frame pixels per march pixel. */
   private scale = 2;
+  /** Settings: the share of the steps marched (1, or 0.5 for 'low'). */
+  quality = 1;
 
   constructor(
     private readonly device: GPUDevice,
@@ -185,7 +187,7 @@ export class VolumetricClouds {
     this.reproj.premultiply(this.tmpM.fromArray(this.prevVP));
     d.set(this.reproj.elements, 0);
     d.set([0, 0, 0, this.hasPrev ? 1 : 0], 16);
-    d.set([this.w, this.h, on, this.n++, this.near, this.scale, lift, 0], 20);
+    d.set([this.w, this.h, on, this.n++, this.near, this.scale, lift, this.quality], 20);
     this.device.queue.writeBuffer(this.params, 0, d);
     this.prevVP.set(vp.elements);
     this.prevRel.copy(rel);
