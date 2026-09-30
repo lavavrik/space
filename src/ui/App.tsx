@@ -28,7 +28,7 @@ export function App() {
         <PauseMenu
           p={hud.pause}
           save={hud.save}
-          act={{ resume: () => game!.resume(), controls: () => game!.showControls(), sound: () => game!.toggleSound(), names: () => game!.toggleNames(), save: () => game!.saveFromMenu(), newGame: () => game!.newGame(), jump: (id) => game!.debugJump(id) }}
+          act={{ resume: () => game!.resume(), controls: () => game!.showControls(), sound: () => game!.toggleSound(), names: () => game!.toggleNames(), save: () => game!.saveFromMenu(), newGame: () => game!.newGame(), jump: (id) => game!.debugJump(id), refill: () => game!.debugRefill() }}
         />
       )}
       {hud && hud.mapOpen && (

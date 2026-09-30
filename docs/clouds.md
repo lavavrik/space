@@ -19,7 +19,8 @@ pixel's ray through the cloud layer (0.4 to 1.05 deck heights up) in 48 steps, s
 scene's depth (so mountains and stations poke through) or 250 km out. The tone map lays the result
 over the frame: scene × what the clouds let through + their light.
 
-- **Density:** the cube's cover, shaped by a height profile (thicker cover rises higher; ~8 km cells
+- **Density:** the cube's cover, broken into ~20 km fields and ~4 km clumps (the cube alone gave
+  whole regions of full cover that read as one fog sheet), shaped by a height profile (thicker cover rises higher; ~8 km cells
   rise and fall so the tops aren't one carpet; soft base, rounded tops) and eroded by three octaves of
   3D noise (billows a couple of km across, finer wisps), drifting with the wind.
 - **Light:** at each sample, the sun through the cloud above it (5 steps toward it, doubling from
@@ -27,13 +28,15 @@ over the frame: scene × what the clouds let through + their light.
   forward (Frostbite's): clouds are bright from every side, with a silver lining toward the sun. Plus
   a little skylight, the sunlight's colour through the air, and eclipses and ring shadows
   (`shadow.wgsl sunShade`).
-- **Air:** the haze between the camera and the first cloud, as for the ground.
+- **Air:** the haze between the camera and the first cloud, as for the ground. All the air's
+  inscatter (`atmo.wgsl atRolloff`) is compressed and paled over a knee: a grazing path low in the
+  air saturates every colour at 3–5× white, and the horizon was a wide flat-white band.
 - **Noise:** each ray starts at a jittered offset (interleaved gradient noise, moving each frame),
   and the result is blended 80/20 with last frame's, reprojected by the clouds' distance, so the
   grain averages out over a few frames.
-- **Light shafts:** below the deck, 8 samples along the ray through the air test whether the clouds
+- **Light shafts:** below the deck, 12 samples along the first 30 km of the ray through the air test whether the clouds
   hide the sun from there (3 density samples up through the layer); the haze along the ray is dimmed
-  by that share, weighted by the air's density, and written as negative light, so the composite
+  by half that share, weighted by the air's density, and written as negative light, so the composite
   takes it off the sky and the ground: shafts under broken cloud, a dim world under overcast.
 - **Cost** (M-series, 2400 × 1500): about 2 ms looking down from above the deck, 3 ms from 50 km,
   1–2 ms from below.

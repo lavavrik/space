@@ -10,6 +10,12 @@ const LEVELS = 6;
 /** Light over this (display units) blooms. */
 const THRESHOLD = 2.0;
 export const BLOOM_K = 0.25;
+/**
+ * Each coarser level's share as it's added into the next finer one (so the widest level adds
+ * 0.55⁵ ≈ 5%): added at full weight, a wide bright source (the horizon's haze at low altitude)
+ * bloomed as much through the coarsest levels as the finest, a white glow rising far into the sky.
+ */
+const UP_W = 0.55;
 export const FLARE_K = 0.4;
 
 export class Bloom {
@@ -47,9 +53,9 @@ export class Bloom {
       h = Math.max(1, Math.ceil(h / 2));
       this.tex.push(this.device.createTexture({ label: `bloom ${i}`, size: [w, h], format: 'rgba16float', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING }));
     }
-    const params = (srcW: number, srcH: number, first: boolean) => {
+    const params = (srcW: number, srcH: number, first: boolean, k = THRESHOLD) => {
       const b = this.device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-      this.device.queue.writeBuffer(b, 0, new Float32Array([1 / srcW, 1 / srcH, THRESHOLD, first ? 1 : 0]));
+      this.device.queue.writeBuffer(b, 0, new Float32Array([1 / srcW, 1 / srcH, k, first ? 1 : 0]));
       this.bufs.push(b);
       return b;
     };
@@ -73,7 +79,7 @@ export class Bloom {
         entries: [
           { binding: 0, resource: s.createView() },
           { binding: 1, resource: this.samp },
-          { binding: 2, resource: { buffer: params(s.width, s.height, false) } },
+          { binding: 2, resource: { buffer: params(s.width, s.height, false, UP_W) } },
         ],
       });
     });

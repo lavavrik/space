@@ -1,4 +1,4 @@
-import { Coins, FloppyDisk, Keyboard, MapPin, Play, SpeakerHigh, SpeakerSlash, Tag } from '@phosphor-icons/react';
+import { Coins, FloppyDisk, Keyboard, MapPin, Play, SpeakerHigh, SpeakerSlash, Tag, Wrench } from '@phosphor-icons/react';
 import type { HudSnapshot } from '../../game/hud/types';
 import { cx } from './primitives';
 
@@ -10,6 +10,7 @@ interface Actions {
   save: () => void;
   newGame: () => void;
   jump: (id: string) => void;
+  refill: () => void;
 }
 
 /**
@@ -54,6 +55,13 @@ export function PauseMenu({ p, save, act }: { p: NonNullable<HudSnapshot['pause'
         <div className="pmbox pmdev pan">
           <div className="pmtitle">JUMP TO</div>
           <div className="pmsub">debug · this system</div>
+          <button type="button" className="pmbtn pmspot" onClick={act.refill}>
+            <Wrench weight="duotone" />
+            <span>
+              Repair &amp; refill
+              <small>hull, tanks, battery, heat</small>
+            </span>
+          </button>
           {p.spots.map((s) => (
             <button key={s.id} type="button" className="pmbtn pmspot" onClick={() => act.jump(s.id)}>
               <MapPin weight="duotone" />

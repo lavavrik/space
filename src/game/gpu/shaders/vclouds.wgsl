@@ -52,10 +52,16 @@ fn density(P: vec3f) -> f32 {
   let h = (r - rBot) / (rTop - rBot);
   if (h <= 0.0 || h >= 1.0) { return 0.0; }
   let lp = toLocalM() * Pc;
-  let cov = cloudCover(textureSampleLevel(cloudTex, cloudSamp, lp / r, 0.0).r);
+  let k = lp * 0.00045 + vec3f(world.time * 0.00002, 0.0, 0.0);
+  // the cube's cover, broken into ~20 km fields and ~4 km clumps (at full cover the layer read as
+  // one fog sheet): thicker cover leaves fewer, narrower gaps, but some
+  let cov0 = cloudCover(textureSampleLevel(cloudTex, cloudSamp, lp / r, 0.0).r);
+  // (tnoise is value noise: mostly within ±0.35, so the thresholds are narrow)
+  let field = smoothstep(-0.2, 0.1, tnoise(k * 0.1 + 11.0) + 0.1 * cov0);
+  let clump = smoothstep(-0.25, 0.05, tnoise(k * 0.55 + 23.0) + 0.1 * cov0);
+  let cov = cov0 * field * clump;
   if (cov < 0.02) { return 0.0; }
   // towers: thicker cover rises higher, and ~8 km cells rise and fall, so the tops aren't one carpet
-  let k = lp * 0.00045 + vec3f(world.time * 0.00002, 0.0, 0.0);
   let cell = 0.5 + 0.5 * tnoise(k * 0.27 + 5.0);
   let top = clamp(mix(0.25, 1.0, cov) * (0.45 + 0.75 * cell), 0.15, 1.0);
   let profile = smoothstep(0.0, 0.08, h) * (1.0 - smoothstep(top * 0.5, top, h));
@@ -64,7 +70,7 @@ fn density(P: vec3f) -> f32 {
   // erosion: billows a couple of km across and finer wisps (drifting with the wind), strongest at
   // the edges, so what's left is lumpy cauliflower rather than fog
   let n = 0.55 * tnoise(k) + 0.3 * tnoise(k * 3.1) + 0.15 * tnoise(k * 9.3);
-  return clamp((base - (1.0 - base) * (0.6 - 0.6 * n)) * 2.5, 0.0, 1.0);
+  return clamp((base - (1.0 - base) * (0.75 - 0.75 * n)) * 3.0, 0.0, 1.0);
 }
 
 fn hg(c: f32, g: f32) -> f32 {
@@ -133,18 +139,18 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   // light shafts (below the deck): the haze along the ray, less where the clouds shade the air
   var dark = vec3f(0.0);
   if (camR < rBot && world.atOn > 0.5) {
-    var tEnd = 60000.0;
+    var tEnd = 30000.0;
     if (d > 0.0) { tEnd = min(tEnd, vp.near / d / max(dot(dir, -normalize(frame.camRot[2].xyz)), 1e-4)); }
     if (bot.y > 0.0) { tEnd = min(tEnd, bot.y); }
     var shade = 0.0;
     var wsum = 0.0;
-    for (var i = 0; i < 8; i++) {
-      let P = dir * (tEnd * (f32(i) + j) / 8.0);
+    for (var i = 0; i < 12; i++) {
+      let P = dir * (tEnd * (f32(i) + j) / 12.0);
       let w = atDens(length(P - C));
       shade += (1.0 - sunThrough(P, L)) * w;
       wsum += w;
     }
-    if (shade > 0.0) { dark = atInscatter(vec3f(0.0), dir * tEnd, L, 4) * (0.85 * shade / max(wsum, 1e-6)); }
+    if (shade > 0.0) { dark = atInscatter(vec3f(0.0), dir * tEnd, L, 4) * (0.5 * shade / max(wsum, 1e-6)); }
   }
   // (a ray that misses the layer marches nothing, but still goes through the blend below)
   let steps = select(0, STEPS, t1 > t0);
@@ -200,7 +206,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   var res = vec4f((S - dark) * frame.exposure, T);
   // with last frame's: where this pixel's clouds were then (by their distance, or the layer's middle)
   if (vp.moved.w > 0.5) {
-    var tr = select(30000.0, 0.5 * (t0 + t1), steps > 0); // (no layer here: a shaft's typical distance)
+    var tr = select(15000.0, 0.5 * (t0 + t1), steps > 0); // (no layer here: a shaft's typical distance)
     if (tFirst > 0.0) { tr = tFirst; }
     let q = vp.prevVP * vec4f(dir * tr + vp.moved.xyz, 1.0);
     if (q.w > 0.0) {

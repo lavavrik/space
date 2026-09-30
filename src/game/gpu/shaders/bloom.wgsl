@@ -2,11 +2,11 @@
 // half-size copies. Down: a 13-tap filter (Jimenez, "Next Generation Post Processing in Call of Duty:
 // AW"), the first one keeping only light over the threshold (with a soft knee, and each tap group
 // weighted down by its brightness so single hot pixels don't flicker). Up: a 3 × 3 tent, added into
-// the next larger copy. The post pass adds the largest to the frame.
+// the next larger copy, weighted down (post.ts UP_W) so a wide bright area doesn't glow far out. The post pass adds the largest to the frame.
 
 struct BloomP {
   texel: vec2f,     // the source's texel (uv)
-  threshold: f32,   // light under this doesn't bloom (display units)
+  threshold: f32,   // down: light under this doesn't bloom (display units); up: the coarser level's weight
   first: f32,       // 1: the first downsample (the threshold and the fireflies' weighting apply)
 }
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -81,5 +81,5 @@ fn fsUp(in: V) -> @location(0) vec4f {
   var s = tap(uv) * 4.0;
   s += (tap(uv + vec2f(-t.x, 0.0)) + tap(uv + vec2f(t.x, 0.0)) + tap(uv + vec2f(0.0, -t.y)) + tap(uv + vec2f(0.0, t.y))) * 2.0;
   s += tap(uv + vec2f(-t.x, -t.y)) + tap(uv + vec2f(t.x, -t.y)) + tap(uv + vec2f(-t.x, t.y)) + tap(uv + vec2f(t.x, t.y));
-  return vec4f(s / 16.0, 1.0);
+  return vec4f(s / 16.0 * bp.threshold, 1.0);
 }

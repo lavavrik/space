@@ -65,7 +65,21 @@ fn atInscatterC(C0: vec3f, C1: vec3f, L: vec3f, n: i32) -> vec3f {
   atTrans = exp(-beta * od);
   let cosT = dot(dir, L);
   let phase = 0.0597 * (1.0 + cosT * cosT) + 0.04 * pow(max(cosT, 0.0), 12.0);
-  return world.atSunI * beta * sum * phase;
+  return atRolloff(world.atSunI * beta * sum * phase);
+}
+
+// Long grazing paths low in the air (the horizon from near the ground) saturate every colour at ~3–5×
+// white, which the tone map flattened into a wide white band: over ATR_KNEE the brightness is
+// compressed and paled toward white as it is (as the eye sees a bright haze; kept, the long path's
+// hue went yellow), so the horizon stays pale and bright but narrow. Applied to all inscatter
+// (the sky, the ground's and the clouds' haze) so they still meet seamlessly at the horizon.
+const ATR_KNEE = 0.7;
+fn atRolloff(c: vec3f) -> vec3f {
+  let l = dot(c, vec3f(0.2126, 0.7152, 0.0722));
+  if (l <= ATR_KNEE) { return c; }
+  let x = l - ATR_KNEE;
+  let lo = ATR_KNEE + x / (1.0 + 1.5 * x);
+  return mix(c * (lo / l), vec3f(lo), 0.6 * x / (1.0 + x));
 }
 
 fn atInscatter(P0: vec3f, P1: vec3f, L: vec3f, n: i32) -> vec3f {

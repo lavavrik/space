@@ -6,7 +6,8 @@ the final pass `tonemap.wgsl`:
 1. **Bloom:** light over 2 (display units: the star's disc and glow, signal lights, the laser,
    sparks and plasma; not a lit planet or a daylit sky) is kept by the first downsample (soft
    knee; each tap group weighted down by its brightness so single hot pixels don't flicker), then
-   blurred wide through 6 half-size copies (13-tap down, tent up, added back up the chain; after
+   blurred wide through 6 half-size copies (13-tap down, tent up, each coarser level added into the next at 0.55 so a wide bright area doesn't glow far
+   out (at full weight the low horizon's haze bloomed up into the sky); after
    Jimenez's Call of Duty: AW talk). The largest is added to the frame at 0.25.
 2. **Lens flare, from the star only:** four small tinted ghosts along the line from the star through
    the screen's centre, as bright as the star shows in the frame there, so a rock

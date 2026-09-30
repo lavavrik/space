@@ -45,7 +45,7 @@ import { START_CREDITS, buyFuel, buyFuelTo, buyRepair, fmtCr, type Fuel, jettiso
 import type { AutoPhase } from './sim/autodock';
 import { fitBattery, fitModule, removeModule } from './outfit/fit';
 import { AUTOSAVE_S, clearSave, loadGame, saveGame } from './save';
-import { toggleLoad, type Switchable } from './sim/power';
+import { battCap, toggleLoad, type Switchable } from './sim/power';
 
 /** A ship with full tanks and the best gear (yours, and every other ship's: sim/traffic.ts). */
 export function newShip(): Ship {
@@ -600,6 +600,18 @@ export class Game {
     spot.go();
     this.showMsg(`Jumped · ${spot.label} · ${spot.hint}`);
     this.resume();
+  }
+  /** Pause menu, debug builds: the hull mended, every tank and the battery full, the hull's heat back to start. */
+  debugRefill() {
+    const s = this.ship;
+    s.hull = 1;
+    s.prop = SHIP.propCap;
+    s.exotic = SHIP.exoticCap;
+    s.o2 = SHIP.o2Cap;
+    s.water = SHIP.waterCap;
+    s.batt = battCap(s);
+    s.temp = TEMP.start;
+    this.showMsg('Repaired · tanks and battery full');
   }
   toggleSound() {
     this.audio.toggleMute();
