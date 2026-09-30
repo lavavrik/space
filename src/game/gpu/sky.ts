@@ -205,7 +205,11 @@ export class SkyLayer {
       cam.updateMatrixWorld();
       const ty = Math.tan(((cam.fov / 2) * Math.PI) / 180);
       const next = 1 - p.cur;
-      this.bake(p.tex[next].createView(), 6, h, h / 2 / ty, new THREE.Matrix4().makeRotationFromQuaternion(g.ship.q), [ty * cam.aspect, ty], [w, h]);
+      // (the detail layers fade in by the view's own resolution, not the bake's: by the bake's, the
+      // wider margin while zooming out dropped them, and they popped back when the zoom stopped and
+      // the patch was baked again at the usual margin, SPACE-34)
+      const viewPxPerRad = h / 2 / Math.tan((g.fov * Math.PI) / 360);
+      this.bake(p.tex[next].createView(), 6, h, viewPxPerRad, new THREE.Matrix4().makeRotationFromQuaternion(g.ship.q), [ty * cam.aspect, ty], [w, h]);
       const vp = this.vpM.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
       // the old patch becomes the one we fade from
       u.set(first ? vp.elements : u.subarray(0, 16), 16);
