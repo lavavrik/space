@@ -375,8 +375,13 @@ export class EffectsLayer {
       const q = 0.5 * a.rho * a.speed ** 3;
       const k = THREE.MathUtils.clamp((Math.log10(q) - 5) / 2, 0, 1);
       if (k > 0) {
-        const dir = ship.vel.clone().normalize();
-        px.emit({ key: 'plasma', pos: dir.multiplyScalar(140), vel: new THREE.Vector3(), region: 70, count: 8000 * k * dt, life: 0.12, lifeJitter: 0.5, color: [5 * k, 2.2 * k, 0.8 * k], size: 0.8, streak: 0.012 });
+        // (the air turns with the world: the plasma is ahead along your velocity through the air, and
+        // moves with it. By your velocity relative to the world's centre, it streamed in from ~17°
+        // off at 1.5 km/s over an equator, where the ground turns at ~450 m/s)
+        const air = new THREE.Vector3(a.body.axis.x, a.body.axis.y, a.body.axis.z).multiplyScalar(a.body.spin).cross(this.tmp.subVectors(ship.pos, a.body.pos));
+        const vf = g.frameBody === a.body ? air : air.add(a.body.vel).sub(g.frameBody.vel);
+        const dir = ship.vel.clone().sub(vf).normalize();
+        px.emit({ key: 'plasma', pos: dir.multiplyScalar(140), vel: vf, region: 70, count: 8000 * k * dt, life: 0.12, lifeJitter: 0.5, color: [5 * k, 2.2 * k, 0.8 * k], size: 0.8, streak: 0.012 });
       }
     }
   }
