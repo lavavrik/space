@@ -16,15 +16,15 @@ Both views read the same density across the radius: bands from two octaves of si
 
 | Layer | Rock radius | Out to | Grid, per cell | Drawn as |
 |---|---|---|---|---|
-| pebbles | 1.5–10 m | 3 km | 128², 3 | meshes (fine within 500 m) |
-| rocks | 10–70 m | 25 km | 128², 3 | meshes (fine within 4 km) |
-| boulders | 70–500 m | 150 km | 128², 4 | meshes (fine within 10 km, medium to 40 km) |
+| pebbles | 1.5–10 m | 6 km | 256², 3 | meshes (fine within 500 m) |
+| rocks | 10–70 m | 50 km | 256², 3 | meshes (fine within 4 km) |
+| boulders | 70–500 m | 300 km | 256², 4 | meshes (fine within 10 km, medium to 40 km) |
 | boulder specks | 70–500 m | 600 km | 256², 16 | specks |
 | far grain | 60–400 m | 12,000 km | 256², 14 | specks |
 
-  Up to ~200,000 mesh rocks and ~1.3 million specks are candidates; most fall outside the density or range and cost only their vertex shader. Sizes favour the small end.
+  The mesh layers reached half as far (on 128² grids: the same cells, so the same rocks); twice as far cost ~1.5 ms more of GPU on an M5 Pro in the belt. Up to ~800,000 mesh rocks and ~1.3 million specks are candidates; most fall outside the density or range and cost only their vertex shader. Sizes favour the small end.
 - **Meshes:** every rock has its own shape. The vertex shader pushes a unit icosphere out by three octaves of 3D noise at a per-rock offset, then elongates it (a random 1 : 0.55–0.95 : 0.45–0.9) and turns it by a random quaternion. Each layer is drawn in detail levels of the same rocks by distance (`lods`): pebbles fine within 500 m, rocks within 4 km, boulders within 10 km then medium to 40 km; beyond, a plain 12-vertex icosahedron. Normals come from the shape itself (finite differences on the sphere). The fragment shader adds fine relief (three octaves of bump-mapped noise, a few percent of the rock's size) and mottling. Where the noise is magnified (a texel over a few pixels, under the periscope) it's filtered at full precision in the shader: the GPU's own filtering has 8-bit weights, which showed as square blocks and moiré. Elsewhere the cheap hardware filtering does. The lighting is regolith-like: Lommel–Seeliger (the Moon's flat-looking disc) mixed with a little Lambert, dark in the planet's shadow, plus planetshine from the giant's sunlit face. They shrink away over the outer half of their range.
-- **Specks:** the boulder specks carry on the boulders' own population (same sizes, the same number per area) and fade in over 75–150 km as the boulder meshes shrink away, so there's no step where meshes turn to specks. A speck is never drawn wider than 2 px (bigger dots read as flat discs); above that it's brightened to keep the light of the rock it stands for, below a pixel it's dimmed by its share of one.
+- **Specks:** the boulder specks carry on the boulders' own population (same sizes, the same number per area) and fade in over 150–300 km as the boulder meshes shrink away, so there's no step where meshes turn to specks. A speck is never drawn wider than 2 px (bigger dots read as flat discs); above that it's brightened to keep the light of the rock it stands for, below a pixel it's dimmed by its share of one.
 - **The disc near you:** inside the belt the disc fades out within 540 km of you (`DISC_FROM`): rocks and specks around you, and beyond, the disc's bands with the far grain on them. Above or below the belt it comes back (fully 6 km out of it), since it stands for all the rocks too small or far to draw.
 - **Cost:** the ring itself is about 3–4 ms of GPU here (2.4 without the surface relief). Most of it is vertex work: every candidate rock runs the shader for every vertex of its mesh, which is why the far detail level is a 12-vertex shape (the distant boulders alone were 2.5 ms at 42 vertices).
 

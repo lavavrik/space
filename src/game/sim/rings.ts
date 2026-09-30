@@ -59,11 +59,13 @@ export interface RockLayer {
   fadeTo: number;
 }
 export const ROCK_LAYERS: RockLayer[] = [
-  { grid: 128, range: 3e3, perCell: 3, minR: 1.5, maxR: 10, detail: 0, inner: 0, fadeTo: 0, lods: [{ detail: 3, cut: 500 }] }, // pebbles
-  { grid: 128, range: 25e3, perCell: 3, minR: 10, maxR: 70, detail: 0, inner: 0, fadeTo: 0, lods: [{ detail: 3, cut: 4000 }] }, // rocks
-  { grid: 128, range: 150e3, perCell: 4, minR: 70, maxR: 500, detail: 0, inner: 0, fadeTo: 0, lods: [{ detail: 3, cut: 10000 }, { detail: 1, cut: 40000 }] }, // boulders
+  // (the meshes' ranges were half these, on grids of 128: the same cells, so the same rocks, now twice
+  // as far out)
+  { grid: 256, range: 6e3, perCell: 3, minR: 1.5, maxR: 10, detail: 0, inner: 0, fadeTo: 0, lods: [{ detail: 3, cut: 500 }] }, // pebbles
+  { grid: 256, range: 50e3, perCell: 3, minR: 10, maxR: 70, detail: 0, inner: 0, fadeTo: 0, lods: [{ detail: 3, cut: 4000 }] }, // rocks
+  { grid: 256, range: 300e3, perCell: 4, minR: 70, maxR: 500, detail: 0, inner: 0, fadeTo: 0, lods: [{ detail: 3, cut: 10000 }, { detail: 1, cut: 40000 }] }, // boulders
   // the boulders as specks: 4 per (2.34 km)² → 16 per (4.7 km)², fading in as they shrink away
-  { grid: 256, range: 600e3, perCell: 16, minR: 70, maxR: 500, detail: -1, inner: 75e3, fadeTo: 150e3 },
+  { grid: 256, range: 600e3, perCell: 16, minR: 70, maxR: 500, detail: -1, inner: 150e3, fadeTo: 300e3 },
   // sparse grain on the disc far off
   { grid: 256, range: 12000e3, perCell: 14, minR: 60, maxR: 400, detail: -1, inner: 500e3, fadeTo: 650e3 },
 ];
