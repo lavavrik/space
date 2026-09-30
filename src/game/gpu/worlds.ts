@@ -467,10 +467,11 @@ export class WorldsLayer {
       const occ = occludersOf(b, cur.bodies, cur.star);
       occ.forEach((o, k) => f.set([o.pos.x - b.pos.x, o.pos.y - b.pos.y, o.pos.z - b.pos.z, o.radius], 176 + k * 4));
       f.set([b.ring?.inner ?? 0, b.ring?.outer ?? 0, b.ring?.seed ?? 0, occ.length], 192);
-      // volumetric clouds (gpu/vclouds.ts): the nearest clouded world within 8 deck heights; its flat
-      // deck fades out as they fade in (from 8 down to 4 deck heights)
+      // volumetric clouds (gpu/vclouds.ts): the nearest clouded world within 40 deck heights (~400 km
+      // on an Earth); its flat deck fades out as they fade in (from 40 down to 25). From 8 down to 4
+      // they switched to the flat deck abruptly while still close enough to see how much plainer it is
       const deckH = f[91];
-      const vc = deckH > 0 ? 1 - THREE.MathUtils.smoothstep(d - b.radius, 4 * deckH, 8 * deckH) : 0;
+      const vc = deckH > 0 ? 1 - THREE.MathUtils.smoothstep(d - b.radius, 25 * deckH, 40 * deckH) : 0;
       f[101] = vc;
       if (vc > this.vcOn) {
         this.vcOn = vc;
