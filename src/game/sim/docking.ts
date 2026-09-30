@@ -28,7 +28,7 @@ import type { Station } from '../types';
 import { impact } from './damage';
 import { engageAutoLaunch, engageAutodock } from './autodock';
 import { startDockGuide } from './guide';
-import { DECK_R } from './skyGeom';
+import { overDeck } from './skyGeom';
 import { HANGAR_R, PAD_R, padCount, padOf, stationPointVel, stationQuat, toLocal, toWorld, whereIsAt } from './stationGeom';
 import { freePads, pilotName, rootOf, slotUser } from './control';
 import { learnSystem } from './scanner';
@@ -287,7 +287,7 @@ export function stationLimits(g: Game): { acc: number; maxV: number } | null {
     const sk = d.station;
     if (sk.sky) {
       const p = tmp.copy(g.dockRel).applyQuaternion(stationQuat(sk, g.simTime).invert()).divideScalar(sk.size);
-      if (p.z > 0 && Math.hypot(p.x, p.y) < DECK_R + 0.1) return { acc: STATION_ACC, maxV: brakeCurve(p.z * sk.size) };
+      if (p.z > 0 && overDeck(p, 0.1)) return { acc: STATION_ACC, maxV: brakeCurve(p.z * sk.size) };
     }
     return { acc: 100, maxV: APPROACH_SPEED };
   }

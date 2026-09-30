@@ -164,19 +164,27 @@ changed nothing that was there. Geometry: `sim/skyGeom.ts`; mesh: `render/skyMes
   closer). The spot is the best of 64 tries: on populated worlds the busiest (sim/population.ts,
   the same density the city lights use), elsewhere over land if there's a sea. Each step it's placed with the world's rotation, and its velocity is the world's plus
   ω × r (`sim/stations.ts`). Its Kepler fields are placeholders (a = its radius, n = the day).
-- **Shape** (units of the deck's diameter, 0.9–1.3 km; +z up): a deck disc 30 m thick with its top
-  at z = 0; a control tower with a lit cab and a red beacon; a tapering keel underneath and four
-  lift-fan pods under the rim. It has no interior: 12 pads sit on top, 8 round the rim and 4 closer
-  in, open to the sky.
+- **Shape: a flying carrier** (`sim/skyGeom.ts`, units of the deck's length, 1.2–1.6 km; +z up,
+  the bow at +x).
+  - A flight deck 5 : 1 (240–320 m wide), 2 % of its length thick, its top at z = 0.
+  - The island on the starboard edge amidships, with a lit bridge, rows of windows and a red beacon
+    on its mast.
+  - A narrower hull under the deck, with rows of portholes, and three lift-fan pods a side under
+    the deck's overhang.
+  - The deck is painted with a dashed centreline, edge lines, hazard stripes along the edges and
+    across the bow and stern, and chasing white edge lights.
+  - It has no interior: 12 pads sit on top in two rows along the deck (the starboard row leaves the
+    island clear), open to the sky. Ships on them face the bow.
+  - It was a round deck with a tower in the middle.
 - **Frames:** it's a station, so within 30 km (5,000 km as your target) flight assist works relative
   to it, which here is the turning ground at its height: hands off, you hover beside it.
 - **Docking:** request a pad as usual (K). There's no slot: fly over the pad and come straight
   down onto it, upright, under 6 m/s. Over the deck with a pad granted, flight assist uses the docking
   thrusters and the same braking curve as above a hangar wall, by height over the deck, so holding
-  "down" settles you onto it (tested: 120 m over the pad to docked in ~4 s). Docked, the ship sits nose-outward on the pad in the open air
+  "down" settles you onto it (tested: 120 m over the pad to docked in ~4 s). Docked, the ship sits on the pad facing the bow in the open air
   (sunlight, not "inside"). The HUD marks the pad; the guide's steps are *fly over the pad*, *land*.
 - **Docking computer:** hold point straight above the deck's centre (0.87 × size + 200 m up), turn
-  upright nose-outward (align), go to 60 m over the pad (enter), settle (descend). It holds the ship
+  upright, nose toward the bow (align), go to 60 m over the pad (enter), settle (descend). It holds the ship
   up against gravity (the station doesn't fall with it: `stationAcc` is only ω²r across the axis)
   and in the air never flies faster than the air allows. Lifting off with a WD-300 reverses it.
 - **Rendezvous** (autopilot, nav route legs, traffic): a sky station is low in thick air, so it

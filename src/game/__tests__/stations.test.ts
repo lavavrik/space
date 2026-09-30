@@ -126,7 +126,7 @@ describe('sky stations', () => {
     }
   });
 
-  it('keep their pads on the open deck, clear of the tower', () => {
+  it('keep their pads on the open deck (a carrier), clear of the island', () => {
     const st = skies[0].st;
     for (let i = 0; i < padCount(st); i++) {
       const p = padOf(st, i);
@@ -134,9 +134,11 @@ describe('sky stations', () => {
       expect(skyWhereIs(p.pos.clone().setZ(0.002), 0.008)).toBe('wall'); // on it
       for (let j = 0; j < i; j++) expect(padOf(st, j).pos.distanceTo(p.pos)).toBeGreaterThan(0.09);
     }
-    expect(skyWhereIs(new THREE.Vector3(0, 0, 0.08), 0.008)).toBe('wall'); // the tower
-    expect(skyWhereIs(new THREE.Vector3(0, 0, -0.2), 0.008)).toBe('wall'); // the keel
-    expect(skyWhereIs(new THREE.Vector3(0.3, 0, -0.2), 0.008)).toBe('outside'); // under the deck, beside the keel
+    expect(skyWhereIs(new THREE.Vector3(0, 0.078, 0.05), 0.008)).toBe('wall'); // the island
+    expect(skyWhereIs(new THREE.Vector3(0, 0, -0.06), 0.008)).toBe('wall'); // the hull
+    expect(skyWhereIs(new THREE.Vector3(0.16, 0.095, -0.04), 0.008)).toBe('outside'); // under the deck's overhang, between pods
+    expect(skyWhereIs(new THREE.Vector3(0, 0.13, 0), 0.008)).toBe('outside'); // off its side (5 : 1)
+    expect(skyWhereIs(new THREE.Vector3(0.45, 0, 0), 0.008)).toBe('wall'); // the bow's deck
   });
 
   it('hang over the cities on populated worlds, and over land where there is a sea', () => {

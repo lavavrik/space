@@ -65,8 +65,8 @@ export function buildStations(sys: StarSystem, bodies: Body[]): Station[] {
 /** Chance that a world of each type (indexed by WT) with air and a surface has a sky station. Moons get half. */
 const SKY_CHANCE = [0.25, 0.45, 0.8, 0.6, 0.2, 0.3, 0, 0];
 const SKY_KINDS = ['Skyport', 'Highport', 'Aerie', 'Sky Dock', 'Cloudport'];
-/** Deck diameter (m). */
-const SKY_SIZE: [number, number] = [900, 1300];
+/** Deck length (m): a carrier 5 : 1 (sim/skyGeom.ts), so 240–320 m wide. */
+const SKY_SIZE: [number, number] = [1200, 1600];
 /** Height above the ground under it (m). */
 const SKY_ALT: [number, number] = [10e3, 20e3];
 /** Spots tried for a sky station (the best one wins). */
