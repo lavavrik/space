@@ -41,6 +41,9 @@ export const STATION_RGB = new THREE.Color(0.45, 1, 0.7);
 /** Dust grains round the ship, in a wrapping box this big (m). */
 export const DUST = 700,
   DUSTBOX = 3000;
-/** Dust fades out between these speeds (m/s). The boost limit (15 km/s) keeps it all. */
-export const DUST_FADE_FROM = 20e3,
-  DUST_FADE_TO = 60e3;
+/**
+ * Dust fades out between these speeds (m/s): by 10 km/s the 3 km box is crossed several times a
+ * second and the grains, re-scattered each time, read as flickering static.
+ */
+export const DUST_FADE_FROM = 3e3,
+  DUST_FADE_TO = 10e3;

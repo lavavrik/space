@@ -1,7 +1,7 @@
 // The final pass to the screen (gpu/post.ts; docs/post.md): the frame, blurred toward where you're
 // heading in FTL; the volumetric clouds laid over it (vclouds.wgsl: scene × what they let through +
-// their light, upsampled); bloom (bloom.wgsl) and a lens flare's ghosts and halo from the bright
-// parts; then linear up to 0.8 and a soft shoulder toward 1 per channel, so over-bright light rolls
+// their light, upsampled); bloom (bloom.wgsl) and a lens flare's ghosts from the brightest
+// points; then linear up to 0.8 and a soft shoulder toward 1 per channel, so over-bright light rolls
 // off to white instead of clipping flat. Written as is to the canvas: the colours are display values.
 
 struct Post {
@@ -16,7 +16,7 @@ struct Post {
 @group(0) @binding(5) var bloomSmall: texture_2d<f32>;
 
 // what makes flares: only the brightest of the bloom (the star, lamps), not a whole lit planet
-fn flareSrc(uv: vec2f) -> vec3f { return max(textureSampleLevel(bloomSmall, samp, uv, 0.0).rgb - vec3f(0.3), vec3f(0.0)); }
+fn flareSrc(uv: vec2f) -> vec3f { return max(textureSampleLevel(bloomSmall, samp, uv, 0.0).rgb - vec3f(1.0), vec3f(0.0)); }
 
 @vertex
 fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
@@ -44,7 +44,8 @@ fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
   }
   // bloom
   c += textureSampleLevel(bloom, samp, uv, 0.0).rgb * post.a.y;
-  // lens flare: ghosts of the bright parts mirrored through the centre, and a halo
+  // lens flare: small ghosts of the brightest points mirrored through the centre (no halo: from a bright
+  // limb or sky it swept arcs across the whole view)
   if (post.a.z > 0.0) {
     let m = vec2f(1.0) - uv;
     let gv = (vec2f(0.5) - m) * 0.4;
@@ -55,10 +56,6 @@ fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
       let w = pow(max(0.0, 1.0 - length(vec2f(0.5) - o) / 0.7071), 5.0);
       fl += flareSrc(o) * w * tint[i - 1];
     }
-    let hv = normalize(gv + vec2f(1e-5)) * 0.45;
-    let ho = fract(m + hv);
-    let hw = pow(max(0.0, 1.0 - length(vec2f(0.5) - ho) / 0.7071), 6.0);
-    fl += flareSrc(ho) * hw * vec3f(0.8, 0.9, 1.0) * 0.6;
     c += fl * post.a.z;
   }
   let s = 0.8 + 0.2 * (1.0 - exp(-(c - 0.8) / 0.2));

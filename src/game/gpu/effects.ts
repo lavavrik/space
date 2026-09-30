@@ -311,8 +311,8 @@ export class EffectsLayer {
     const { ship } = g;
     const fade = 1 - THREE.MathUtils.smoothstep(g.curSpeed, DUST_FADE_FROM, DUST_FADE_TO);
     if (ship.mode === 'normal' && fade > 0) {
-      const f = 0.55 * 0.8 * fade;
-      px.field({ mode: 'wrap', at: ship.pos, size: DUSTBOX, count: DUST * 2, seed: 99, grain: -2.2 * pr, color: [f, f * 0.92, f * 0.85] });
+      const f = 0.55 * fade;
+      px.field({ mode: 'wrap', at: ship.pos, size: DUSTBOX, count: DUST, seed: 99, grain: -2.2 * pr, color: [f, f * 0.92, f * 0.85] });
     }
     // the belt's dust, orbiting with the ring
     const b = g.frameBody;

@@ -8,9 +8,9 @@ import { BLOOM_WGSL } from './shaders';
 
 const LEVELS = 6;
 /** Light over this (display units) blooms. */
-const THRESHOLD = 1.5;
+const THRESHOLD = 2.0;
 export const BLOOM_K = 0.25;
-export const FLARE_K = 1.0;
+export const FLARE_K = 0.4;
 
 export class Bloom {
   private readonly down: GPURenderPipeline;
