@@ -13,6 +13,7 @@ import { THREE } from '../lib/three';
 import { DUST, DUSTBOX, DUST_FADE_FROM, DUST_FADE_TO, RING_AP, RING_N, RING_PLAN } from '../render/look';
 import { FtlTrail } from '../render/Trail';
 import { orbitPreview } from '../sim/planner';
+import { sunFraction } from '../sim/eclipse';
 import { occluder } from '../sim/sight';
 import { FLASH_S, type Npc } from '../sim/traffic';
 import { DEPTH_FORMAT, HDR_FORMAT, SAMPLES } from './formats';
@@ -74,7 +75,8 @@ export class EffectsLayer {
   private readonly beamPipe: GPURenderPipeline;
   private readonly hull: { pos: GPUBuffer; nrm: GPUBuffer; count: number };
   private readonly inst: GPUBuffer;
-  private readonly instData = new Float32Array(MAX_SHIPS * 16);
+  /** Per ship: its model matrix and the share of the star it sees. */
+  private readonly instData = new Float32Array(MAX_SHIPS * 17);
   private hulls = 0;
   /** Every line this frame (trails, then the orbit ring), and each one's [first vertex, count]. */
   private readonly lineBuf: GPUBuffer;
@@ -125,9 +127,12 @@ export class EffectsLayer {
           v3(0),
           v3(1),
           {
-            arrayStride: 64,
+            arrayStride: 68,
             stepMode: 'instance',
-            attributes: [0, 1, 2, 3].map((k) => ({ shaderLocation: 2 + k, offset: k * 16, format: 'float32x4' as const })),
+            attributes: [
+              ...[0, 1, 2, 3].map((k) => ({ shaderLocation: 2 + k, offset: k * 16, format: 'float32x4' as const })),
+              { shaderLocation: 6, offset: 64, format: 'float32' as const },
+            ],
           },
         ],
       },
@@ -251,7 +256,8 @@ export class EffectsLayer {
       const rel = new THREE.Vector3().subVectors(npc.pos, ship.pos);
       if (rel.length() < 200e3) {
         this.m.compose(rel, this.q.copy(npc.q).multiply(FLIP), this.one);
-        this.instData.set(this.m.elements, this.hulls++ * 16);
+        this.instData.set(this.m.elements, this.hulls * 17);
+        this.instData[this.hulls++ * 17 + 16] = sunFraction(g.cur.bodies, g.cur.star, npc.pos);
       }
       // marker, and the engines: main at the tail while thrusting, retro at the nose while braking
       const ftl = npc.ftl;
@@ -270,7 +276,7 @@ export class EffectsLayer {
         worlds.addDot(rel, 0.8 * k, 0.95 * k, 1.2 * k, (14 + 110 * Math.sqrt(fu)) * pr);
       }
     }
-    if (this.hulls) this.device.queue.writeBuffer(this.inst, 0, this.instData, 0, this.hulls * 16);
+    if (this.hulls) this.device.queue.writeBuffer(this.inst, 0, this.instData, 0, this.hulls * 17);
   }
 
   /**

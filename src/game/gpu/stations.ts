@@ -12,6 +12,7 @@ import { STATION_RGB } from '../render/look';
 import { skyStationGeometry } from '../render/skyMesh';
 import { CORRIDOR_GROW, corridorGeometry, corridorLights, hullGeometry, interiorGeometry } from '../render/stationMesh';
 import { slotUser } from '../sim/control';
+import { sunFraction } from '../sim/eclipse';
 import { occluder } from '../sim/sight';
 import { SKY_PAD_COUNT, skyPadLocal } from '../sim/skyGeom';
 import { CORRIDOR_M, PAD_R, padLocal, stationQuat } from '../sim/stationGeom';
@@ -244,12 +245,11 @@ export class StationsLayer {
           const pl = padLocal(dk.pad).pos;
           f.set([pl.x, pl.y, pl.z], 16 + 16);
         }
-        // in the parent's shadow if the line to the star passes through it
         const par = st.parent;
         const w = this.b.subVectors(par.pos, st.pos);
         const pd = w.length();
-        const t = w.dot(toStar);
-        f[16 + 3] = t > 0 && pd * pd - t * t < par.radius * par.radius ? 0 : 1;
+        // lit: the share of the star in view (sim/eclipse.ts: the parent's shadow, moons, a penumbra)
+        f[16 + 3] = sunFraction(cur.bodies, cur.star, st.pos);
         f.set([w.x / pd, w.y / pd, w.z / pd, Math.cos(Math.asin(Math.min(1, par.radius / pd)))], 16 + 8);
       }
       this.device.queue.writeBuffer(v.buf, 0, f);

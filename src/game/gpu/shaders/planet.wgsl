@@ -13,6 +13,8 @@ diagnostic(off, derivative_uniformity);
 // #include atmo
 // #include clouds
 // #include city
+// #include ringband
+// #include shadow
 
 // the chunk's bake (terrainBake.wgsl): two vec4s per grid vertex
 @group(2) @binding(1) var<storage, read> bake: array<vec4f>;
@@ -211,6 +213,13 @@ fn fs(in: Out) -> @location(0) vec4f {
   let C1 = transpose(toLocal3()) * (in.obj * world.radius);
   var sunC = in.sun;
   if (!terr) { sunC = atSunlightC(C1, L); }
+  // eclipses and the ring's shadow (shadow.wgsl), from the surface point relative to the centre
+  var Pc = C1;
+  if (terr) { Pc = in.wp - world.atC.xyz; }
+  // (the air just above is in the same shadow, so the haze over it dims with it: on a giant it's
+  // most of what you see)
+  let shade = eclipse(Pc) * ringShade(p * (world.radius + elev), world.lightL.xyz);
+  sunC *= shade;
   let sky = select(0.0, 0.07 * smoothstep(-0.12, 0.35, ndl0), world.atOn > 0.5);
   let R = reflect(-L, N);
   let s = pow(max(dot(R, V), 0.0), 60.0) * 0.7 * spec * diff;
@@ -223,14 +232,14 @@ fn fs(in: Out) -> @location(0) vec4f {
     }
   }
   if (world.atOn > 0.5 && terr) {
-    col = col * in.hazeT + in.haze;
+    col = col * in.hazeT + in.haze * shade;
   } else if (world.atOn > 0.5) {
     let vd = normalize(in.wp);
     let C1s = normalize(C1) * atR();
     let k = dot(C1s, vd);
     let sAir = k + sqrt(max(k * k - dot(C1s, C1s) + world.atTop * world.atTop, 0.0));
     let haze = atInscatterC(C1s - vd * min(sAir, length(in.wp)), C1s, L, 5);
-    col = col * atTrans + haze;
+    col = col * atTrans + haze * shade;
   } else {
     let rim = pow(1.0 - max(dot(N, V), 0.0), 3.0);
     col += world.atmoCol.rgb * world.atmoCol.w * rim * clamp(ndl + 0.25, 0.0, 1.0) * 1.1;

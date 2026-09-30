@@ -162,11 +162,11 @@ export function heatBudget(g: Game, inTunnel: boolean): HeatBudget {
   if (!inTunnel) {
     const s = cur.star;
     const toS = s.pos.clone().sub(ship.pos).normalize();
-    if (!power.shadow && !g.inStation) {
-      star = HULL.absorb * crossSection(g, toS) * power.flux * S0;
+    if (power.sunlit > 0 && !g.inStation) {
+      star = HULL.absorb * crossSection(g, toS) * power.flux * power.sunlit * S0;
       // the fins lie in the plane of the nose and the top: their faces point along the ship's x axis
       const c = Math.abs(side.set(1, 0, 0).applyQuaternion(ship.q).dot(toS));
-      radStar = RADIATOR_SURFACE.absorb * finFace * c * power.flux * S0;
+      radStar = RADIATOR_SURFACE.absorb * finFace * c * power.flux * power.sunlit * S0;
     }
     for (const b of cur.bodies) {
       if (b.kind === 'star') continue;

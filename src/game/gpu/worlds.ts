@@ -18,6 +18,7 @@ import { CITY_K } from '../render/exposure';
 import { atmoOf } from '../sim/atmosphere';
 import { populated } from '../sim/population';
 import { hasCraters, reliefAmp, terrainOffsets, worldQuat } from '../sim/terrain';
+import { occludersOf } from '../sim/eclipse';
 import type { Body, CurrentSystem, Star, World } from '../types';
 import { ATMO_WGSL, CLOUD_BAKE_WGSL, CLOUD_WGSL, DOTS_WGSL, PLANET_WGSL, RING_WGSL, STAR_WGSL, TERRAIN_BAKE_WGSL } from './shaders';
 import { CHUNK_BYTES, TerrainGpu, TerrainShared } from './terrain';
@@ -25,7 +26,7 @@ import { CHUNK_BYTES, TerrainGpu, TerrainShared } from './terrain';
 import { DEPTH_FORMAT, HDR_FORMAT, SAMPLES } from './formats';
 import { RingFieldGpu } from './rings';
 
-const WORLD_BYTES = 688;
+const WORLD_BYTES = 784;
 const STAR_BYTES = 128;
 const RING_BYTES = 128;
 const CLOUD_CUBE = 1024;
@@ -458,6 +459,11 @@ export class WorldsLayer {
       const lightL = light.clone().applyQuaternion(qInv);
       f.set([lightL.x, lightL.y, lightL.z, 0], 72);
       f.set([rel.x, rel.y, rel.z, b.radius], 76);
+      // shadows (shadow.wgsl): the star and the bodies that can eclipse this one, from its centre
+      f.set([starPos.x - b.pos.x, starPos.y - b.pos.y, starPos.z - b.pos.z, cur.star.radius], 172);
+      const occ = occludersOf(b, cur.bodies, cur.star);
+      occ.forEach((o, k) => f.set([o.pos.x - b.pos.x, o.pos.y - b.pos.y, o.pos.z - b.pos.z, o.radius], 176 + k * 4));
+      f.set([b.ring?.inner ?? 0, b.ring?.outer ?? 0, b.ring?.seed ?? 0, occ.length], 192);
       // up close, LOD terrain replaces the sphere: big on screen and actually close (render/look.ts)
       w.terrOn = !!w.terrain && pxR > TERRAIN_PX && d < b.radius * TERRAIN_NEAR;
       if (w.terrOn) {

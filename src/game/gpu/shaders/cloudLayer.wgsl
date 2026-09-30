@@ -7,6 +7,8 @@ diagnostic(off, derivative_uniformity);
 // #include noise
 // #include noise3d
 // #include clouds
+// #include ringband
+// #include shadow
 // #include atmo
 
 struct Out {
@@ -54,7 +56,7 @@ fn fs(in: Out) -> @location(0) vec4f {
   let cov = cloudCover(raw);
   if (cov < 0.004) { discard; }
   let L = normalize(world.light.xyz);
-  let lit = clamp(dot(n, L) * 1.05 + 0.05, 0.0, 1.0);
+  let lit = clamp(dot(n, L) * 1.05 + 0.05, 0.0, 1.0) * sunShade(P - C);
   let below = length(C) < world.cloudR;
   let col = vec3f(0.97) * lit * atSunlight(P, L) * select(1.0, 0.3 + 0.55 * (1.0 - cov), below);
   let haze = atInscatter(dir * atSpan(dir).x, P, L, 5);

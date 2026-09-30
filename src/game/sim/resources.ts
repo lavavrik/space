@@ -2,7 +2,8 @@ import { laserYield } from './laser';
 import { AU, SCOOP_FLUX_FULL, SCOOP_FLUX_MIN, SHIP, WT } from '../constants';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
-import type { Ship } from '../types';
+import type { Body, Ship } from '../types';
+import { sunFraction } from './eclipse';
 import { TEMP } from './thermal';
 import { battCap, grant } from './power';
 import { RADIATOR_MAX_ACC, outfitMass, scoopFitted } from '../outfit/catalog';
@@ -64,27 +65,24 @@ export function applyThrust(g: Game, T: THREE.Vector3, dt: number) {
   power.burn += dm;
 }
 
-/** Solar panels on the ship's top face. Output ∝ starlight flux × cos(angle), zero in a shadow. */
+/**
+ * Solar panels on the ship's top face. Output ∝ starlight flux × cos(angle) × the share of the
+ * star's disc in view (sim/eclipse.ts: it fades through a penumbra); "in the shadow" of a body once
+ * it hides more than half the disc.
+ */
 export function solarPower(g: Game) {
   const { ship, power, cur } = g;
   const s = cur.star;
   const toS = s.pos.clone().sub(ship.pos);
   const d = toS.length();
   toS.divideScalar(d);
-  power.shadow = null;
-  for (const b of cur.bodies) {
-    if (b === s) continue;
-    const w = b.pos.clone().sub(ship.pos);
-    const t = w.dot(toS);
-    if (t > 0 && t < d && w.lengthSq() - t * t < b.radius * b.radius) {
-      power.shadow = b;
-      break;
-    }
-  }
+  const worst = { body: null as Body | null };
+  power.sunlit = sunFraction(cur.bodies, s, ship.pos, undefined, worst);
+  power.shadow = power.sunlit < 0.5 ? worst.body : null;
   power.flux = s.L * (AU / d) ** 2;
   power.cos = new THREE.Vector3(0, 1, 0).applyQuaternion(ship.q).dot(toS);
   if (power.shadow || ship.temp >= TEMP.panels) return 0; // too hot: panels feathered edge-on
-  return Math.min(SHIP.solarMax, SHIP.solarRated * power.flux * Math.max(0, power.cos));
+  return Math.min(SHIP.solarMax, SHIP.solarRated * power.flux * power.sunlit * Math.max(0, power.cos));
 }
 
 /**

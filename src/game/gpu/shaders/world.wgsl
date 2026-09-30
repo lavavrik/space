@@ -37,6 +37,12 @@ struct World {
   _p1: f32,
   _p2: f32,
   tOff: array<vec4f, 17>, // per-octave noise offsets (terrain.wgsl)
+  // shadows (shadow.wgsl): the star relative to the world's centre (world axes; w: its radius), the
+  // bodies that can eclipse it (centre likewise; w: radius), its ring (inner, outer radius in planet
+  // radii, seed; w: how many of occ are set)
+  sunC: vec4f,
+  occ: array<vec4f, 4>,
+  ringP: vec4f,
 }
 
 @group(1) @binding(0) var<uniform> world: World;

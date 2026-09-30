@@ -15,12 +15,14 @@ struct Fx {
 struct HullOut {
   @builtin(position) pos: vec4f,
   @location(0) n: vec3f,
+  @location(1) lit: f32, // the share of the star it sees (sim/eclipse.ts)
 }
 
 @vertex
-fn vsHull(@location(0) position: vec3f, @location(1) normal: vec3f, @location(2) m0: vec4f, @location(3) m1: vec4f, @location(4) m2: vec4f, @location(5) m3: vec4f) -> HullOut {
+fn vsHull(@location(0) position: vec3f, @location(1) normal: vec3f, @location(2) m0: vec4f, @location(3) m1: vec4f, @location(4) m2: vec4f, @location(5) m3: vec4f, @location(6) lit: f32) -> HullOut {
   let model = mat4x4f(m0, m1, m2, m3);
   var o: HullOut;
+  o.lit = lit;
   o.n = normalize((model * vec4f(normal, 0.0)).xyz);
   o.pos = frame.viewProj * (model * vec4f(position, 1.0));
   return o;
@@ -28,7 +30,7 @@ fn vsHull(@location(0) position: vec3f, @location(1) normal: vec3f, @location(2)
 
 @fragment
 fn fsHull(in: HullOut) -> @location(0) vec4f {
-  let d = max(dot(normalize(in.n), fx.light.xyz), 0.0);
+  let d = max(dot(normalize(in.n), fx.light.xyz), 0.0) * in.lit;
   return vec4f(vec3f(0.62, 0.64, 0.68) * (0.04 + 0.6 * d), 1.0);
 }
 

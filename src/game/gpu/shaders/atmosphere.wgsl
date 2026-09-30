@@ -4,6 +4,9 @@
 // #include frame
 // #include world
 // #include atmo
+// #include noise
+// #include ringband
+// #include shadow
 
 struct Out {
   @builtin(position) pos: vec4f,
@@ -29,8 +32,12 @@ fn fs(in: Out) -> @location(0) vec4f {
   let b = dot(dir, C);
   let cg = dot(C, C) - atR() * atR();
   let dg = b * b - cg;
-  if (dg > 0.0 && b - sqrt(dg) > 0.0) { s.y = min(s.y, b - sqrt(dg)); }
-  let sky = atInscatter(dir * s.x, dir * s.y, normalize(world.light.xyz), 8);
+  let ground = dg > 0.0 && b - sqrt(dg) > 0.0;
+  if (ground) { s.y = min(s.y, b - sqrt(dg)); }
+  // an eclipse or the ring's shadow dims the sky too: taken where the ray meets the ground, or
+  // halfway along it through the air
+  let at = select(0.5 * (s.x + s.y), s.y, ground);
+  let sky = atInscatter(dir * s.x, dir * s.y, normalize(world.light.xyz), 8) * sunShade(dir * at - C);
   let lum = dot(sky, vec3f(0.2126, 0.7152, 0.0722));
   let keep = clamp(1.0 - lum * 5.0, 0.0, 1.0) * dot(atTrans, vec3f(0.333));
   return vec4f(sky, keep);

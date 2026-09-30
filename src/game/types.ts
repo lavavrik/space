@@ -266,6 +266,8 @@ export interface Power {
   shore: number; // kW of external (station) power while docked
   cos: number;
   shadow: Body | null;
+  /** The share of the star's disc the ship sees (sim/eclipse.ts): 1 in full sun, 0 in a total eclipse. */
+  sunlit: number;
   draw: number;
   net: number;
   thrustKW: number;

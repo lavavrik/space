@@ -33,8 +33,10 @@ import corridor from './corridor.wgsl?raw';
 import skyStation from './skyStation.wgsl?raw';
 import fx from './fx.wgsl?raw';
 import meter from './meter.wgsl?raw';
+import ringband from './ringband.wgsl?raw';
+import shadow from './shadow.wgsl?raw';
 
-const parts: Record<string, string> = { noise, frame, world, chunk, rock, stationBody, noise3d, terrain, atmo, clouds, city };
+const parts: Record<string, string> = { noise, frame, world, chunk, rock, stationBody, ringband, shadow, noise3d, terrain, atmo, clouds, city };
 const build = (src: string) => src.replace(/^\/\/ #include (\w+)$/gm, (_, name: string) => parts[name] ?? `// (no ${name})`);
 
 export const SKY_BAKE_WGSL = build(skyBake);

@@ -2,6 +2,7 @@
 // Cassini-like gap at 63 %, the planet's shadow; faded out close in where the rocks take over.
 // #include frame
 // #include noise
+// #include ringband
 
 struct Ring {
   model: mat4x4f,   // the disc (unit annulus in the xy plane, radii in planet radii) → camera-relative
@@ -35,12 +36,7 @@ fn vs(@location(0) position: vec3f) -> Out {
 
 @fragment
 fn fs(in: Out) -> @location(0) vec4f {
-  let r = length(in.obj.xy);
-  let t = (r - ring.inner) / (ring.outer - ring.inner);
-  let seed = ring.color.w;
-  let band = 0.55 + 0.35 * snoise(vec3f(r * 14.0, seed, 0.0)) + 0.25 * snoise(vec3f(r * 60.0, seed, 1.0));
-  var alpha = smoothstep(0.0, 0.06, t) * (1.0 - smoothstep(0.86, 1.0, t)) * clamp(band, 0.0, 1.0) * 0.85;
-  alpha *= smoothstep(0.015, 0.04, abs(t - 0.63));
+  var alpha = ringAlpha(length(in.obj.xy), ring.inner, ring.outer, ring.color.w);
   let fade = ring.pc.w;
   if (fade > 0.0) { alpha *= smoothstep(0.5 * fade, fade, length(in.wp)); }
   let L = normalize(ring.light.xyz);
