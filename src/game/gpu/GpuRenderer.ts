@@ -20,6 +20,7 @@ import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import type { PerfMonitor } from '../debug/Perf';
 import type { GameRenderer, ViewInfo } from '../render/api';
+import { sunsAt, type Suns } from '../sim/starlight';
 import { AUTO_EXPOSURE, AutoExposure, FLOOD_K, HEAD_K, INT_K, MAX_EXP, SKY_EXP_P, SKY_K, STAR_EXP_P, WINDOW_K } from '../render/exposure';
 import { MAX_RENDER_PIXELS } from '../render/look';
 import { DynamicResolution } from './dynres';
@@ -67,6 +68,7 @@ export class GpuRenderer implements GameRenderer {
   private readonly particles: Particles;
   private lastSim = 0;
   private readonly exposure = new AutoExposure();
+  private readonly suns: Suns = { s1: null as unknown as Suns['s1'], s2: null, c2: new THREE.Color() };
   private readonly meter: Meter;
   private readonly timer: GpuTimer | null;
   private hdr!: GPUTexture;
@@ -245,7 +247,10 @@ export class GpuRenderer implements GameRenderer {
     const inTunnel = !!g.jump && g.jump.phase === 'tunnel';
     // the eye's adaptation (render/exposure.ts): the Milky Way and the stars follow only part of it
     this.exposure.update(this.meter.collect());
-    const e = this.exposure.value;
+    // (a pair's second sun adds its light to the first's, docs/binaries.md: the eye takes both as one
+    // day's light, as a lone star of the same total would give, so the scene isn't brighter for it)
+    const suns = sunsAt(g.cur.stars, ship.pos, this.suns);
+    const e = this.exposure.value / (1 + (suns.s2 ? Math.max(suns.c2.r, suns.c2.g, suns.c2.b) : 0));
     const skyExp = AUTO_EXPOSURE ? (e / MAX_EXP) ** SKY_EXP_P : 1,
       starExp = AUTO_EXPOSURE ? (e / MAX_EXP) ** STAR_EXP_P : 1;
     this.worlds.starExp = starExp;

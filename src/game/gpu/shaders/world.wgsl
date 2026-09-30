@@ -43,6 +43,13 @@ struct World {
   sunC: vec4f,
   occ: array<vec4f, 4>,
   ringP: vec4f,
+  // a second sun (a star pair, docs/binaries.md; `light` and `sunC` are the one brighter here):
+  // its direction (w: 1 if there is one), the same in the world's frame, where it is (w: radius),
+  // and its light's colour × strength relative to the first's (0 with one star)
+  light2: vec4f,
+  lightL2: vec4f,
+  sunC2: vec4f,
+  lightC2: vec4f,
 }
 
 @group(1) @binding(0) var<uniform> world: World;

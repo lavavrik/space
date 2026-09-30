@@ -257,6 +257,13 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   let mid = dir * (0.5 * (t0 + t1)) - C;
   let sunCol = atSunlightC(normalize(mid) * (world.radius + world.cloudH), L) * sunShade(mid) * world.atSunI / 45.0;
   let dayK = smoothstep(-0.15, 0.3, dot(normalize(mid), L));
+  // a pair's second sun (docs/binaries.md): its light through the air in its colour, a cheaper march
+  // toward it (3 steps), the same scattering; no god rays of its own
+  let two = world.light2.w > 0.5;
+  let L2 = normalize(world.light2.xyz + vec3f(0.0, 1e-9, 0.0));
+  let cosT2 = dot(dir, L2);
+  var sunCol2 = vec3f(0.0);
+  if (two) { sunCol2 = atSunlightC(normalize(mid) * (world.radius + world.cloudH), L2) * world.lightC2.rgb * world.atSunI / 45.0 * smoothstep(-0.15, 0.3, dot(normalize(mid), L2)); }
   let span = t1 - t0;
   // Level of detail: steps no finer than 0.4 % of the distance to the layer (150 m at least), so a
   // ray from high up through a few km of layer takes ~12, not 48: from 300 km a screen full of
@@ -308,7 +315,28 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     let lamp = vec3f(1.0, 0.97, 0.92) * shipLightAt(P) * T * 0.08;
     // (the sunlight's share in the shadows of what's near: a sky station's on the clouds under it)
     sun *= shadowAtPoint(P);
-    let light = sunCol * (sun * 0.6 + 0.12 * (0.4 + 0.6 * h)) * dayK * 0.97 + lamp + vec3f(0.55, 0.7, 1.0) * 0.05 * (1.0 - dayK);
+    var light = sunCol * (sun * 0.6 + 0.12 * (0.4 + 0.6 * h)) * dayK * 0.97 + lamp + vec3f(0.55, 0.7, 1.0) * 0.05 * (1.0 - dayK);
+    if (two) {
+      var od2 = 0.0;
+      var ls2 = 240.0;
+      var lt2 = 0.0;
+      for (var k = 0; k < 3; k++) {
+        lt2 += ls2;
+        od2 += density(P + L2 * lt2) * ls2;
+        ls2 *= 3.0;
+      }
+      var sun2 = 0.0;
+      var a2 = 1.0;
+      var bw2 = 1.0;
+      var g2 = 0.65;
+      for (var o = 0; o < 3; o++) {
+        sun2 += bw2 * exp(-od2 * SIGMA * a2) * mix(hg(cosT2, g2), hg(cosT2, -0.2 * g2), 0.25);
+        a2 *= 0.35;
+        bw2 *= 0.5;
+        g2 *= 0.5;
+      }
+      light += sunCol2 * (sun2 * 0.6 + 0.12 * (0.4 + 0.6 * h)) * 0.97;
+    }
     let tStep = exp(-dn * SIGMA * dt);
     S += T * light * (1.0 - tStep);
     tSum += t * T * (1.0 - tStep);
@@ -319,7 +347,8 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   // the air in front of the cloud: its haze and how much it dims
   if (tFirst > 0.0 && world.atOn > 0.5) {
     let span = atSpan(dir);
-    let haze = atInscatter(dir * span.x, dir * max(tFirst, span.x), L, 4);
+    var haze = atInscatter(dir * span.x, dir * max(tFirst, span.x), L, 4);
+    if (two) { haze += atInscatter(dir * span.x, dir * max(tFirst, span.x), L2, 4) * world.lightC2.rgb; }
     S = S * atTrans + haze * (1.0 - T) * skyDim; // (under the deck, that air is shaded too)
   }
   var res = vec4f((S + rays) * frame.exposure, T * skyDim);

@@ -30,7 +30,14 @@ struct Out {
   @location(6) sun: vec3f,
   @location(7) t: vec4f,        // skirt (0 surface … 1 down a skirt), octaves the geometry has (0: far sphere), shadow, hc
   @location(8) mask: f32,       // the range mask the geometry has
+  @location(9) sun2: vec3f,     // chunks: a second sun's light through the air, per vertex (docs/binaries.md)
 }
+
+// A pair's second sun (world.wgsl light2; docs/binaries.md): whether there is one, its direction,
+// and how strong it is at most (its colour × strength's largest channel)
+fn has2() -> bool { return world.light2.w > 0.5; }
+fn L2dir() -> vec3f { return normalize(world.light2.xyz + vec3f(0.0, 1e-9, 0.0)); }
+fn k2() -> f32 { return max(world.lightC2.r, max(world.lightC2.g, world.lightC2.b)); }
 
 @vertex
 fn vs(@location(0) position: vec3f, @location(1) normal: vec3f) -> Out {
@@ -40,6 +47,7 @@ fn vs(@location(0) position: vec3f, @location(1) normal: vec3f) -> Out {
   o.wp = wp.xyz;
   o.wn = normalize((world.rotN * vec4f(normal, 0.0)).xyz);
   o.t = vec4f(0.0, 0.0, 1.0, 0.0);
+  o.sun2 = vec3f(0.0);
   o.pos = frame.viewProj * wp;
   return o;
 }
@@ -68,6 +76,11 @@ fn vsChunk(@location(0) position: vec3f, @location(1) dir: vec3f, @location(2) g
   o.haze = atInscatter(vd * atSpan(vd).x, ground, L, 5);
   o.hazeT = atTrans;
   o.sun = atSunlight(ground, L);
+  o.sun2 = vec3f(0.0);
+  if (has2()) {
+    o.haze += atInscatter(vd * atSpan(vd).x, ground, L2dir(), 5) * world.lightC2.rgb;
+    o.sun2 = atSunlight(ground, L2dir()) * world.lightC2.rgb;
+  }
   o.pos = frame.viewProj * wp;
   return o;
 }
@@ -194,7 +207,8 @@ fn fs(in: Out) -> @location(0) vec4f {
   // a skirt's top, so that keeps the full shader and the rest gets plain lit ground colour.
   if (terr && in.t.x > 0.5) {
     let d0 = clamp(dot(normalize(in.wn), normalize(world.light.xyz)) * 1.05 + 0.03, 0.0, 1.0);
-    let c0 = mix(world.pa.rgb, world.pb.rgb, 0.5) * (d0 * in.t.z * in.sun + 0.0002);
+    let d02 = select(0.0, clamp(dot(normalize(in.wn), L2dir()) * 1.05 + 0.03, 0.0, 1.0), has2());
+    let c0 = mix(world.pa.rgb, world.pb.rgb, 0.5) * (d0 * in.t.z * in.sun + d02 * in.sun2 + 0.0002);
     return vec4f((c0 * in.hazeT + in.haze) * frame.exposure, 1.0);
   }
   let p = normalize(in.obj);
@@ -203,12 +217,19 @@ fn fs(in: Out) -> @location(0) vec4f {
   let L = normalize(world.light.xyz);
   var ndl = dot(N, L);
   let ndl0 = ndl;
+  // a pair's second sun (docs/binaries.md): its own diffuse, specular, sky light and haze; its
+  // shadows come later. Night (the dark side's octaves, its ambient and city lights) is where both
+  // are down, a weak one counting for less.
+  let two = has2();
+  let L2 = L2dir();
+  let ndl20 = select(-1.0, dot(N, L2), two);
+  let up2 = min(1.0, k2() * 4.0);
   let seed = world.seed;
   let sp = p * 1.6 + vec3f(seed * 1.7, seed * 2.3, seed * 0.9);
   let fw = max(length(fwidth(p)), 1e-9);
   var oct = min(world.oct, i32(clamp(log2(0.5 / (1.6 * fw)) / 1.02 + 1.0, 3.0, f32(T_OCT_MAX))));
   let ty = world.wtype;
-  let dark = clamp(ndl * 1.05 + 0.03, 0.0, 1.0) < 0.002 && ty != 4;
+  let dark = clamp(ndl * 1.05 + 0.03, 0.0, 1.0) < 0.002 && clamp(ndl20 * 1.05 + 0.03, 0.0, 1.0) * up2 < 0.002 && ty != 4;
   if (dark) { oct = min(oct, select(3, 8, world.city > 0.5)); }
   var col: vec3f;
   var emit = vec3f(0.0);
@@ -280,6 +301,7 @@ fn fs(in: Out) -> @location(0) vec4f {
   col *= mix(det, 1.0, spec);
   ndl = dot(N, L);
   var diff = clamp(ndl * 1.05 + 0.03, 0.0, 1.0) * in.t.z;
+  let diff2 = select(0.0, clamp(dot(N, L2) * 1.05 + 0.03, 0.0, 1.0), two);
   // the cloud layer's shadow: the cover where the sun's ray from here crosses the deck
   if (world.cloudH > 0.0 && !dark) {
     let up = dot(p, world.lightL.xyz);
@@ -301,19 +323,26 @@ fn fs(in: Out) -> @location(0) vec4f {
   // most of what you see)
   let shade = eclipse(Pc) * ringShade(p * (world.radius + elev), world.lightL.xyz);
   sunC *= shade;
+  var sunC2 = vec3f(0.0);
+  if (two) {
+    sunC2 = select(atSunlightC(C1, L2) * world.lightC2.rgb, in.sun2, terr) * ringShade(p * (world.radius + elev), world.lightL2.xyz);
+  }
   if (terr) { sunC *= shadowAt(in.wp, N); } // up close: sky stations', ships' and rocks' shadows on the ground
   let sky = select(0.0, 0.07 * smoothstep(-0.12, 0.35, ndl0), world.atOn > 0.5);
+  let sky2 = select(vec3f(0.0), 0.07 * smoothstep(-0.12, 0.35, ndl20) * world.lightC2.rgb, world.atOn > 0.5 && two);
   let R = reflect(-L, N);
   let s = pow(max(dot(R, V), 0.0), 60.0) * 0.7 * spec * diff;
+  let s2 = pow(max(dot(reflect(-L2, N), V), 0.0), 60.0) * 0.7 * spec * diff2;
   // (the ship's lamps, near: headlights and landing lights; world.wgsl lights up close only matter
   // for the ground under you)
   let lamps = select(vec3f(0.0), shipLights(N, in.wp, col), terr);
   // the night's own light, where the sun's gone: starlight and airglow, so the ground under an
   // overcast night isn't pitch black (it was 0.0002)
-  let nightAmb = NIGHT_AMB * vec3f(0.55, 0.7, 1.0) * (1.0 - smoothstep(-0.2, 0.05, ndl0));
-  col = col * (diff * sunC + sky + 0.0002 + nightAmb) + vec3f(1.0, 0.95, 0.85) * s * sunC + lamps;
+  let night2 = 1.0 - smoothstep(-0.2, 0.05, ndl20) * up2;
+  let nightAmb = NIGHT_AMB * vec3f(0.55, 0.7, 1.0) * (1.0 - smoothstep(-0.2, 0.05, ndl0)) * night2;
+  col = col * (diff * sunC + diff2 * sunC2 + sky + sky2 + 0.0002 + nightAmb) + vec3f(1.0, 0.95, 0.85) * (s * sunC + s2 * sunC2) + lamps;
   if (pop > 0.0) {
-    let night = sm(0.1, -0.08, ndl0);
+    let night = sm(0.1, -0.08, ndl0) * (1.0 - sm(-0.08, 0.1, ndl20) * up2);
     if (night > 0.0) {
       let lights = cityLights(p, pop, fw);
       col += mix(vec3f(1.0, 0.62, 0.3), vec3f(1.0, 0.88, 0.7), cityWhite) * lights * night * world.cityK;
@@ -326,8 +355,9 @@ fn fs(in: Out) -> @location(0) vec4f {
     let C1s = normalize(C1) * atR();
     let k = dot(C1s, vd);
     let sAir = k + sqrt(max(k * k - dot(C1s, C1s) + world.atTop * world.atTop, 0.0));
-    let haze = atInscatterC(C1s - vd * min(sAir, length(in.wp)), C1s, L, 5);
-    col = col * atTrans + haze * shade;
+    var haze = atInscatterC(C1s - vd * min(sAir, length(in.wp)), C1s, L, 5) * shade;
+    if (two) { haze += atInscatterC(C1s - vd * min(sAir, length(in.wp)), C1s, L2, 5) * world.lightC2.rgb; }
+    col = col * atTrans + haze;
   } else {
     let rim = pow(1.0 - max(dot(N, V), 0.0), 3.0);
     col += world.atmoCol.rgb * world.atmoCol.w * rim * clamp(ndl + 0.25, 0.0, 1.0) * 1.1;

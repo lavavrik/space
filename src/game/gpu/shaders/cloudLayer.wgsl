@@ -76,8 +76,15 @@ fn fs(in: Out) -> FragOut {
   let L = normalize(world.light.xyz);
   let lit = clamp(dot(n, L) * 1.05 + 0.05, 0.0, 1.0) * sunShade(P - C);
   let below = length(C) < world.cloudR;
-  let col = vec3f(0.97) * lit * atSunlight(P, L) * select(1.0, 0.3 + 0.55 * (1.0 - cov), below);
-  let haze = atInscatter(dir * atSpan(dir).x, P, L, 5);
+  var light = lit * atSunlight(P, L);
+  var haze = atInscatter(dir * atSpan(dir).x, P, L, 5);
+  // a pair's second sun, in its colour (docs/binaries.md)
+  if (world.light2.w > 0.5) {
+    let L2 = normalize(world.light2.xyz);
+    light += clamp(dot(n, L2) * 1.05 + 0.05, 0.0, 1.0) * atSunlight(P, L2) * world.lightC2.rgb;
+    haze += atInscatter(dir * atSpan(dir).x, P, L2, 5) * world.lightC2.rgb;
+  }
+  let col = vec3f(0.97) * light * select(1.0, 0.3 + 0.55 * (1.0 - cov), below);
   let clip = frame.viewProj * vec4f(P, 1.0);
   return FragOut(vec4f(col * atTrans + haze, cov * 0.95 * (1.0 - world.deckHide)), clamp(clip.z / clip.w, 0.0, 1.0));
 }

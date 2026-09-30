@@ -19,6 +19,7 @@ import { atmoOf } from '../sim/atmosphere';
 import { populated } from '../sim/population';
 import { hasCraters, reliefAmp, surfaceRadius, terrainOffsets, worldQuat } from '../sim/terrain';
 import { occludersOf } from '../sim/eclipse';
+import { sunsAt, type Suns } from '../sim/starlight';
 import type { Body, CurrentSystem, Star, World } from '../types';
 import { ATMO_WGSL, CLOUD_BAKE_WGSL, CLOUD_WGSL, DOTS_WGSL, PLANET_WGSL, RING_WGSL, STAR_WGSL, TERRAIN_BAKE_WGSL } from './shaders';
 import { CHUNK_BYTES, TerrainGpu, TerrainShared } from './terrain';
@@ -26,7 +27,7 @@ import { CHUNK_BYTES, TerrainGpu, TerrainShared } from './terrain';
 import { DEPTH_FORMAT, HDR_FORMAT, SAMPLES } from './formats';
 import { RingFieldGpu } from './rings';
 
-const WORLD_BYTES = 784;
+const WORLD_BYTES = 848;
 const STAR_BYTES = 128;
 const RING_BYTES = 128;
 const CLOUD_CUBE = 1024;
@@ -84,6 +85,7 @@ export class WorldsLayer {
   private readonly noChunk: GPUBindGroup;
   private readonly noChunkBufs: GPUBuffer[];
   private readonly rocks: RingFieldGpu;
+  private readonly suns: Suns = { s1: null as unknown as Suns['s1'], s2: null, c2: new THREE.Color() };
   private readonly atmoPipe: GPURenderPipeline;
   private readonly cloudPipe: GPURenderPipeline;
   private readonly cloudBakePipe: GPURenderPipeline;
@@ -413,7 +415,6 @@ export class WorldsLayer {
   update(g: Game) {
     const { ship, cur, simTime } = g;
     const pxPerRad = g.view.pxPerRad;
-    const starPos = cur.star.pos;
     const { device, m, q, v, s } = this;
     for (const st of this.stars) {
       const b = st.b;
@@ -459,14 +460,26 @@ export class WorldsLayer {
       const qInv = wq.clone().invert();
       m.makeRotationFromQuaternion(qInv);
       f.set(m.elements, 32);
-      const light = new THREE.Vector3().subVectors(starPos, b.pos).normalize();
+      // its suns (sim/starlight.ts): the brighter here is `light`, a pair's other `light2`
+      const suns = sunsAt(cur.stars, b.pos, this.suns);
+      const s1 = suns.s1;
+      const light = new THREE.Vector3().subVectors(s1.pos, b.pos).normalize();
       f.set([light.x, light.y, light.z, 0], 68);
       const lightL = light.clone().applyQuaternion(qInv);
       f.set([lightL.x, lightL.y, lightL.z, 0], 72);
       f.set([rel.x, rel.y, rel.z, b.radius], 76);
       // shadows (shadow.wgsl): the star and the bodies that can eclipse this one, from its centre
-      f.set([starPos.x - b.pos.x, starPos.y - b.pos.y, starPos.z - b.pos.z, cur.star.radius], 172);
-      const occ = occludersOf(b, cur.bodies, cur.star);
+      f.set([s1.pos.x - b.pos.x, s1.pos.y - b.pos.y, s1.pos.z - b.pos.z, s1.radius], 172);
+      if (suns.s2) {
+        const s2 = suns.s2;
+        const l2 = new THREE.Vector3().subVectors(s2.pos, b.pos).normalize();
+        f.set([l2.x, l2.y, l2.z, 1], 196);
+        l2.applyQuaternion(qInv);
+        f.set([l2.x, l2.y, l2.z, 0], 200);
+        f.set([s2.pos.x - b.pos.x, s2.pos.y - b.pos.y, s2.pos.z - b.pos.z, s2.radius], 204);
+        f.set([suns.c2.r, suns.c2.g, suns.c2.b, 0], 208);
+      } else f.fill(0, 196, 212);
+      const occ = occludersOf(b, cur.bodies, s1);
       occ.forEach((o, k) => f.set([o.pos.x - b.pos.x, o.pos.y - b.pos.y, o.pos.z - b.pos.z, o.radius], 176 + k * 4));
       f.set([b.ring?.inner ?? 0, b.ring?.outer ?? 0, b.ring?.seed ?? 0, occ.length], 192);
       // volumetric clouds (gpu/vclouds.ts): the nearest clouded world within 40 deck heights (~400 km
@@ -524,11 +537,11 @@ export class WorldsLayer {
       }
       // distant bodies as dots of reflected starlight
       if (pxR < 2.5) {
-        const dS = b.pos.distanceTo(starPos);
-        const toS = new THREE.Vector3().subVectors(starPos, b.pos).normalize();
+        const dS = b.pos.distanceTo(s1.pos);
+        const toS = new THREE.Vector3().subVectors(s1.pos, b.pos).normalize();
         const phase = 0.5 * (1 - toS.dot(rel) / d);
         const dA = d / AU;
-        const br = ((6e8 * b.albedo * cur.star.L * (b.radius / dS) ** 2) / (dA * dA)) * (0.15 + phase);
+        const br = ((6e8 * b.albedo * s1.L * (b.radius / dS) ** 2) / (dA * dA)) * (0.15 + phase);
         const a = Math.max(0, Math.min(1, (Math.log10(br) + 3.2) / 3.2)) * (pxR < 1.2 ? 1 : (2.5 - pxR) / 1.3);
         if (a > 0.02) {
           const c = w.dotColor;
