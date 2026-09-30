@@ -1,8 +1,14 @@
 // A world's cloud pattern baked into a cube map in its own frame (render/shaders/cloudBake.frag.glsl):
-// each texel the raw cloud value (clouds.wgsl) in its direction. One pass per face, as skyBake.wgsl.
+// each texel the raw cloud value (clouds.wgsl) in its direction, and the ground's coarse height
+// there (m over the sea), which lifts the clouds over high ground (clouds.wgsl cloudLiftAt). 8
+// octaves (features ~90 km and up): the ranges, not each ridge (with 11 the cloud tops were
+// corrugated along the ridges); cloudLiftAt's margin covers the peaks. One pass per face, as
+// skyBake.wgsl.
 // #include world
+// #include chunk
 // #include noise
 // #include noise3d
+// #include terrain
 // #include clouds
 
 struct Bake {
@@ -34,5 +40,8 @@ fn faceDir(face: u32, st: vec2f) -> vec3f {
 
 @fragment
 fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
-  return vec4f(cloudRaw(normalize(faceDir(bake.face, pos.xy / bake.size)), 7), 0.0, 0.0, 1.0);
+  let d = normalize(faceDir(bake.face, pos.xy / bake.size));
+  let wet = world.wtype == 2 || world.wtype == 3;
+  let ground = select(0.0, terrElev(terrH(d, 8, 8), world.sea, wet), world.terrA > 0.0);
+  return vec4f(cloudRaw(d, 7), ground, 0.0, 1.0);
 }

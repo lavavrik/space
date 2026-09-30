@@ -114,7 +114,7 @@ export class WorldsLayer {
     device.queue.writeTexture({ texture: this.noiseTex }, noise3dBytes() as Uint8Array<ArrayBuffer>, { bytesPerRow: n, rowsPerImage: n }, [n, n, n]);
     this.noiseSamp = device.createSampler({ magFilter: 'linear', minFilter: 'linear', addressModeU: 'repeat', addressModeV: 'repeat', addressModeW: 'repeat' });
     this.cloudSamp = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
-    this.noCloud = device.createTexture({ label: 'no clouds', size: [1, 1, 6], format: 'r16float', usage: GPUTextureUsage.TEXTURE_BINDING });
+    this.noCloud = device.createTexture({ label: 'no clouds', size: [1, 1, 6], format: 'rg16float', usage: GPUTextureUsage.TEXTURE_BINDING });
 
     const FS = GPUShaderStage.FRAGMENT,
       VS = GPUShaderStage.VERTEX,
@@ -228,9 +228,9 @@ export class WorldsLayer {
     const bake = mod('cloud bake', CLOUD_BAKE_WGSL);
     this.cloudBakePipe = device.createRenderPipeline({
       label: 'cloud bake',
-      layout: device.createPipelineLayout({ bindGroupLayouts: [this.oneBufLayout, this.worldLayout] }),
+      layout: device.createPipelineLayout({ bindGroupLayouts: [this.oneBufLayout, this.worldLayout, chunkLayout] }),
       vertex: { module: bake, entryPoint: 'vs' },
-      fragment: { module: bake, entryPoint: 'fs', targets: [{ format: 'r16float' }] },
+      fragment: { module: bake, entryPoint: 'fs', targets: [{ format: 'rg16float' }] },
     });
     const ring = mod('ring', RING_WGSL);
     this.ringPipe = device.createRenderPipeline({
@@ -325,7 +325,7 @@ export class WorldsLayer {
       const data = new ArrayBuffer(WORLD_BYTES);
       this.fillStatic(b, data, clouded ? air!.H * CLOUD_H : 0);
       device.queue.writeBuffer(buf, 0, data);
-      const cloud = clouded ? device.createTexture({ label: `${b.name} clouds`, size: [CLOUD_CUBE, CLOUD_CUBE, 6], format: 'r16float', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING }) : null;
+      const cloud = clouded ? device.createTexture({ label: `${b.name} clouds`, size: [CLOUD_CUBE, CLOUD_CUBE, 6], format: 'rg16float', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING }) : null;
       const groupWith = (clouds: GPUTexture) =>
         device.createBindGroup({
           layout: this.worldLayout,
@@ -400,6 +400,7 @@ export class WorldsLayer {
       pass.setPipeline(this.cloudBakePipe);
       pass.setBindGroup(0, device.createBindGroup({ layout: this.oneBufLayout, entries: [{ binding: 0, resource: { buffer: buf } }] }));
       pass.setBindGroup(1, group);
+      pass.setBindGroup(2, this.noChunk); // (terrain.wgsl reads a chunk's uniforms; not here)
       pass.draw(3);
       pass.end();
       device.queue.submit([enc.finish()]);

@@ -64,10 +64,12 @@ hull showed dimly, as if beyond the clouds. Bloom and the lens flare see the clo
   module as the march) through a 3 × 3 filter weighted by
   how alike the scene's depth is where each texel was marched and at the pixel. Blurred across an
   edge, sky clouds bled onto the far terrain and back, a soft low-res band along the horizon.
-- **Over high ground:** the layer doesn't know the terrain, so near you it's lifted enough for its
-  base to clear the ground under you by ~1.2 km (`liftAt`, `vp.lift`), fading back to its own
-  height 30–80 km away. Over a plateau or in mountains it sat on the ground. Distant peaks can
-  still rise into it.
+- **Over high ground:** the layer is lifted so its base clears the ground (`liftAt`).
+  - Everywhere, by the ground's coarse height: 8 octaves, ranges rather than ridges, baked with the cover into the cloud cube's second channel (`cloudBake.wgsl`, `clouds.wgsl cloudLiftAt`). The base clears it by 1.2 km plus a fifth of the relief, for the finer peaks.
+  - Near you, by the exact ground under you (`vp.lift`), fading out 30–80 km away.
+  - The flat deck is lifted the same way, and writes the lifted point's depth.
+  - Why: an Earth-like world's ground reaches ~1.3 × its relief (11 km on Venydes 5), and a fifth of it lies above the cloud base (3.3 km). From orbit the highlands' terrain cut holes in both layers, with the haze's gradient round them. With 11 octaves the cloud tops were corrugated along the ridges.
+  - The march reaches the top at its most lifted (`liftTop`). Whether you're in the layer or above it goes by the lift under you (`liftCam`).
 - **Inside the layer:** 64 steps over at most 100 km (48 over 250 km banded the clouds across a
   gap). The blend with last frame's result trusts this frame more (0.2 → 0.6) where the two differ
   a lot in what shows through: a cloud edge moved across, and the old one trailed as a ghost.

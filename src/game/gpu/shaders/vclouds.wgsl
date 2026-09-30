@@ -49,16 +49,26 @@ const MAX_DIST: f32 = 250000.0;
 
 var<private> rBot: f32;
 var<private> rTop: f32;
+var<private> liftTop: f32; // the lift at most (the march must reach the lifted top)
+var<private> liftCam: f32; // …and over the ground under you (whether you're in the layer or above it)
 
-// The layer is lifted over high ground near you (vp.lift: enough for its base to clear the ground
-// under you by ~1.2 km), fading back to its own height 30–80 km away: it doesn't know the terrain,
-// and over a plateau or in the mountains it sat on the ground. (Distant peaks can still rise
+// The layer is lifted over high ground (clouds.wgsl cloudLiftAt: by the baked coarse height,
+// ~12 km texels), and near you by the ground under you exactly (vp.lift: enough for its base to
+// clear it by ~1.2 km), fading back 30–80 km away. Over a plateau or in the mountains it sat on the
+// ground, and from orbit the highlands cut holes in it. (Peaks finer than the bake can still rise
 // into it, as mountains do.)
 fn liftAt(P: vec3f) -> f32 {
-  if (vp.lift <= 0.0) { return 0.0; }
-  let up = normalize(-world.atC.xyz);
-  let hd = length(P - up * dot(P, up));
-  return vp.lift * (1.0 - smoothstep(30000.0, 80000.0, hd));
+  var l = cloudLiftAt(toLocalM() * normalize(P - world.atC.xyz));
+  if (vp.lift > 0.0) {
+    let up = normalize(-world.atC.xyz);
+    let hd = length(P - up * dot(P, up));
+    l = max(l, vp.lift * (1.0 - smoothstep(30000.0, 80000.0, hd)));
+  }
+  return l;
+}
+fn setLifts() {
+  liftTop = max(vp.lift, cloudLiftMax());
+  liftCam = liftAt(vec3f(0.0));
 }
 
 // (0…1) cloud density at a camera-relative point
@@ -142,7 +152,7 @@ fn cirrus(lq: vec3f) -> f32 {
 fn sunThrough(P: vec3f, L: vec3f) -> f32 {
   let Cp = world.atC.xyz - P;
   let a = select(sphereSpan(L, Cp, rBot).y, 0.0, length(Cp) >= rBot);
-  let b = sphereSpan(L, Cp, rTop + vp.lift).y; // (the lifted top: from a point above the unlifted one it saw clear sky)
+  let b = sphereSpan(L, Cp, rTop + liftTop).y; // (the lifted top: from a point above the unlifted one it saw clear sky)
   if (b <= a || a < 0.0) { return 1.0; }
   var od = 0.0;
   let ds = (b - a) / 3.0;
@@ -171,20 +181,21 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   let C = world.atC.xyz;
   rBot = world.radius + world.cloudH * 0.4;
   rTop = world.radius + world.cloudH * 1.05;
+  setLifts();
   // the segment of the ray inside the layer (the near one)
   let camR = length(C);
-  let top = sphereSpan(dir, C, rTop + vp.lift); // (the lifted layer's top: the march must reach it)
+  let top = sphereSpan(dir, C, rTop + liftTop); // (the lifted layer's top: the march must reach it)
   let bot = sphereSpan(dir, C, rBot);
   var t0 = 0.0;
   var t1 = 0.0;
   if (camR < rBot) {
     t0 = bot.y;
     t1 = top.y;
-  } else if (camR < rTop + vp.lift) { // (the lifted layer's top: by the unlifted one, a camera just above it counted as above the layer and marched nothing)
+  } else if (camR < rTop + liftCam) { // (the lifted layer's top: by the unlifted one, a camera just above it counted as above the layer and marched nothing)
     t0 = 0.0;
     t1 = select(top.y, bot.x, bot.y > bot.x && bot.x > 0.0);
-  } else if (top.y > top.x && top.x > 0.0) {
-    t0 = top.x;
+  } else if (top.y > max(top.x, 0.0)) { // (above the layer here, but maybe under its top at most: from here)
+    t0 = max(top.x, 0.0);
     t1 = select(top.y, bot.x, bot.y > bot.x && bot.x > 0.0);
   }
   // the scene in front ends it
@@ -195,7 +206,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     sceneT = vp.near / d / max(dot(dir, fwd), 1e-4);
     t1 = min(t1, sceneT);
   }
-  let inLayer = camR >= rBot && camR < rTop + vp.lift;
+  let inLayer = camR >= rBot && camR < rTop + liftCam;
   t1 = min(t1, t0 + select(MAX_DIST, MAX_DIST_IN, inLayer));
   let L = normalize(world.light.xyz);
   let j = fract(52.9829189 * fract(dot(vec2f(px) + vp.frameN * 5.588238, vec2f(0.06711056, 0.00583715))));
@@ -204,7 +215,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   // it fades out toward the deck's top, where the view down is through the clouds themselves)
   var skyDim = 1.0;
   var rays = vec3f(0.0);
-  if (camR < rTop + vp.lift && world.atOn > 0.5) {
+  if (camR < rTop + liftCam && world.atOn > 0.5) {
     // the air under the deck along the ray: to the ground or to the cloud base (toward the horizon
     // ~200 km); the shade is sampled over its first 30 km and taken for all of it (only the first
     // 30 km were dimmed, and the rest, reddened by its long path, glowed as a yellow band along the
@@ -238,7 +249,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     // the clouds to take away, and it darkened the night's own glow to nothing)
     let camDay = smoothstep(-0.1, 0.1, dot(normalize(-C), L));
     skyDim = 1.0 - 0.8 * camDay * shade / max(wsum, 1e-6);
-    let fade = smoothstep(mix(rBot, rTop, 0.6) + vp.lift, rTop + vp.lift, camR);
+    let fade = smoothstep(mix(rBot, rTop, 0.6) + liftCam, rTop + liftCam, camR);
     skyDim = mix(skyDim, 1.0, fade);
     rays *= 1.0 - fade;
   }
@@ -371,6 +382,7 @@ fn fsComposite(@builtin(position) pos: vec4f) -> @location(0) vec4f {
   let camR = length(C);
   rBot = world.radius + world.cloudH * 0.4;
   rTop = world.radius + world.cloudH * 1.05;
+  setLifts();
   let L = normalize(world.light.xyz);
   let cosT = dot(dir, L);
   var sceneT = 1e30;
@@ -397,7 +409,7 @@ fn fsComposite(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         ci = ci * atTrans + hz;
       }
       ci *= frame.exposure;
-      if (camR >= rTop + vp.lift) {
+      if (camR >= rTop + liftCam) {
         cl = vec4f(ci * a + (1.0 - a) * cl.rgb, (1.0 - a) * cl.a); // above the lower clouds: in front
       } else {
         cl = vec4f(cl.rgb + cl.a * ci * a, cl.a * (1.0 - a)); // under or in them: behind

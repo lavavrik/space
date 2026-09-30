@@ -26,6 +26,21 @@ fn cloudMap(p: vec3f) -> f32 {
   return (s1 + s2) * 0.7; // (two independent fields: × 0.7 keeps the spread about the same)
 }
 
+// How far the cloud layer is lifted over high ground (m), at a unit direction in the world's own
+// frame (not the wind's: the ground stays put): enough for the volumetric layer's base (0.4 deck
+// heights) to clear the ground's coarse height (the cube's second channel, cloudBake.wgsl) by
+// LIFT_CLEAR, as gpu/worlds.ts's vcLift does for the ground under you, plus a fifth of the relief
+// for the peaks finer than the bake. Without it the plateaus and
+// ranges rose through the clouds and cut them off (up to ~1.3 × the relief: on an Earth-like world
+// a fifth of the ground is over the base): from orbit, gaps with the haze's gradient round them.
+const LIFT_CLEAR: f32 = 1200.0;
+fn cloudLiftAt(p: vec3f) -> f32 {
+  let g = textureSampleLevel(cloudTex, cloudSamp, p, 0.0).g;
+  return max(g + (LIFT_CLEAR + 0.2 * world.terrA) * smoothstep(0.0, 500.0, g) - world.cloudH * 0.4, 0.0); // (none over the sea)
+}
+// …at most (the ground's at most ~1.3 × the relief)
+fn cloudLiftMax() -> f32 { return max(world.terrA * 1.6 + LIFT_CLEAR - world.cloudH * 0.4, 0.0); }
+
 fn cloudRaw(p: vec3f, oct: i32) -> f32 {
   let s = world.seed;
   let cp = (p * 1.6 + vec3f(s * 1.7, s * 2.3, s * 0.9)) * 1.25;
