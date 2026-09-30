@@ -23,7 +23,7 @@ import { METAL_RICH, minedRocks } from '../sim/ringRocks';
 import { HEADLIGHT_GLSL } from './shaders';
 
 /** Above (or below) the belt by this much (m), the disc is back in full around you. */
-const FADE_ABOVE = 6000;
+export const FADE_ABOVE = 6000;
 
 /**
  * A rock from its index (shared by meshes and specks). Bin table (uBins, grid × 2): row 0 = (offset
@@ -263,7 +263,7 @@ void main(){
 }`;
 
 /** A unit icosphere, welded (the vertex shader shapes each rock from it: the instances are many, so vertex count matters). */
-function sphereGeometry(detail: number) {
+export function sphereGeometry(detail: number) {
   const g = new THREE.IcosahedronGeometry(1, detail);
   const p = g.attributes.position as THREE.BufferAttribute;
   const map = new Map<string, number>();
@@ -288,9 +288,9 @@ function sphereGeometry(detail: number) {
 
 /** The ring and camera as the layers need them this frame. */
 /** How many mined rocks per layer the shader knows about (the nearest to the camera). */
-const MINED_MAX = 24;
+export const MINED_MAX = 24;
 
-interface MinedRock {
+export interface MinedRock {
   layer: number;
   gi: number;
   jj: number;
@@ -299,7 +299,7 @@ interface MinedRock {
 }
 
 /** This ring's mined rocks (sim/ringRocks.ts minedRocks), parsed from their keys. */
-function minedHere(b: World): MinedRock[] {
+export function minedHere(b: World): MinedRock[] {
   const out: MinedRock[] = [];
   const pre = `${b.name}#`;
   for (const [key, left] of minedRocks) {

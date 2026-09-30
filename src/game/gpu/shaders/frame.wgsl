@@ -11,9 +11,27 @@ struct Frame {
   exposure: f32,    // physical light × exposure = display value (render/exposure.ts)
   skyExp: f32,      // the Milky Way's share of it
   starExp: f32,     // the stars'
+  // lights in scene units (render/exposure.ts): the headlights, floodlights, the headlights inside
+  // (÷ interior light), interior light, windows, the sky's level
+  headK: f32,
+  floodK: f32,
+  headKi: f32,
+  headDir: vec4f,   // the ship's nose (world axes); w: headlights on (0 or 1)
+  intK: f32,
+  winK: f32,
+  skyK: f32,
   _pad0: f32,
-  _pad1: f32,
-  _pad2: f32,
+}
+
+// The ship's headlights, as a physical lamp (render/shaders/headlight.glsl): a cone along the nose
+// (the camera at the origin of camera-relative positions) with inverse-square falloff; `K` turns
+// candela into brightness at the current exposure.
+fn headlight(N: vec3f, wp: vec3f, albedo: vec3f, K: f32) -> vec3f {
+  let d = max(length(wp), 5.0);
+  let toSurf = wp / d;
+  let cone = smoothstep(0.91, 0.96, dot(toSurf, frame.headDir.xyz)); // ~16–24° half-angle, soft edge
+  let ndl = max(dot(N, -toSurf), 0.0);
+  return albedo * vec3f(1.0, 0.96, 0.88) * cone * ndl * frame.headDir.w * K / (d * d);
 }
 @group(0) @binding(0) var<uniform> frame: Frame;
 

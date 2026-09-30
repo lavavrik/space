@@ -3,7 +3,8 @@
  * (the far sphere: surface, terrain as bumps, city lights), their skies (a scattering shell), cloud
  * decks (a cube-map bake per world, a shell at the deck), ring discs, and dots for distant bodies.
  * Mirrors render/SceneRenderer.ts attachStar / attachWorld / renderScene. Up close, a world with
- * relief is LOD terrain chunks instead of its sphere (gpu/terrain.ts); the ring's rocks are phase 4.
+ * relief is LOD terrain chunks instead of its sphere (gpu/terrain.ts); and close to a ring, its rocks
+ * (gpu/rings.ts).
  *
  * Draw order: opaque (surfaces, the star's disc), then the transparent layers far to near within
  * each (as three.js sorts them): glow, rings, dots; skies; cloud decks.
@@ -21,9 +22,8 @@ import type { Body, CurrentSystem, Star, World } from '../types';
 import { ATMO_WGSL, CLOUD_BAKE_WGSL, CLOUD_WGSL, DOTS_WGSL, PLANET_WGSL, RING_WGSL, STAR_WGSL, TERRAIN_BAKE_WGSL } from './shaders';
 import { CHUNK_BYTES, TerrainGpu, TerrainShared } from './terrain';
 
-export const HDR_FORMAT: GPUTextureFormat = 'rgba16float';
-export const DEPTH_FORMAT: GPUTextureFormat = 'depth32float';
-export const SAMPLES = 4;
+import { DEPTH_FORMAT, HDR_FORMAT, SAMPLES } from './formats';
+import { RingFieldGpu } from './rings';
 
 const WORLD_BYTES = 688;
 const STAR_BYTES = 128;
@@ -82,6 +82,7 @@ export class WorldsLayer {
   /** The far sphere's (unused) terrain-chunk group: the planet shader binds one either way. */
   private readonly noChunk: GPUBindGroup;
   private readonly noChunkBufs: GPUBuffer[];
+  private readonly rocks: RingFieldGpu;
   private readonly atmoPipe: GPURenderPipeline;
   private readonly cloudPipe: GPURenderPipeline;
   private readonly cloudBakePipe: GPURenderPipeline;
@@ -158,6 +159,7 @@ export class WorldsLayer {
       compute: { module: bakeModule, entryPoint: 'main' },
     });
     this.terrain = new TerrainShared(device, chunkLayout, chunkBakeLayout, bakePipe);
+    this.rocks = new RingFieldGpu(device, frameLayout, this.noiseTex, this.noiseSamp);
     this.oneBufLayout = device.createBindGroupLayout({ entries: [{ binding: 0, visibility: VS | FS, buffer: { type: 'uniform' } }] });
     const worldPL = device.createPipelineLayout({ bindGroupLayouts: [frameLayout, this.worldLayout] });
     const planetPL = device.createPipelineLayout({ bindGroupLayouts: [frameLayout, this.worldLayout, chunkLayout] });
@@ -431,6 +433,8 @@ export class WorldsLayer {
       device.queue.writeBuffer(st.buf, 0, f);
     }
     let nd = 0;
+    let ringDone = false;
+    this.rocks.off();
     for (const w of this.worlds) {
       const b = w.b;
       const rel = v.subVectors(b.pos, ship.pos);
@@ -473,7 +477,14 @@ export class WorldsLayer {
         rf.set(m.elements, 0);
         rf.set([b.ring.color.r, b.ring.color.g, b.ring.color.b, b.ring.seed], 16);
         rf.set([light.x, light.y, light.z, b.radius], 20);
-        rf.set([rel.x, rel.y, rel.z, 0], 24); // (near fade: the rocks come in phase 4)
+        // up close, the ring's rocks (gpu/rings.ts); the first ringed world near enough has them,
+        // and its disc fades out around the camera where they take over
+        let fade = 0;
+        if (!ringDone && this.rocks.update(b, rel, b.axis, light, simTime, pxPerRad * this.pr)) {
+          ringDone = true;
+          fade = this.rocks.nearFade;
+        }
+        rf.set([rel.x, rel.y, rel.z, fade], 24);
         rf.set([b.ring.inner, b.ring.outer], 28);
         device.queue.writeBuffer(w.ring.buf, 0, rf);
       }
@@ -499,6 +510,7 @@ export class WorldsLayer {
   /** Compute work before the frame's render pass: terrain chunks' bakes. */
   bake(enc: GPUCommandEncoder, frameGroup: GPUBindGroup) {
     for (const w of this.worlds) if (w.terrOn) w.terrain!.bake(enc, frameGroup);
+    this.rocks.cull(enc, frameGroup);
   }
 
   /** Render pixels per CSS pixel (GpuRenderer.resize). */
@@ -526,6 +538,7 @@ export class WorldsLayer {
         w.terrain!.draw(pass);
       }
     }
+    this.rocks.draw(pass);
   }
 
   /** Transparent, far to near within each kind (glow, rings and dots; skies; cloud decks). */
@@ -594,6 +607,7 @@ export class WorldsLayer {
     for (const mesh of Object.values(this.sphere)) this.freeMesh(mesh);
     this.noiseTex.destroy();
     this.terrain.dispose();
+    this.rocks.dispose();
     for (const b of this.noChunkBufs) b.destroy();
     this.noCloud.destroy();
     this.dotBuf.destroy();

@@ -13,11 +13,13 @@
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import type { GameRenderer, ViewInfo } from '../render/api';
+import { FLOOD_K, HEAD_K, INT_K, SKY_K, WINDOW_K } from '../render/exposure';
 import { skyColor, skyLook } from '../sim/hyperspace';
 import type { Body, CurrentSystem, StarSystem, Station } from '../types';
 import type { Gpu } from './device';
 import { SKY_BAKE_WGSL, SKY_WGSL, STARS_WGSL, TONEMAP_WGSL } from './shaders';
-import { DEPTH_FORMAT, HDR_FORMAT, SAMPLES, WorldsLayer } from './worlds';
+import { DEPTH_FORMAT, HDR_FORMAT, SAMPLES } from './formats';
+import { WorldsLayer } from './worlds';
 
 /** Near plane (m): with reversed-Z and 32-bit float depth, precision barely depends on it. */
 const NEAR = 0.5;
@@ -25,8 +27,8 @@ const NEAR = 0.5;
 const MAX_RENDER_PIXELS = 5e6;
 /** The baked Milky Way cube map's face size. */
 const SKY_CUBE = 1024;
-/** Bytes in the per-frame uniform block (frame.wgsl Frame): two mat4 + 12 floats, padded. */
-const FRAME_BYTES = 192;
+/** Bytes in the per-frame uniform block (frame.wgsl Frame): two mat4, 12 floats, a vec4, 4 floats. */
+const FRAME_BYTES = 208;
 
 export class GpuRenderer implements GameRenderer {
   readonly kind = 'webgpu' as const;
@@ -55,6 +57,7 @@ export class GpuRenderer implements GameRenderer {
   private readonly viewM = new THREE.Matrix4();
   private readonly rot = new THREE.Matrix4();
   private readonly vp = new THREE.Matrix4();
+  private readonly head = new THREE.Vector3();
 
   constructor(
     readonly canvas: HTMLCanvasElement,
@@ -67,7 +70,7 @@ export class GpuRenderer implements GameRenderer {
 
     this.frameBuf = device.createBuffer({ size: FRAME_BYTES, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     this.frameLayout = device.createBindGroupLayout({
-      entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } }],
+      entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } }],
     });
     this.frameGroup = device.createBindGroup({ layout: this.frameLayout, entries: [{ binding: 0, resource: { buffer: this.frameBuf } }] });
 
@@ -236,7 +239,9 @@ export class GpuRenderer implements GameRenderer {
     const f = this.frameData;
     f.set(this.vp.elements, 0);
     f.set(this.rot.elements, 16);
-    f.set([this.W, this.H, P.elements[0], P.elements[5], this.PR, g.simTime, 1, 1, 1], 32);
+    f.set([this.W, this.H, P.elements[0], P.elements[5], this.PR, g.simTime, 1, 1, 1, HEAD_K, FLOOD_K, HEAD_K / INT_K], 32);
+    this.head.set(0, 0, -1).applyQuaternion(ship.q);
+    f.set([this.head.x, this.head.y, this.head.z, g.lights ? 1 : 0, INT_K, WINDOW_K, SKY_K], 44);
     device.queue.writeBuffer(this.frameBuf, 0, f);
     this.updateViews(g);
     this.worlds.update(g);

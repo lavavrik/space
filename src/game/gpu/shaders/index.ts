@@ -23,8 +23,11 @@ import star from './star.wgsl?raw';
 import dots from './dots.wgsl?raw';
 import chunk from './chunk.wgsl?raw';
 import terrainBake from './terrainBake.wgsl?raw';
+import rock from './rock.wgsl?raw';
+import rocksCull from './rocksCull.wgsl?raw';
+import rocks from './rocks.wgsl?raw';
 
-const parts: Record<string, string> = { noise, frame, world, chunk, noise3d, terrain, atmo, clouds, city };
+const parts: Record<string, string> = { noise, frame, world, chunk, rock, noise3d, terrain, atmo, clouds, city };
 const build = (src: string) => src.replace(/^\/\/ #include (\w+)$/gm, (_, name: string) => parts[name] ?? `// (no ${name})`);
 
 export const SKY_BAKE_WGSL = build(skyBake);
@@ -39,3 +42,5 @@ export const RING_WGSL = build(ring);
 export const STAR_WGSL = build(star);
 export const DOTS_WGSL = build(dots);
 export const TERRAIN_BAKE_WGSL = build(terrainBake);
+export const ROCKS_CULL_WGSL = build(rocksCull);
+export const ROCKS_WGSL = build(rocks);
