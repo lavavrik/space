@@ -153,10 +153,16 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   let j = fract(52.9829189 * fract(dot(vec2f(px) + vp.frameN * 5.588238, vec2f(0.06711056, 0.00583715))));
   // light shafts (below the deck): the haze along the ray, less where the clouds shade the air
   var dark = vec3f(0.0);
+  var skyDim = 1.0;
   if (camR < rBot && world.atOn > 0.5) {
-    var tEnd = 30000.0;
-    if (d > 0.0) { tEnd = min(tEnd, vp.near / d / max(dot(dir, -normalize(frame.camRot[2].xyz)), 1e-4)); }
-    if (bot.y > 0.0) { tEnd = min(tEnd, bot.y); }
+    // the air under the deck along the ray: to the ground or to the cloud base (toward the horizon
+    // ~200 km); the shade is sampled over its first 30 km and taken for all of it (only the first
+    // 30 km were dimmed, and the rest, reddened by its long path, glowed as a yellow band along the
+    // horizon under overcast)
+    var tFull = atSpan(dir).y;
+    if (d > 0.0) { tFull = min(tFull, vp.near / d / max(dot(dir, -normalize(frame.camRot[2].xyz)), 1e-4)); }
+    if (bot.y > 0.0) { tFull = min(tFull, bot.y); }
+    let tEnd = min(tFull, 30000.0);
     var shade = 0.0;
     var wsum = 0.0;
     for (var i = 0; i < 12; i++) {
@@ -165,7 +171,16 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
       shade += (1.0 - sunThrough(P, L)) * w;
       wsum += w;
     }
-    if (shade > 0.0) { dark = atInscatter(vec3f(0.0), dir * tEnd, L, 4) * (0.5 * shade / max(wsum, 1e-6)); }
+    let frac = 0.92 * shade / max(wsum, 1e-6);
+    // to the ground: that stretch's haze taken off (the ground itself has the clouds' shadow). Into
+    // the sky: the sky dimmed as a whole instead (the sky's haze is compressed over a knee, atmo.wgsl
+    // atRolloff, and taking a stretch's compressed haze off it left a reddish line on the horizon)
+    if (d > 0.0) {
+      // (mostly: the far ground is mostly haze; near, the ground's own shading does it)
+      skyDim = 1.0 - frac * smoothstep(2000.0, 30000.0, tFull);
+    } else {
+      skyDim = 1.0 - frac;
+    }
   }
   // (a ray that misses the layer marches nothing, but still goes through the blend below)
   let steps = select(0, STEPS, t1 > t0);
@@ -225,9 +240,9 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   if (tFirst > 0.0 && world.atOn > 0.5) {
     let span = atSpan(dir);
     let haze = atInscatter(dir * span.x, dir * max(tFirst, span.x), L, 4);
-    S = S * atTrans + haze * (1.0 - T);
+    S = S * atTrans + haze * (1.0 - T) * skyDim; // (under the deck, that air is shaded too)
   }
-  var res = vec4f((S - dark) * frame.exposure, T);
+  var res = vec4f((S - dark) * frame.exposure, T * skyDim);
   // with last frame's: where this pixel's clouds were then (by their distance, or the layer's middle)
   if (vp.moved.w > 0.5) {
     var tr = select(15000.0, 0.5 * (t0 + t1), steps > 0); // (no layer here: a shaft's typical distance)

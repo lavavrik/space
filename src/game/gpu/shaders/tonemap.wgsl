@@ -35,20 +35,25 @@ fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     }
     c = s / 12.0;
   }
+  var seen = 1.0; // how much of the scene behind the clouds shows here
   if (post.a.x > 0.5) {
     // four bilinear taps round the pixel (a soft 4 × 4 half-res texel filter): what's left of the
     // march's jitter after the temporal blend would show as static inside the clouds
     let ct = 0.75 / vec2f(textureDimensions(clouds));
     let cl = 0.25 * (textureSampleLevel(clouds, samp, uv + vec2f(-ct.x, -ct.y), 0.0) + textureSampleLevel(clouds, samp, uv + vec2f(ct.x, -ct.y), 0.0) + textureSampleLevel(clouds, samp, uv + vec2f(-ct.x, ct.y), 0.0) + textureSampleLevel(clouds, samp, uv + vec2f(ct.x, ct.y), 0.0));
     c = max(c * cl.a + cl.rgb, vec3f(0.0)); // (the light can be negative: light shafts take haze off)
+    seen = cl.a;
   }
-  // bloom
-  c += textureSampleLevel(bloom, samp, uv, 0.0).rgb * post.a.y;
+  // bloom (it's made from the scene before the clouds: dimmed by what they let through here, or the
+  // sun's glow showed through an overcast)
+  c += textureSampleLevel(bloom, samp, uv, 0.0).rgb * post.a.y * seen;
   // lens flare, from the star only: ghosts along the line from it through the centre, as bright as
   // the star shows in the frame right now (so a rock or a world in front of it dims them)
   if (post.a.z > 0.0 && post.c.z > 0.5) {
     let sp = post.c.xy;
-    let src = max(textureSampleLevel(hdr, samp, sp, 0.0).rgb - vec3f(0.8), vec3f(0.0)) * 0.6;
+    // (behind clouds: as much of it as they let through)
+    let through = select(1.0, textureSampleLevel(clouds, samp, sp, 0.0).a, post.a.x > 0.5);
+    let src = max(textureSampleLevel(hdr, samp, sp, 0.0).rgb - vec3f(0.8), vec3f(0.0)) * 0.6 * through;
     if (max(src.r, max(src.g, src.b)) > 0.0) {
       let aspect = size.x / size.y;
       let axis = vec2f(0.5) - sp;

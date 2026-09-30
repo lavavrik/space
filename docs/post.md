@@ -9,6 +9,9 @@ the final pass `tonemap.wgsl`:
    blurred wide through 6 half-size copies (13-tap down, tent up, each coarser level added into the next at 0.55 so a wide bright area doesn't glow far
    out (at full weight the low horizon's haze bloomed up into the sky); after
    Jimenez's Call of Duty: AW talk). The largest is added to the frame at 0.25.
+   Both the bloom and the flare are made from the scene before the volumetric clouds are laid
+   over it, so each is dimmed by what the clouds let through (the bloom where it lands, the flare
+   at the star): the sun didn't glare through an overcast.
 2. **Lens flare, from the star only:** four small tinted ghosts along the line from the star through
    the screen's centre, as bright as the star shows in the frame there, so a rock
    or a world in front of it dims them. From every bright spot (as a pseudo lens flare) the laser's
