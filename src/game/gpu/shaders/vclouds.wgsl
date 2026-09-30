@@ -53,8 +53,9 @@ fn density(P: vec3f) -> f32 {
   let r = length(Pc);
   let h = (r - rBot) / (rTop - rBot);
   if (h <= 0.0 || h >= 1.0) { return 0.0; }
-  let lp = toLocalM() * Pc;
-  let k = lp * 0.00045 + vec3f(world.time * 0.00002, 0.0, 0.0);
+  // in the weather's own turning frame (clouds.wgsl cloudDir): the cover and all its shapes blow along
+  let lp = cloudDir(toLocalM() * Pc);
+  let k = lp * 0.00045;
   // the cube's cover: where the weather is (hundreds of km)
   let cov0 = cloudCover(textureSampleLevel(cloudTex, cloudSamp, lp / r, 0.0).r);
   // Shaped like weather, not a sponge (cutting holes all over the cover with one noise read as
@@ -85,7 +86,9 @@ fn density(P: vec3f) -> f32 {
   // the edges, so what's left is lumpy cauliflower rather than fog
   // (softer inside thick cover, or its tops were pocked all over with little shadowed pits, which
   // from high up read as dashes)
-  let n = 0.55 * tnoise(k) + 0.3 * tnoise(k * 3.1) + 0.15 * tnoise(k * 9.3);
+  // (and they boil: the finest detail changes over a few minutes)
+  let kb = k + vec3f(0.0, world.time * 3e-4, 0.0);
+  let n = 0.55 * tnoise(kb) + 0.3 * tnoise(kb * 3.1) + 0.15 * tnoise(kb * 9.3);
   let bite = mix(0.75, 0.45, smoothstep(0.5, 0.9, cov));
   return clamp((base - (1.0 - base) * (bite - bite * n)) * 3.0, 0.0, 1.0);
 }

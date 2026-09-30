@@ -41,7 +41,7 @@ fn fs(in: Out) -> @location(0) vec4f {
   if (t <= 0.0) { discard; }
   let P = dir * t;
   let n = normalize(P - C);
-  let p = mat3x3f(world.toLocal[0].xyz, world.toLocal[1].xyz, world.toLocal[2].xyz) * n;
+  let p = cloudDir(mat3x3f(world.toLocal[0].xyz, world.toLocal[1].xyz, world.toLocal[2].xyz) * n);
   let fw = max(length(fwidth(p)), 1e-9);
   let oct = i32(clamp(log2(0.5 / (2.0 * fw)) + 1.0, 3.0, 11.0));
   var raw = textureSampleLevel(cloudTex, cloudSamp, p, 0.0).r;

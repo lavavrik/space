@@ -1,5 +1,17 @@
 // Cloud cover (render/shaders/clouds.glsl): cloudRaw is what the per-world bake evaluates (into a
 // cube map in the world's own frame), cloudCover turns a raw value into cover (0…1).
+// The weather turns round the world's axis (its local y) a little faster than the ground: ~16 m/s
+// at an Earth's equator (sim/clouds.ts CLOUD_WIND). A local direction → where in the (baked, still)
+// cloud map it is now. Everything that reads the map goes through it (the deck, the volumetric
+// clouds, their shadows on the ground), so they move together.
+const CLOUD_WIND: f32 = 2.5e-6; // rad/s
+fn cloudDir(p: vec3f) -> vec3f {
+  let a = -world.time * CLOUD_WIND;
+  let c = cos(a);
+  let s = sin(a);
+  return vec3f(c * p.x + s * p.z, p.y, -s * p.x + c * p.z);
+}
+
 fn cloudRaw(p: vec3f, oct: i32) -> f32 {
   let s = world.seed;
   let cp = (p * 1.6 + vec3f(s * 1.7, s * 2.3, s * 0.9)) * 1.25;

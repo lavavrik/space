@@ -204,7 +204,7 @@ fn fs(in: Out) -> @location(0) vec4f {
     let up = dot(p, world.lightL.xyz);
     if (up > 0.0) {
       let s = max(world.cloudH - elev, 0.0) / max(up, 0.08);
-      let cloud = cloudCover(textureSampleLevel(cloudTex, cloudSamp, normalize(p * (world.radius + elev) + world.lightL.xyz * s), 0.0).r);
+      let cloud = cloudCover(textureSampleLevel(cloudTex, cloudSamp, cloudDir(normalize(p * (world.radius + elev) + world.lightL.xyz * s)), 0.0).r);
       diff *= 1.0 - 0.75 * cloud;
     }
   }

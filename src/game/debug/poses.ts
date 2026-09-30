@@ -77,7 +77,7 @@ function cloudySpot(g: Game, b: World, low: boolean) {
     const r = 0.6 * Math.sqrt((i + 0.5) / 300),
       a = i * 2.39996;
     const d = c.clone().addScaledVector(u, r * Math.cos(a)).addScaledVector(w, r * Math.sin(a)).normalize();
-    let s = cloudCoverAt(b, d);
+    let s = cloudCoverAt(b, d, g.simTime);
     if (low) s -= Math.max(0, surfaceRadius(b, b.pos.clone().addScaledVector(d, b.radius)) - b.radius) / 1000;
     if (s > score) {
       score = s;

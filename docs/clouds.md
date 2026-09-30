@@ -45,6 +45,11 @@ hull showed dimly, as if beyond the clouds. Bloom and the lens flare see the clo
 - **Air:** the haze between the camera and the first cloud, as for the ground. All the air's
   inscatter (`atmo.wgsl atRolloff`) is compressed and paled over a knee: a grazing path low in the
   air saturates every colour at 3–5× white, and the horizon was a wide flat-white band.
+- **Wind:** the weather turns round the world's axis 2.5 × 10⁻⁶ rad/s faster than the ground (~16 m/s
+  at an Earth's equator; `clouds.wgsl cloudDir`, `sim/clouds.ts CLOUD_WIND`). The deck, the
+  volumetric clouds and their shadows on the ground all read the cloud map through it, so they move
+  together. The finest detail also boils, changing over a few minutes. Before, they drifted at
+  ~4 cm/s, still to the eye.
 - **Level of detail:** steps no finer than 0.4 % of the distance to the layer (150 m at least),
   12–48 a ray, and 3 sun steps, not 5, from over 50 km. From 300 km a screen full of clouds cost
   6.5 ms and pushed the dynamic resolution down to half; now it's ~1.9 ms at 1200 × 750.
