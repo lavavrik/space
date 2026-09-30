@@ -487,7 +487,7 @@ export class WorldsLayer {
       w.terrOn = !!w.terrain && pxR > TERRAIN_PX && d < b.radius * TERRAIN_NEAR;
       if (w.terrOn) {
         const cam = new THREE.Vector3().subVectors(ship.pos, b.pos).applyQuaternion(qInv);
-        w.terrain!.update(cam, lightL, rel, wq);
+        w.terrain!.update(cam, lightL, rel, wq, pxPerRad);
       }
       f[89] = simTime;
       f[90] = d - b.radius;

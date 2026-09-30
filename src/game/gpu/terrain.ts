@@ -3,8 +3,9 @@
  * terrain height in the vertex shader (planet.wgsl vsChunk, height in terrain.wgsl).
  * See docs/terrain.md.
  *
- * - Each cube face is a quadtree. A chunk splits into four when the camera is within SPLIT_K of its
- *   edge length, down to MIN_SPACING between vertices (~8 m), so detail follows you to the ground.
+ * - Each cube face is a quadtree. A chunk splits into four while its quads would be over TARGET_PX
+ *   on screen, down to MIN_SPACING between vertices (~8 m), so detail follows you to the ground and
+ *   holds out to the horizon.
  * - Vertex positions are built on the CPU in double precision, relative to the chunk's centre, and
  *   the chunk mesh sits at that centre, so nothing loses precision on a 6,000 km world.
  * - A chunk's vertices carry only the octaves its spacing can show (uVOct); the fragment shader
@@ -25,9 +26,18 @@ import { reliefAmp, T_OCT_MAX, terrainOffsets } from '../sim/terrain';
 import type { World } from '../types';
 
 const N = 32; // quads per chunk edge
-const SPLIT_K = 1.6; // split when the camera is within this many edge lengths (quads ~15–20 px on screen)
+/**
+ * A chunk splits while its quads would be over TARGET_PX on screen (CSS px, by the view's own
+ * resolution, so the periscope counts too). By distance alone (within 1.6 edge lengths) they were
+ * 15–20 px wherever you looked, and the far ground and its mountains' silhouette against the sky
+ * read as low-res. The target is eased up while there are more than CHUNK_BUDGET chunks (and back
+ * down when there's room), so a view over a whole mountain range can't run away with the frame.
+ */
+const TARGET_PX = 6,
+  TARGET_MAX = 20,
+  CHUNK_BUDGET = 900;
 const MIN_SPACING = 8; // m between vertices at the finest level
-const MAX_BUILDS = 12; // chunk meshes built per frame at most (the rest wait a frame)
+const MAX_BUILDS = 24; // chunk meshes built per frame at most (the rest wait a frame)
 const KEEP_FRAMES = 240; // free a chunk unused this long
 const SUN_REBAKE = Math.cos(0.004); // re-bake a chunk's shadows once the sun has moved ~0.2° over it
 const MAX_REBAKES = 8; // shadow re-bakes per frame
@@ -159,6 +169,9 @@ export class TerrainGpu {
   private readonly off: Float32Array;
   private frame = 0;
   private builds = 0;
+  /** This frame's split threshold (px per quad) and the view's resolution (CSS px per radian). */
+  private target = TARGET_PX;
+  private pxPerRad = 1000;
   private rebakes = 0;
   private readonly tmp: number[] = [0, 0, 0];
   private readonly sun = new THREE.Vector3(0, 1, 0);
@@ -185,8 +198,13 @@ export class TerrainGpu {
    * (same frame); queue new chunks and ones the sun has moved over for baking; place the chosen ones
    * for a world at `rel` (camera-relative) turned by `q`.
    */
-  update(cam: THREE.Vector3, sun: THREE.Vector3, rel: THREE.Vector3, q: THREE.Quaternion) {
+  update(cam: THREE.Vector3, sun: THREE.Vector3, rel: THREE.Vector3, q: THREE.Quaternion, pxPerRad: number) {
     this.frame++;
+    this.pxPerRad = pxPerRad;
+    // over budget last frame: coarser; well under: finer again
+    const n = this.shown.length;
+    if (n > CHUNK_BUDGET) this.target = Math.min(TARGET_MAX, this.target * 1.08);
+    else if (n < CHUNK_BUDGET * 0.8) this.target = Math.max(TARGET_PX, this.target / 1.03);
     this.builds = 0;
     this.rebakes = 0;
     this.shown = [];
@@ -220,7 +238,8 @@ export class TerrainGpu {
     if (ang - (edge / this.R) * 0.8 > horizon) return;
     const dist = Math.hypot(cam.x - c[0] * this.R, cam.y - c[1] * this.R, cam.z - c[2] * this.R);
     const canSplit = edge / N / 2 >= MIN_SPACING;
-    if (canSplit && dist < SPLIT_K * edge) {
+    // (its quads' size on screen: edge / N seen from `dist`)
+    if (canSplit && (edge / N / Math.max(dist, 1)) * this.pxPerRad > this.target) {
       // split, if all four children are ready (or can be built this frame); else draw this one
       const kids: [number, number][] = [
         [2 * i, 2 * j],
