@@ -1,6 +1,6 @@
 /**
  * Post-processing (docs/post.md): the bloom chain (bloom.wgsl) and the final pass's settings
- * (tonemap.wgsl: FTL zoom blur, the volumetric clouds, bloom, lens flare, tone map).
+ * (tonemap.wgsl: FTL zoom blur, the volumetric clouds, bloom, the star's lens flare, tone map).
  */
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
@@ -96,9 +96,9 @@ export class Bloom {
     for (let i = LEVELS - 2; i >= 0; i--) pass(this.tex[i].createView(), true, this.up, this.upGroups[i], false);
   }
 
-  /** The bloom (half the frame's size), and a small copy for the lens flare. */
+  /** The bloom (half the frame's size). */
   get views() {
-    return { bloom: this.tex[0].createView(), small: this.tex[2].createView(), samp: this.samp };
+    return { bloom: this.tex[0].createView(), samp: this.samp };
   }
 
   dispose() {
@@ -112,7 +112,7 @@ export class Bloom {
  * as strong as your speed (from ~1,000 to ~1,000,000 km/s), and the bloom and flare strengths.
  */
 export function postParams(g: Game, vp: THREE.Matrix4, clouds: boolean) {
-  const out = new Float32Array(8);
+  const out = new Float32Array(12);
   let blur = 0;
   let fx = 0.5,
     fy = 0.5,
@@ -127,5 +127,9 @@ export function postParams(g: Game, vp: THREE.Matrix4, clouds: boolean) {
     }
   }
   out.set([clouds ? 1 : 0, BLOOM_K, FLARE_K, blur, fx, fy, side, 0]);
+  // the star on screen, for its lens flare
+  const r = g.cur.star.pos.clone().sub(g.ship.pos);
+  const q = new THREE.Vector4(r.x, r.y, r.z, 0).applyMatrix4(vp);
+  if (q.w > 0) out.set([(q.x / q.w) * 0.5 + 0.5, 0.5 - (q.y / q.w) * 0.5, 1], 8);
   return out;
 }

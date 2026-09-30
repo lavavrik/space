@@ -8,9 +8,10 @@ the final pass `tonemap.wgsl`:
    knee; each tap group weighted down by its brightness so single hot pixels don't flicker), then
    blurred wide through 6 half-size copies (13-tap down, tent up, added back up the chain; after
    Jimenez's Call of Duty: AW talk). The largest is added to the frame at 0.25.
-2. **Lens flare:** four small tinted ghosts of the brightest points mirrored through the centre
-   (after John Chapman's pseudo lens flare), read from the 1/8-size bloom copy less 1, so only the
-   star and lamps make them. No halo: from a bright limb or sky it swept arcs across the view.
+2. **Lens flare, from the star only:** four small tinted ghosts along the line from the star through
+   the screen's centre, as bright as the star shows in the frame there, so a rock
+   or a world in front of it dims them. From every bright spot (as a pseudo lens flare) the laser's
+   hot spot made them too, and a bright limb or sky swept arcs across the view.
 3. **FTL zoom blur:** in FTL, 12 samples toward the point you're heading for (away from it when it's
    behind you), stronger toward the edges and with speed (from ~1,000 to ~1,000,000 km/s), kept to a
    tenth of full strength: a hint of speed, not a smear.

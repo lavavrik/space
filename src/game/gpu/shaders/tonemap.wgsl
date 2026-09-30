@@ -1,22 +1,18 @@
 // The final pass to the screen (gpu/post.ts; docs/post.md): the frame, blurred toward where you're
 // heading in FTL; the volumetric clouds laid over it (vclouds.wgsl: scene × what they let through +
-// their light, upsampled); bloom (bloom.wgsl) and a lens flare's ghosts from the brightest
-// points; then linear up to 0.8 and a soft shoulder toward 1 per channel, so over-bright light rolls
+// their light, upsampled); bloom (bloom.wgsl) and the star's lens-flare ghosts; then linear up to 0.8 and a soft shoulder toward 1 per channel, so over-bright light rolls
 // off to white instead of clipping flat. Written as is to the canvas: the colours are display values.
 
 struct Post {
   a: vec4f, // clouds on, bloom strength, flare strength, blur strength
   b: vec4f, // the screen point you're heading for (uv), and whether it's in front (1) or behind (−1)
+  c: vec4f, // the star on screen (uv); z: 1 if it's in front
 }
 @group(0) @binding(0) var hdr: texture_2d<f32>;
 @group(0) @binding(1) var clouds: texture_2d<f32>;
 @group(0) @binding(2) var samp: sampler;
 @group(0) @binding(3) var<uniform> post: Post;
 @group(0) @binding(4) var bloom: texture_2d<f32>;
-@group(0) @binding(5) var bloomSmall: texture_2d<f32>;
-
-// what makes flares: only the brightest of the bloom (the star, lamps), not a whole lit planet
-fn flareSrc(uv: vec2f) -> vec3f { return max(textureSampleLevel(bloomSmall, samp, uv, 0.0).rgb - vec3f(1.0), vec3f(0.0)); }
 
 @vertex
 fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
@@ -44,19 +40,25 @@ fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
   }
   // bloom
   c += textureSampleLevel(bloom, samp, uv, 0.0).rgb * post.a.y;
-  // lens flare: small ghosts of the brightest points mirrored through the centre (no halo: from a bright
-  // limb or sky it swept arcs across the whole view)
-  if (post.a.z > 0.0) {
-    let m = vec2f(1.0) - uv;
-    let gv = (vec2f(0.5) - m) * 0.4;
-    var fl = vec3f(0.0);
-    let tint = array<vec3f, 4>(vec3f(1.0, 0.8, 0.6), vec3f(0.6, 0.9, 1.0), vec3f(0.9, 0.6, 1.0), vec3f(0.7, 1.0, 0.7));
-    for (var i = 1; i < 5; i++) {
-      let o = fract(m + gv * f32(i));
-      let w = pow(max(0.0, 1.0 - length(vec2f(0.5) - o) / 0.7071), 5.0);
-      fl += flareSrc(o) * w * tint[i - 1];
+  // lens flare, from the star only: ghosts along the line from it through the centre, as bright as
+  // the star shows in the frame right now (so a rock or a world in front of it dims them)
+  if (post.a.z > 0.0 && post.c.z > 0.5) {
+    let sp = post.c.xy;
+    let src = max(textureSampleLevel(hdr, samp, sp, 0.0).rgb - vec3f(0.8), vec3f(0.0)) * 0.6;
+    if (max(src.r, max(src.g, src.b)) > 0.0) {
+      let aspect = size.x / size.y;
+      let axis = vec2f(0.5) - sp;
+      let pos = array<f32, 4>(0.6, 1.1, 1.5, 1.9);
+      let rad = array<f32, 4>(0.02, 0.045, 0.03, 0.07);
+      let tint = array<vec3f, 4>(vec3f(1.0, 0.8, 0.6), vec3f(0.6, 0.9, 1.0), vec3f(0.9, 0.6, 1.0), vec3f(0.7, 1.0, 0.7));
+      var fl = vec3f(0.0);
+      for (var i = 0; i < 4; i++) {
+        let g = sp + axis * pos[i];
+        let d = length((uv - g) * vec2f(aspect, 1.0)) / rad[i];
+        fl += tint[i] * (1.0 - smoothstep(0.7, 1.0, d)) * (0.4 + 0.6 * d * d);
+      }
+      c += fl * src * post.a.z;
     }
-    c += fl * post.a.z;
   }
   let s = 0.8 + 0.2 * (1.0 - exp(-(c - 0.8) / 0.2));
   return vec4f(select(c, s, c >= vec3f(0.8)), 1.0);
