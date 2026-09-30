@@ -33,7 +33,9 @@ over the frame: scene × what the clouds let through + their light.
   air saturates every colour at 3–5× white, and the horizon was a wide flat-white band.
 - **Noise:** each ray starts at a jittered offset (interleaved gradient noise, moving each frame),
   and the result is blended 80/20 with last frame's, reprojected by the clouds' distance, so the
-  grain averages out over a few frames.
+  grain averages out over a few frames. The reprojection follows the world's turn and orbit (the
+  clouds move with it): taken as still in space, they were off by the orbit's 30 km/s and smeared
+  upward whenever the game ran.
 - **Light shafts:** below the deck, 12 samples along the first 30 km of the ray through the air test whether the clouds
   hide the sun from there (3 density samples up through the layer); the haze along the ray is dimmed
   by half that share, weighted by the air's density, and written as negative light, so the composite

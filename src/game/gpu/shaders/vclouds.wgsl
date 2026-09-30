@@ -22,7 +22,7 @@
 
 struct VParams {
   prevVP: mat4x4f, // last frame's view-projection (camera-relative then)
-  moved: vec4f,    // how far the camera moved since (m); w: 1 if last frame's result is usable
+  moved: vec4f,    // xyz: unused (0; prevVP carries the world's motion, vclouds.ts); w: 1 if last frame's result is usable
   size: vec2f,     // the output (px)
   on: f32,         // 0…1: fades in as you come down toward the deck
   frameN: f32,     // frame counter (the start jitter moves)

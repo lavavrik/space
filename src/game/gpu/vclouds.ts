@@ -23,8 +23,14 @@ export class VolumetricClouds {
   private readonly samp: GPUSampler;
   /** Last frame's view-projection and camera position (doubles), for the reprojection. */
   private readonly prevVP = new Float32Array(16);
-  private readonly prevPos = new THREE.Vector3();
+  /** Last frame's world (camera-relative) and turn, and which world it was. */
+  private readonly prevRel = new THREE.Vector3();
+  private readonly prevQ = new THREE.Quaternion();
+  private prevGroup: GPUBindGroup | null = null;
   private hasPrev = false;
+  private readonly reproj = new THREE.Matrix4();
+  private readonly tmpM = new THREE.Matrix4();
+  private readonly tmpQ = new THREE.Quaternion();
   private w = 1;
   private h = 1;
   private n = 0;
@@ -92,22 +98,31 @@ export class VolumetricClouds {
 
   /**
    * March the clouds of the world bound by `worldGroup`, faded in by `on` (0: skip); `vp` is this
-   * frame's view-projection and `pos` the camera's position (for next frame's reprojection).
+   * frame's view-projection, `rel` the world's centre (camera-relative) and `q` its turn: for next
+   * frame's reprojection, which follows the clouds as they turn and orbit with their world.
    */
-  dispatch(enc: GPUCommandEncoder, frameGroup: GPUBindGroup, worldGroup: GPUBindGroup | null, on: number, vp: THREE.Matrix4, pos: THREE.Vector3, tw: (label: string) => GPUComputePassTimestampWrites | undefined) {
+  dispatch(enc: GPUCommandEncoder, frameGroup: GPUBindGroup, worldGroup: GPUBindGroup | null, on: number, vp: THREE.Matrix4, rel: THREE.Vector3, q: THREE.Quaternion, tw: (label: string) => GPUComputePassTimestampWrites | undefined) {
     if (!worldGroup || on <= 0 || !this.groups.length) {
       this.hasPrev = false;
       return;
     }
     this.cur = 1 - this.cur;
     const d = this.data;
-    d.set(this.prevVP, 0);
-    // how far the camera moved (a camera-relative point then = now's + this)
-    d.set([pos.x - this.prevPos.x, pos.y - this.prevPos.y, pos.z - this.prevPos.z, this.hasPrev ? 1 : 0], 16);
+    // where a camera-relative point of the clouds now was last frame: into the world's own frame
+    // (−rel, turned back by q⁻¹), then out by last frame's turn and place. Taking the clouds as still
+    // in space instead, they were 30 km/s along the world's orbit off, and smeared upward (docs/clouds.md)
+    if (worldGroup !== this.prevGroup) this.hasPrev = false;
+    this.tmpQ.copy(q).invert().premultiply(this.prevQ);
+    this.reproj.makeTranslation(-rel.x, -rel.y, -rel.z).premultiply(this.tmpM.makeRotationFromQuaternion(this.tmpQ)).premultiply(this.tmpM.makeTranslation(this.prevRel.x, this.prevRel.y, this.prevRel.z));
+    this.reproj.premultiply(this.tmpM.fromArray(this.prevVP));
+    d.set(this.reproj.elements, 0);
+    d.set([0, 0, 0, this.hasPrev ? 1 : 0], 16);
     d.set([this.w, this.h, on, this.n++, this.near, this.scale], 20);
     this.device.queue.writeBuffer(this.params, 0, d);
     this.prevVP.set(vp.elements);
-    this.prevPos.copy(pos);
+    this.prevRel.copy(rel);
+    this.prevQ.copy(q);
+    this.prevGroup = worldGroup;
     this.hasPrev = true;
     const pass = enc.beginComputePass({ label: 'volumetric clouds', timestampWrites: tw('clouds') });
     pass.setPipeline(this.pipe);

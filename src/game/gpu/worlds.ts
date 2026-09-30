@@ -475,6 +475,8 @@ export class WorldsLayer {
       if (vc > this.vcOn) {
         this.vcOn = vc;
         this.vcGroup = w.group;
+        this.vcRel.copy(rel);
+        this.vcQ.copy(wq);
       }
       // up close, LOD terrain replaces the sphere: big on screen and actually close (render/look.ts)
       w.terrOn = !!w.terrain && pxR > TERRAIN_PX && d < b.radius * TERRAIN_NEAR;
@@ -526,6 +528,9 @@ export class WorldsLayer {
   /** The world whose clouds are marched as volumes this frame (its bind group), and how far faded in. */
   vcGroup: GPUBindGroup | null = null;
   vcOn = 0;
+  /** …and where that world is (camera-relative) and how it's turned: the clouds move with it. */
+  readonly vcRel = new THREE.Vector3();
+  readonly vcQ = new THREE.Quaternion();
 
   /** The stars' share of the exposure (render/exposure.ts STAR_EXP_P): planets' dots follow it. */
   starExp = 1;

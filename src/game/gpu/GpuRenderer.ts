@@ -297,7 +297,7 @@ export class GpuRenderer implements GameRenderer {
         craft(pass);
         transparent(pass);
       });
-    this.vclouds.dispatch(enc, this.frameGroup, clouds ? this.worlds.vcGroup : null, this.worlds.vcOn, this.vp, g.ship.pos, tw);
+    this.vclouds.dispatch(enc, this.frameGroup, clouds ? this.worlds.vcGroup : null, this.worlds.vcOn, this.vp, this.worlds.vcRel, this.worlds.vcQ, tw);
     if (AUTO_EXPOSURE) this.meter.encode(enc, e);
 
     this.bloom.render(enc, tw);
