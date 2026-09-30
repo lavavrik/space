@@ -14,6 +14,7 @@ struct Field {
   p: vec4f,       // box size or ball radius (m), grains, seed, size (m; negative: pixels)
   col: vec4f,     // rgb; w: glint strength
   sun: vec4f,     // direction to the star (glints); w: time (s)
+  drift: vec4f,   // x: each grain's own slow drift (m/s, random direction), so a field isn't frozen
 }
 struct Fields {
   f: array<Field, 8>,
@@ -41,7 +42,8 @@ fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> Sprit
   var fade = 1.0;
   if (f.anchor.w < 0.5) {
     let box = f.p.x;
-    let q = h * box - f.anchor.xyz + 0.5 * box;
+    let dv = (hash3(i, seed + 13u) * 2.0 - 1.0) * f.drift.x;
+    let q = h * box + dv * f.sun.w - f.anchor.xyz + 0.5 * box;
     c = q - box * floor(q / box) - 0.5 * box; // (the nearest copy of the grain)
     fade = max(0.0, 1.0 - length(c) / (0.5 * box));
   } else {

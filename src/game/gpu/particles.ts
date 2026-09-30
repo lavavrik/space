@@ -46,6 +46,8 @@ export interface Field {
   grain: number; // m, or negative: pixels
   color: [number, number, number];
   glint?: number;
+  /** Each grain's own slow drift (m/s): the field lives even when you sit still. */
+  drift?: number;
 }
 
 const blendAdd: GPUBlendState = { color: { srcFactor: 'one', dstFactor: 'one' }, alpha: { srcFactor: 'zero', dstFactor: 'src-alpha' } };
@@ -62,7 +64,7 @@ export class Particles {
   private readonly simPipe: GPUComputePipeline;
   private readonly drawPipe: GPURenderPipeline;
   private readonly fieldBuf: GPUBuffer;
-  private readonly fieldData = new Float32Array(MAX_FIELDS * 16);
+  private readonly fieldData = new Float32Array(MAX_FIELDS * 20);
   private readonly fieldGroup: GPUBindGroup;
   private readonly fieldPipe: GPURenderPipeline;
   private emitters: Emitter[] = [];
@@ -190,14 +192,15 @@ export class Particles {
     // fields
     const fd = this.fieldData;
     this.fields.forEach((fl, k) => {
-      const o = k * 16;
+      const o = k * 20;
       const a = fl.at;
       const w = (v: number) => (fl.mode === 'wrap' ? v - Math.floor(v / fl.size) * fl.size : v);
       fd.set([w(a.x), w(a.y), w(a.z), fl.mode === 'wrap' ? 0 : 1], o);
       fd.set([fl.size, fl.count, fl.seed, fl.grain], o + 4);
       fd.set([...fl.color, fl.glint ?? 0], o + 8);
       const s = g.cur.star.pos.clone().sub(g.ship.pos).normalize();
-      fd.set([s.x, s.y, s.z, performance.now() / 1000], o + 12);
+      fd.set([s.x, s.y, s.z, (performance.now() / 1000) % 1e5], o + 12);
+      fd.set([fl.drift ?? 0, 0, 0, 0], o + 16);
     });
     if (this.fields.length) this.device.queue.writeBuffer(this.fieldBuf, 0, fd);
     this.live = this.live || n > 0;

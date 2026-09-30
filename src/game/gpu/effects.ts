@@ -330,7 +330,11 @@ export class EffectsLayer {
         this.ringAnchor.addScaledVector(ship.vel.clone().sub(vOrb), dt);
         const c = b.ring.color;
         const k = 5 * sun * Math.min(1, dens);
-        px.field({ mode: 'wrap', at: this.ringAnchor, size: 500, count: Math.round(60000 * Math.min(1, dens)), seed: 7, grain: -1.3 * pr, color: [c.r * k, c.g * k, c.b * k], glint: 4 });
+        // fine ice dust (a few px, glinting, drifting), and nearer gravel: centimetre pebbles, shaded
+        // like the rocks, bigger the nearer, so the space round you has depth and parallax
+        px.field({ mode: 'wrap', at: this.ringAnchor, size: 400, count: Math.round(60000 * Math.min(1, dens)), seed: 7, grain: -1.5 * pr, color: [c.r * k, c.g * k, c.b * k], glint: 5, drift: 0.6 });
+        const kg = 1.2 * sun * Math.min(1, dens);
+        px.field({ mode: 'wrap', at: this.ringAnchor, size: 120, count: Math.round(2500 * Math.min(1, dens)), seed: 11, grain: 0.06, color: [c.r * kg, c.g * kg, c.b * kg], glint: 2, drift: 0.25 });
       } else this.ringAnchor = null;
     } else this.ringAnchor = null;
     // wrecks' debris

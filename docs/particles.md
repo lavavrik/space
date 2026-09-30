@@ -31,8 +31,10 @@ No buffers: a grain's place is a hash of its index. Up to 8 fields a frame, one 
 - **Space dust:** 700 grains in a 3 km box repeating through the system, placed by the ship's
   position (so they hang still as you pass), fading with speed from 3 km/s, gone by 10 km/s (faster,
   the box is crossed several times a second and the grains read as flickering static).
-- **Ring dust:** in a ring's belt, up to 60,000 fine ice grains in a 500 m box that orbits with the
+- **Ring dust:** in a ring's belt, up to 60,000 fine ice grains in a 400 m box that orbits with the
   ring (the box's place advances by the ship's velocity less the orbital velocity there), as dense
   as the ring is at that radius and height, glinting, and glowing when backlit (grains scatter
-  forward).
+  forward); and up to 2,500 centimetre pebbles in a 120 m box, bigger the nearer, for depth and
+  parallax. Every grain drifts slowly on its own (0.6 m/s dust, 0.25 m/s pebbles), so the belt
+  isn't frozen while you sit still.
 - **Wreck debris:** 2,500 bits in a 90 m ball round each wreck within 40 km, tumbling so they glint.
