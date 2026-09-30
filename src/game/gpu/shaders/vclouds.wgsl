@@ -158,13 +158,18 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   let mid = dir * (0.5 * (t0 + t1)) - C;
   let sunCol = atSunlightC(normalize(mid) * (world.radius + world.cloudH), L) * sunShade(mid) * world.atSunI / 45.0;
   let dayK = smoothstep(-0.15, 0.3, dot(normalize(mid), L));
-  let dt = (t1 - t0) / f32(STEPS);
-  // (the start is jittered: banding becomes fine grain, averaged out over frames)
+  let span = t1 - t0;
+  // (the start is jittered: banding becomes fine grain, averaged out over frames.) Steps are spaced
+  // quadratically, fine near the camera and coarse far off: evenly, a ray skimming the layer 250 km
+  // took 5 km steps and one ending 20 km off at the cloud base 400 m ones, so from inside the layer
+  // the fog built up differently either side of the base's horizon, a hard line across the view
   var T = 1.0;
   var S = vec3f(0.0);
   var tFirst = -1.0;
   for (var i = 0; i < steps; i++) {
-    let t = t0 + (f32(i) + j) * dt;
+    let u = (f32(i) + j) / f32(STEPS);
+    let t = t0 + span * u * u;
+    let dt = span * 2.0 * max(u, 0.5 / f32(STEPS)) / f32(STEPS);
     let P = dir * t;
     let dn = density(P);
     if (dn <= 0.0) { continue; }

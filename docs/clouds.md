@@ -31,6 +31,9 @@ over the frame: scene × what the clouds let through + their light.
 - **Air:** the haze between the camera and the first cloud, as for the ground. All the air's
   inscatter (`atmo.wgsl atRolloff`) is compressed and paled over a knee: a grazing path low in the
   air saturates every colour at 3–5× white, and the horizon was a wide flat-white band.
+- **Steps:** 48, spaced quadratically along the ray's stretch in the layer (fine near, coarse far):
+  evenly, from inside the layer rays skimming 250 km and rays ending at the nearby cloud base were
+  sampled 12× apart, and the fog differed across the base's horizon as a hard line.
 - **Noise:** each ray starts at a jittered offset (interleaved gradient noise, moving each frame),
   and the result is blended 80/20 with last frame's, reprojected by the clouds' distance, so the
   grain averages out over a few frames. The reprojection follows the world's turn and orbit (the
