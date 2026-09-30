@@ -74,7 +74,11 @@ Both renderers live side by side until WebGPU matches WebGL: the game stays play
   (frustum-tested as spheres) and counts them into an indirect draw. Lists are sized for every
   candidate (the far speck layers ~30 MB each), so they can't overflow. Checked inside a giant's
   ring: identical to WebGL.
-- [ ] 5. Stations · [ ] 6. Ships and effects · [ ] 7. Auto-exposure, timings, remove WebGL
+- [x] **5. Stations** (`gpu/stations.ts`, station*.wgsl, corridor.wgsl, skyStation.wgsl): hulls,
+  interiors, the approach corridor and its lights (instanced quads), sky stations in their world's
+  air (bound as group 1), and the mint beacon dots. One uniform block per station for all its
+  materials. Checked: a hull from outside (as WebGL), the hangar, a sky station.
+- [ ] · [ ] 6. Ships and effects · [ ] 7. Auto-exposure, timings, remove WebGL
 
 **Dev note:** the preview tooling serves the main checkout. For this worktree, run
 `npx vite --port 5175` in it and open `http://localhost:5175/?gpu=webgpu`.

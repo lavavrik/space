@@ -26,8 +26,13 @@ import terrainBake from './terrainBake.wgsl?raw';
 import rock from './rock.wgsl?raw';
 import rocksCull from './rocksCull.wgsl?raw';
 import rocks from './rocks.wgsl?raw';
+import stationBody from './stationBody.wgsl?raw';
+import station from './station.wgsl?raw';
+import stationInterior from './stationInterior.wgsl?raw';
+import corridor from './corridor.wgsl?raw';
+import skyStation from './skyStation.wgsl?raw';
 
-const parts: Record<string, string> = { noise, frame, world, chunk, rock, noise3d, terrain, atmo, clouds, city };
+const parts: Record<string, string> = { noise, frame, world, chunk, rock, stationBody, noise3d, terrain, atmo, clouds, city };
 const build = (src: string) => src.replace(/^\/\/ #include (\w+)$/gm, (_, name: string) => parts[name] ?? `// (no ${name})`);
 
 export const SKY_BAKE_WGSL = build(skyBake);
@@ -44,3 +49,7 @@ export const DOTS_WGSL = build(dots);
 export const TERRAIN_BAKE_WGSL = build(terrainBake);
 export const ROCKS_CULL_WGSL = build(rocksCull);
 export const ROCKS_WGSL = build(rocks);
+export const STATION_WGSL = build(station);
+export const STATION_INTERIOR_WGSL = build(stationInterior);
+export const CORRIDOR_WGSL = build(corridor);
+export const SKY_STATION_WGSL = build(skyStation);

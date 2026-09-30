@@ -19,6 +19,7 @@ import type { Body, CurrentSystem, StarSystem, Station } from '../types';
 import type { Gpu } from './device';
 import { SKY_BAKE_WGSL, SKY_WGSL, STARS_WGSL, TONEMAP_WGSL } from './shaders';
 import { DEPTH_FORMAT, HDR_FORMAT, SAMPLES } from './formats';
+import { StationsLayer } from './stations';
 import { WorldsLayer } from './worlds';
 
 /** Near plane (m): with reversed-Z and 32-bit float depth, precision barely depends on it. */
@@ -43,6 +44,7 @@ export class GpuRenderer implements GameRenderer {
   private readonly starsPipe: GPURenderPipeline;
   private readonly tonePipe: GPURenderPipeline;
   private readonly worlds: WorldsLayer;
+  private readonly stations: StationsLayer;
   private starBuf: GPUBuffer | null = null;
   private starCount = 0;
   private hdr!: GPUTexture;
@@ -142,6 +144,7 @@ export class GpuRenderer implements GameRenderer {
     });
 
     this.worlds = new WorldsLayer(device, this.frameLayout);
+    this.stations = new StationsLayer(device, this.frameLayout, this.worlds.worldLayout);
   }
 
   /** The Milky Way into a cube map, once (skyBake.wgsl): a pass per face. */
@@ -196,6 +199,7 @@ export class GpuRenderer implements GameRenderer {
     this.device.queue.writeBuffer(this.starBuf, 0, data);
     this.starCount = others.length;
     this.worlds.setSystem(cur);
+    this.stations.setSystem(cur, this.worlds);
   }
 
   /** As the WebGL renderer: up to 1.5× the CSS resolution, at most MAX_RENDER_PIXELS. */
@@ -245,6 +249,8 @@ export class GpuRenderer implements GameRenderer {
     device.queue.writeBuffer(this.frameBuf, 0, f);
     this.updateViews(g);
     this.worlds.update(g);
+    this.stations.update(g, this.worlds);
+    this.worlds.flushDots();
 
     const enc = device.createCommandEncoder({ label: 'frame' });
     this.worlds.bake(enc, this.frameGroup);
@@ -265,7 +271,8 @@ export class GpuRenderer implements GameRenderer {
     }
     // the system's bodies: surfaces, then the transparent layers
     this.worlds.drawOpaque(pass);
-    this.worlds.drawTransparent(pass);
+    this.stations.drawOpaque(pass);
+    this.worlds.drawTransparent(pass, (p) => this.stations.drawTransparent(p));
     pass.end();
 
     const tone = enc.beginRenderPass({
@@ -302,6 +309,7 @@ export class GpuRenderer implements GameRenderer {
   dispose() {
     this.starBuf?.destroy();
     this.worlds.dispose();
+    this.stations.dispose();
     this.hdr?.destroy();
     this.resolved?.destroy();
     this.depth?.destroy();

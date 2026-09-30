@@ -74,7 +74,7 @@ export class WorldsLayer {
   private readonly noiseSamp: GPUSampler;
   private readonly cloudSamp: GPUSampler;
   private readonly noCloud: GPUTexture;
-  private readonly worldLayout: GPUBindGroupLayout;
+  readonly worldLayout: GPUBindGroupLayout;
   private readonly oneBufLayout: GPUBindGroupLayout;
   private readonly planetPipe: GPURenderPipeline;
   private readonly chunkPipe: GPURenderPipeline;
@@ -432,7 +432,7 @@ export class WorldsLayer {
       f[28] = simTime;
       device.queue.writeBuffer(st.buf, 0, f);
     }
-    let nd = 0;
+    this.dotCount = 0;
     let ringDone = false;
     this.rocks.off();
     for (const w of this.worlds) {
@@ -489,7 +489,7 @@ export class WorldsLayer {
         device.queue.writeBuffer(w.ring.buf, 0, rf);
       }
       // distant bodies as dots of reflected starlight
-      if (pxR < 2.5 && nd < MAXDOTS) {
+      if (pxR < 2.5) {
         const dS = b.pos.distanceTo(starPos);
         const toS = new THREE.Vector3().subVectors(starPos, b.pos).normalize();
         const phase = 0.5 * (1 - toS.dot(rel) / d);
@@ -498,13 +498,31 @@ export class WorldsLayer {
         const a = Math.max(0, Math.min(1, (Math.log10(br) + 3.2) / 3.2)) * (pxR < 1.2 ? 1 : (2.5 - pxR) / 1.3);
         if (a > 0.02) {
           const c = w.dotColor;
-          this.dotData.set([rel.x, rel.y, rel.z, c.r * a, c.g * a, c.b * a, (2.2 + 2.5 * a) * this.pr], nd * 7);
-          nd++;
+          const k = a * this.starExp; // like the stars
+          this.addDot(rel, c.r * k, c.g * k, c.b * k, (2.2 + 2.5 * a) * this.pr);
         }
       }
     }
-    this.dotCount = nd;
-    if (nd) device.queue.writeBuffer(this.dotBuf, 0, this.dotData, 0, nd * 7);
+  }
+
+  /** The stars' share of the exposure (render/exposure.ts STAR_EXP_P): planets' dots follow it. */
+  starExp = 1;
+
+  /** A dot at camera-relative `rel`: colour (display-referred) and size (render px). */
+  addDot(rel: THREE.Vector3, r: number, g: number, b: number, size: number) {
+    if (this.dotCount >= MAXDOTS) return;
+    this.dotData.set([rel.x, rel.y, rel.z, r, g, b, size], this.dotCount * 7);
+    this.dotCount++;
+  }
+
+  /** The frame's dots to the GPU (after everything has added its own). */
+  flushDots() {
+    if (this.dotCount) this.device.queue.writeBuffer(this.dotBuf, 0, this.dotData, 0, this.dotCount * 7);
+  }
+
+  /** A world's bind group (its uniforms and textures), for things drawn in its air. */
+  groupOf(b: Body) {
+    return this.worlds.find((w) => w.b === b)!.group;
   }
 
   /** Compute work before the frame's render pass: terrain chunks' bakes. */
@@ -541,8 +559,12 @@ export class WorldsLayer {
     this.rocks.draw(pass);
   }
 
-  /** Transparent, far to near within each kind (glow, rings and dots; skies; cloud decks). */
-  drawTransparent(pass: GPURenderPassEncoder) {
+  /**
+   * Transparent, far to near within each kind (glow, rings and dots; skies; cloud decks), as three.js
+   * orders them (render order, then distance). `more` draws the rest of the first kind (stations'
+   * corridors and lights, …) before the skies.
+   */
+  drawTransparent(pass: GPURenderPassEncoder, more: (pass: GPURenderPassEncoder) => void) {
     const far = [...this.worlds].sort((a, b) => b.dist - a.dist);
     if (this.star) {
       pass.setPipeline(this.glowPipe);
@@ -560,6 +582,7 @@ export class WorldsLayer {
       pass.setVertexBuffer(0, this.dotBuf);
       pass.draw(6, this.dotCount);
     }
+    more(pass);
     pass.setPipeline(this.atmoPipe);
     for (const w of far) {
       if (!w.air || w.pxR <= 2) continue;
