@@ -31,7 +31,7 @@ second ages and moves all of them and lists the living, and they're drawn with o
 No buffers: a grain's place is a hash of its index. Up to 8 fields a frame, one draw each.
 
 - **Space dust:** 700 grains in a 3 km box repeating through the system, placed by the ship's
-  position (so they hang still as you pass), fading with speed from 3 km/s, gone by 10 km/s (faster,
+  position (so they hang still as you pass), fading with speed from 3 km/s, gone by 10 km/s, and gone in a world's air (fading out through its upper half) (faster,
   the box is crossed several times a second and the grains read as flickering static).
 - **Ring dust:** in a ring's belt, up to 60,000 fine ice grains in a 400 m box that orbits with the
   ring (the box's place advances by the ship's velocity less the orbital velocity there), as dense

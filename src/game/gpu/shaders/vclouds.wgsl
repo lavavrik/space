@@ -54,10 +54,11 @@ fn density(P: vec3f) -> f32 {
   let h = (r - rBot) / (rTop - rBot);
   if (h <= 0.0 || h >= 1.0) { return 0.0; }
   // in the weather's own turning frame (clouds.wgsl cloudDir): the cover and all its shapes blow along
-  let lp = cloudDir(toLocalM() * Pc);
+  let lw = toLocalM() * Pc;
+  let lp = cloudDir(lw);
   let k = lp * 0.00045;
   // the cube's cover: where the weather is (hundreds of km)
-  let cov0 = cloudCover(textureSampleLevel(cloudTex, cloudSamp, lp / r, 0.0).r);
+  let cov0 = cloudCover(cloudMap(lw / r));
   // Shaped like weather, not a sponge (cutting holes all over the cover with one noise read as
   // round craters of one size; tnoise is value noise, mostly within ±0.35, so thresholds are narrow;
   // a noise texel is ~2.8 km at k × 0.1):
@@ -70,14 +71,16 @@ fn density(P: vec3f) -> f32 {
   let ks = k - east * (dot(k, east) * 0.55);
   let sw = tnoise(ks * 0.06 + 3.0);
   let kw = ks + vec3f(sw, -0.7 * sw, 0.5 * sw) * 6.0;
-  let swell = tnoise(kw * 0.035 + 11.0);
-  let c = 0.7 * tnoise(kw * 0.18 + 23.0) + 0.3 * tnoise(kw * 0.5 + 7.0);
+  // (shapes evolve too: swells over ~an hour, clumps and towers over ~15 min)
+  let tv = vec3f(0.0, world.time, 0.0);
+  let swell = tnoise(kw * 0.035 + 11.0 + tv * 7e-5);
+  let c = 0.7 * tnoise(kw * 0.18 + 23.0 + tv * 2.8e-4) + 0.3 * tnoise(kw * 0.5 + 7.0 + tv * 2.8e-4);
   let broken = 1.0 - smoothstep(0.45, 0.8, cov0);
   let clump = mix(1.0, smoothstep(-0.15, 0.1, c + 0.3 * swell), broken);
   let cov = min(cov0 * clump * (0.9 + 0.6 * swell), 1.0);
   if (cov < 0.02) { return 0.0; }
   // towers: thicker cover rises higher, and ~8 km cells rise and fall, so the tops aren't one carpet
-  let cell = 0.5 + 0.5 * tnoise(kw * 0.27 + 5.0);
+  let cell = 0.5 + 0.5 * tnoise(kw * 0.27 + 5.0 + tv * 2.8e-4);
   let top = clamp(mix(0.25, 1.0, cov) * (0.45 + 0.75 * cell), 0.15, 1.0);
   let profile = smoothstep(0.0, 0.08, h) * (1.0 - smoothstep(top * 0.5, top, h));
   let base = cov * profile;
@@ -96,6 +99,24 @@ fn density(P: vec3f) -> f32 {
 fn hg(c: f32, g: f32) -> f32 {
   let d = 1.0 + g * g - 2.0 * g * c;
   return (1.0 - g * g) / (d * sqrt(d)); // × 4π: 1 on average
+}
+
+// Cirrus, CIRRUS_H deck heights up (~14 km on an Earth): wisps of ice crystals, not marched (a thin
+// sheet, one lookup). Patches ~100 km across (where there's any at all), streaked ~15× along the
+// wind into fibres a few km across; opacity 0…~0.45. `lq`: a point in the weather's frame (m).
+const CIRRUS_H: f32 = 1.35;
+fn cirrus(lq: vec3f) -> f32 {
+  let k = lq * 0.00012;
+  let east = normalize(vec3f(lq.z, 0.0, -lq.x) + vec3f(1e-3, 0.0, 0.0));
+  let ks = k - east * (dot(k, east) * 0.8);
+  let area = smoothstep(-0.05, 0.2, tnoise(ks * 0.02 + 41.0));
+  if (area <= 0.0) { return 0.0; }
+  let sw = tnoise(ks * 0.08 + 17.0);
+  let kf = ks + vec3f(sw, 0.6 * sw, -0.4 * sw) * 6.0;
+  let kf2 = kf - east * (dot(kf, east) * 0.7);
+  let fib = 0.65 * tnoise(kf2 * 2.0 + 3.0) + 0.35 * tnoise(kf2 * 6.0 + 9.0);
+  let body = tnoise(kf * 0.3 + 29.0);
+  return area * smoothstep(-0.05, 0.3, body + 0.7 * fib) * 0.45;
 }
 
 // how much sunlight reaches camera-relative point P (below the deck or in it) through the clouds
@@ -151,9 +172,11 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   }
   // the scene in front ends it
   let d = textureLoad(sceneDepth, vec2i(full), 0);
+  var sceneT = 1e30;
   if (d > 0.0) {
     let fwd = -normalize(frame.camRot[2].xyz);
-    t1 = min(t1, vp.near / d / max(dot(dir, fwd), 1e-4));
+    sceneT = vp.near / d / max(dot(dir, fwd), 1e-4);
+    t1 = min(t1, sceneT);
   }
   t1 = min(t1, t0 + MAX_DIST);
   let L = normalize(world.light.xyz);
@@ -261,6 +284,38 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     let span = atSpan(dir);
     let haze = atInscatter(dir * span.x, dir * max(tFirst, span.x), L, 4);
     S = S * atTrans + haze * (1.0 - T) * skyDim; // (under the deck, that air is shaded too)
+  }
+  // cirrus: a thin sheet of ice crystals well above the rest (see cirrus), crossed once
+  let rCi = world.radius + world.cloudH * CIRRUS_H;
+  let ciSpan = sphereSpan(dir, C, rCi);
+  var tCi = -1.0;
+  if (camR < rCi) { tCi = ciSpan.y; } else if (ciSpan.y > ciSpan.x && ciSpan.x > 0.0) { tCi = ciSpan.x; }
+  if (tCi > 0.0 && tCi < sceneT) {
+    let Q = dir * tCi - C;
+    let up = normalize(Q);
+    let a0 = cirrus(cloudDir(toLocalM() * Q));
+    if (a0 > 0.0) {
+      // (a thin sheet: seen edge-on, the path through it, and its opacity, grow)
+      let a = 1.0 - pow(1.0 - a0, 1.0 / max(abs(dot(dir, up)), 0.12));
+      // lit white, brighter toward the sun (ice scatters forward), dimmed by the air in front, which
+      // stays in front of it
+      let sunC = atSunlightC(Q, L) * sunShade(Q) * world.atSunI / 45.0;
+      let dayC = smoothstep(-0.1, 0.25, dot(up, L));
+      var ci = (sunC * (0.8 + 0.15 * hg(cosT, 0.6)) + vec3f(0.03, 0.04, 0.06)) * dayC;
+      if (world.atOn > 0.5) {
+        let sp = atSpan(dir);
+        let hz = atInscatter(dir * sp.x, dir * max(tCi, sp.x), L, 4);
+        ci = ci * atTrans + hz;
+      }
+      // in front of the lower clouds (seen from above) or behind them (from below)
+      let lowAt = select(select(1e30, t0, steps > 0), tFirst, tFirst > 0.0);
+      if (tCi < lowAt) {
+        S = ci * a + (1.0 - a) * S;
+      } else {
+        S = S + T * ci * a;
+      }
+      T *= 1.0 - a;
+    }
   }
   var res = vec4f((S + rays) * frame.exposure, T * skyDim);
   // with last frame's: where this pixel's clouds were then (by their distance, or the layer's middle)

@@ -13,6 +13,7 @@ import { THREE } from '../lib/three';
 import { DUST, DUSTBOX, DUST_FADE_FROM, DUST_FADE_TO, RING_AP, RING_N, RING_PLAN } from '../render/look';
 import { FtlTrail } from '../render/Trail';
 import { orbitPreview } from '../sim/planner';
+import { atmoOf } from '../sim/atmosphere';
 import { sunFraction } from '../sim/eclipse';
 import { occluder } from '../sim/sight';
 import { FLASH_S, type Npc } from '../sim/traffic';
@@ -321,7 +322,10 @@ export class EffectsLayer {
    */
   private updateGrains(g: Game, px: Particles, pr: number, dt: number) {
     const { ship } = g;
-    const fade = 1 - THREE.MathUtils.smoothstep(g.curSpeed, DUST_FADE_FROM, DUST_FADE_TO);
+    // (space dust: gone in air, fading out through the upper half of it; on the ground it shimmered)
+    const air = atmoOf(g.frameBody);
+    const inAir = air ? 1 - THREE.MathUtils.smoothstep(ship.pos.distanceTo(g.frameBody.pos) - g.frameBody.radius, air.top * 0.5, air.top) : 0;
+    const fade = (1 - THREE.MathUtils.smoothstep(g.curSpeed, DUST_FADE_FROM, DUST_FADE_TO)) * (1 - inAir);
     if (ship.mode === 'normal' && fade > 0) {
       const f = 0.55 * fade;
       px.field({ mode: 'wrap', at: ship.pos, size: DUSTBOX, count: DUST, seed: 99, grain: -2.2 * pr, color: [f, f * 0.92, f * 0.85] });

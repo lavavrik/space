@@ -45,6 +45,15 @@ hull showed dimly, as if beyond the clouds. Bloom and the lens flare see the clo
 - **Air:** the haze between the camera and the first cloud, as for the ground. All the air's
   inscatter (`atmo.wgsl atRolloff`) is compressed and paled over a knee: a grazing path low in the
   air saturates every colour at 3–5× white, and the horizon was a wide flat-white band.
+- **Cirrus:** a thin sheet of ice crystals 1.35 deck heights up (~11 km on Venydes 5), not
+  marched: one lookup where the ray crosses it (`vclouds.wgsl cirrus`). Its patches are ~100 km
+  across, streaked ~15× along the wind into fibres a few km wide, opacity up to ~0.45 (more seen
+  edge-on). It's lit white, brighter toward the sun, with the air in front hazing it. It lies in
+  front of the lower clouds from above and behind them from below.
+- **Changing shape:** the cloud map is read twice (`clouds.wgsl cloudMap`), once with the wind and
+  once slower, round a tilted axis and from another part of the map. The two slide past each other,
+  so weather systems grow, merge and die away over hours. Swells evolve over ~an hour, clumps and
+  towers over ~15 min, the finest detail over a few minutes.
 - **Wind:** the weather turns round the world's axis 2.5 × 10⁻⁶ rad/s faster than the ground (~16 m/s
   at an Earth's equator; `clouds.wgsl cloudDir`, `sim/clouds.ts CLOUD_WIND`). The deck, the
   volumetric clouds and their shadows on the ground all read the cloud map through it, so they move

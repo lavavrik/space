@@ -50,10 +50,14 @@ const q = new THREE.Quaternion(),
 
 /** The weather's turn round the world's axis relative to the ground (rad/s; clouds.wgsl CLOUD_WIND). */
 export const CLOUD_WIND = 2.5e-6;
-const Y = new THREE.Vector3(0, 1, 0);
+const Y = new THREE.Vector3(0, 1, 0),
+  TILT = new THREE.Vector3(0.35, 1, 0.2).normalize();
 
 /** The cover over the point of `b` in the direction `dir` (world space, from its centre) at sim time `t`. */
 export function cloudCoverAt(b: World, dir: THREE.Vector3, t: number) {
-  v.copy(dir).normalize().applyQuaternion(worldQuat(b, q).invert()).applyAxisAngle(Y, -t * CLOUD_WIND);
-  return cloudCoverOf(b, cloudRaw(b.seed, v.x, v.y, v.z));
+  // clouds.wgsl cloudMap: the map read twice, sliding past itself
+  v.copy(dir).normalize().applyQuaternion(worldQuat(b, q).invert());
+  const a = v.clone().applyAxisAngle(Y, -t * CLOUD_WIND);
+  const w = v.clone().applyAxisAngle(TILT, -t * CLOUD_WIND * 0.55);
+  return cloudCoverOf(b, (cloudRaw(b.seed, a.x, a.y, a.z) + cloudRaw(b.seed, w.z, -w.y, w.x)) * 0.7);
 }
