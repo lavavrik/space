@@ -41,10 +41,31 @@ Most stars have a companion, and so do many of Farlight's systems. The design is
 ## Seen from afar
 
 - **The sky and the jump transit** draw a pair as one point: both stars' light, its colour weighted by each star's share (`pairLight`).
-- **Up close, each star has its own disc and glow** (`gpu/worlds.ts`).
+- **Up close, each star has its own disc and glow** (`gpu/worlds.ts`), and its own lens flare (`tonemap.wgsl flare`).
 
-## Still to come
+## Two suns' light (`sim/starlight.ts sunsAt`)
 
-- **Light (phase 2).** Everything is lit by the primary only for now. Next, a second full light: surfaces, air, clouds, rings, ships and stations.
-- **Shadows (phase 3).** The second light's own shadows and eclipses.
-- **Heat, power and maps (phase 4).** Heat and power from both stars. The system map and navigation for the companion.
+- **A main light and a second one.** Everywhere, the brighter sun at that place is the main light. In a wide pair, that's a planet's own star. It is lit exactly as a lone star always was: white, full strength, with the exposure and the air tuned for it.
+- **The second light's colour and strength.** It's tinted by its colour against the main light's, each at unit luminance, so a K star beside a G one is orange. It's scaled by its flux against the main light's (`c2`).
+- **Where each shader gets it:**
+  - Worlds (`world.wgsl light2`, `lightL2`, `sunC2`, `lightC2`).
+  - Ships (`fx.wgsl`).
+  - Stations (`Obj.v[14]`, `v[15]`).
+  - Ring discs and rocks.
+- **What it lights.** It has its own diffuse and specular on planets, terrain and ring rocks, and its own scattering in the sky, on the flat cloud deck and in the volumetric clouds (a 3-step march toward it). It lights ships, stations and sky stations. Night (the dark side's city lights, its ambient glow) is where both suns are down, a weak one counting for less.
+- **Exposure** divides by 1 + the second sun's strength at the camera. The eye takes both as one day's light, as from a lone star of the same total: a close pair's planets are placed for their combined light, so the scene isn't brighter for it.
+- **Shadows.**
+  - Eclipses of the second sun on worlds, the sky and the clouds (`shadow.wgsl eclipse2`, `sunShade2`). The same bodies are tested as for the first.
+  - Mountains' shadows from it, baked per terrain chunk (`terrainBake.wgsl`, the bake's `w`).
+  - A second set of shadow cascades (`gpu/shadowmap.ts`, layers 3–5, `frame.wgsl shadowAt2`) for ships, stations, sky stations, ring rocks and the ground near you. They're drawn only while the second sun's light at the camera is over 1 % of the first's. A wide pair's far companion by day isn't worth the passes; the side lit by it at night is.
+- **Cost.** In a binary, the air's scattering, the clouds' sun march and the extra cascades roughly double. Single-star systems cost what they did.
+- **Not yet from the second sun:** the volumetric clouds' god rays, the cirrus, cloud shadows on the ground and on themselves from near objects (`shadowAtPoint`), and the heat particles' light.
+
+## Heat, power and navigation
+
+- **Solar power and hull heating** sum both suns, each with its own eclipse (`sim/resources.ts solarPower` fills `power.suns`). The readouts show a starlight row per star. "In X's shadow" and the panels' angle are about the brightest.
+- **Planets' own glow and reflected light** (`thermal.ts`) use both suns' light on them.
+- **Sun tracking** turns the panels toward both suns, weighted by their light. The landing lights come on by the higher sun.
+- **The system map** draws a pair's orbits round their barycentre. A star's info shows its own class, its partner, the pair's period, and its planets: its own, or the pair's in a close pair.
+- **A wide pair's stars are nav destinations** (`sim/navroute.ts`, kind `'sun'`). You orbit them within their Roche lobes. A close pair's stars aren't, since you arrive beside them; orbits round a single star of a close pair aren't offered.
+- **Heat damage and death messages** name the brightest sun.
