@@ -115,8 +115,9 @@ fn hg(c: f32, g: f32) -> f32 {
   return (1.0 - g * g) / (d * sqrt(d)); // × 4π: 1 on average
 }
 
-// Cirrus, CIRRUS_H deck heights up (~14 km on an Earth): wisps of ice crystals, not marched (a thin
-// sheet, one lookup). Patches ~100 km across (where there's any at all), streaked ~15× along the
+// Cirrus, CIRRUS_H deck heights up (~11–14 km): wisps of ice crystals, not marched (a thin sheet,
+// one lookup), and drawn at full resolution in fsComposite (at the march's half, blurred, they were
+// soft). Patches ~100 km across (where there's any at all), streaked ~15× along the
 // wind into fibres a few km across; opacity 0…~0.45. `lq`: a point in the weather's frame (m).
 const CIRRUS_H: f32 = 1.35;
 fn cirrus(lq: vec3f) -> f32 {
@@ -128,9 +129,11 @@ fn cirrus(lq: vec3f) -> f32 {
   let sw = tnoise(ks * 0.08 + 17.0);
   let kf = ks + vec3f(sw, 0.6 * sw, -0.4 * sw) * 6.0;
   let kf2 = kf - east * (dot(kf, east) * 0.7);
-  let fib = 0.65 * tnoise(kf2 * 2.0 + 3.0) + 0.35 * tnoise(kf2 * 6.0 + 9.0);
+  // (three scales of fibre, the finest a few hundred metres across, and a harder edge: drawn at
+  // full resolution now, fsComposite, it holds that much)
+  let fib = 0.55 * tnoise(kf2 * 2.0 + 3.0) + 0.3 * tnoise(kf2 * 6.0 + 9.0) + 0.15 * tnoise(kf2 * 16.0 + 5.0);
   let body = tnoise(kf * 0.3 + 29.0);
-  return area * smoothstep(-0.05, 0.3, body + 0.7 * fib) * 0.45;
+  return area * smoothstep(-0.14, 0.08, body + 0.8 * fib) * 0.5;
 }
 
 // how much sunlight reaches camera-relative point P (below the deck or in it) through the clouds
@@ -308,38 +311,6 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     let haze = atInscatter(dir * span.x, dir * max(tFirst, span.x), L, 4);
     S = S * atTrans + haze * (1.0 - T) * skyDim; // (under the deck, that air is shaded too)
   }
-  // cirrus: a thin sheet of ice crystals well above the rest (see cirrus), crossed once
-  let rCi = world.radius + world.cloudH * CIRRUS_H;
-  let ciSpan = sphereSpan(dir, C, rCi);
-  var tCi = -1.0;
-  if (camR < rCi) { tCi = ciSpan.y; } else if (ciSpan.y > ciSpan.x && ciSpan.x > 0.0) { tCi = ciSpan.x; }
-  if (tCi > 0.0 && tCi < sceneT) {
-    let Q = dir * tCi - C;
-    let up = normalize(Q);
-    let a0 = cirrus(cloudDir(toLocalM() * Q));
-    if (a0 > 0.0) {
-      // (a thin sheet: seen edge-on, the path through it, and its opacity, grow)
-      let a = 1.0 - pow(1.0 - a0, 1.0 / max(abs(dot(dir, up)), 0.12));
-      // lit white, brighter toward the sun (ice scatters forward), dimmed by the air in front, which
-      // stays in front of it
-      let sunC = atSunlightC(Q, L) * sunShade(Q) * world.atSunI / 45.0;
-      let dayC = smoothstep(-0.1, 0.25, dot(up, L));
-      var ci = (sunC * (0.8 + 0.15 * hg(cosT, 0.6)) + vec3f(0.03, 0.04, 0.06)) * dayC;
-      if (world.atOn > 0.5) {
-        let sp = atSpan(dir);
-        let hz = atInscatter(dir * sp.x, dir * max(tCi, sp.x), L, 4);
-        ci = ci * atTrans + hz;
-      }
-      // in front of the lower clouds (seen from above) or behind them (from below)
-      let lowAt = select(select(1e30, t0, steps > 0), tFirst, tFirst > 0.0);
-      if (tCi < lowAt) {
-        S = ci * a + (1.0 - a) * S;
-      } else {
-        S = S + T * ci * a;
-      }
-      T *= 1.0 - a;
-    }
-  }
   var res = vec4f((S + rays) * frame.exposure, T * skyDim);
   // with last frame's: where this pixel's clouds were then (by their distance, or the layer's middle)
   if (vp.moved.w > 0.5) {
@@ -359,4 +330,79 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     }
   }
   textureStore(outTex, px, res);
+}
+
+// ---- Laying the result over the frame (vclouds.ts composite), at full resolution ----
+// The march's result (bound as `history`: this frame's) upsampled depth-aware: a soft 3 × 3 over its
+// half-res texels, each weighted by how alike the scene's depth is where it was marched and here
+// (blurred across an edge, the far terrain's against the sky, sky clouds bled onto the ground and
+// the ground's onto the sky). Then the cirrus, at this resolution (it's a thin sheet, one lookup),
+// in front of the lower clouds from above them and behind them from below. The blend is
+// frame × alpha + rgb.
+@vertex
+fn vsComposite(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f { return fullscreen(i); }
+
+@fragment
+fn fsComposite(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+  let full = vec2f(textureDimensions(sceneDepth));
+  let half = vec2i(textureDimensions(history));
+  let kk = full / vec2f(half);
+  let dc = textureLoad(sceneDepth, vec2i(pos.xy), 0);
+  let cc = pos.xy / kk - 0.5;
+  let base = vec2i(floor(cc + 0.5));
+  var sum = vec4f(0.0);
+  var wsum = 0.0;
+  for (var y = -1; y <= 1; y++) {
+    for (var x = -1; x <= 1; x++) {
+      let tt = clamp(base + vec2i(x, y), vec2i(0), half - 1);
+      let tp = (vec2f(tt) + 0.5) * kk;
+      let dt = textureLoad(sceneDepth, vec2i(min(tp, full - 1.0)), 0);
+      let g = (2.0 - f32(abs(x))) * (2.0 - f32(abs(y)));
+      let same = exp(-abs(dt - dc) / (0.03 * max(dt, dc) + 1e-7));
+      let w = g * (same + 1e-3);
+      sum += textureLoad(history, tt, 0) * w;
+      wsum += w;
+    }
+  }
+  var cl = sum / wsum;
+  // the cirrus
+  let dir = viewDir(pos.xy);
+  let C = world.atC.xyz;
+  let camR = length(C);
+  rBot = world.radius + world.cloudH * 0.4;
+  rTop = world.radius + world.cloudH * 1.05;
+  let L = normalize(world.light.xyz);
+  let cosT = dot(dir, L);
+  var sceneT = 1e30;
+  if (dc > 0.0) { sceneT = vp.near / dc / max(dot(dir, -normalize(frame.camRot[2].xyz)), 1e-4); }
+  let rCi = world.radius + world.cloudH * CIRRUS_H;
+  let ciSpan = sphereSpan(dir, C, rCi);
+  var tCi = -1.0;
+  if (camR < rCi) { tCi = ciSpan.y; } else if (ciSpan.y > ciSpan.x && ciSpan.x > 0.0) { tCi = ciSpan.x; }
+  if (tCi > 0.0 && tCi < sceneT && vp.on > 0.0) {
+    let Q = dir * tCi - C;
+    let up = normalize(Q);
+    let a0 = cirrus(cloudDir(toLocalM() * Q));
+    if (a0 > 0.0) {
+      // (a thin sheet: seen edge-on, the path through it, and its opacity, grow)
+      let a = (1.0 - pow(1.0 - a0, 1.0 / max(abs(dot(dir, up)), 0.12))) * vp.on;
+      // lit white, brighter toward the sun (ice scatters forward), dimmed by the air in front, which
+      // stays in front of it
+      let sunC = atSunlightC(Q, L) * sunShade(Q) * world.atSunI / 45.0;
+      let dayC = smoothstep(-0.1, 0.25, dot(up, L));
+      var ci = (sunC * (0.8 + 0.15 * hg(cosT, 0.6)) + vec3f(0.03, 0.04, 0.06)) * dayC;
+      if (world.atOn > 0.5) {
+        let sp = atSpan(dir);
+        let hz = atInscatter(dir * sp.x, dir * max(tCi, sp.x), L, 4);
+        ci = ci * atTrans + hz;
+      }
+      ci *= frame.exposure;
+      if (camR >= rTop + vp.lift) {
+        cl = vec4f(ci * a + (1.0 - a) * cl.rgb, (1.0 - a) * cl.a); // above the lower clouds: in front
+      } else {
+        cl = vec4f(cl.rgb + cl.a * ci * a, cl.a * (1.0 - a)); // under or in them: behind
+      }
+    }
+  }
+  return cl;
 }

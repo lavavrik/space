@@ -7,45 +7,7 @@
 import { THREE } from '../lib/three';
 import { VCLOUDS_WGSL } from './shaders';
 
-/** Laying the result over the frame: frame × a + rgb (a blend), upsampled depth-aware (below). */
-const COMPOSITE_WGSL = /* wgsl */ `
-@group(0) @binding(0) var clouds: texture_2d<f32>;
-@group(0) @binding(1) var sceneDepth: texture_depth_multisampled_2d;
-@fragment
-fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
-  // Depth-aware upsampling: a soft 3 × 3 over the half-res march (what's left of its jitter after
-  // the temporal blend would show as static inside the clouds), each texel weighted by how alike
-  // the scene's depth is where it was marched and here. Blurred across an edge (the far terrain's
-  // against the sky), sky clouds bled onto the ground and the ground's onto the sky, a soft, low-res
-  // band all along the horizon.
-  let full = vec2f(textureDimensions(sceneDepth));
-  let half = vec2i(textureDimensions(clouds));
-  let k = full / vec2f(half);
-  let dc = textureLoad(sceneDepth, vec2i(pos.xy), 0);
-  let c = pos.xy / k - 0.5;
-  let base = vec2i(floor(c + 0.5));
-  var sum = vec4f(0.0);
-  var wsum = 0.0;
-  for (var y = -1; y <= 1; y++) {
-    for (var x = -1; x <= 1; x++) {
-      let t = clamp(base + vec2i(x, y), vec2i(0), half - 1);
-      let tp = (vec2f(t) + 0.5) * k; // (where it was marched: vclouds.wgsl full)
-      let dt = textureLoad(sceneDepth, vec2i(min(tp, full - 1.0)), 0);
-      let g = (2.0 - f32(abs(x))) * (2.0 - f32(abs(y)));
-      let same = exp(-abs(dt - dc) / (0.03 * max(dt, dc) + 1e-7));
-      let w = g * (same + 1e-3);
-      sum += textureLoad(clouds, t, 0) * w;
-      wsum += w;
-    }
-  }
-  return sum / wsum;
-}
-@vertex
-fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
-  let p = vec2f(f32((i << 1u) & 2u), f32(i & 2u));
-  return vec4f(p * 2.0 - 1.0, 0.0, 1.0);
-}
-`;
+
 
 /** vclouds.wgsl VParams: a mat4, a vec4, 8 floats. */
 const PARAM_BYTES = 64 + 16 + 32;
@@ -62,6 +24,7 @@ export class VolumetricClouds {
   private groups: GPUBindGroup[] = [];
   private readonly compPipe: GPURenderPipeline;
   private compGroups: GPUBindGroup[] = [];
+  private readonly compLayout: GPUBindGroupLayout;
   private cur = 0;
   private readonly samp: GPUSampler;
   /** Last frame's view-projection and camera position (doubles), for the reprojection. */
@@ -99,18 +62,28 @@ export class VolumetricClouds {
       ],
     });
     this.samp = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
+    const module = device.createShaderModule({ label: 'volumetric clouds', code: VCLOUDS_WGSL });
     this.pipe = device.createComputePipeline({
       label: 'volumetric clouds',
       layout: device.createPipelineLayout({ bindGroupLayouts: [frameLayout, worldLayout, this.layout] }),
-      compute: { module: device.createShaderModule({ label: 'volumetric clouds', code: VCLOUDS_WGSL }), entryPoint: 'main' },
+      compute: { module, entryPoint: 'main' },
     });
-    const cm = device.createShaderModule({ label: 'clouds composite', code: COMPOSITE_WGSL });
+    // laying it over the frame (vclouds.wgsl fsComposite): the scene's depth, the params, the result
+    const FS = GPUShaderStage.FRAGMENT;
+    this.compLayout = device.createBindGroupLayout({
+      entries: [
+        { binding: 0, visibility: FS, texture: { sampleType: 'depth', multisampled: true } },
+        { binding: 2, visibility: FS, buffer: { type: 'uniform' } },
+        { binding: 3, visibility: FS, texture: { sampleType: 'unfilterable-float' } },
+      ],
+    });
+    const cm = module;
     this.compPipe = device.createRenderPipeline({
       label: 'clouds composite',
-      layout: 'auto',
-      vertex: { module: cm, entryPoint: 'vs' },
+      layout: device.createPipelineLayout({ bindGroupLayouts: [frameLayout, worldLayout, this.compLayout] }),
+      vertex: { module: cm, entryPoint: 'vsComposite' },
       // frame × a + rgb
-      fragment: { module: cm, entryPoint: 'fs', targets: [{ format: 'rgba16float', blend: { color: { srcFactor: 'one', dstFactor: 'src-alpha' }, alpha: { srcFactor: 'zero', dstFactor: 'one' } } }] },
+      fragment: { module: cm, entryPoint: 'fsComposite', targets: [{ format: 'rgba16float', blend: { color: { srcFactor: 'one', dstFactor: 'src-alpha' }, alpha: { srcFactor: 'zero', dstFactor: 'one' } } }] },
     });
     this.params = device.createBuffer({ label: 'volumetric clouds', size: PARAM_BYTES, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
   }
@@ -138,10 +111,11 @@ export class VolumetricClouds {
     );
     this.compGroups = [0, 1].map((k) =>
       this.device.createBindGroup({
-        layout: this.compPipe.getBindGroupLayout(0),
+        layout: this.compLayout,
         entries: [
-          { binding: 0, resource: this.tex[k].createView() },
-          { binding: 1, resource: depth.createView() },
+          { binding: 0, resource: depth.createView() },
+          { binding: 2, resource: { buffer: this.params } },
+          { binding: 3, resource: this.tex[k].createView() },
         ],
       }),
     );
@@ -149,9 +123,11 @@ export class VolumetricClouds {
   }
 
   /** Lay this frame's clouds over the frame (a pass on the resolved frame, after dispatch). */
-  composite(pass: GPURenderPassEncoder) {
+  composite(pass: GPURenderPassEncoder, frameGroup: GPUBindGroup, worldGroup: GPUBindGroup) {
     pass.setPipeline(this.compPipe);
-    pass.setBindGroup(0, this.compGroups[this.cur]);
+    pass.setBindGroup(0, frameGroup);
+    pass.setBindGroup(1, worldGroup);
+    pass.setBindGroup(2, this.compGroups[this.cur]);
     pass.draw(3);
   }
 

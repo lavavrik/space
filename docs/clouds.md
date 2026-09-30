@@ -46,7 +46,10 @@ hull showed dimly, as if beyond the clouds. Bloom and the lens flare see the clo
   inscatter (`atmo.wgsl atRolloff`) is compressed and paled over a knee: a grazing path low in the
   air saturates every colour at 3–5× white, and the horizon was a wide flat-white band.
 - **Cirrus:** a thin sheet of ice crystals 1.35 deck heights up (~11 km on Venydes 5), not
-  marched: one lookup where the ray crosses it (`vclouds.wgsl cirrus`). Its patches are ~100 km
+  marched: one lookup where the ray crosses it (`vclouds.wgsl cirrus`), drawn at full resolution
+  in the pass that lays the clouds over the frame (`fsComposite`). At the march's half resolution,
+  blurred, it was soft. Its fibres come at three scales, down to a few hundred metres, with a
+  harder edge. Its patches are ~100 km
   across, streaked ~15× along the wind into fibres a few km wide, opacity up to ~0.45 (more seen
   edge-on). It's lit white, brighter toward the sun, with the air in front hazing it. It lies in
   front of the lower clouds from above and behind them from below.
@@ -57,7 +60,8 @@ hull showed dimly, as if beyond the clouds. Bloom and the lens flare see the clo
 - **Shadows of what's near:** the sunlight at each sample goes through the shadow map too
   (`frame.wgsl shadowAtPoint`, one tap), so a sky station, or a ship, shadows the clouds under it.
   It works within the cascades' 30 km, while the map is on (a station within 30 km).
-- **Upsampling:** the half-res result is laid over the frame through a 3 × 3 filter weighted by
+- **Upsampling:** the half-res result is laid over the frame (`vclouds.wgsl fsComposite`, the same
+  module as the march) through a 3 × 3 filter weighted by
   how alike the scene's depth is where each texel was marched and at the pixel. Blurred across an
   edge, sky clouds bled onto the far terrain and back, a soft low-res band along the horizon.
 - **Over high ground:** the layer doesn't know the terrain, so near you it's lifted enough for its

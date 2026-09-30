@@ -351,8 +351,7 @@ export class GpuRenderer implements GameRenderer {
     if (clouds) {
       // the clouds over the frame, then the particles over them (they're near: plasma, exhaust)
       const over = enc.beginRenderPass({ label: 'clouds over', colorAttachments: [{ view: this.resolved.createView(), loadOp: 'load', storeOp: 'store' }] });
-      over.setBindGroup(0, this.frameGroup);
-      this.vclouds.composite(over);
+      this.vclouds.composite(over, this.frameGroup, this.worlds.vcGroup!);
       over.setBindGroup(0, this.frameGroup);
       this.particles.draw(over, true);
       over.end();
