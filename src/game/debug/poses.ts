@@ -17,6 +17,7 @@
 import type { Game } from '../Game';
 import { WT } from '../constants';
 import { THREE } from '../lib/three';
+import { sunsAt } from '../sim/starlight';
 import { atmoOf } from '../sim/atmosphere';
 import { cloudCoverAt } from '../sim/clouds';
 import { resetFrame } from '../sim/frame';
@@ -54,9 +55,12 @@ function orbitVel(b: Body, rel: THREE.Vector3, axis: THREE.Vector3) {
   return dir.multiplyScalar(Math.sqrt(b.mu / r));
 }
 
+/** The sun that lights `b` most (a pair's nearer, docs/binaries.md). */
+const sunOf = (g: Game, b: Body) => sunsAt(g.cur.stars, b.pos).s1;
+
 /** A direction from `b`'s centre `a` rad from the point under the star, toward the axis `k`. */
 function fromSunward(g: Game, b: Body, a: number) {
-  const toS = g.cur.star.pos.clone().sub(b.pos).normalize();
+  const toS = sunOf(g, b).pos.clone().sub(b.pos).normalize();
   const side = V(0, 1, 0).cross(toS).normalize();
   return toS.multiplyScalar(Math.cos(a)).addScaledVector(side, Math.sin(a)).normalize();
 }
@@ -102,12 +106,12 @@ export function debugSpots(g: Game): Spot[] {
       label: 'Ring belt',
       hint: `in ${b.name}'s rocks, orbiting with them`,
       go: () => {
-        const toS = g.cur.star.pos.clone().sub(b.pos);
+        const toS = sunOf(g, b).pos.clone().sub(b.pos);
         toS.addScaledVector(n, -toS.dot(n)).normalize();
         const dir = toS.clone().multiplyScalar(0.5).addScaledVector(V().crossVectors(n, toS), 0.866).normalize();
         const rel = dir.clone().multiplyScalar((ring.inner + (ring.outer - ring.inner) * 0.4) * b.radius).addScaledVector(n, 40);
         const pos = b.pos.clone().add(rel);
-        const away = pos.clone().sub(g.cur.star.pos).normalize();
+        const away = pos.clone().sub(sunOf(g, b).pos).normalize();
         const fwd = away.clone().multiplyScalar(Math.cos(0.8)).addScaledVector(V().crossVectors(n, away).normalize(), Math.sin(0.8)).addScaledVector(n, -0.1);
         place(g, b, pos, orbitVel(b, rel.clone().addScaledVector(n, -40), n), fwd, n);
       },
@@ -117,7 +121,7 @@ export function debugSpots(g: Game): Spot[] {
       label: 'Ring shadow',
       hint: `${b.name} from its sunward side`,
       go: () => {
-        const toS = g.cur.star.pos.clone().sub(b.pos).normalize();
+        const toS = sunOf(g, b).pos.clone().sub(b.pos).normalize();
         const side = V().crossVectors(n, toS).normalize();
         const dir = toS.multiplyScalar(0.85).addScaledVector(side, 0.25).addScaledVector(n, -0.45).normalize();
         const pos = b.pos.clone().addScaledVector(dir, b.radius * 5);
@@ -130,7 +134,7 @@ export function debugSpots(g: Game): Spot[] {
     const deck = (atmoOf(b)?.H ?? 8000) * 1.3;
     const over = (alt: number, pitch: number, low: boolean) => {
       const up = cloudySpot(g, b, low);
-      const side = V(0, 1, 0).cross(g.cur.star.pos.clone().sub(b.pos).normalize()).normalize();
+      const side = V(0, 1, 0).cross(sunOf(g, b).pos.clone().sub(b.pos).normalize()).normalize();
       const ground = Math.max(b.radius, surfaceRadius(b, b.pos.clone().addScaledVector(up, b.radius)));
       const pos = b.pos.clone().addScaledVector(up, ground + alt);
       const t = V().crossVectors(up, side).normalize();
@@ -149,7 +153,7 @@ export function debugSpots(g: Game): Spot[] {
       hint: `75 km over ${b.name} at 7.6 km/s`,
       go: () => {
         const up = fromSunward(g, b, 0.9);
-        const side = V(0, 1, 0).cross(g.cur.star.pos.clone().sub(b.pos).normalize()).normalize();
+        const side = V(0, 1, 0).cross(sunOf(g, b).pos.clone().sub(b.pos).normalize()).normalize();
         const pos = b.pos.clone().addScaledVector(up, b.radius + 75e3);
         const fwd = V().crossVectors(up, side).normalize().addScaledVector(up, -0.05).normalize();
         place(g, b, pos, fwd.clone().multiplyScalar(7600), fwd, up);

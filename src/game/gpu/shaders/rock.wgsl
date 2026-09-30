@@ -38,6 +38,9 @@ struct Layer {
   // rocks mined down (sim/laser.ts): (radial bin, cell ÷ 4096, cell mod 4096, candidate) → share left
   mined: array<vec4f, 24>,
   minedS: array<vec4f, 6>,
+  // a pair's second sun (docs/binaries.md): direction (w: 1 if there is one), light relative to the first's
+  light2: vec4f,
+  lightC2: vec4f,
 }
 
 fn pcg3(v0: vec3u) -> vec3u {

@@ -7,6 +7,7 @@ struct Post {
   a: vec4f, // clouds on, bloom strength, flare strength, blur strength
   b: vec4f, // the screen point you're heading for (uv), whether it's in front (1) or behind (−1); w: the canvas's width (px)
   c: vec4f, // the star on screen (uv); z: 1 if it's in front; w: the canvas's height (px)
+  d: vec4f, // a pair's other star likewise (docs/binaries.md); z: 0 with one star
 }
 @group(0) @binding(0) var hdr: texture_2d<f32>;
 @group(0) @binding(1) var clouds: texture_2d<f32>;
@@ -18,6 +19,26 @@ struct Post {
 fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
   let p = vec2f(f32((i << 1u) & 2u), f32(i & 2u));
   return vec4f(p * 2.0 - 1.0, 0.0, 1.0);
+}
+
+// a star's lens-flare ghosts at `uv`, for the star at `sp` on screen
+fn flare(sp: vec2f, uv: vec2f, size: vec2f) -> vec3f {
+  // (behind clouds: as much of it as they let through)
+  let through = select(1.0, textureSampleLevel(clouds, samp, sp, 0.0).a, post.a.x > 0.5);
+  let src = max(textureSampleLevel(hdr, samp, sp, 0.0).rgb - vec3f(0.8), vec3f(0.0)) * 0.6 * through;
+  if (max(src.r, max(src.g, src.b)) <= 0.0) { return vec3f(0.0); }
+  let aspect = size.x / size.y;
+  let axis = vec2f(0.5) - sp;
+  let pos = array<f32, 4>(0.6, 1.1, 1.5, 1.9);
+  let rad = array<f32, 4>(0.02, 0.045, 0.03, 0.07);
+  let tint = array<vec3f, 4>(vec3f(1.0, 0.8, 0.6), vec3f(0.6, 0.9, 1.0), vec3f(0.9, 0.6, 1.0), vec3f(0.7, 1.0, 0.7));
+  var fl = vec3f(0.0);
+  for (var i = 0; i < 4; i++) {
+    let g = sp + axis * pos[i];
+    let d = length((uv - g) * vec2f(aspect, 1.0)) / rad[i];
+    fl += tint[i] * (1.0 - smoothstep(0.7, 1.0, d)) * (0.4 + 0.6 * d * d);
+  }
+  return fl * src;
 }
 
 @fragment
@@ -47,28 +68,10 @@ fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
   // bloom (it's made from the scene before the clouds: dimmed by what they let through here, or the
   // sun's glow showed through an overcast)
   c += textureSampleLevel(bloom, samp, uv, 0.0).rgb * post.a.y * seen;
-  // lens flare, from the star only: ghosts along the line from it through the centre, as bright as
-  // the star shows in the frame right now (so a rock or a world in front of it dims them)
-  if (post.a.z > 0.0 && post.c.z > 0.5) {
-    let sp = post.c.xy;
-    // (behind clouds: as much of it as they let through)
-    let through = select(1.0, textureSampleLevel(clouds, samp, sp, 0.0).a, post.a.x > 0.5);
-    let src = max(textureSampleLevel(hdr, samp, sp, 0.0).rgb - vec3f(0.8), vec3f(0.0)) * 0.6 * through;
-    if (max(src.r, max(src.g, src.b)) > 0.0) {
-      let aspect = size.x / size.y;
-      let axis = vec2f(0.5) - sp;
-      let pos = array<f32, 4>(0.6, 1.1, 1.5, 1.9);
-      let rad = array<f32, 4>(0.02, 0.045, 0.03, 0.07);
-      let tint = array<vec3f, 4>(vec3f(1.0, 0.8, 0.6), vec3f(0.6, 0.9, 1.0), vec3f(0.9, 0.6, 1.0), vec3f(0.7, 1.0, 0.7));
-      var fl = vec3f(0.0);
-      for (var i = 0; i < 4; i++) {
-        let g = sp + axis * pos[i];
-        let d = length((uv - g) * vec2f(aspect, 1.0)) / rad[i];
-        fl += tint[i] * (1.0 - smoothstep(0.7, 1.0, d)) * (0.4 + 0.6 * d * d);
-      }
-      c += fl * src * post.a.z;
-    }
-  }
+  // lens flare, from the stars only (a pair's each): ghosts along the line from it through the
+  // centre, as bright as the star shows in the frame right now (so a rock or a world in front dims them)
+  if (post.a.z > 0.0 && post.c.z > 0.5) { c += flare(post.c.xy, uv, size) * post.a.z; }
+  if (post.a.z > 0.0 && post.d.z > 0.5) { c += flare(post.d.xy, uv, size) * post.a.z; }
   let s = 0.8 + 0.2 * (1.0 - exp(-(c - 0.8) / 0.2));
   return vec4f(select(c, s, c >= vec3f(0.8)), 1.0);
 }

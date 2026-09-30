@@ -29,7 +29,7 @@ import { RingFieldGpu } from './rings';
 
 const WORLD_BYTES = 848;
 const STAR_BYTES = 128;
-const RING_BYTES = 128;
+const RING_BYTES = 160;
 const CLOUD_CUBE = 1024;
 const MAXDOTS = 2048; // bodies, stations, ships, dust, the laser's plume
 
@@ -527,12 +527,16 @@ export class WorldsLayer {
         // up close, the ring's rocks (gpu/rings.ts); the first ringed world near enough has them,
         // and its disc fades out around the camera where they take over
         let fade = 0;
-        if (!ringDone && this.rocks.update(b, rel, b.axis, light, simTime, pxPerRad * this.pr)) {
+        const l2r = suns.s2 ? new THREE.Vector3().subVectors(suns.s2.pos, b.pos).normalize() : null;
+        if (!ringDone && this.rocks.update(b, rel, b.axis, light, simTime, pxPerRad * this.pr, l2r, suns.c2)) {
           ringDone = true;
           fade = this.rocks.nearFade;
         }
         rf.set([rel.x, rel.y, rel.z, fade], 24);
         rf.set([b.ring.inner, b.ring.outer], 28);
+        // (a pair's second sun, docs/binaries.md)
+        const l2 = suns.s2 ? new THREE.Vector3().subVectors(suns.s2.pos, b.pos).normalize() : null;
+        if (l2) rf.set([l2.x, l2.y, l2.z, 1, suns.c2.r, suns.c2.g, suns.c2.b, 0], 32);
         device.queue.writeBuffer(w.ring.buf, 0, rf);
       }
       // distant bodies as dots of reflected starlight

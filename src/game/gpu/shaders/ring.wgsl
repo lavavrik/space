@@ -13,6 +13,9 @@ struct Ring {
   outer: f32,
   _p0: f32,
   _p1: f32,
+  // a pair's second sun (docs/binaries.md): direction (w: 1 if there is one), light relative to the first's
+  light2: vec4f,
+  lightC2: vec4f,
 }
 @group(1) @binding(0) var<uniform> ring: Ring;
 
@@ -45,5 +48,12 @@ fn fs(in: Out) -> @location(0) vec4f {
   let perp = length(toP - along * L);
   let sh = select(1.0, 0.06, along < 0.0 && perp < ring.light.w);
   let lit = 0.35 + 0.65 * abs(dot(normalize(in.wn), L));
-  return vec4f(ring.color.rgb * lit * sh * frame.exposure, alpha);
+  var col = ring.color.rgb * lit * sh;
+  if (ring.light2.w > 0.5) {
+    let L2 = ring.light2.xyz;
+    let a2 = dot(toP, L2);
+    let sh2 = select(1.0, 0.06, a2 < 0.0 && length(toP - a2 * L2) < ring.light.w);
+    col += ring.color.rgb * (0.35 + 0.65 * abs(dot(normalize(in.wn), L2))) * sh2 * ring.lightC2.rgb;
+  }
+  return vec4f(col * frame.exposure, alpha);
 }

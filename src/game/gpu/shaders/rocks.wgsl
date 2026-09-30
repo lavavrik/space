@@ -164,6 +164,12 @@ fn fsMesh(in: MeshOut, @builtin(front_facing) front: bool) -> @location(0) vec4f
   let shine = layer.pc.w * (0.5 + 0.5 * dot(-Lp, L)) * (pr * pr) / (dp * dp) * max(dot(N, Lp), 0.0);
   let mottle = 0.8 + 0.2 * tno(3.1) + 0.1 * tno(13.0);
   var col = in.col * mottle * (sun + shine + 0.002);
+  if (layer.light2.w > 0.5) {
+    // a pair's second sun, in its colour (no shadows of its own yet)
+    let L2 = layer.light2.xyz;
+    let m2 = max(dot(N, L2), 0.0);
+    col += in.col * mottle * mix(m2, 2.0 * m2 / (m2 + mu), 0.6) * layer.lightC2.rgb;
+  }
   // the headlights: rocks in the planet's shadow (or on their night side) light up in the cone
   col += headlight(N, in.wp, in.col * mottle, frame.headK);
   if (in.k.z > 0.5) {

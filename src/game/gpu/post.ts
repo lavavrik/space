@@ -121,7 +121,7 @@ export class Bloom {
  * the canvas's size (CW × CH px).
  */
 export function postParams(g: Game, vp: THREE.Matrix4, clouds: boolean, CW: number, CH: number, set: Settings) {
-  const out = new Float32Array(12);
+  const out = new Float32Array(16);
   let blur = 0;
   let fx = 0.5,
     fy = 0.5,
@@ -137,11 +137,13 @@ export function postParams(g: Game, vp: THREE.Matrix4, clouds: boolean, CW: numb
   }
   out.set([clouds ? 1 : 0, set.bloom ? BLOOM_K : 0, set.flare ? FLARE_K : 0, set.ftlBlur ? blur : 0, fx, fy, side, CW]);
   out[11] = CH; // (the canvas's size: the scene may be rendered smaller, gpu/dynres.ts)
-  // the star on screen, for its lens flare
-  const r = g.cur.star.pos.clone().sub(g.ship.pos);
-  const q = new THREE.Vector4(r.x, r.y, r.z, 0).applyMatrix4(vp);
-  // (not behind a world: the flare reads the frame at the star, and the ground there, lit by your
-  // landing lights at night, flared)
-  if (q.w > 0 && !occluder(g.cur.bodies, g.ship.pos, g.cur.star.pos)) out.set([(q.x / q.w) * 0.5 + 0.5, 0.5 - (q.y / q.w) * 0.5, 1], 8);
+  // the stars on screen (a pair's both), for their lens flares
+  g.cur.stars.forEach((s, k) => {
+    const r = s.pos.clone().sub(g.ship.pos);
+    const q = new THREE.Vector4(r.x, r.y, r.z, 0).applyMatrix4(vp);
+    // (not behind a world: the flare reads the frame at the star, and the ground there, lit by your
+    // landing lights at night, flared)
+    if (q.w > 0 && !occluder(g.cur.bodies, g.ship.pos, s.pos)) out.set([(q.x / q.w) * 0.5 + 0.5, 0.5 - (q.y / q.w) * 0.5, 1], 8 + 4 * k);
+  });
   return out;
 }

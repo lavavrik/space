@@ -81,7 +81,7 @@ function minedHere(b: World): MinedRock[] {
 }
 
 /** Bytes in rock.wgsl Layer: 6 vec4, 20 floats, 24 + 6 vec4. */
-const LAYER_BYTES = (6 * 4 + 20 + 24 * 4 + 6 * 4) * 4;
+const LAYER_BYTES = (6 * 4 + 20 + 24 * 4 + 6 * 4 + 8) * 4; // (+ a pair's second sun, docs/binaries.md)
 /** Bytes per listed rock or speck (rocksCull.wgsl Rock, Speck). */
 const ITEM_BYTES = 32;
 
@@ -97,6 +97,9 @@ interface RingFrame {
   t: number;
   pxPerRad: number;
   light: THREE.Vector3;
+  /** A pair's second sun, or null; its light relative to the first's. */
+  light2: THREE.Vector3 | null;
+  c2: THREE.Color;
   pc: THREE.Vector3;
 }
 
@@ -280,6 +283,8 @@ class LayerGpu {
     u[28] = r;
     u[29] = h;
     u[34] = fr.pxPerRad;
+    if (fr.light2) u.set([fr.light2.x, fr.light2.y, fr.light2.z, 1, fr.c2.r, fr.c2.g, fr.c2.b, 0], 164);
+    else u.fill(0, 164, 172);
     device.queue.writeBuffer(this.uni, 0, u);
     // the indirect draw, its instance count reset for the cull to count up
     const args = this.mesh ? new Uint32Array([this.mesh.n, 0, 0, 0, 0]) : new Uint32Array([6, 0, 0, 0, 0]);
@@ -429,7 +434,7 @@ export class RingFieldGpu {
    * centre relative to the camera (m), `n` the ring's normal, `light` the direction to the star.
    * Returns whether any part of the ring is close enough to have rocks.
    */
-  update(b: World, rel: THREE.Vector3, n: THREE.Vector3, light: THREE.Vector3, t: number, pxPerRad: number) {
+  update(b: World, rel: THREE.Vector3, n: THREE.Vector3, light: THREE.Vector3, t: number, pxPerRad: number, light2: THREE.Vector3 | null = null, c2 = new THREE.Color(0, 0, 0)) {
     const ring = b.ring!;
     const R = b.radius;
     const far = ROCK_LAYERS[ROCK_LAYERS.length - 1].range;
@@ -451,7 +456,7 @@ export class RingFieldGpu {
     const thC = Math.atan2(px * e2.x + py * e2.y + pz * e2.z, px * e1.x + py * e1.y + pz * e1.z);
     const d1 = e1.clone().multiplyScalar(Math.cos(thC)).addScaledVector(e2, Math.sin(thC));
     const d2 = new THREE.Vector3().crossVectors(n, d1);
-    const fr: RingFrame = { b, e1: d1, e2: d2, n, r, h, thC, t, pxPerRad, light, pc: rel.clone() };
+    const fr: RingFrame = { b, e1: d1, e2: d2, n, r, h, thC, t, pxPerRad, light, light2, c2, pc: rel.clone() };
     const seed = Math.floor(ring.seed * 1e4);
     const mined = minedHere(b);
     for (const l of this.layers) l.update(fr, seed, mined);
