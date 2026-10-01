@@ -12,12 +12,22 @@ struct Post {
   // FTL entries and exits (gpu/post.ts warpsOf): the warp's centre (uv), its size (screen heights)
   // and its age (0…1)
   warps: array<vec4f, 8>,
+  // …and each one's depth (reversed-Z: NEAR / distance; 1 for yours, round the camera): it bends
+  // only what's behind it
+  warpD: array<vec4f, 2>,
 }
 @group(0) @binding(0) var hdr: texture_2d<f32>;
 @group(0) @binding(1) var clouds: texture_2d<f32>;
 @group(0) @binding(2) var samp: sampler;
 @group(0) @binding(3) var<uniform> post: Post;
 @group(0) @binding(4) var bloom: texture_2d<f32>;
+@group(0) @binding(5) var sceneDepth: texture_depth_multisampled_2d;
+
+// the scene's depth at `uv` (reversed-Z: larger is nearer; 0 where nothing was drawn)
+fn depthAt(uv: vec2f) -> f32 {
+  let dims = vec2f(textureDimensions(sceneDepth));
+  return textureLoad(sceneDepth, vec2i(clamp(uv * dims, vec2f(0.0), dims - 1.0)), 0);
+}
 
 @vertex
 fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
@@ -54,8 +64,13 @@ fn warpAt(uv: vec2f, size: vec2f) -> vec3f {
   var off = vec2f(0.0);
   var glow = 0.0;
   let n = i32(post.e.x + 0.5);
+  if (n == 0) { return vec3f(0.0); }
+  // only what's behind a warp bends (a rock in front of a ship dropping out of FTL stays as it is:
+  // the warp showed through a ring's belt as if in front)
+  let here = depthAt(uv);
   for (var i = 0; i < 8; i++) {
     if (i >= n) { break; }
+    if (here > post.warpD[i / 4][i % 4] * 1.0001) { continue; }
     let w = post.warps[i];
     let d = (uv - w.xy) * vec2f(asp, 1.0);
     let r = length(d);
@@ -78,6 +93,14 @@ fn warpAt(uv: vec2f, size: vec2f) -> vec3f {
     off += dir / vec2f(asp, 1.0) * (ring * R * 0.16 * x - lens * 0.5);
     glow += ring * 0.5;
   }
+  // (nor is something in front pulled in from beside it: where the shifted sample lands nearer than
+  // the nearest warp, the view is left alone)
+  var nearest = 0.0;
+  for (var i = 0; i < 8; i++) {
+    if (i >= n) { break; }
+    nearest = max(nearest, post.warpD[i / 4][i % 4]);
+  }
+  if (dot(off, off) > 0.0 && depthAt(uv + off) > nearest * 1.0001) { return vec3f(0.0, 0.0, glow); }
   return vec3f(off, glow);
 }
 

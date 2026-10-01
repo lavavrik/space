@@ -124,19 +124,23 @@ export class Bloom {
  * as strong as your speed (from ~1,000 to ~1,000,000 km/s), the bloom and flare strengths, and
  * the canvas's size (CW × CH px).
  */
-/** Floats in tonemap.wgsl Post: 5 vec4, then the warps. */
-export const POST_FLOATS = 20 + 4 * MAX_WARPS;
+/** Floats in tonemap.wgsl Post: 5 vec4, then the warps and their depths. */
+export const POST_FLOATS = 20 + 5 * MAX_WARPS;
+/** The camera's near plane (m; GpuRenderer's NEAR): a warp's depth is NEAR / its distance. */
+const NEAR = 0.5;
+/** Another ship's FTL warp: the drive's field bends space this far across (m). */
+const WARP_SIZE = 10000e3;
 
 /**
  * The space warps on screen this frame (tonemap.wgsl warpAt; docs/post.md), in place of the white
  * flashes FTL entries and exits used to be: yours, centred on the view (g.warpFx: engaging,
- * dropping out, arriving from hyperspace), and other ships' (npc.flashAt), sized by how far off
- * they are (a bubble ~25 km across, at least a seventh of the screen's height, so even a far one
- * reads), the nearest first.
+ * dropping out, arriving from hyperspace), and other ships' (npc.flashAt) at their real size, a
+ * bubble WARP_SIZE across (sized by the screen, a far ship's looked as big as a near one's), the
+ * nearest first. Each bends only what's behind it (its depth: tonemap.wgsl warpD).
  */
 function warpsOf(g: Game, vp: THREE.Matrix4, out: Float32Array) {
   const list: [number, number, number, number, number][] = []; // x, y, size, age, distance
-  for (const w of g.warpFx) list.push([0.5, 0.5, w.r, w.age / w.dur, 0]);
+  for (const w of g.warpFx) list.push([0.5, 0.5, w.r, w.age / w.dur, NEAR]); // (round the camera: in front of everything)
   const pxPerRad = g.view.pxPerRad;
   for (const npc of g.traffic) {
     const u = (g.simTime - npc.flashAt) / FLASH_S;
@@ -145,13 +149,17 @@ function warpsOf(g: Game, vp: THREE.Matrix4, out: Float32Array) {
     const d = r.length();
     const q = new THREE.Vector4(r.x, r.y, r.z, 0).applyMatrix4(vp);
     if (q.w <= 0 || occluder(g.cur.bodies, g.ship.pos, npc.pos)) continue;
-    const size = Math.min(0.8, Math.max(0.14, ((25e3 / d) * pxPerRad) / g.view.H));
+    const size = Math.min(3, ((WARP_SIZE / d) * pxPerRad) / g.view.H); // (screen heights)
+    if (size < 0.004) continue; // (under a few pixels: nothing to see)
     list.push([(q.x / q.w) * 0.5 + 0.5, 0.5 - (q.y / q.w) * 0.5, size, u, d]);
   }
   list.sort((a, b) => a[4] - b[4]);
   const n = Math.min(MAX_WARPS, list.length);
   out[16] = n;
-  for (let k = 0; k < n; k++) out.set(list[k].slice(0, 4), 20 + 4 * k);
+  for (let k = 0; k < n; k++) {
+    out.set(list[k].slice(0, 4), 20 + 4 * k);
+    out[20 + 4 * MAX_WARPS + k] = Math.min(1, NEAR / Math.max(list[k][4], NEAR)); // its depth (tonemap.wgsl warpD)
+  }
 }
 
 export function postParams(g: Game, vp: THREE.Matrix4, clouds: boolean, CW: number, CH: number, set: Settings) {

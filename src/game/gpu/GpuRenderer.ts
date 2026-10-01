@@ -224,6 +224,7 @@ export class GpuRenderer implements GameRenderer {
           { binding: 2, resource: this.toneSamp },
           { binding: 3, resource: { buffer: this.toneBuf } },
           { binding: 4, resource: bl.bloom },
+          { binding: 5, resource: this.depth.createView() }, // (the space warps bend only what's behind them)
         ],
       }),
     );
@@ -309,12 +310,15 @@ export class GpuRenderer implements GameRenderer {
     // volumetric clouds near a clouded world (they read the scene's depth, so it's kept)
     const clouds = !inTunnel && this.worlds.vcOn > 0;
     // (the clouds are laid over the frame in their own pass, before the particles, not by the tone map)
-    device.queue.writeBuffer(this.toneBuf, 0, postParams(g, this.vp, false, this.CW, this.CH, this.settings));
+    const pp = postParams(g, this.vp, false, this.CW, this.CH, this.settings);
+    device.queue.writeBuffer(this.toneBuf, 0, pp);
+    // (the depth is kept for the final pass while a warp is on: it bends only what's behind it)
+    const keepDepth = clouds || pp[16] > 0;
     const scene = (label: string, first: boolean, last: boolean, draw: (pass: GPURenderPassEncoder) => void) => {
       const pass = enc.beginRenderPass({
         label,
         colorAttachments: [{ view: hdrView, resolveTarget: last ? this.resolved.createView() : undefined, loadOp: first ? 'clear' : 'load', storeOp: last ? 'discard' : 'store', clearValue: [0, 0, 0, 1] }],
-        depthStencilAttachment: { view: depthView, depthLoadOp: first ? 'clear' : 'load', depthStoreOp: last && !clouds ? 'discard' : 'store', depthClearValue: 0 },
+        depthStencilAttachment: { view: depthView, depthLoadOp: first ? 'clear' : 'load', depthStoreOp: last && !keepDepth ? 'discard' : 'store', depthClearValue: 0 },
         timestampWrites: tw(label),
       });
       pass.setBindGroup(0, this.frameGroup);
