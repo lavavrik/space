@@ -335,6 +335,11 @@ export class Game {
   }
 
   /** Publish a HUD snapshot on the next frame instead of waiting for the next tick. */
+  /** Shift+`: time the terrain with parts of its pixel shader off in turn (debug/tdbg.ts). */
+  terrainSweep() {
+    this.scene.terrainSweep?.();
+  }
+
   invalidateHud() {
     this.hudT = 0;
   }

@@ -146,3 +146,14 @@ fn terrHFrom(d: vec3f, o0: i32, oct: i32, hc: f32, mask0: f32) -> f32 {
 }
 
 fn terrElev(h: f32, sea: f32, seaOn: bool) -> f32 { return world.terrA * select(h, max(h - sea, 0.0), seaOn); }
+
+// Ground colour's large-scale terms (planet.wgsl): hundreds of km across, so a chunk's vertices carry
+// them (terrainBake.wgsl) and its pixels interpolate, instead of each running the simplex noise.
+//   h2 base: the first FBM_EXACT octaves of the colour patches' fBm; moist: the two big octaves of the
+//   land's moisture (landMoist adds the finer one per pixel)
+const H2_SEED: i32 = 3; // (= FBM_EXACT)
+fn h2At(p: vec3f, seed: f32) -> vec3f { return p * 1.6 * 3.1 + vec3f(seed * 1.7, seed * 2.3, seed * 0.9) * 3.1 + 4.0; }
+fn moist12(p: vec3f, seed: f32) -> f32 {
+  return 0.5 + 0.35 * snoise(p * 2.6 + vec3f(seed * 1.9, 7.0, seed)) + 0.2 * snoise(p * 11.0 + vec3f(2.0, seed, 5.0));
+}
+fn h2Base(p: vec3f, seed: f32) -> f32 { return fbmF(h2At(p, seed), H2_SEED); }

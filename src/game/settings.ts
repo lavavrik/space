@@ -17,6 +17,8 @@ export interface Settings {
   resScale: 1 | 0.75 | 0.5;
   /** Volumetric clouds: at every pixel (heavy), full quality, half the steps, or off (the flat deck only). */
   clouds: 'ultra' | 'high' | 'low' | 'off';
+  /** The clouds' speedups (interleaved marching, Ultra's sun shadow map: docs/clouds.md "Cost"); off marches every pixel every frame, as before. */
+  cloudSpeedups: boolean;
   bloom: boolean;
   flare: boolean;
   /** The sea mirroring land, ships and stations (tonemap.wgsl seaReflect; the sky's always in it). */
@@ -36,6 +38,7 @@ export const DEFAULT_SETTINGS: Settings = {
   dynres: true,
   resScale: 1,
   clouds: 'high',
+  cloudSpeedups: true,
   bloom: true,
   flare: true,
   reflections: true,

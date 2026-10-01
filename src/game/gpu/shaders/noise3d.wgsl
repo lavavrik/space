@@ -28,6 +28,21 @@ fn tnoiseHQ(p: vec3f) -> f32 {
   return c * 2.0 - 1.0;
 }
 
+// fbmF's octaves from o0 on only (the first ones come baked: terrainBake.wgsl)
+fn fbmFrom(p0: vec3f, o0: i32, oct: i32) -> f32 {
+  var a = 0.5;
+  var s = 0.0;
+  var p = p0;
+  for (var i = 0; i < oct; i++) {
+    if (i >= o0) {
+      if (i < FBM_EXACT) { s += a * snoise(p); } else { s += a * tnoise(p); }
+    }
+    p = p * 2.03 + vec3f(1.7, 9.2, 3.1);
+    a *= 0.5;
+  }
+  return s;
+}
+
 fn fbmF(p0: vec3f, oct: i32) -> f32 {
   var a = 0.5;
   var s = 0.0;

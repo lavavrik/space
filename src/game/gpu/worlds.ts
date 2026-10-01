@@ -27,6 +27,7 @@ import { CHUNK_BYTES, TerrainGpu, TerrainShared } from './terrain';
 
 import { DEPTH_FORMAT, HDR_FORMAT, SAMPLES } from './formats';
 import { RingFieldGpu } from './rings';
+import { terrainDebug } from '../debug/tdbg';
 
 const WORLD_BYTES = 896;
 const STAR_BYTES = 128;
@@ -388,7 +389,6 @@ export class WorldsLayer {
     f[92] = b.radius;
     f[93] = hasCraters(b) ? 1 : 0;
     f[94] = reliefAmp(b);
-    f[95] = 0; // useQc (terrain chunks only)
     f[96] = populated(b) ? 1 : 0;
     f[97] = CITY_K;
     f[98] = b.radius + cloudH;
@@ -551,6 +551,7 @@ export class WorldsLayer {
       }
       f[89] = simTime;
       f[90] = d - b.radius;
+      f[95] = terrainDebug.bits; // (was useQc, unused: the terrain shader's perf bisect, planet.wgsl dbg; per frame for the sweep)
       // (terrain chunks: all of them, their fragment shader drops what a pixel can't show by its own
       // derivatives; by the apparent radius, landed it was ~9, so the nearest ground was plain until the
       // periscope multiplied the radius)
@@ -654,6 +655,18 @@ export class WorldsLayer {
 
   /** Opaque: surfaces and the star's disc. */
   drawOpaque(pass: GPURenderPassEncoder) {
+    this.drawFar(pass);
+    this.drawTerrain(pass);
+    this.drawRocks(pass);
+  }
+
+  /** The ring's rocks, when close to it. */
+  drawRocks(pass: GPURenderPassEncoder) {
+    this.rocks.draw(pass);
+  }
+
+  /** The stars' discs and the worlds seen as spheres (too far for terrain). */
+  drawFar(pass: GPURenderPassEncoder) {
     for (const st of this.stars) {
       if (st.pxR <= 0.6) continue;
       pass.setPipeline(this.discPipe);
@@ -667,6 +680,10 @@ export class WorldsLayer {
       pass.setBindGroup(1, w.group);
       this.drawMesh(pass, w.mesh, true);
     }
+  }
+
+  /** The terrain chunks of the worlds near enough. */
+  drawTerrain(pass: GPURenderPassEncoder) {
     const near = this.worlds.filter((w) => w.terrOn);
     if (near.length) {
       pass.setPipeline(this.chunkPipe);
@@ -675,7 +692,6 @@ export class WorldsLayer {
         w.terrain!.draw(pass);
       }
     }
-    this.rocks.draw(pass);
   }
 
   /**

@@ -31,6 +31,7 @@ struct Out {
   @location(6) sun: vec3f,
   @location(7) t: vec4f,        // skirt (0 surface … 1 down a skirt), octaves the geometry has (0: far sphere), shadow, hc
   @location(8) mask: f32,       // the range mask the geometry has
+  @location(10) bk: vec2f,      // chunks: the baked large-scale colour terms (terrain.wgsl moist12, h2Base)
   @location(9) sun2: vec3f,     // chunks: a second sun's light through the air, per vertex (docs/binaries.md)
 }
 
@@ -49,6 +50,7 @@ fn vs(@location(0) position: vec3f, @location(1) normal: vec3f) -> Out {
   o.wn = normalize((world.rotN * vec4f(normal, 0.0)).xyz);
   o.t = vec4f(0.0, 0.0, 1.0, 0.0);
   o.sun2 = vec3f(0.0);
+  o.bk = vec2f(0.0);
   o.pos = frame.viewProj * wp;
   return o;
 }
@@ -59,8 +61,9 @@ fn vs(@location(0) position: vec3f, @location(1) normal: vec3f) -> Out {
 fn vsChunk(@location(0) position: vec3f, @location(1) dir: vec3f, @location(2) grid: vec2f, @location(3) skirt: f32) -> Out {
   var o: Out;
   let gi = u32(grid.y + 0.5) * u32(chunk.gridW + 0.5) + u32(grid.x + 0.5);
-  let A = bake[2u * gi];
-  let B = bake[2u * gi + 1u];
+  let A = bake[3u * gi];
+  let B = bake[3u * gi + 1u];
+  o.bk = bake[3u * gi + 2u].xy;
   let pos = position + dir * (A.w - skirt * chunk.skirtD);
   let wp = chunkModel() * vec4f(pos, 1.0);
   o.obj = dir;
@@ -151,16 +154,15 @@ fn waterWaves(wp: vec3f, fw: f32) -> vec4f {
 //   - the cover: desert / steppe / grassland where it's dry, savanna / forest / jungle where wet,
 //     tundra and taiga where cold.
 fn landTemp(e: f32, lat: f32) -> f32 { return 1.0 - smoothstep(0.1, 0.9, lat) - e * 0.9; }
-fn landMoist(p: vec3f, e: f32, lat: f32, seed: f32) -> f32 {
+fn landMoist(m12: f32, p: vec3f, e: f32, lat: f32, seed: f32) -> f32 {
   // (continents' climates ~2,500 km across, regions ~500 km, and patches ~100 km: by the first alone
   // a view from the ground was one cover to the horizon)
-  let m = 0.5 + 0.35 * snoise(p * 2.6 + vec3f(seed * 1.9, 7.0, seed)) + 0.2 * snoise(p * 11.0 + vec3f(2.0, seed, 5.0)) + 0.12 * snoise(p * 48.0 + vec3f(seed, 3.0, 1.0));
+  let m = m12 + 0.12 * snoise(p * 48.0 + vec3f(seed, 3.0, 1.0));
   let belt = exp(-pow((lat - 0.5) / 0.13, 2.0));
   return m - 0.4 * belt + 0.25 * (1.0 - smoothstep(0.0, 0.1, e));
 }
-fn landClimate(p: vec3f, e: f32, lat: f32, seed: f32) -> vec3f {
+fn landClimate(m: f32, e: f32, lat: f32) -> vec3f {
   let t = landTemp(e, lat);
-  let m = landMoist(p, e, lat, seed);
   let cool = smoothstep(0.75, 0.35, t); // (0 hot … 1 temperate)
   let dry = mix(vec3f(0.78, 0.64, 0.43), vec3f(0.56, 0.53, 0.34), cool); // desert … steppe
   let mid = mix(vec3f(0.55, 0.5, 0.27), vec3f(0.33, 0.42, 0.2), cool); // savanna … grassland
@@ -277,6 +279,9 @@ fn waterGlint(Nw: vec3f, N: vec3f, V: vec3f, L: vec3f, n: f32) -> f32 {
 @fragment
 fn fs(in: Out) -> @location(0) vec4f {
   let terr = in.t.y > 0.5;
+  // (the perf bisect, ?tdbg=<bits> in the URL: parts of the shader off to see what the pixels cost; docs/perf.md)
+  let dbg = u32(world._pq);
+  if (terr && (dbg & 1024u) != 0u) { return vec4f(0.2, 0.2, 0.2, 1.0); }
   // Skirts hang below every chunk's edge to hide the cracks between levels; a crack only ever shows
   // a skirt's top, so that keeps the full shader and the rest gets plain lit ground colour.
   if (terr && in.t.x > 0.5) {
@@ -298,6 +303,8 @@ fn fs(in: Out) -> @location(0) vec4f {
   let L2 = L2dir();
   let ndl20 = select(-1.0, dot(N, L2), two);
   let up2 = min(1.0, k2() * 4.0);
+  // where the cities' lights show (night under both suns); their population is only worked out there
+  let cityNight = sm(0.1, -0.08, ndl0) * (1.0 - sm(-0.08, 0.1, ndl20) * up2);
   let seed = world.seed;
   let sp = p * 1.6 + vec3f(seed * 1.7, seed * 2.3, seed * 0.9);
   let fw = max(length(fwidth(p)), 1e-9);
@@ -330,14 +337,18 @@ fn fs(in: Out) -> @location(0) vec4f {
     var h = hc;
     tDet = 0.0;
     tFw = fw;
-    if (!(terr && seaOn && hc + terrRise(o0, oct) < world.sea)) { h = terrHFrom(p, o0, oct, hc, in.mask); }
+    if (!(terr && seaOn && hc + terrRise(o0, oct) < world.sea) && (dbg & 1u) == 0u) { h = terrHFrom(p, o0, oct, hc, in.mask); }
     tFw = 0.0;
     tUseOff = false;
     elev = terrElev(h, world.sea, seaOn);
-    N = bumpN(N, elev - terrElev(hc, world.sea, seaOn), in.obj, in.wp, terr);
+    if ((dbg & 262144u) == 0u) { N = bumpN(N, elev - terrElev(hc, world.sea, seaOn), in.obj, in.wp, terr); }
     det = 1.0 + 0.1 * tDet;
     var h2 = 0.0;
-    if (!dark) { h2 = fbmF(sp * 3.1 + 4.0, min(max(oct - 2, 3), 5)); }
+    // (the patches' first octaves come baked on chunks: they're 300+ km across)
+    if (!dark && (dbg & (16u | 2048u)) == 0u) {
+      let o2 = min(max(oct - 2, 3), 5);
+      if (terr) { h2 = in.bk.y + fbmFrom(h2At(p, seed), H2_SEED, o2); } else { h2 = fbmF(sp * 3.1 + 4.0, o2); }
+    }
     let lat = abs(p.y);
     // (cr: 1 − |noise|, slightly negative where the noise overshoots ±1, and pow of a negative is
     // NaN on NVIDIA (D3D): on rocky moons it blinked black blocks, bloom's low mips spreading one bad
@@ -365,13 +376,18 @@ fn fs(in: Out) -> @location(0) vec4f {
         col = mix(col, mix(vec3f(0.1, 0.42, 0.45), vec3f(0.5, 0.5, 0.4), 1.0 - smoothstep(0.5, 3.0, seaDepth)), shallow);
       } else {
         let e = h - world.sea;
-        if (world.city > 0.5) { pop = cityPop(p, e, lat); }
+        if (world.city > 0.5 && cityNight > 0.0 && (dbg & 32768u) == 0u) { pop = cityPop(p, e, lat); }
         col = mix(C, D, sm(0.12, 0.55, e + h2 * 0.12));
         col = mix(col, C * 0.7 + vec3f(0.18, 0.15, 0.08), sm(0.2, 0.6, h2) * 0.3);
         // climate (docs/terrain.md): the land's cover by how warm and how wet it is, blended over the
         // world's palette (two thirds), so its own character stays
-        let cl = landClimate(p, e, lat, seed);
-        col = mix(col, cl, 0.65 * (1.0 - sm(0.35, 0.6, e)));
+        var m12 = in.bk.x; // (baked on chunks: select() would run the noise for both)
+        if (!terr) { m12 = moist12(p, seed); }
+        var moist = 0.5;
+        if ((dbg & (16u | 4096u)) == 0u) {
+          moist = landMoist(m12, p, e, lat, seed);
+          col = mix(col, landClimate(moist, e, lat), 0.65 * (1.0 - sm(0.35, 0.6, e)));
+        }
         snow = max(sm(0.62, 0.75, e), sm(0.05, -0.12, landTemp(e, lat)) * 0.85);
         col = mix(col, vec3f(0.9), snow);
         // lakes: in low, flat basins where the land's wettest, still water (as the sea's, a few metres
@@ -380,9 +396,15 @@ fn fs(in: Out) -> @location(0) vec4f {
         // gated by the height directly, on a wide flat plain a lake's edge followed tiny differences
         // in it, and neighbouring terrain chunks, which have them, cut it along their straight
         // edges, SPACE-78)
-        let lakeN = snoise(p * 60.0 + vec3f(seed * 2.7, 4.0, 9.0)) + 0.2 * snoise(p * 220.0 + 3.0);
-        let lakeK = 0.3 * sm(0.06, 0.0, e) + 0.15 * sm(0.4, 0.7, landMoist(p, e, lat, seed));
-        let lake = sm(0.38, 0.41, lakeN + lakeK - 0.45 - 0.5 * sm(0.05, 0.15, e));
+        let lakeK = 0.3 * sm(0.06, 0.0, e) + 0.15 * sm(0.4, 0.7, moist) - 0.45 - 0.5 * sm(0.05, 0.15, e);
+        var lakeN = 0.0;
+        if ((dbg & (16u | 8192u)) == 0u) {
+          lakeN = snoise(p * 60.0 + vec3f(seed * 2.7, 4.0, 9.0));
+          // (the finer octave moves it 0.2 at most, a little more where the noise overshoots ±1: only
+          // read where that could reach the shore's threshold, most of the land being well short of it)
+          if (lakeN + lakeK + 0.25 > 0.38) { lakeN += 0.2 * snoise(p * 220.0 + 3.0); }
+        }
+        let lake = sm(0.38, 0.41, lakeN + lakeK);
         if (lake > 0.5) {
           // (the sea's colour a few tens of metres down: darker than the sea, they stood out from
           // orbit as dark blue patches on the land)
@@ -411,7 +433,7 @@ fn fs(in: Out) -> @location(0) vec4f {
   }
   col *= mix(det, 1.0, spec);
   // the ground up close: patches, rock on steep ground, stones, grain and small bumps
-  if (terr && spec <= 0.0 && ty < 6 && !dark) {
+  if (terr && spec <= 0.0 && ty < 6 && !dark && (dbg & 2u) == 0u) {
     let gd = groundDetail(col, N, normalize(in.wp - world.atC.xyz), in.wp, fw, ty == 2 || ty == 3);
     // (mostly not on snow: its stones and soil patches read as dark spots scattered over it)
     col = mix(gd.col, col, snow * 0.85);
@@ -421,7 +443,7 @@ fn fs(in: Out) -> @location(0) vec4f {
   var diff = clamp(ndl * 1.05 + 0.03, 0.0, 1.0) * in.t.z;
   let diff2 = select(0.0, clamp(dot(N, L2) * 1.05 + 0.03, 0.0, 1.0), two);
   // the cloud layer's shadow: the cover where the sun's ray from here crosses the deck
-  if (world.cloudH > 0.0 && !dark && cloudKind() != CK_GIANT) { // (a giant's face is its clouds)
+  if (world.cloudH > 0.0 && !dark && cloudKind() != CK_GIANT && (dbg & 4u) == 0u) { // (a giant's face is its clouds)
     let up = dot(p, world.lightL.xyz);
     if (up > 0.0) {
       let s = max(world.cloudH - elev, 0.0) / max(up, 0.08);
@@ -441,14 +463,15 @@ fn fs(in: Out) -> @location(0) vec4f {
   if (terr) { Pc = in.wp - world.atC.xyz; }
   // (the air just above is in the same shadow, so the haze over it dims with it: on a giant it's
   // most of what you see)
-  let shade = eclipse(Pc) * ringShade(p * (world.radius + elev), world.lightL.xyz);
+  var shade = 1.0;
+  if ((dbg & 65536u) == 0u) { shade = eclipse(Pc) * ringShade(p * (world.radius + elev), world.lightL.xyz); }
   sunC *= shade;
   var sunC2 = vec3f(0.0);
   if (two) {
     sunC2 = select(atSunlightC(C1, L2) * world.lightC2.rgb, in.sun2, terr) * ringShade(p * (world.radius + elev), world.lightL2.xyz) * eclipse2(Pc);
   }
-  if (terr) { sunC *= shadowAt(in.wp, N); } // up close: sky stations', ships' and rocks' shadows on the ground
-  if (terr && two) { sunC2 *= shadowAt2(in.wp, N); }
+  if (terr && (dbg & 8u) == 0u) { sunC *= shadowAt(in.wp, N); } // up close: sky stations', ships' and rocks' shadows on the ground
+  if (terr && two && (dbg & 8u) == 0u) { sunC2 *= shadowAt2(in.wp, N); }
   // the sky's own light on the ground: by how high the sun is over the horizon here (the whole lit
   // sky, not the sun's angle to each slope), bluish, and holding up while it's low (at 0.07 by
   // N·L, the ground at dawn and dusk sat dark under a bright sky)
@@ -461,7 +484,7 @@ fn fs(in: Out) -> @location(0) vec4f {
   // more of the waves are resolved here: glints on each wave up close, a broad glitter path far off.
   var waterF = 0.0;
   var waterAdd = vec3f(0.0);
-  if (spec > 0.0) {
+  if (spec > 0.0 && (dbg & 32u) == 0u) {
     let wv = waterWaves(in.wp, fw);
     // the slope, in the surface's plane, turned to world axes: the normal tips against it
     let gw = transpose(toLocal3()) * wv.xyz;
@@ -517,7 +540,8 @@ fn fs(in: Out) -> @location(0) vec4f {
   }
   // (the ship's lamps, near: headlights and landing lights; world.wgsl lights up close only matter
   // for the ground under you)
-  let lamps = select(vec3f(0.0), shipLights(N, in.wp, col), terr);
+  var lamps = vec3f(0.0); // (not select(): it runs both, the far sphere's pixels too)
+  if (terr && (dbg & 128u) == 0u) { lamps = shipLights(N, in.wp, col); }
   // the night's own light, where the sun's gone: starlight and airglow, so the ground under an
   // overcast night isn't pitch black (it was 0.0002)
   let night2 = 1.0 - smoothstep(-0.2, 0.05, ndl20) * up2;
@@ -530,12 +554,12 @@ fn fs(in: Out) -> @location(0) vec4f {
   //     (world.waveO, precise), shifting as you move (the noise read moves with the view), only
   //     where they're over a pixel.
   let skyT = mix(vec3f(1.0), vec3f(0.72, 0.88, 1.25), snow);
-  if (terr && ty < 6 && spec <= 0.0 && !dark && (ty == 2 || ty == 3)) {
+  if (terr && ty < 6 && spec <= 0.0 && !dark && (ty == 2 || ty == 3) && (dbg & 131072u) == 0u) {
     let covUp = cloudCover(cloudMap(p)) / select(0.85, 0.95, ty == 3);
     col *= 1.0 - 0.35 * smoothstep(0.8, 0.98, covUp) * (1.0 - snow);
   }
   col = col * (diff * sunC + diff2 * sunC2 + (sky + sky2) * skyT + 0.0002 + nightAmb + STRIKE_C * strikeLight(in.wp, N) + vec3f(0.9, 0.93, 1.0) * world.shine.w * clamp(dot(N, world.shine.xyz) * 1.05 + 0.03, 0.0, 1.0)) * (1.0 - waterF) + waterAdd + lamps;
-  if (terr && snow > 0.01 && !dark) {
+  if (terr && snow > 0.01 && !dark && (dbg & 131072u) == 0u) {
     let vis = 1.0 - smoothstep(0.06, 0.25, fw * world.radius);
     if (vis > 0.0) {
       let q = toLocal3() * in.wp + world.waveO.xyz;
@@ -545,11 +569,8 @@ fn fs(in: Out) -> @location(0) vec4f {
     }
   }
   if (pop > 0.0) {
-    let night = sm(0.1, -0.08, ndl0) * (1.0 - sm(-0.08, 0.1, ndl20) * up2);
-    if (night > 0.0) {
-      let lights = cityLights(p, pop, fw);
-      col += mix(vec3f(1.0, 0.62, 0.3), vec3f(1.0, 0.88, 0.7), cityWhite) * lights * night * world.cityK;
-    }
+    let lights = cityLights(p, pop, fw);
+    col += mix(vec3f(1.0, 0.62, 0.3), vec3f(1.0, 0.88, 0.7), cityWhite) * lights * cityNight * world.cityK;
   }
   // valley fog at dawn (docs/terrain.md): on Earth-like and ocean worlds, low fog fills the ground
   // lying below its region's height (the cloud cube's coarse ground height, ~100 km across) by up to
@@ -557,7 +578,7 @@ fn fs(in: Out) -> @location(0) vec4f {
   // the horizon to ~17° up, burning off as it climbs). How much hides the ground is its thickness
   // along the line of sight (from above, its depth over the slant; from inside it, the distance).
   // Lit by the low sun and the sky. Before the haze, so it's hazed with the ground behind it.
-  if ((ty == 2 || ty == 3) && world.cloudH > 0.0 && spec < 0.5 && !dark) {
+  if ((ty == 2 || ty == 3) && world.cloudH > 0.0 && spec < 0.5 && !dark && (dbg & 64u) == 0u) {
     let upF = normalize(in.wp - world.atC.xyz);
     let e1 = dot(upF, L);
     let axisW = transpose(toLocal3()) * vec3f(0.0, 1.0, 0.0);
@@ -601,7 +622,7 @@ fn fs(in: Out) -> @location(0) vec4f {
   // it as half physical, which hardly matters)
   // auroras between you and the ground (atmo.wgsl aurora: the sky shell's far side is behind this
   // surface over the disc). In sky units, so not × exposure
-  if (world.atOn > 0.5) {
+  if (world.atOn > 0.5 && !(terr && (dbg & 16384u) != 0u)) {
     let auD = normalize(in.wp);
     let auC = world.atC.xyz;
     col += aurora(auD, vec2f(0.0, length(in.wp)), auC, dot(auD, auC), dot(auC, auC)) / max(frame.exposure, 1e-4);

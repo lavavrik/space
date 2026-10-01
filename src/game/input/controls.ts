@@ -31,7 +31,9 @@ export function onPress(g: Game, code: string) {
     return;
   }
   if (g.paused) return; // the pause menu: nothing else until it's closed
-  if (code === 'Backquote') g.perf.toggle(); // performance overlay, available any time
+  // performance overlay, available any time; with Shift, the terrain sweep (debug/tdbg.ts)
+  if (code === 'Backquote' && (keys.ShiftLeft || keys.ShiftRight)) g.terrainSweep();
+  else if (code === 'Backquote') g.perf.toggle();
   g.invalidateHud();
   if (code === 'Tab') g.helpVisible = !g.helpVisible;
   // info (I), avionics (U), outfit (Shift+U), influences (B), radar (Shift+Y), cargo (Shift+I) and

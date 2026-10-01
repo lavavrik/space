@@ -209,21 +209,39 @@ export class VolumetricClouds {
     this.hasPrev = true;
     // the sun's shadow map first (its own pass: the march reads it)
     if (this.sunMapOn) this.sunMapPass(enc, frameGroup, worldGroup, tw);
-    const pass = enc.beginComputePass({ label: 'volumetric clouds', timestampWrites: tw('clouds') });
-    pass.setBindGroup(0, frameGroup);
-    pass.setBindGroup(1, worldGroup);
-    pass.setBindGroup(2, this.groups[this.cur]);
-    if (this.interleave) {
-      // a quarter marched (each 2 × 2's pixel in turn), then the rest from last frame's
-      pass.setPipeline(this.marchPipe);
-      pass.dispatchWorkgroups(Math.ceil(this.w / 16), Math.ceil(this.h / 16));
-      pass.setPipeline(this.fillPipe);
-      pass.dispatchWorkgroups(Math.ceil(this.w / 8), Math.ceil(this.h / 8));
-    } else {
+    pass_: {
+      if (this.interleave) {
+        // a quarter marched (each 2 × 2's pixel in turn), then the rest from last frame's: timed apart,
+        // so a fill that costs as much as the march shows the reprojection being refused (marching anyway)
+        const m = enc.beginComputePass({ label: 'clouds march', timestampWrites: tw('cloud march') });
+        m.setBindGroup(0, frameGroup);
+        m.setBindGroup(1, worldGroup);
+        m.setBindGroup(2, this.groups[this.cur]);
+        m.setPipeline(this.marchPipe);
+        m.dispatchWorkgroups(Math.ceil(this.w / 16), Math.ceil(this.h / 16));
+        m.end();
+        const f = enc.beginComputePass({ label: 'clouds fill', timestampWrites: tw('cloud fill') });
+        f.setBindGroup(0, frameGroup);
+        f.setBindGroup(1, worldGroup);
+        f.setBindGroup(2, this.groups[this.cur]);
+        f.setPipeline(this.fillPipe);
+        f.dispatchWorkgroups(Math.ceil(this.w / 8), Math.ceil(this.h / 8));
+        f.end();
+        break pass_;
+      }
+      const pass = enc.beginComputePass({ label: 'volumetric clouds', timestampWrites: tw('clouds') });
+      pass.setBindGroup(0, frameGroup);
+      pass.setBindGroup(1, worldGroup);
+      pass.setBindGroup(2, this.groups[this.cur]);
       pass.setPipeline(this.pipe);
       pass.dispatchWorkgroups(Math.ceil(this.w / 8), Math.ceil(this.h / 8));
+      pass.end();
     }
-    pass.end();
+  }
+
+  /** For the perf panel: how the clouds are being marched. */
+  describe() {
+    return `clouds march ${this.w}×${this.h} (1/${this.scale.toFixed(1)} of the frame) · ${this.interleave ? 'interleaved' : 'every pixel'} · ${this.sunMapOn ? 'sun map' : 'no sun map'} · steps ×${this.quality}`;
   }
 
   private sunMapPass(enc: GPUCommandEncoder, frameGroup: GPUBindGroup, worldGroup: GPUBindGroup, tw: (label: string) => GPUComputePassTimestampWrites | undefined) {

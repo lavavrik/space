@@ -178,6 +178,9 @@ fn aurora(dir: vec3f, span: vec2f, C: vec3f, b: f32, CC: f32) -> vec3f {
   let t0 = max(b - q2, 0.0);
   let t1 = min(b + q2, span.y);
   if (t1 <= t0) { return vec3f(0.0); }
+  // (both ends under the shell's floor, as from a flight or the ground to the ground below: so is all
+  // between, a ball being convex, and every step would be skipped)
+  if (max(length(dir * t0 - C), length(dir * t1 - C)) < r1) { return vec3f(0.0); }
   let L = normalize(world.light.xyz);
   let toL = mat3x3f(world.toLocal[0].xyz, world.toLocal[1].xyz, world.toLocal[2].xyz);
   let tt = world.time;

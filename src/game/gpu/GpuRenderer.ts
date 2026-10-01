@@ -28,6 +28,7 @@ import { atmoOf } from '../sim/atmosphere';
 import { strikeGlow } from '../sim/lightning';
 import { MAX_RENDER_PIXELS } from '../render/look';
 import { DynamicResolution } from './dynres';
+import { TerrainSweep } from '../debug/tdbg';
 import { DEFAULT_SETTINGS, type Settings } from '../settings';
 import type { Body, CurrentSystem, StarSystem, Station } from '../types';
 import type { Gpu } from './device';
@@ -160,6 +161,7 @@ export class GpuRenderer implements GameRenderer {
     this.timer = gpu.timestamps ? new GpuTimer(device, (slot, parts) => perf.gpuResult(slot, parts)) : null;
     perf.gpuTimed = !!this.timer;
     perf.info2 = () => this.worlds.terrainStats();
+    perf.info3 = () => this.vclouds.describe();
     perf.info = () => `WebGPU ${this.W}×${this.H} @${this.PR.toFixed(2)}${this.dynres.scale < 1 ? ` (${Math.round(this.dynres.scale * 100)} %)` : ''}`;
   }
 
@@ -193,6 +195,13 @@ export class GpuRenderer implements GameRenderer {
     if (s !== null) this.setScale(s);
   }
 
+  /** Shift+`: time the terrain with each part of its pixel shader off in turn (debug/tdbg.ts). */
+  terrainSweep() {
+    if (!this.timer) return;
+    const sweep = new TerrainSweep(this.perf, this.dynres);
+    this.perf.onGpu = (parts) => sweep.sample(parts);
+  }
+
   /** The Settings panel's graphics options (game/settings.ts), applied now. */
   applySettings(s: Settings) {
     this.settings = s;
@@ -201,7 +210,8 @@ export class GpuRenderer implements GameRenderer {
     this.vclouds.quality = s.clouds === 'low' ? 0.5 : 1;
     this.vclouds.full = s.clouds === 'ultra';
     // (the sun's shadow map costs the same at any size: worth it only marching every frame pixel)
-    this.vclouds.sunMapOn = s.clouds === 'ultra';
+    this.vclouds.interleave = s.cloudSpeedups;
+    this.vclouds.sunMapOn = s.clouds === 'ultra' && s.cloudSpeedups;
     setTerrainDetail(s.terrain === 'low');
     this.resize(this.cssW, this.cssH);
   }
@@ -388,7 +398,10 @@ export class GpuRenderer implements GameRenderer {
       });
     else if (timed) {
       scene('sky', true, false, sky);
-      scene('bodies', false, false, bodies);
+      // (bodies in three, to see which costs: the far spheres, the terrain, the ring rocks)
+      scene('far bodies', false, false, (pass) => this.worlds.drawFar(pass));
+      scene('terrain', false, false, (pass) => this.worlds.drawTerrain(pass));
+      scene('rocks', false, false, (pass) => this.worlds.drawRocks(pass));
       scene('stations, ships', false, false, craft);
       scene('transparent', false, true, transparent);
     } else

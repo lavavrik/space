@@ -10,7 +10,37 @@ Press **`** (backquote) or open the game with `?perf` to show the performance ov
 
 ## GPU time by pass
 
-While the overlay is up, the fourth line splits GPU time by pass (`gpu/timing.ts`): the compute passes (terrain bake, rock cull, meter), then the scene split into sky, bodies (planets, terrain, ring rocks), stations and ships, and transparent (glows, rings, dots, skies, clouds), and post (tone mapping). WebGPU times whole passes, so to split the scene it's drawn as four passes while the overlay is up (storing and reloading the MSAA target between them, which costs a little itself). Before the WebGPU port it split by shader category with WebGL timer queries.
+While the overlay is up, the fourth line splits GPU time by pass (`gpu/timing.ts`): the compute passes (terrain bake, rock cull, meter), then the scene split into sky, far bodies (stars, worlds seen as spheres), terrain (the chunks), rocks (the rings'), stations and ships, and transparent (glows, rings, dots, skies, clouds), and post (tone mapping). WebGPU times whole passes, so to split the scene it's drawn as six passes while the overlay is up (storing and reloading the MSAA target between them, which costs a little itself). Before the WebGPU port it split by shader category with WebGL timer queries.
+
+## Terrain pixel bisect (`?tdbg=<bits>`)
+
+Open the game with `?tdbg=N` (N the sum of the bits below) and read the panel's `terrain` pass: the cost of what stays on. The bits switch parts of the ground's pixel shader (`planet.wgsl fs`) off, so the picture is wrong; only for measuring.
+
+| Bit | Off |
+|---|---|
+| 1 | the finer height octaves (`terrHFrom`) |
+| 2 | ground detail (patches, stones, grain, bumps) |
+| 4 | the cloud layer's shadow on the ground |
+| 8 | the shadow map's lookups (ships, stations, rocks) |
+| 16 | the colour's noise: patches, climate, lakes |
+| 32 | the sea (waves, reflection, surf) |
+| 64 | the dawn valley fog |
+| 128 | the ship's lamps |
+| 1024 | everything: a flat grey (the floor: vertex work, rasterising, MSAA, bandwidth) |
+| 2048 | the colour patches' fine octaves (part of 16) |
+| 4096 | the climate's moisture and cover (part of 16) |
+| 8192 | the lakes' noise (part of 16) |
+| 16384 | the auroras over the ground (12 steps) |
+| 32768 | the cities' population noise and lights |
+| 65536 | eclipses and the ring's shadow |
+| 131072 | wet ground under the overcast, snow sparkles |
+| 262144 | the finer octaves' bump on the normal |
+
+**Shift+`** sweeps them all from where you are (`debug/tdbg.ts`): about 4 s each with the resolution held, then the terrain pass's median and mean per setting in the console (`terrainSweep` holds the rows) and on the panel. Chrome rounds GPU timestamps to ~0.13 ms unless it's started with `--enable-webgpu-developer-features`; without that, the medians all land on the same value.
+
+## Terrain pixels above the clouds (2026-10-01)
+
+On an RTX 4090 at 3132×1597, Venydes 2 from 20 km up over the overcast, the terrain pass took 1.95 ms of 3.16 (its flat-grey floor 0.39). The sweep found three parts doing work nobody saw, now skipped where they can't show (the picture is the same): the cities' population noise by day (its only use is the night lights; 0.28 ms), the lakes' finer octave where the coarse one is far from the shore's threshold (0.14 ms), and the auroras' 12-step march when the whole ray is under their shell (0.11 ms). Terrain 1.95 → 1.48 ms, GPU 3.16 → 2.69 ms.
 
 ## Terrain skirts and the periscope (2026-09-28)
 

@@ -39,6 +39,8 @@ export class DynamicResolution {
   /** Off: always the full resolution (?fullres in the URL, or the Settings panel). */
   private readonly allowed = typeof location === 'undefined' || !new URLSearchParams(location.search).has('fullres');
   on = this.allowed;
+  /** Held at the current scale (a measurement under way, debug/tdbg.ts). */
+  hold = false;
   /** Settings: switch it (the URL's ?fullres still wins). */
   enable(on: boolean) {
     this.on = this.allowed && on;
@@ -67,7 +69,7 @@ export class DynamicResolution {
   frame(now: number, cpuMs: number): number | null {
     const dt = now - this.last;
     this.last = now;
-    if (!this.on || dt <= 0 || dt > 200) return null; // (the first frame, or back from a hidden tab)
+    if (!this.on || this.hold || dt <= 0 || dt > 200) return null; // (the first frame, or back from a hidden tab)
     this.long.push(dt);
     if (this.long.length > 1200) this.long.shift();
     this.win.push(dt);

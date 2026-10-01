@@ -60,7 +60,7 @@
 #help span { color: var(--amber-dim); }
 
 /* performance overlay (`): top centre, above everything, never takes clicks */
-#perf { position: fixed; top: calc(0.667rem + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); width: 27.5rem; height: 13.75rem; pointer-events: none; z-index: 50; }
+#perf { position: fixed; top: calc(0.667rem + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); width: 55rem; height: 29rem; max-width: calc(100vw - 1rem); pointer-events: none; z-index: 50; }
 
 /* avionics panel (U): a table of contents; each entry is a button that opens its tool */
 #avionics { display: flex; flex-direction: column; gap: .5rem; }

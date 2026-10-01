@@ -6,7 +6,7 @@
  * belong to. While the overlay is shown the scene is split into several passes (sky, bodies,
  * stations and ships, transparent) so their times show separately.
  */
-const MAX_PASSES = 16;
+const MAX_PASSES = 24;
 
 export class GpuTimer {
   private readonly set: GPUQuerySet;

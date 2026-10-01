@@ -3,6 +3,7 @@
 //   bake[2i]     normal.xyz (the world's frame), elevation (m)
 //   bake[2i + 1] sun (1 lit, 0 in a mountain's shadow), h with the chunk's octaves, range mask,
 //                a pair's second sun likewise (docs/binaries.md; 0 with one star)
+//   bake[2i + 2] the large-scale colour terms: moisture's two big octaves, the colour patches' base (terrain.wgsl)
 // which the drawing pass (planet.wgsl vsChunk) just reads. Run when a chunk is made and again when
 // the sun has moved over it (gpu/terrain.ts).
 // #include world
@@ -74,12 +75,13 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
   let eps = chunk.spacing / world.radius;
   let e1 = elevOff(normalize(dir + t1 * eps), off + t1 * eps, vo);
   let e2 = elevOff(normalize(dir + t2 * eps), off + t2 * eps, vo);
-  bake[2u * i] = vec4f(normalize(dir - t1 * ((e1 - e) / chunk.spacing) - t2 * ((e2 - e) / chunk.spacing)), e);
+  bake[3u * i + 2u] = vec4f(moist12(dir, world.seed), h2Base(dir, world.seed), 0.0, 0.0);
+  bake[3u * i] = vec4f(normalize(dir - t1 * ((e1 - e) / chunk.spacing) - t2 * ((e2 - e) / chunk.spacing)), e);
   let L = world.lightL.xyz;
   var sun = 0.0; // night side: dark anyway
   if (dot(dir, L) >= -0.2) { sun = sunShadow(dir * (world.radius + e), L, vo); }
   var sun2 = 0.0;
   let L2 = world.lightL2.xyz;
   if (world.light2.w > 0.5 && dot(dir, L2) >= -0.2) { sun2 = sunShadow(dir * (world.radius + e), L2, vo); }
-  bake[2u * i + 1u] = vec4f(sun, h, mask, sun2);
+  bake[3u * i + 1u] = vec4f(sun, h, mask, sun2);
 }

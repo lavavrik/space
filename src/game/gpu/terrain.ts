@@ -89,7 +89,7 @@ function faceDir(f: number, s: number, t: number, out: number[]) {
 export const CHUNK_BYTES = 64 + 16 + 2 * 17 * 16;
 const V = (N + 1) * (N + 1); // grid vertices
 const S = 4 * (N + 1); // skirt vertices, one per edge vertex
-const BAKE_BYTES = V * 2 * 16;
+const BAKE_BYTES = V * 3 * 16;
 
 interface Chunk {
   f: number;

@@ -3,6 +3,8 @@ const STAGES = ['sim', 'render', 'overlay', 'hud'] as const;
 type Stage = (typeof STAGES)[number];
 const COLORS: Record<Stage, string> = { sim: '#7fdcff', render: '#ffa53a', overlay: '#73ffb2', hud: '#e6d3ff' };
 
+const W = 660; // panel size, px
+const H = 348;
 const N = 240; // frames of history in the graph
 const GRAPH_MS = 50; // graph height in ms
 const STORE_KEY = 'farlight.perf';
@@ -36,6 +38,12 @@ export class PerfMonitor {
   info: () => string = () => '';
   /** A second line of state worth watching (the terrain's chunks, gpu/terrain.ts stats). */
   info2: () => string = () => '';
+  /** A third line: the clouds' march (size, interleave, shadow map). */
+  info3: () => string = () => '';
+  /** Shown over the passes' heading while set (the terrain sweep, debug/tdbg.ts). */
+  note = '';
+  /** Gets each frame's GPU times by pass as they're read back (the terrain sweep). */
+  onGpu: ((parts: [string, number][]) => void) | null = null;
 
   constructor(
     host: HTMLElement,
@@ -53,8 +61,8 @@ export class PerfMonitor {
     this.visible = saved || new URLSearchParams(location.search).has('perf');
     this.canvas.style.display = this.visible ? '' : 'none';
     const dpr = Math.min(devicePixelRatio || 1, 2);
-    this.canvas.width = 330 * dpr;
-    this.canvas.height = 165 * dpr;
+    this.canvas.width = W * dpr;
+    this.canvas.height = H * dpr;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
@@ -101,6 +109,7 @@ export class PerfMonitor {
       a[slot] = (Number.isNaN(a[slot]) ? 0 : a[slot]) + ms;
     }
     this.gpuMs[slot] = total;
+    this.onGpu?.(parts);
   }
 
   frameEnd() {
@@ -125,9 +134,7 @@ export class PerfMonitor {
 
   private draw() {
     const { ctx } = this;
-    const W = 330,
-      H = 165,
-      gh = 70,
+    const gh = 100,
       gy = H - gh - 6;
     ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = 'rgba(8,6,4,.82)';
@@ -149,21 +156,62 @@ export class PerfMonitor {
     ctx.fillStyle = '#ffe6c7';
     ctx.fillText(`${(1000 / Math.max(avg, 0.01)).toFixed(0)} FPS   ${avg.toFixed(1)} ms   p95 ${p95.toFixed(1)}   max ${worst.toFixed(1)}`, 8, 6);
     let x = 8;
+    let cpu = 0;
     for (const s of STAGES) {
       ctx.fillStyle = COLORS[s];
-      const txt = `${s} ${mean(this.stageMs[s]).toFixed(1)}`;
+      const m = mean(this.stageMs[s]);
+      if (!Number.isNaN(m)) cpu += m;
+      const txt = `${s} ${m.toFixed(1)}`;
       ctx.fillText(txt, x, 21);
       x += ctx.measureText(txt).width + 12;
     }
+    ctx.fillStyle = '#ffe6c7';
+    ctx.fillText(`cpu ${cpu.toFixed(1)}`, x, 21);
+    x += ctx.measureText(`cpu ${cpu.toFixed(1)}`).width + 12;
     ctx.fillStyle = '#7fdcff';
     ctx.fillText(Number.isNaN(gpu) ? 'gpu n/a' : `gpu ${gpu.toFixed(1)}`, x, 21);
+    // what limits the frame: whichever of the CPU and the (timed) GPU is longer, unless both leave
+    // a good part of the frame idle (vsync, the frame limiter, the display's refresh)
+    const busy = Math.max(cpu, Number.isNaN(gpu) ? 0 : gpu);
+    const idle = avg - busy;
+    let verdict: string;
+    let vcol = '#ffe6c7';
+    if (idle > Math.max(1, avg * 0.2)) {
+      verdict = `PACED: ${idle.toFixed(1)} ms of ${avg.toFixed(1)} idle (vsync / frame cap): cheaper work won't raise FPS`;
+      vcol = '#73ffb2';
+    } else if (!Number.isNaN(gpu) && gpu >= cpu) {
+      verdict = `GPU-BOUND: gpu ${gpu.toFixed(1)} of ${avg.toFixed(1)} ms${parts0(this.split, mean)}`;
+      vcol = '#ff7a5c';
+    } else {
+      verdict = `CPU-BOUND: cpu ${cpu.toFixed(1)} of ${avg.toFixed(1)} ms (render ${mean(this.stageMs.render).toFixed(1)}, sim ${mean(this.stageMs.sim).toFixed(1)})`;
+      vcol = '#ff7a5c';
+    }
+    ctx.fillStyle = vcol;
+    ctx.fillText(verdict, 8, 36);
     ctx.fillStyle = 'rgba(255,230,199,.7)';
-    ctx.fillText(`${this.info()}  2D ${this.overlayCanvas.width}×${this.overlayCanvas.height}`, 8, 36);
-    ctx.fillText(this.info2(), 8, 51);
-    // GPU time by category, most first
-    const parts = [...this.split].map(([k, a]): [string, number] => [k, mean(a)]).filter(([, v]) => v >= 0.05).sort((a, b) => b[1] - a[1]);
-    ctx.fillStyle = '#7fdcff';
-    ctx.fillText(parts.length ? 'gpu: ' + parts.slice(0, 6).map(([k, v]) => `${k} ${v.toFixed(1)}`).join('  ') : '', 8, 66);
+    ctx.fillText(`${this.info()}  2D ${this.overlayCanvas.width}×${this.overlayCanvas.height}`, 8, 51);
+    ctx.fillText(this.info2(), 8, 66);
+    ctx.fillText(this.info3(), 8, 81);
+    // GPU time by pass, most first: avg, worst of the last 60, share of the timed total, a bar
+    const rows = [...this.split]
+      .map(([k, a]) => {
+        const r = this.recent(a, 60);
+        return { k, v: r.length ? r.reduce((p, q) => p + q, 0) / r.length : NaN, mx: r.length ? Math.max(...r) : NaN };
+      })
+      .filter((r) => r.v >= 0.02)
+      .sort((p, q) => q.v - p.v);
+    const top = rows[0]?.v ?? 1;
+    const colW = (W - 16) / 2;
+    ctx.fillStyle = 'rgba(127,220,255,.6)';
+    ctx.fillText(this.note ? this.note : rows.length ? 'GPU by pass (ms avg / worst · % of timed)' : this.gpuTimed ? 'GPU by pass: waiting for samples…' : 'GPU by pass: no timestamp queries', 8, 98);
+    rows.slice(0, 16).forEach((r, n) => {
+      const cx = 8 + Math.floor(n / 8) * colW;
+      const ry = 113 + (n % 8) * 14;
+      ctx.fillStyle = 'rgba(127,220,255,.25)';
+      ctx.fillRect(cx, ry, Math.max(1, (r.v / top) * (colW - 12)), 12);
+      ctx.fillStyle = '#7fdcff';
+      ctx.fillText(`${r.k}  ${r.v.toFixed(2)} / ${r.mx.toFixed(2)} · ${Number.isNaN(gpu) ? '' : Math.round((r.v / gpu) * 100) + '%'}`, cx + 3, ry);
+    });
 
     // graph: one column per frame, newest on the right
     const bw = (W - 16) / N;
@@ -206,4 +254,18 @@ export class PerfMonitor {
   dispose() {
     this.canvas.remove();
   }
+}
+
+/** The biggest pass, for the verdict line. */
+function parts0(split: Map<string, Float32Array>, mean: (a: Float32Array) => number) {
+  let best = '';
+  let bv = 0;
+  for (const [k, a] of split) {
+    const m = mean(a);
+    if (m > bv) {
+      bv = m;
+      best = k;
+    }
+  }
+  return best ? `, mostly ${best} ${bv.toFixed(1)}` : '';
 }

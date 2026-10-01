@@ -23,6 +23,8 @@ export interface GameRenderer {
   pace(now: number, cpuMs: number): void;
   /** The Settings panel's graphics options (game/settings.ts). */
   applySettings(s: Settings): void;
+  /** Shift+`: the terrain's pixel bisect, timed (debug/tdbg.ts; GPU timestamps only). */
+  terrainSweep?(): void;
   render(g: Game): void;
   dispose(): void;
   bodyView(b: Body): ViewInfo | undefined;
