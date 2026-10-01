@@ -58,10 +58,18 @@ hull showed dimly, as if beyond the clouds. Bloom and the lens flare see the clo
 - **Cirrus:** a thin sheet of ice crystals 1.35 deck heights up (~11 km on Venydes 5), not
   marched: one lookup where the ray crosses it (`vclouds.wgsl cirrus`), drawn at full resolution
   in the pass that lays the clouds over the frame (`fsComposite`). At the march's half resolution,
-  blurred, it was soft. Its fibres come at three scales, down to a few hundred metres, with a
-  harder edge. Its patches are ~100 km
-  across, streaked ~15× along the wind into fibres a few km wide, opacity up to ~0.45 (more seen
-  edge-on). It's lit white, brighter toward the sun, with the air in front hazing it. It lies in
+  blurred, it was soft.
+  - **Laid out along the latitude circles** (arc along the circle, height along the axis), so it
+    can be stretched along the wind. Squashing a point's own coordinates along its east did
+    nothing (east is square to where the point is), and it came out round: fuzzy blobs fading out
+    at their edges from orbit. The longitude wraps, so a second layout with its seam on the other
+    side takes over near the first's.
+  - **Plumes** a few hundred km long, ~3× along the wind and swirled, their edges frayed by the
+    streaks in them.
+  - **Filaments:** ridged noise (thin lines) ~7× along the wind, every ~16, 4, 1.4 and 0.5 km;
+    each fades to its mean once under a couple of pixels. The 16 km ones hold from orbit. At 25×
+    they were scratches; swirled as much as the plumes, they meandered like rivers.
+  - Opacity up to ~0.55 (more seen edge-on). It's lit white, brighter toward the sun, with the air in front hazing it. It lies in
   front of the lower clouds from above and behind them from below.
 - **Changing shape:** the cloud map is read twice (`clouds.wgsl cloudMap`), once with the wind and
   once slower, round a tilted axis and from another part of the map. The two slide past each other,
