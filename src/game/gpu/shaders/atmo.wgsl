@@ -65,7 +65,15 @@ fn atInscatterC(C0: vec3f, C1: vec3f, L: vec3f, n: i32) -> vec3f {
   atTrans = exp(-beta * od);
   let cosT = dot(dir, L);
   let phase = 0.0597 * (1.0 + cosT * cosT) + 0.04 * pow(max(cosT, 0.0), 12.0);
-  return atRolloff(world.atSunI * beta * sum * phase);
+  let raw = world.atSunI * beta * sum * phase;
+  // (what's seen through the haze dims through a long path's reddened light: paled as the haze is,
+  // or distant clouds by the horizon went yellow under a white haze, SPACE-73)
+  let l = dot(raw, vec3f(0.2126, 0.7152, 0.0722));
+  if (l > ATR_KNEE) {
+    let x = l - ATR_KNEE;
+    atTrans = mix(atTrans, vec3f(dot(atTrans, vec3f(0.2126, 0.7152, 0.0722))), 0.6 * x / (1.0 + x));
+  }
+  return atRolloff(raw);
 }
 
 // Long grazing paths low in the air (the horizon from near the ground) saturate every colour at ~3–5×
