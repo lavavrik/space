@@ -280,6 +280,12 @@ function flight(g: Game): FlightView {
   // on/off states are dashboard lamps (lamps()); pills carry the ones with a value
   const pills: Pill[] = [];
   if (g.autodock) pills.push({ text: `AUTO-DOCK · ${g.autodock.phase.toUpperCase()}`, kind: 'ftl' });
+  // the cities' closed airspace (sim/airspace.ts): coming down toward it, and held above it
+  const as = g.airspace;
+  if (as && ship.mode === 'normal' && !ship.dead) {
+    if (as.h < as.floor) pills.push({ text: `RESTRICTED AIRSPACE · CLIMBING TO ${fmtDist(as.floor)}`, kind: 'warn' });
+    else if (as.h < as.floor + 1500) pills.push({ text: `RESTRICTED AIRSPACE BELOW ${fmtDist(as.floor)}`, kind: 'warn' });
+  }
   if (g.ascent) pills.push({ text: 'ASCENT PROGRAM', kind: 'ftl' });
   if (g.pivot) pills.push({ text: g.pivotLocked ? `LOCKED · ${(g.target?.name ?? g.jumpDest?.name ?? '').toUpperCase()}` : 'PIVOTING', kind: 'on' });
   const lz = g.laser;

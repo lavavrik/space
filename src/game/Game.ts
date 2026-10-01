@@ -1,3 +1,4 @@
+import type { AirspaceState } from './sim/airspace';
 import { spawnTraffic, type Npc } from './sim/traffic';
 import { loadSettings, saveSettings, type Settings } from './settings';
 import { debugSpots } from './debug/poses';
@@ -189,6 +190,8 @@ export class Game {
   /** Your own space warps (FTL in or out, arriving from hyperspace; gpu/post.ts warpsOf): size (screen heights), age and length (s, real time). */
   warpFx: { r: number; age: number; dur: number }[] = [];
   warned: Record<string, boolean> = {};
+  /** Over a populated world's towns: the closed airspace's floor and your height over the ground (sim/airspace.ts). */
+  airspace: AirspaceState | null = null;
   msg: Message = { text: '', kind: '', on: false, t: 0 };
 
   /** The pause menu is up (Esc with the cursor free): nothing moves. */

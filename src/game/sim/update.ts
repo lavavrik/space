@@ -1,3 +1,4 @@
+import { airspaceGuard } from './airspace';
 import { rideTraffic, updateTraffic } from './traffic';
 import { noAero, updateAero } from './atmosphere';
 import { JUMP_DEPART_TIME, SHIP } from '../constants';
@@ -254,6 +255,8 @@ export function update(g: Game, dt: number, realDt = dt) {
         /* flown by the ascent program */
       } else if (ship.ap && ship.ap.phase === 'insert') autopilot(g, dt, grav);
       else manualFlight(g, dt, grav, inp);
+      // the cities' closed airspace: held above its floor (sim/airspace.ts)
+      airspaceGuard(g, dt);
       // ring dust, the deflector, the collision radar's nudge (sim/belt.ts; sideways input: the pilot is steering)
       updateBelt(g, dt, inp[0] !== 0 || inp[1] !== 0);
       updateAero(g, dt, (u) => crossSection(g, u), shipMass(ship)); // drag and entry heating

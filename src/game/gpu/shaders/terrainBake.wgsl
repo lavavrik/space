@@ -11,6 +11,7 @@
 // #include noise
 // #include noise3d
 // #include terrain
+// #include city
 
 @group(2) @binding(1) var<storage, read_write> bake: array<vec4f>;
 @group(2) @binding(2) var<storage, read> vpos: array<f32>; // the chunk's vertices (m from its centre)
@@ -76,7 +77,16 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
   let eps = chunk.spacing / world.radius;
   let e1 = elevOff(normalize(dir + t1 * eps), off + t1 * eps, vo);
   let e2 = elevOff(normalize(dir + t2 * eps), off + t2 * eps, vo);
-  bake[3u * i + 2u] = vec4f(moist12(dir, world.seed), h2Base(dir, world.seed), 0.0, 0.0);
+  // the cities' population and their towns' density (city.wgsl cityPop, cityDensity, fully resolved):
+  // smooth over a km or more, so per vertex, not per pixel (by day every land pixel ran 10 noise
+  // octaves and the towns' four layers of hashed spots: the terrain's cost ×3 over a populated world)
+  var popB = 0.0;
+  var townB = 0.0;
+  if (world.city > 0.5 && seaOn()) {
+    popB = cityPop(dir, h - world.sea, abs(dir.y));
+    if (popB > 0.0) { townB = cityDensity(dir, popB, 0.0).L; }
+  }
+  bake[3u * i + 2u] = vec4f(moist12(dir, world.seed), h2Base(dir, world.seed), popB, townB);
   bake[3u * i] = vec4f(normalize(dir - t1 * ((e1 - e) / chunk.spacing) - t2 * ((e2 - e) / chunk.spacing)), e);
   let L = world.lightL.xyz;
   var sun = 0.0; // night side: dark anyway

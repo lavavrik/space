@@ -61,7 +61,7 @@ struct Out {
   @location(6) sun: vec3f,
   @location(7) t: vec4f,        // skirt (0 surface … 1 down a skirt), octaves the geometry has (0: far sphere), shadow, hc
   @location(8) mask: f32,       // the range mask the geometry has
-  @location(10) bk: vec2f,      // chunks: the baked large-scale colour terms (terrain.wgsl moist12, h2Base)
+  @location(10) bk: vec4f,      // chunks: the baked large-scale terms (terrain.wgsl moist12, h2Base; the cities' population and towns' density, city.wgsl)
   @location(9) sun2: vec3f,     // chunks: a second sun's light through the air, per vertex (docs/binaries.md)
 }
 
@@ -80,7 +80,7 @@ fn vs(@location(0) position: vec3f, @location(1) normal: vec3f) -> Out {
   o.wn = normalize((world.rotN * vec4f(normal, 0.0)).xyz);
   o.t = vec4f(0.0, 0.0, 1.0, 0.0);
   o.sun2 = vec3f(0.0);
-  o.bk = vec2f(0.0);
+  o.bk = vec4f(0.0);
   o.pos = frame.viewProj * wp;
   return o;
 }
@@ -93,7 +93,7 @@ fn vsChunk(@location(0) position: vec3f, @location(1) dir: vec3f, @location(2) g
   let gi = u32(grid.y + 0.5) * u32(chunk.gridW + 0.5) + u32(grid.x + 0.5);
   let A = bake[3u * gi];
   let B = bake[3u * gi + 1u];
-  o.bk = bake[3u * gi + 2u].xy;
+  o.bk = bake[3u * gi + 2u];
   let pos = position + dir * (A.w - skirt * chunk.skirtD);
   let wp = chunkModel() * vec4f(pos, 1.0);
   o.obj = dir;
@@ -347,6 +347,11 @@ fn fs(in: Out) -> @location(0) vec4f {
   let seed = world.seed;
   let sp = p * 1.6 + vec3f(seed * 1.7, seed * 2.3, seed * 0.9);
   let fw = max(length(fwidth(p)), 1e-9);
+  // (the baked towns' density's and the point's screen derivatives, here in uniform control flow: city.wgsl cityDay)
+  let cityDLx = dpdx(in.bk.w);
+  let cityDLy = dpdy(in.bk.w);
+  let cityDWx = dpdx(in.wp);
+  let cityDWy = dpdy(in.wp);
   var oct = min(world.oct, i32(clamp(log2(0.5 / (1.6 * fw)) / 1.02 + 1.0, 3.0, f32(T_OCT_MAX))));
   let ty = world.wtype;
   let dark = clamp(ndl * 1.05 + 0.03, 0.0, 1.0) < 0.002 && clamp(ndl20 * 1.05 + 0.03, 0.0, 1.0) * up2 < 0.002 && ty != 4;
@@ -415,7 +420,11 @@ fn fs(in: Out) -> @location(0) vec4f {
         col = mix(col, mix(vec3f(0.1, 0.42, 0.45), vec3f(0.5, 0.5, 0.4), 1.0 - smoothstep(0.5, 3.0, seaDepth)), shallow);
       } else {
         let e = h - world.sea;
-        if (world.city > 0.5 && cityNight > 0.0 && (dbg & 32768u) == 0u) { pop = cityPop(p, e, lat); }
+        // (on chunks baked per vertex, by day too: the cities' look, cityDay; the far sphere's only at
+        // night, for the lights: by day its cities are under a pixel)
+        if (world.city > 0.5 && (dbg & 32768u) == 0u) {
+          if (terr) { pop = in.bk.z; } else if (cityNight > 0.0) { pop = cityPop(p, e, lat); }
+        }
         col = mix(C, D, sm(0.12, 0.55, e + h2 * 0.12));
         col = mix(col, C * 0.7 + vec3f(0.18, 0.15, 0.08), sm(0.2, 0.6, h2) * 0.3);
         // climate (docs/terrain.md): the land's cover by how warm and how wet it is, blended over the
@@ -471,12 +480,21 @@ fn fs(in: Out) -> @location(0) vec4f {
     }
   }
   col *= mix(det, 1.0, spec);
+  let Npre = N;
   // the ground up close: patches, rock on steep ground, stones, grain and small bumps
   if (terr && spec <= 0.0 && ty < 6 && !dark && (dbg & 2u) == 0u) {
     let gd = groundDetail(col, N, normalize(in.wp - world.atC.xyz), in.wp, fw, ty == 2 || ty == 3);
     // (mostly not on snow: its stones and soil patches read as dark spots scattered over it)
     col = mix(gd.col, col, snow * 0.85);
     N = gd.N;
+  }
+  // the cities as built, by day too (city.wgsl cityDay): where their lights are at night (not on
+  // water, nor under snow); flat (the ground's small bumps off)
+  if (terr && pop > 0.0 && spec <= 0.0 && !dark) {
+    let cl = cityDay(cityFrame(p, in.bk.w), p, pop, fw, col, CityLin(cityDLx, cityDLy, cityDWx, cityDWy, transpose(toLocal3())));
+    let k = cl.cover * (1.0 - snow);
+    col = mix(col, cl.col, k);
+    N = normalize(mix(N, Npre, k));
   }
   ndl = dot(N, L);
   var diff = clamp(ndl * 1.05 + 0.03, 0.0, 1.0) * in.t.z;
@@ -607,8 +625,9 @@ fn fs(in: Out) -> @location(0) vec4f {
       col += sunC * (smoothstep(0.29, 0.33, nS) * pow(max(dot(N, Hs), 0.0), 4.0) * snow * vis * 6.0);
     }
   }
-  if (pop > 0.0) {
-    let lights = cityLights(p, pop, fw);
+  if (pop > 0.0 && cityNight > 0.0) {
+    var lights = 0.0;
+    if (terr) { lights = cityLightsOf(cityFrame(p, in.bk.w), pop, fw); } else { lights = cityLights(p, pop, fw); }
     col += mix(vec3f(1.0, 0.62, 0.3), vec3f(1.0, 0.88, 0.7), cityWhite) * lights * cityNight * world.cityK;
   }
   // valley fog at dawn (docs/terrain.md): on Earth-like and ocean worlds, low fog fills the ground
