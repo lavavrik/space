@@ -21,8 +21,11 @@ import { THREE } from '../lib/three';
 import type { PerfMonitor } from '../debug/Perf';
 import type { GameRenderer, ViewInfo } from '../render/api';
 import { sunsAt, type Suns } from '../sim/starlight';
-import { AUTO_EXPOSURE, AutoExposure, FLOOD_K, HEAD_K, INT_K, MAX_EXP, SKY_EXP_P, SKY_K, STAR_EXP_P, WINDOW_K, twilightBoost } from '../render/exposure';
+import { AUTO_EXPOSURE, AutoExposure, FLOOD_K, HEAD_K, INT_K, MAX_EXP, SKY_EXP_P, SKY_K, STAR_EXP_P, WINDOW_K, overcastBoost, twilightBoost } from '../render/exposure';
+import { cloudCoverAt } from '../sim/clouds';
+import { CLOUD_H } from '../render/look';
 import { atmoOf } from '../sim/atmosphere';
+import { WT } from '../constants';
 import { MAX_RENDER_PIXELS } from '../render/look';
 import { DynamicResolution } from './dynres';
 import { DEFAULT_SETTINGS, type Settings } from '../settings';
@@ -267,6 +270,10 @@ export class GpuRenderer implements GameRenderer {
       let sinEl = -1;
       for (const st of g.cur.stars) sinEl = Math.max(sinEl, this.tw2.subVectors(st.pos, ship.pos).normalize().dot(up));
       twK = twilightBoost(sinEl, alt / air.H);
+      // (and to an overcast, under the cloud base, 0.4 deck heights: vclouds.wgsl)
+      if (fb.kind !== 'star' && (fb.type === WT.EarthLike || fb.type === WT.Ocean)) {
+        twK *= overcastBoost(cloudCoverAt(fb, up, g.simTime), 1 - THREE.MathUtils.smoothstep(alt, air.H * CLOUD_H * 0.3, air.H * CLOUD_H * 0.5));
+      }
       e *= twK;
     }
     const skyExp = AUTO_EXPOSURE ? (e / MAX_EXP) ** SKY_EXP_P : 1,

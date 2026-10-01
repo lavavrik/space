@@ -67,6 +67,17 @@ export function twilightBoost(sinEl: number, altH: number): number {
   return 1 + (TWILIGHT_K - 1) * w;
 }
 
+/**
+ * Overcast (with auto-exposure off): under thick cloud the day is ~1/5 as bright, and the eye adapts
+ * to that too: up to OVERCAST_K× under full cover (`cover`: 0…1 overhead), below the cloud base only
+ * (`below`: 0…1).
+ */
+export const OVERCAST_K = 1.8;
+export function overcastBoost(cover: number, below: number): number {
+  const t = Math.min(Math.max((cover - 0.5) / 0.3, 0), 1);
+  return 1 + (OVERCAST_K - 1) * t * t * (3 - 2 * t) * Math.min(Math.max(below, 0), 1);
+}
+
 /** Exposure limits: fully dark-adapted shows the sky as it used to be. */
 const MIN_EXP = 0.25;
 export const MAX_EXP = 40; // 1 / SKY_K with auto-exposure on

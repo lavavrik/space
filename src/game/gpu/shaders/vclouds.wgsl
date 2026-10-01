@@ -382,7 +382,9 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     sun *= shadowAtPoint(P);
     // (the sun's own light isn't dimmed by dayK: sunCol already fades and reddens as it sets, and
     // dimmed twice, clouds at sunset were dull grey instead of glowing; only the sky's light is)
-    var light = sunCol * (sun * 0.6 * sunUp + 0.12 * (0.4 + 0.6 * h) * dayK) * 0.97 + twL * (0.6 + 0.4 * h) + lamp + vec3f(0.55, 0.7, 1.0) * 0.05 * (1.0 - dayK);
+    // (the light diffused through the cloud, which is all its underside gets: 0.2 at the base. At
+    // 0.05 an overcast's base was near black from under it, where it's a mid grey)
+    var light = sunCol * (sun * 0.6 * sunUp + 0.2 * (0.55 + 0.45 * h) * dayK) * 0.97 + twL * (0.6 + 0.4 * h) + lamp + vec3f(0.55, 0.7, 1.0) * 0.05 * (1.0 - dayK);
     if (two) {
       var od2 = 0.0;
       var ls2 = 240.0;
@@ -419,6 +421,28 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     S = S * atTrans + haze * (1.0 - T) * skyDim; // (under the deck, that air is shaded too)
   }
   var res = vec4f((S + rays) * frame.exposure, T * skyDim);
+  // Under overcast (docs/clouds.md): below the cloud base, with thick cover overhead, the air is
+  // moist and lit only by the light through the clouds: a grey, even fog, thickening with distance
+  // (an e-fold every ~12 km), over everything in front of the scene or the cloud base. The air's own
+  // blue haze stayed as on a clear day, and the far land sharp and blue under a grey ceiling.
+  // (Taken from the cover over you; for 85 % of the ground behind at most: the far coast still shows.)
+  if (world.atOn > 0.5 && camR < rBot + liftCam) {
+    let upC = normalize(-C);
+    let k = smoothstep(0.5, 0.8, cloudCover(cloudMap(toLocalM() * upC)));
+    if (k > 0.0) {
+      var dF = min(sceneT, 200000.0);
+      if (bot.y > 0.0 && camR < rBot) { dF = min(dF, bot.y); }
+      // (up to 97 % 30–120 km off: at 85 % the sunlit land and sky beyond the overcast showed as a
+      // bright line along the horizon)
+      let amt = k * mix(0.85, 0.97, smoothstep(30000.0, 120000.0, dF)) * (1.0 - exp(-dF / 12000.0));
+      // (its light: the sun's through the air at the cloud base, a fifth through the clouds, grey, by
+      // day; twilight's at dusk; the night's faint glow)
+      let sunB = atSunlightC(upC * (world.radius + world.cloudH * 0.4), L) * world.atSunI / 45.0;
+      let lB = dot(sunB, vec3f(0.2126, 0.7152, 0.0722)) * smoothstep(-0.1, 0.2, dot(upC, L));
+      let fogC = vec3f(0.62, 0.66, 0.72) * (0.3 * lB + 0.004) + atTwilight(upC, L, upC);
+      res = vec4f(res.rgb * (1.0 - amt) + fogC * amt * frame.exposure, res.a * (1.0 - amt));
+    }
+  }
   // with last frame's: where this pixel's clouds were then (by their distance, or the layer's middle)
   if (vp.moved.w > 0.5) {
     var tr = select(15000.0, 0.5 * (t0 + t1), steps > 0); // (no layer here: a shaft's typical distance)
