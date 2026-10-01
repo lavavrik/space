@@ -38,6 +38,9 @@ var<private> tUseOff: bool = false;
 // one-tap filter below that. All 8 taps on every octave: ~80 texture reads a pixel zoomed in, the
 // terrain's whole cost at 100×. 0: always the 8-tap one.
 var<private> tFw: f32 = 0.0;
+// the noise worked out exactly (gnoise) on every texture octave: the bake (terrainBake.wgsl) sets it,
+// so the terrain's mesh, which near the ground carries all its octaves, has no texel grid in it
+var<private> tExact: bool = false;
 
 fn terrQ(d: vec3f, i: i32, k: f32) -> vec3f {
   if (tUseOff) { return chunk.qn[i].xyz + tOffDir * k; }
@@ -90,7 +93,7 @@ fn terrH(d: vec3f, oct: i32, split: i32) -> f32 {
     if (i == split) { tCoarse = s + mask * (r - MTN_MEAN) * MTN_K + cr; }
     let q = terrQ(d, i, k);
     var n: f32;
-    if (i < FBM_EXACT) { n = snoise(q); } else { n = tnoise(q); }
+    if (i < FBM_EXACT) { n = snoise(q); } else if (tExact) { n = gnoise(q); } else { n = tnoise(q); }
     s += a * n;
     if (i >= 6) { tDet = tDet * 0.8 + n; }
     if (i == 2) { mask = smoothstep(-0.05, 0.45, n); }
@@ -143,8 +146,9 @@ fn terrHFrom(d: vec3f, o0: i32, oct: i32, hc: f32, mask0: f32) -> f32 {
     if (i >= oct) { break; }
     let q = terrQ(d, i, k);
     var n: f32;
-    // (a noise texel here: 1 / (8k) in direction units; magnified past ~3 px, the precise filter)
-    if (i < FBM_EXACT) { n = snoise(q); } else if (tFw <= 0.0 || 1.0 / (8.0 * k * tFw) > 3.0) { n = tnoiseHQ(q); } else { n = tnoise(q); }
+    // (a noise texel here: 1 / (8k) in direction units; magnified past ~3 px, the noise exactly, as
+    // many reads as the precise filter was and no kinks at its faces)
+    if (i < FBM_EXACT) { n = snoise(q); } else if (tFw <= 0.0 || 1.0 / (8.0 * k * tFw) > 3.0) { n = gnoise(q); } else { n = tnoise(q); }
     s += octA(i) * n;
     if (i >= 6) { tDet = tDet * 0.8 + n; }
     if (i == 2) { mask = smoothstep(-0.05, 0.45, n); }

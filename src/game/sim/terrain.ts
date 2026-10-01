@@ -20,7 +20,7 @@
  * sea surface sits at the mean radius). A = RELIEF[type] × radius; gas and ice giants have none.
  */
 import { WT } from '../constants';
-import { noise3dBytes, NOISE3D_SIZE } from '../lib/noise3d';
+import { gnoise, noise3dBytes, NOISE3D_SIZE } from '../lib/noise3d';
 import { THREE } from '../lib/three';
 import type { Body, World } from '../types';
 
@@ -101,7 +101,7 @@ export function terrainH(seed: number, x: number, y: number, z: number, oct = PH
     const qx = x * k + O[i * 3],
       qy = y * k + O[i * 3 + 1],
       qz = z * k + O[i * 3 + 2];
-    const n = i < FBM_EXACT ? snoise(qx, qy, qz) : tnoise(qx, qy, qz);
+    const n = i < FBM_EXACT ? snoise(qx, qy, qz) : gnoise(qx, qy, qz); // (exact: the GPU's terrain bake, terrain.wgsl tExact)
     s += a * n;
     if (i === 2) mask = smoothstep(-0.05, 0.45, n);
     if (i >= MTN_FROM) {

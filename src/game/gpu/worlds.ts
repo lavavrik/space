@@ -12,7 +12,7 @@
 import type { Game } from '../Game';
 import { AU, FOV, WT } from '../constants';
 import { THREE } from '../lib/three';
-import { noise3dBytes, NOISE3D_SIZE } from '../lib/noise3d';
+import { noise3dBytes, noise3dGrads, NOISE3D_SIZE } from '../lib/noise3d';
 import { airBeta, TERRAIN_NEAR, TERRAIN_PX } from '../render/look';
 import { CITY_K } from '../render/exposure';
 import { atmoOf } from '../sim/atmosphere';
@@ -79,6 +79,8 @@ export class WorldsLayer {
   private readonly noiseTex: GPUTexture;
   private readonly tmpV = new THREE.Vector3();
   private readonly noiseSamp: GPUSampler;
+  /** The noise texture's lattice gradients (8³, rgba32float): its noise worked out exactly (noise3d.wgsl gnoise). */
+  private readonly gradTex: GPUTexture;
   private readonly cloudSamp: GPUSampler;
   private readonly noCloud: GPUTexture;
   readonly worldLayout: GPUBindGroupLayout;
@@ -124,6 +126,8 @@ export class WorldsLayer {
     const n = NOISE3D_SIZE;
     this.noiseTex = device.createTexture({ label: 'noise3d', size: [n, n, n], dimension: '3d', format: 'r8unorm', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
     device.queue.writeTexture({ texture: this.noiseTex }, noise3dBytes() as Uint8Array<ArrayBuffer>, { bytesPerRow: n, rowsPerImage: n }, [n, n, n]);
+    this.gradTex = device.createTexture({ label: 'noise3d gradients', size: [8, 8, 8], dimension: '3d', format: 'rgba32float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
+    device.queue.writeTexture({ texture: this.gradTex }, noise3dGrads() as Float32Array<ArrayBuffer>, { bytesPerRow: 8 * 16, rowsPerImage: 8 }, [8, 8, 8]);
     this.noiseSamp = device.createSampler({ magFilter: 'linear', minFilter: 'linear', addressModeU: 'repeat', addressModeV: 'repeat', addressModeW: 'repeat' });
     this.cloudSamp = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
     this.noCloud = device.createTexture({ label: 'no clouds', size: [1, 1, 6], format: 'rg16float', usage: GPUTextureUsage.TEXTURE_BINDING });
@@ -145,6 +149,7 @@ export class WorldsLayer {
         { binding: 2, visibility: VS | FS | CS, sampler: {} },
         { binding: 3, visibility: FS | CS, texture: { viewDimension: 'cube' } },
         { binding: 4, visibility: FS | CS, sampler: {} },
+        { binding: 5, visibility: VS | FS | CS, texture: { sampleType: 'unfilterable-float', viewDimension: '3d' } },
       ],
     });
     // terrain chunks (chunk.wgsl): the uniforms and the bake, read when drawing, written by the bake
@@ -355,6 +360,7 @@ export class WorldsLayer {
             { binding: 0, resource: { buffer: buf } },
             { binding: 1, resource: this.noiseTex.createView() },
             { binding: 2, resource: this.noiseSamp },
+            { binding: 5, resource: this.gradTex.createView() },
             { binding: 3, resource: clouds.createView({ dimension: 'cube' }) },
             { binding: 4, resource: this.cloudSamp },
           ],
@@ -781,6 +787,7 @@ export class WorldsLayer {
     this.clear();
     for (const mesh of Object.values(this.sphere)) this.freeMesh(mesh);
     this.noiseTex.destroy();
+    this.gradTex.destroy();
     this.terrain.dispose();
     this.rocks.dispose();
     for (const b of this.noChunkBufs) b.destroy();

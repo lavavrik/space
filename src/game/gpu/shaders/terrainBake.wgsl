@@ -57,6 +57,7 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
   let n = u32(chunk.gridW + 0.5);
   let i = id.x;
   if (i >= n * n) { return; }
+  tExact = (u32(world._pq) & 8388608u) == 0u; // (the noise exactly: no texel grid in the mesh; tdbg 8388608: as before)
   let dir = vec3f(vdir[3u * i], vdir[3u * i + 1u], vdir[3u * i + 2u]);
   let position = vec3f(vpos[3u * i], vpos[3u * i + 1u], vpos[3u * i + 2u]);
   let vo = i32(chunk.vOct + 0.5);

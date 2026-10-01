@@ -11,7 +11,9 @@ The height is the same noise that paints each world's continents, seas and snow.
 | GLSL | `render/shaders/terrain.glsl` (`terrH`, `terrElev`) | raising the terrain mesh, colour, bump shading |
 | TypeScript | `sim/terrain.ts` (`terrainH`, `elevationLocal`, `surfaceRadius`) | collisions, landing, altitude readouts, time-warp impact checks |
 
-Both sample the same noise: exact simplex noise for the first 3 octaves (`snoise`, ported line by line; note the float32 `n_` constant, which the GPU rounds differently from a double) and the tiled 64³ gradient-noise texture for the rest (`lib/noise3d.ts`, sampled trilinearly on the CPU as the GPU does). `__tests__/terrain.test.ts` checks the noise stays in range and the peaks stay below the lowest safe orbit.
+Both sample the same noise: exact simplex noise for the first 3 octaves (`snoise`, ported line by line; note the float32 `n_` constant, which the GPU rounds differently from a double) and the tiled 64³ gradient-noise texture for the rest (`lib/noise3d.ts`).
+
+**The texture's noise exactly** (`noise3d.wgsl gnoise`, `lib/noise3d.ts gnoise`): the texture holds gradient noise (512 gradients on an 8³ lattice, quintic between them), and its linear filter puts a kink in the slope at every texel face, axis-aligned planes that crossed the terrain as straight lines: a grid of odd-shaped cells, seen from any height (with the ridges' sharp crests, creases everywhere). The terrain bake (`terrainBake.wgsl`, `tExact`), which near the ground carries every octave in the mesh, and the CPU (`sim/terrain.ts`) work the noise out exactly from the lattice's gradients (an 8³ rgba32 texture, `world.wgsl gradTex`): 8 reads and a quintic blend, smooth. It matches the texture to ~0.007 (its values span ~±0.35). The fragment shader's octaves magnified past ~3 px a texel use it too; finer ones keep the one-tap filter, where a kink is under a pixel. The bake pass went from ~0.2 to ~0.26 ms on the frames it builds chunks (RTX 4090). `?tdbg=8388608`: the texture as before. `__tests__/terrain.test.ts` checks the noise stays in range and the peaks stay below the lowest safe orbit.
 
 ### Shape
 
@@ -28,7 +30,7 @@ For each octave i, the noise is sampled at `q_i = dir · 1.6 · 2.03^i + O_i`, i
 
 Up close, even float32 unit directions aren't enough: they resolve ~0.5 m on an Earth, and through the periscope a pixel covers millimetres, so the fine octaves and bump slopes turned to static. On terrain chunks the shaders don't sample `dir · k + O_i`. They use `uQc[i] + (dir − centre) · k`: the chunk centre's lattice point, computed per chunk in double precision (`Terrain.ts latticeAt`), plus the small, precise offset from the centre (`position / R`). The centre point is wrapped by 8 for the noise (the texture's period, `uQn`) and by 2312 = 8 × 289 for the crater hash (`uQc`), so nothing changes but precision (`terrain.glsl terrQ`, `terrQC`).
 
-The GPU's own texture filter also has only 8-bit weights (1/256 of a texel), which at 1000× turned the noise into fine steps that the bump shading showed as moiré. The fragment shader's octaves use `tnoiseHQ` (noise3d.glsl): 8 texel fetches blended at full precision.
+The GPU's own texture filter also has only 8-bit weights (1/256 of a texel), which at 1000× turned the noise into fine steps that the bump shading showed as moiré. The fragment shader's octaves used `tnoiseHQ` (noise3d.glsl): 8 texel fetches blended at full precision; now `gnoise`, the noise itself (above).
 
 The old shader chain `sp = 1.6·dir + seedOffset`, multiplied by 2.03 per octave, lost float32 precision past about 11 octaves. `terrainOffsets` works out each octave's offset `O_i` in double precision. For the texture octaves it wraps the offset into [0, 8), since the texture tiles every 8 cells. That keeps shader coordinates small and precise to 17 octaves, about 15 m features on an Earth.
 

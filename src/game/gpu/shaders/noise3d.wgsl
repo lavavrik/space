@@ -28,6 +28,29 @@ fn tnoiseHQ(p: vec3f) -> f32 {
   return c * 2.0 - 1.0;
 }
 
+// The texture's noise exactly, smooth (lib/noise3d.ts gnoise): its gradient noise from the lattice's
+// gradients, quintic between them, at tnoise's coordinates (its half-texel offset included). The
+// texture's linear filter puts a kink in the slope at every texel face, axis-aligned planes that
+// crossed the terrain as straight lines, a grid of odd-shaped cells seen from any height. 8 reads
+// (as tnoiseHQ's), on a texture of 8 KB.
+fn gnoise(p: vec3f) -> f32 {
+  let x = p - vec3f(0.0625);
+  let i0 = floor(x);
+  let f = x - i0;
+  let u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+  let a = vec3i(gmod3(i0, 8.0));
+  let b = vec3i(gmod3(i0 + 1.0, 8.0));
+  let n000 = dot(textureLoad(gradTex, vec3i(a.x, a.y, a.z), 0).xyz, f);
+  let n100 = dot(textureLoad(gradTex, vec3i(b.x, a.y, a.z), 0).xyz, f - vec3f(1.0, 0.0, 0.0));
+  let n010 = dot(textureLoad(gradTex, vec3i(a.x, b.y, a.z), 0).xyz, f - vec3f(0.0, 1.0, 0.0));
+  let n110 = dot(textureLoad(gradTex, vec3i(b.x, b.y, a.z), 0).xyz, f - vec3f(1.0, 1.0, 0.0));
+  let n001 = dot(textureLoad(gradTex, vec3i(a.x, a.y, b.z), 0).xyz, f - vec3f(0.0, 0.0, 1.0));
+  let n101 = dot(textureLoad(gradTex, vec3i(b.x, a.y, b.z), 0).xyz, f - vec3f(1.0, 0.0, 1.0));
+  let n011 = dot(textureLoad(gradTex, vec3i(a.x, b.y, b.z), 0).xyz, f - vec3f(0.0, 1.0, 1.0));
+  let n111 = dot(textureLoad(gradTex, vec3i(b.x, b.y, b.z), 0).xyz, f - vec3f(1.0, 1.0, 1.0));
+  return mix(mix(mix(n000, n100, u.x), mix(n010, n110, u.x), u.y), mix(mix(n001, n101, u.x), mix(n011, n111, u.x), u.y), u.z);
+}
+
 // fbmF's octaves from o0 on only (the first ones come baked: terrainBake.wgsl)
 fn fbmFrom(p0: vec3f, o0: i32, oct: i32) -> f32 {
   var a = 0.5;

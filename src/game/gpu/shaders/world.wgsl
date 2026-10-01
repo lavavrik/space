@@ -63,6 +63,8 @@ struct World {
 
 @group(1) @binding(0) var<uniform> world: World;
 @group(1) @binding(1) var noiseTex: texture_3d<f32>;
+// the noise texture's lattice gradients ÷ 4σ (8³; lib/noise3d.ts noise3dGrads): its noise exactly (noise3d.wgsl gnoise)
+@group(1) @binding(5) var gradTex: texture_3d<f32>;
 @group(1) @binding(2) var noiseSamp: sampler;
 @group(1) @binding(3) var cloudTex: texture_cube<f32>;
 @group(1) @binding(4) var cloudSamp: sampler;
