@@ -6,6 +6,7 @@
  *   - belt: inside the nearest ringed world's belt, orbiting with it (rocks, their shadows, the dust)
  *   - ring shadow: the ringed world from its sunward side (the ring's shadow on it)
  *   - above / under the clouds: over and below a clouded world's deck (volumetric clouds, light shafts)
+ *   - snow: a kilometre over snow-covered ground by day, the sun to the side (the ground shader's snow)
  *   - low orbit: a circular orbit 250 km over the Earth-like world, by day (SPACE-76)
  *   - re-entry: 75 km up at 7.6 km/s, descending (plasma)
  *   - station, sky station: in front of one, matched with it (shadows, exhaust of the traffic)
@@ -24,7 +25,7 @@ import { cloudCoverAt } from '../sim/clouds';
 import { resetFrame } from '../sim/frame';
 import { stationQuat } from '../sim/stationGeom';
 import { CLEARANCE } from '../sim/flight';
-import { elevationLocal, surfaceRadius, worldQuat } from '../sim/terrain';
+import { elevationLocal, reliefAmp, surfaceRadius, worldQuat } from '../sim/terrain';
 import { wreckBody, wrecksHere } from '../sim/wreck';
 import type { Body, World } from '../types';
 
@@ -44,6 +45,7 @@ const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 function place(g: Game, frame: Body, pos: THREE.Vector3, vel: THREE.Vector3, fwd: THREE.Vector3, up: THREE.Vector3) {
   g.autodock = null;
   g.ship.mode = 'normal';
+  g.ship.landed = null; // (jumping off the ground: it held the ship there, LANDED a kilometre up)
   resetFrame(g, frame);
   g.ship.pos.copy(pos);
   g.ship.vel.copy(vel);
@@ -91,6 +93,57 @@ function cloudySpot(g: Game, b: World, low: boolean) {
     }
   }
   return best;
+}
+
+const smooth = (a: number, b: number, x: number) => {
+  const t = Math.min(Math.max((x - a) / (b - a), 0), 1);
+  return t * t * (3 - 2 * t);
+};
+
+/**
+ * How much snow the ground shader puts at `l` (a unit direction in `b`'s own frame), `elev` m over its
+ * sea: planet.wgsl's, above the snow line or where it's cold (landTemp), on Earth-like and ocean worlds.
+ */
+function snowAt(b: World, l: THREE.Vector3, elev: number) {
+  const A = reliefAmp(b);
+  if (!A || elev <= 0) return 0;
+  const e = elev / A;
+  const temp = 1 - smooth(0.1, 0.9, Math.abs(l.y)) - e * 0.9;
+  return Math.max(smooth(0.62, 0.75, e), smooth(0.05, -0.12, temp) * 0.85);
+}
+
+/**
+ * Over snow on `b`: the sunlit spot most surely under snow (by the ground shader's own rule), the
+ * sun well up there, a kilometre over it, looking across the slopes with the sun to the side.
+ */
+function overSnow(g: Game, b: World) {
+  const c = fromSunward(g, b, 0);
+  const u = V(0, 1, 0).cross(c).normalize(),
+    w = V().crossVectors(c, u);
+  const q = worldQuat(b, new THREE.Quaternion()).invert();
+  let best = c,
+    score = -Infinity;
+  for (let i = 0; i < 2000; i++) {
+    // (over most of the day side: snow's on the high ground and toward the poles)
+    const r = 1.2 * Math.sqrt((i + 0.5) / 2000),
+      a = i * 2.39996;
+    const d = c.clone().addScaledVector(u, r * Math.cos(a)).addScaledVector(w, r * Math.sin(a)).normalize();
+    const l = d.clone().applyQuaternion(q);
+    const sunUp = d.dot(c);
+    if (sunUp < 0.3) continue; // (the sun at least ~17° up)
+    const s = snowAt(b, l, elevationLocal(b, l.x, l.y, l.z));
+    const sc = Math.min(s, 0.95) * 4 + sunUp;
+    if (sc > score) {
+      score = sc;
+      best = d;
+    }
+  }
+  const pos = b.pos.clone().addScaledVector(best, surfaceRadius(b, b.pos.clone().addScaledVector(best, b.radius)) + 1000);
+  const spin = V(b.axis.x, b.axis.y, b.axis.z).multiplyScalar(b.spin).cross(pos.clone().sub(b.pos));
+  const toSun = sunOf(g, b).pos.clone().sub(pos);
+  const level = toSun.addScaledVector(best, -toSun.dot(best)).normalize();
+  const side = V().crossVectors(best, level).normalize(); // (level, the sun to the left)
+  place(g, b, pos, spin, side.multiplyScalar(Math.cos(0.3)).addScaledVector(best, -Math.sin(0.3)), best);
 }
 
 /**
@@ -142,6 +195,7 @@ export function debugSpots(g: Game): Spot[] {
   // landed on dry ground: an Earth-like world (an ocean world may have no land), else any with terrain
   const landable = bodies.find((b): b is World => b.kind === 'planet' && b.type === WT.EarthLike) ?? clouded;
   if (landable) out.push({ id: 'landed', label: 'Landed', hint: `on dry ground on ${landable.name}, by day (F9)`, go: () => landOn(g, landable) });
+  if (landable) out.push({ id: 'snow', label: 'Snow', hint: `a kilometre over snow on ${landable.name}, by day`, go: () => overSnow(g, landable) });
   if (ringed?.ring) {
     const b = ringed,
       ring = b.ring!;
