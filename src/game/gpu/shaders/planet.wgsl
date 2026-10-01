@@ -453,7 +453,13 @@ fn fs(in: Out) -> @location(0) vec4f {
         col = mix(col, vec3f(0.9), snow);
         // lakes: in low, flat basins where the land's wettest, still water (as the sea's, a few metres
         // deep; the geometry's the land's there, so only small and flat)
-        let lake = sm(0.38, 0.41, snoise(p * 60.0 + vec3f(seed * 2.7, 4.0, 9.0)) + 0.2 * snoise(p * 220.0 + 3.0)) * sm(0.03, 0.01, e) * sm(0.15, 0.35, landMoist(p, e, lat, seed) - 0.4);
+        // (their outline from the noise alone, the height and wetness only nudging its threshold:
+        // gated by the height directly, on a wide flat plain a lake's edge followed tiny differences
+        // in it, and neighbouring terrain chunks, which have them, cut it along their straight
+        // edges, SPACE-78)
+        let lakeN = snoise(p * 60.0 + vec3f(seed * 2.7, 4.0, 9.0)) + 0.2 * snoise(p * 220.0 + 3.0);
+        let lakeK = 0.3 * sm(0.06, 0.0, e) + 0.15 * sm(0.4, 0.7, landMoist(p, e, lat, seed));
+        let lake = sm(0.38, 0.41, lakeN + lakeK - 0.45 - 0.5 * sm(0.05, 0.15, e));
         if (lake > 0.5) {
           // (the sea's colour a few tens of metres down: darker than the sea, they stood out from
           // orbit as dark blue patches on the land)

@@ -75,7 +75,7 @@ On Earth-like and ocean worlds' land, the cover follows how warm and how wet it 
 - **Warmth** falls with latitude and height (`landTemp`).
 - **Wetness** (`landMoist`): continents' climates ~2,500 km across, regions ~500 km, patches ~100 km (by the first alone a view from the ground was one cover to the horizon); less in dry belts ~25–35° from the equator (where the air sinks: the deserts); more near the coasts.
 - **The cover:** desert, steppe, grassland where it's dry; savanna, forest, jungle where it's wet; tundra and taiga where it's cold. Snow where it's cold enough as well as high enough.
-- **Lakes:** in low, flat, wet basins, small (tens of km at most), still water in the sea's colour a few tens of metres down, reflecting as the sea does. The geometry is the land's there, so only where it's low and flat. (Darker than the sea, the first ones stood out from orbit as dark blue patches.)
+- **Lakes:** in low, wet ground, their outlines from the noise alone (the height and wetness only nudge its threshold: gated by the height directly, on a wide flat plain a lake's edge followed tiny differences in it, and neighbouring terrain chunks, which have them, cut it along their straight edges: SPACE-78), small (tens of km at most), still water in the sea's colour a few tens of metres down, reflecting as the sea does. The geometry is the land's there, so only where it's low and flat. (Darker than the sea, the first ones stood out from orbit as dark blue patches.)
 - Not yet: rivers (a heightfield shader has no flow to follow).
 
 ## Valley fog at dawn (`planet.wgsl`)
