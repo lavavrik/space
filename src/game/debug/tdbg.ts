@@ -9,6 +9,8 @@ import type { DynamicResolution } from '../gpu/dynres';
 export const terrainDebug = {
   bits: typeof location === 'undefined' ? 0 : Number(new URLSearchParams(location.search).get('tdbg')) || 0,
 };
+// (in the console in dev builds, for A/B shots: farlightTdbg.bits = 524288 turns the low haze off, atmo.wgsl atBL)
+if (import.meta.env.DEV) (globalThis as { farlightTdbg?: typeof terrainDebug }).farlightTdbg = terrainDebug;
 
 /** In order: the baseline, the floor, the first eight parts, each part, the colour noise's three, all, the baseline again (drift). */
 const SWEEP = [0, 1024, 255, 1, 2, 4, 8, 16, 32, 64, 128, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 255 + 16384 + 32768 + 65536 + 131072 + 262144, 0];

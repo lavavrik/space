@@ -9,6 +9,16 @@ fn atH() -> f32 { return world.atBeta.w; }
 
 fn atDens(r: f32) -> f32 { return exp(-max(r - atR(), 0.0) / atH()); }
 
+// The low haze (dust, droplets, pollen): most of the air's aerosols lie in its lowest ~1–2 km (Earth's
+// ~1.2 km scale height against the air's 8), as thick there as ~0.6 of the air's blue scattering.
+// Grey, it dims what's behind it as much as it lights the path: far land fades to a pale, greyish
+// haze. (Without it, the long near-level paths of a low flight saw only the air's own blue added
+// over the ground, green land going a saturated turquoise by ~30 km that read as sea.) No thicker
+// than Earth's however dense the air: a Venus's would be a fog.
+fn atHB() -> f32 { return atH() * 0.15; }
+fn atBL() -> f32 { return select(min(3.0 * world.atBeta.z, 6e-5), 0.0, (u32(world._pq) & 524288u) != 0u); } // scattering at the ground (/m); off for the A/B (debug/tdbg.ts)
+const AT_BL_EXT: f32 = 1.11; // its extinction over its scattering (it absorbs a little)
+
 // Extinction: the air's scattering plus ozone's absorption, which takes out green and orange
 // (Chappuis band; Earth's at sea-level density (0.65, 1.88, 0.085) × 1e-6 /m beside Rayleigh's
 // blue 33.1e-6, so scaled to the air's blue). It hardly shows by day; along twilight's long paths
@@ -23,9 +33,9 @@ fn atExt() -> vec3f {
   return beta + beta.z * world.ozone * vec3f(0.0196, 0.0568, 0.0026) + beta.x * world.smog * vec3f(0.05, 0.35, 1.2);
 }
 
-fn atChapman(r: f32, mu: f32) -> f32 {
+fn atChapman(r: f32, mu: f32) -> f32 { return atChapmanH(r, mu, atH()); }
+fn atChapmanH(r: f32, mu: f32, H: f32) -> f32 {
   let R = atR();
-  let H = atH();
   if (mu < -sqrt(max(0.0, 1.0 - (R * R) / (r * r)))) { return 1e9; }
   let X = R / H;
   let h = max(r - R, 0.0) / H;
@@ -60,8 +70,12 @@ fn atInscatterC(C0: vec3f, C1: vec3f, L: vec3f, n: i32) -> vec3f {
   let startLow = length(C0) < length(C1);
   let beta = world.atBeta.xyz;
   let ext = atExt();
+  let HB = atHB();
+  let extB = atBL() * AT_BL_EXT;
   var sum = vec3f(0.0);
+  var sumB = vec3f(0.0); // (the low haze's)
   var od = 0.0;
+  var odB = 0.0;
   var prev = 0.0;
   for (var i = 0; i < AT_MAX_SAMPLES; i++) {
     if (i >= n) { break; }
@@ -78,12 +92,20 @@ fn atInscatterC(C0: vec3f, C1: vec3f, L: vec3f, n: i32) -> vec3f {
     // counted almost nothing, and in a Titan's or a Venus's air, edge-on along the limb, where the
     // steps are long, the sky was a dark speckled band round the world. In thin air it's ρ·ds.)
     let dOd = rho * ds;
-    let Tv = exp(-ext * od);
+    let dOdB = exp(-max(r - atR(), 0.0) / HB) * ds;
+    let Tv = exp(-ext * od - extB * odB);
     od += dOd;
-    let Ts = exp(-ext * atChapman(r, dot(q / r, L)));
-    sum += Tv * Ts * select(vec3f(dOd), (1.0 - exp(-ext * dOd)) / max(ext, vec3f(1e-12)), ext * dOd > vec3f(1e-4));
+    odB += dOdB;
+    let mu = dot(q / r, L);
+    var odS = ext * atChapman(r, mu);
+    if (extB > 0.0 && r - atR() < 8.0 * HB) { odS += extB * atChapmanH(r, mu, HB); } // (none worth counting higher)
+    let Ts = exp(-odS);
+    let x = ext * dOd + extB * dOdB; // (the step's own depth)
+    let f = select(vec3f(1.0), (1.0 - exp(-x)) / max(x, vec3f(1e-12)), x > vec3f(1e-4));
+    sum += Tv * Ts * dOd * f;
+    sumB += Tv * Ts * dOdB * f;
   }
-  atTrans = exp(-ext * od);
+  atTrans = exp(-ext * od - extB * odB);
   let cosT = dot(dir, L);
   let phase = 0.0597 * (1.0 + cosT * cosT);
   // plus haze (dust, droplets): grey, scattering strongly forward (Henyey-Greenstein, g 0.76), so
@@ -93,7 +115,12 @@ fn atInscatterC(C0: vec3f, C1: vec3f, L: vec3f, n: i32) -> vec3f {
   let gM = 0.76;
   let dM = 1.0 + gM * gM - 2.0 * gM * cosT;
   let phaseM = (1.0 - gM * gM) / (dM * sqrt(dM)) / 12.566;
-  let raw = world.atSunI * sum * (beta * phase + vec3f(0.07 * beta.z * phaseM));
+  // the low haze's: broader, its light scattered again and again in the thick lowest air (single
+  // scattering's forward lobe alone, it was dark away from the sun and the haze stayed blue there)
+  let gB = 0.2;
+  let dB = 1.0 + gB * gB - 2.0 * gB * cosT;
+  let phaseB = mix((1.0 - gB * gB) / (dB * sqrt(dB)) / 12.566, phaseM, 0.6);
+  let raw = world.atSunI * (sum * (beta * phase + vec3f(0.07 * beta.z * phaseM)) + sumB * atBL() * phaseB);
   // (what's seen through the haze dims through a long path's reddened light: paled as the haze is,
   // or distant clouds by the horizon went yellow under a white haze, SPACE-73)
   // (paled less where the sunlight itself is reddened, at sunset: its colours are real there, and
@@ -137,7 +164,11 @@ fn atInscatter(P0: vec3f, P1: vec3f, L: vec3f, n: i32) -> vec3f {
 fn atSunlightC(q: vec3f, L: vec3f) -> vec3f {
   if (world.atOn < 0.5) { return vec3f(1.0); }
   let r = length(q);
-  return exp(-atExt() * atChapman(r, dot(q / r, L)));
+  let mu = dot(q / r, L);
+  var od = atExt() * atChapman(r, mu);
+  // (and the low haze's: none worth counting from 8 of its scale heights up, the clouds' marches)
+  if (r - atR() < 8.0 * atHB() && atBL() > 0.0) { od += atBL() * AT_BL_EXT * atChapmanH(r, mu, atHB()); }
+  return exp(-od);
 }
 fn atSunlight(P: vec3f, L: vec3f) -> vec3f { return atSunlightC(P - world.atC.xyz, L); }
 
