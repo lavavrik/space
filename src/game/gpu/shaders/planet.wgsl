@@ -315,8 +315,9 @@ fn groundDetail(col0: vec3f, N0: vec3f, up: vec3f, wp: vec3f, fw: f32, wet: bool
 }
 
 // the sky seen in the water, along `R` from `Pc` (relative to the world's centre): the air's own
-// light out to its top (as the sky shell draws it), each sun's, dimmed by their eclipses
-fn waterSky(Pc: vec3f, R: vec3f, L: vec3f, two: bool, L2: vec3f, shade: f32) -> vec3f {
+// light out to its top (as the sky shell draws it), each sun's, dimmed by their eclipses; the clouds
+// in it along `Rc`, the flat sea's mirror ray
+fn waterSky(Pc: vec3f, R: vec3f, Rc: vec3f, L: vec3f, two: bool, L2: vec3f, shade: f32) -> vec3f {
   if (world.atOn < 0.5) { return vec3f(0.0); } // (no air: black space in the water)
   let b = dot(R, Pc);
   let t = -b + sqrt(max(b * b - (dot(Pc, Pc) - world.atTop * world.atTop), 0.0));
@@ -324,17 +325,26 @@ fn waterSky(Pc: vec3f, R: vec3f, L: vec3f, two: bool, L2: vec3f, shade: f32) -> 
   if (two) { c += atInscatterC(Pc, Pc + R * t, L2, 4) * world.lightC2.rgb; }
   // the clouds in it: where the ray crosses the cloud deck, its cover there, lit as the deck is
   // (cloudLayer.wgsl), over the sky (a mirrored deck, one lookup: the volumetric clouds' shapes
-  // aren't marched again)
+  // aren't marched again). Looked up along the flat sea's mirror ray, not each wave's: the deck's
+  // edges are sharp, and toward the horizon, each pixel's wave sending its ray to a different bit of
+  // it, the far sea was streaked with bright cloud and dark gaps by turns (no mips to blur it with)
   if (world.cloudH > 0.0 && length(Pc) < world.cloudR) {
-    let tc = -b + sqrt(max(b * b - (dot(Pc, Pc) - world.cloudR * world.cloudR), 0.0));
-    let Pk = Pc + R * tc;
+    let bc = dot(Rc, Pc);
+    let tc = -bc + sqrt(max(bc * bc - (dot(Pc, Pc) - world.cloudR * world.cloudR), 0.0));
+    let Pk = Pc + Rc * tc;
     let nk = normalize(Pk);
     let cov = cloudCover(cloudMap(toLocal3() * nk));
     if (cov > 0.004) {
       var lit = clamp(dot(nk, L) * 1.05 + 0.05, 0.0, 1.0) * atSunlightC(Pk, L) * shade;
       if (two) { lit += clamp(dot(nk, L2) * 1.05 + 0.05, 0.0, 1.0) * atSunlightC(Pk, L2) * world.lightC2.rgb; }
-      // (seen from under it: its underside, greyer the thicker it is)
-      c = mix(c, vec3f(0.9) * lit * (0.35 + 0.5 * (1.0 - cov)) + c * 0.3, cov * 0.9);
+      // (seen from under it: its underside, greyer the thicker it is), behind the air up to it: near
+      // the horizon the mirrored deck is 100+ km off, and unhazed it showed in the far sea as crisp
+      // white streaks where the sky's own clouds there had faded into the haze
+      var near = atInscatterC(Pc, Pk, L, 4) * shade;
+      let tr = atTrans;
+      if (two) { near += atInscatterC(Pc, Pk, L2, 4) * world.lightC2.rgb; }
+      let deck = vec3f(0.9) * lit * (0.35 + 0.5 * (1.0 - cov)) * tr + near;
+      c = mix(c, deck + c * 0.3 * tr, cov * 0.9);
     }
   }
   return c;
@@ -559,7 +569,9 @@ fn fs(in: Out) -> @location(0) vec4f {
     let up = normalize(Pc);
     var Rv = reflect(-V, Nr);
     if (dot(Rv, up) < 0.01) { Rv = normalize(Rv + up * (0.01 - dot(Rv, up))); }
-    let skyR = waterSky(Pc, Rv, L, two, L2, shade);
+    var Rf = reflect(-V, Ns);
+    if (dot(Rf, up) < 0.01) { Rf = normalize(Rf + up * (0.01 - dot(Rf, up))); }
+    let skyR = waterSky(Pc, Rv, Rf, L, two, L2, shade);
     let n0 = mix(40.0, 900.0, wv.w);
     let n = n0 / (1.0 + n0 * dot(dn, dn) * 0.5);
     var glint = vec3f(1.0, 0.97, 0.9) * waterGlint(Nw, N, V, L, n) * sunC;
