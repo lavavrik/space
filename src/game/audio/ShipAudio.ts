@@ -23,6 +23,8 @@ export class ShipAudio {
   private seen: Seen | null = null;
   private lastMsg = { text: '', at: -1 };
   private beepT = 0;
+  /** Lightning strikes already given their thunder (sim/lightning.ts), by seed. */
+  private heard = new Set<number>();
   muted = false;
   /** Settings (game/settings.ts): the overall level and the cabin hum's, 0…1. */
   private volume = 1;
@@ -222,6 +224,13 @@ export class ShipAudio {
     const v = soundLevels(g);
     this.steer(v, ctx.currentTime);
     if (was) for (const c of cues(was, now)) this.cue(c, g);
+    // thunder: each strike once, after the sound's delay from it (343 m/s)
+    for (const s of g.lightning.strikes) {
+      if (this.heard.has(s.seed)) continue;
+      this.heard.add(s.seed);
+      if (this.heard.size > 64) this.heard = new Set([s.seed]);
+      this.thunder(s.ground.clone().lerp(s.top, 0.33).distanceTo(g.ship.pos));
+    }
     // collision radar: a fast pip while a rock's on a collision course
     if (v.proximity && (this.beepT -= dt) <= 0) {
       this.beepT = 0.35;
@@ -364,6 +373,51 @@ export class ShipAudio {
     o.connect(e).connect(this.master);
     o.start(t);
     o.stop(t + 1);
+  }
+
+  /**
+   * Thunder `dist` m off, starting after the sound's delay: near (under ~3 km) a sharp crack first;
+   * then a rumble of low noise, longer, deeper and softer the farther it is (the highs die with
+   * distance), swelling and fading a few times as the sound comes in from along the bolt.
+   */
+  private thunder(dist: number) {
+    const ctx = this.ctx!;
+    const t = ctx.currentTime + dist / 343;
+    const loud = Math.min(1, Math.max(0.06, 2500 / dist));
+    if (dist < 3000) {
+      const s = ctx.createBufferSource();
+      s.buffer = this.noise.white;
+      const f = ctx.createBiquadFilter();
+      f.type = 'highpass';
+      f.frequency.value = 700;
+      const e = ctx.createGain();
+      e.gain.setValueAtTime(0, t);
+      e.gain.linearRampToValueAtTime(0.7 * loud, t + 0.01);
+      e.gain.setTargetAtTime(0, t + 0.02, 0.06);
+      s.connect(f).connect(e).connect(this.master);
+      s.start(t, Math.random());
+      s.stop(t + 0.5);
+    }
+    const len = 2.5 + Math.min(dist / 4000, 3) + Math.random();
+    const s = ctx.createBufferSource();
+    s.buffer = this.noise.brown;
+    s.loop = true;
+    const f = ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.value = Math.max(90, 450 - dist / 40);
+    const e = ctx.createGain();
+    e.gain.setValueAtTime(0, t);
+    e.gain.linearRampToValueAtTime(0.9 * loud, t + Math.min(0.4, 0.05 + dist / 40000));
+    // (the rolls: a few swells as the sound comes in from farther along the bolt)
+    let at = t + 0.3;
+    while (at < t + len * 0.7) {
+      e.gain.setTargetAtTime(loud * (0.35 + 0.6 * Math.random()), at, 0.15);
+      at += 0.3 + Math.random() * 0.6;
+    }
+    e.gain.setTargetAtTime(0, t + len * 0.7, len * 0.15);
+    s.connect(f).connect(e).connect(this.master);
+    s.start(t, Math.random() * 2);
+    s.stop(t + len * 1.3);
   }
 
   /** A burst of noise through a filter gliding `from`→`to` Hz. */

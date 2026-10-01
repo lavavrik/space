@@ -8,6 +8,7 @@ import type { Settings } from '../settings';
 import { occluder } from '../sim/sight';
 import { FLASH_S } from '../sim/traffic';
 import { WT } from '../constants';
+import { BOLT_POINTS, boltPath, strikeGlow } from '../sim/lightning';
 import { BLOOM_WGSL } from './shaders';
 
 /** Warps (FTL in and out) drawn at once (tonemap.wgsl). */
@@ -127,7 +128,8 @@ export class Bloom {
  */
 /** Floats in tonemap.wgsl Post: 5 vec4, the warps and their depths, then the sea's reflections. */
 const SEA_AT = 20 + 5 * MAX_WARPS;
-export const POST_FLOATS = SEA_AT + 4 + 32;
+const BOLT_AT = SEA_AT + 4 + 32;
+export const POST_FLOATS = BOLT_AT + 8 + 4 * BOLT_POINTS;
 /** The camera's near plane (m; GpuRenderer's NEAR): a warp's depth is NEAR / its distance. */
 const NEAR = 0.5;
 /** Another ship's FTL warp: the drive's field bends space this far across (m). */
@@ -164,6 +166,44 @@ function warpsOf(g: Game, vp: THREE.Matrix4, out: Float32Array) {
   }
 }
 
+/**
+ * A lightning strike near you on screen (tonemap.wgsl): its shape (sim/lightning.ts boltPath)
+ * projected, each point's view depth for the depth test, its screen box, how bright it is now, and
+ * the whole view's flash (full within ~8 km, falling with the distance's square beyond).
+ */
+function boltOf(g: Game, vp: THREE.Matrix4, out: Float32Array) {
+  const st = g.lightning.strikes[g.lightning.strikes.length - 1];
+  const k = st ? strikeGlow(g.simTime - st.t0) : 0;
+  if (!st || k <= 0) return;
+  const pts = boltPath(st);
+  const q = new THREE.Vector4();
+  let x0 = 1,
+    y0 = 1,
+    x1 = 0,
+    y1 = 0,
+    restart = true;
+  pts.forEach((pt, i) => {
+    const r = pt.p.clone().sub(g.ship.pos);
+    q.set(r.x, r.y, r.z, 1).applyMatrix4(vp);
+    const at = BOLT_AT + 8 + 4 * i;
+    if (q.w <= 1) {
+      out.set([0, 0, -1, 1], at);
+      restart = true;
+      return;
+    }
+    const u = (q.x / q.w) * 0.5 + 0.5,
+      v = 0.5 - (q.y / q.w) * 0.5;
+    out.set([u, v, q.w, pt.start || restart ? 1 : 0], at);
+    restart = false;
+    x0 = Math.min(x0, u);
+    y0 = Math.min(y0, v);
+    x1 = Math.max(x1, u);
+    y1 = Math.max(y1, v);
+  });
+  const d = st.ground.clone().lerp(st.top, 0.33).distanceTo(g.ship.pos);
+  out.set([x0 - 0.03, y0 - 0.03, x1 + 0.03, y1 + 0.03, k, pts.length, k * Math.min(1, (8000 / d) ** 2), 0], BOLT_AT);
+}
+
 export function postParams(g: Game, vp: THREE.Matrix4, clouds: boolean, CW: number, CH: number, set: Settings) {
   const out = new Float32Array(POST_FLOATS);
   let blur = 0;
@@ -195,6 +235,7 @@ export function postParams(g: Game, vp: THREE.Matrix4, clouds: boolean, CW: numb
     if (q.w > 0 && edge > 0 && !occluder(g.cur.bodies, g.ship.pos, s.pos)) out.set([u, v, Math.min(1, edge / 0.05)], 8 + 4 * k);
   });
   warpsOf(g, vp, out);
+  boltOf(g, vp, out);
   // the sea's reflections (tonemap.wgsl seaReflect): on a sea world, within 200 km of it
   const b = g.frameBody;
   if (b.kind !== 'star' && (b.type === WT.EarthLike || b.type === WT.Ocean)) {

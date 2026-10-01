@@ -551,7 +551,7 @@ fn fs(in: Out) -> @location(0) vec4f {
     let covUp = cloudCover(cloudMap(p)) / select(0.85, 0.95, ty == 3);
     col *= 1.0 - 0.35 * smoothstep(0.8, 0.98, covUp) * (1.0 - snow);
   }
-  col = col * (diff * sunC + diff2 * sunC2 + (sky + sky2) * skyT + 0.0002 + nightAmb) * (1.0 - waterF) + waterAdd + lamps;
+  col = col * (diff * sunC + diff2 * sunC2 + (sky + sky2) * skyT + 0.0002 + nightAmb + STRIKE_C * strikeLight(in.wp, N)) * (1.0 - waterF) + waterAdd + lamps;
   if (terr && snow > 0.01 && !dark) {
     let vis = 1.0 - smoothstep(0.06, 0.25, fw * world.radius);
     if (vis > 0.0) {

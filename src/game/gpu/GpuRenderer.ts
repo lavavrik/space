@@ -25,6 +25,7 @@ import { AUTO_EXPOSURE, AutoExposure, FLOOD_K, HEAD_K, INT_K, MAX_EXP, SKY_EXP_P
 import { cloudCoverAt } from '../sim/clouds';
 import { CLOUD_H } from '../render/look';
 import { atmoOf } from '../sim/atmosphere';
+import { strikeGlow } from '../sim/lightning';
 import { WT } from '../constants';
 import { MAX_RENDER_PIXELS } from '../render/look';
 import { DynamicResolution } from './dynres';
@@ -47,8 +48,8 @@ import { WorldsLayer } from './worlds';
 
 /** Near plane (m): with reversed-Z and 32-bit float depth, precision barely depends on it. */
 const NEAR = 0.5;
-/** Bytes in the per-frame uniform block (frame.wgsl Frame): two mat4, 12 floats, a vec4, 4 floats. */
-const FRAME_BYTES = 224;
+/** Bytes in the per-frame uniform block (frame.wgsl Frame): two mat4, 12 floats, a vec4, 4 floats, 3 vec4. */
+const FRAME_BYTES = 256;
 
 export class GpuRenderer implements GameRenderer {
   readonly kind = 'webgpu' as const;
@@ -294,6 +295,16 @@ export class GpuRenderer implements GameRenderer {
     // the landing lights: down from under the hull, a little forward (sim/landingLights.ts)
     this.land.set(0, -1, -0.35).normalize().applyQuaternion(ship.q);
     f.set([this.land.x, this.land.y, this.land.z, g.landingLights ? 1 : 0], 52);
+    // the latest lightning strike near you, while it lasts (sim/lightning.ts)
+    f.fill(0, 56, 64);
+    const st = g.lightning.strikes[g.lightning.strikes.length - 1];
+    const sk = st ? strikeGlow(g.simTime - st.t0) : 0;
+    if (st && sk > 0) {
+      const lp = this.tw.copy(st.ground).lerp(st.top, 0.33).sub(ship.pos);
+      f.set([lp.x, lp.y, lp.z, sk], 56);
+      const tp = this.tw2.copy(st.top).sub(ship.pos);
+      f.set([tp.x, tp.y, tp.z, 0], 60);
+    }
     device.queue.writeBuffer(this.frameBuf, 0, f);
     this.updateViews(g);
     this.sky.update(g, this.W, this.H);

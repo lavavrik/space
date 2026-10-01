@@ -398,6 +398,13 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     let lamp = vec3f(1.0, 0.97, 0.92) * shipLightAt(P) * T * 0.08;
     // (lightning, inside a storm: clouds.wgsl flashAt, in the weather's frame)
     // (by day a quarter as bright against the sunlit cloud: from orbit, blazing white blobs on it)
+    // (a strike near you, sim/lightning.ts: the cloud round where it leaves the base lit from
+    // inside, and all of it by its light)
+    var strikeC = vec3f(0.0);
+    if (frame.strike.w > 0.0) {
+      let dT = P - frame.strikeTop.xyz;
+      strikeC = STRIKE_C * (frame.strike.w * 1.2 * exp(-dot(dT, dT) / (2500.0 * 2500.0)) + strikeLight(P, normalize(frame.strike.xyz - P)) * 0.15);
+    }
     let flash = vec3f(0.75, 0.82, 1.0) * flashAt(cloudDir(toLocalM() * (P - C)), world.radius + world.cloudH * 0.7) * (1.0 - 0.75 * dayK);
     // (the sunlight's share in the shadows of what's near: a sky station's on the clouds under it)
     sun *= shadowAtPoint(P);
@@ -405,7 +412,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     // dimmed twice, clouds at sunset were dull grey instead of glowing; only the sky's light is)
     // (the light diffused through the cloud, which is all its underside gets: 0.2 at the base. At
     // 0.05 an overcast's base was near black from under it, where it's a mid grey)
-    var light = sunCol * (sun * 0.6 * sunUp + 0.2 * (0.55 + 0.45 * h) * dayK) * 0.97 + twL * (0.6 + 0.4 * h) + cityL * (1.0 - 0.7 * h) + lamp + flash + vec3f(0.55, 0.7, 1.0) * 0.05 * (1.0 - dayK);
+    var light = sunCol * (sun * 0.6 * sunUp + 0.2 * (0.55 + 0.45 * h) * dayK) * 0.97 + twL * (0.6 + 0.4 * h) + cityL * (1.0 - 0.7 * h) + lamp + flash + strikeC + vec3f(0.55, 0.7, 1.0) * 0.05 * (1.0 - dayK);
     if (two) {
       var od2 = 0.0;
       var ls2 = 240.0;

@@ -20,6 +20,12 @@ struct Post {
   sea: vec4f,
   vp: mat4x4f,
   ivp: mat4x4f,
+  // a lightning bolt near you (sim/lightning.ts boltPath, gpu/post.ts boltOf): its screen box
+  // (min uv, max uv); x: how bright it is now, y: how many points, z: the whole view's flash from it;
+  // its points: uv, view depth (≤ 0: behind you), w 1 where a new strand starts
+  bolt: vec4f,
+  boltK: vec4f,
+  boltP: array<vec4f, 48>,
 }
 @group(0) @binding(0) var hdr: texture_2d<f32>;
 @group(0) @binding(1) var clouds: texture_2d<f32>;
@@ -219,6 +225,33 @@ fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
   // (z: 0 off screen, fading in from its edges)
   if (post.a.z > 0.0 && post.c.z > 0.0) { c += flare(post.c.xy, uv, size) * post.a.z * post.c.z; }
   if (post.a.z > 0.0 && post.d.z > 0.0) { c += flare(post.d.xy, uv, size) * post.a.z * post.d.z; }
+  // lightning (docs/clouds.md): the bolt, a white-hot core a pixel or two across in a bluish glow,
+  // hidden where the scene is nearer; and the whole view's flash
+  if (post.boltK.x > 0.0) {
+    c += vec3f(0.55, 0.6, 0.75) * post.boltK.z * 0.3;
+    if (all(uv >= post.bolt.xy) && all(uv <= post.bolt.zw)) {
+      var best = 1e9;
+      var bz = 0.0;
+      let n = i32(post.boltK.y);
+      for (var i = 1; i < 48; i++) {
+        if (i >= n) { break; }
+        let a = post.boltP[i - 1];
+        let b = post.boltP[i];
+        if (b.w > 0.5 || a.z <= 0.0 || b.z <= 0.0) { continue; }
+        let pa = (uv - a.xy) * size;
+        let ba = (b.xy - a.xy) * size;
+        let h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0);
+        let dpx = length(pa - ba * h);
+        if (dpx < best) {
+          best = dpx;
+          bz = mix(a.z, b.z, h);
+        }
+      }
+      if (best < 60.0 && !(depthAt(uv) > SSR_NEAR / bz)) {
+        c += vec3f(0.78, 0.84, 1.0) * (exp(-best * best / 1.6) * 6.0 + exp(-best / 7.0) * 0.6) * post.boltK.x;
+      }
+    }
+  }
   // the warp's ring: a faint cold shimmer where space is squeezed
   c += vec3f(0.55, 0.75, 1.0) * wp.z * 0.06;
   // the shoulder (white from 0.8 up): per channel it flattened bright colours toward yellow and

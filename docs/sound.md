@@ -34,3 +34,7 @@ Target selected (a tick). A hit (a thud sized by the hull lost in the frame; wea
 makes no sound). Ship lost (a boom). Messages: warnings get a two-tone beep, FTL messages a soft tone,
 and others a tick. A message only sounds when no louder cue fires that frame, and the same line
 within 2 s stays quiet. Collision radar: a fast pip while a rock is on a collision course.
+
+## Weather
+
+- **Thunder** (`thunder`): for each lightning strike near you (sim/lightning.ts), once, after the sound's delay from it (343 m/s): under ~3 km a sharp crack of high-passed noise first; then a rumble of brown noise through a low-pass (450 Hz near, down to 90 Hz far), 2.5–6.5 s long, softer the farther (2,500 m / distance, at most 1), swelling and fading a few times as the sound comes in from along the bolt.

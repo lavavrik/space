@@ -21,6 +21,7 @@ import { pickAt, placeAtHome } from './sim/navigation';
 import { closePlanner, openPlanner, requestDisengage } from './sim/planner';
 import { update } from './sim/update';
 import { ShipAudio } from './audio/ShipAudio';
+import { Lightning } from './sim/lightning';
 import type { Prospect } from './sim/prospect';
 import type { Wreck } from './types';
 export type StationTab = 'trade' | 'services' | 'contracts' | 'outfit';
@@ -254,6 +255,8 @@ export class Game {
   readonly overlay: Overlay;
   /** The ship's sound (audio/ShipAudio.ts; Shift+P on / off). */
   readonly audio = new ShipAudio();
+  /** Lightning strikes near you under a storm (sim/lightning.ts). */
+  readonly lightning = new Lightning();
   /** Sound and graphics options (game/settings.ts; the pause menu's Settings panel). */
   settings: Settings = loadSettings();
   private readonly glCanvas: HTMLCanvasElement;
@@ -746,6 +749,7 @@ export class Game {
     if (!this.paused) {
       updatePeriscope(this, dt);
       update(this, dt * this.warp, dt);
+      this.lightning.update(this);
     }
     if (!this.paused && (this.saveT -= dt) <= 0) {
       this.saveT = AUTOSAVE_S;

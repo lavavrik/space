@@ -22,7 +22,22 @@ struct Frame {
   skyK: f32,
   twilight: f32,   // the eye's twilight adaptation (render/exposure.ts twilightBoost), in exposure too: for what isn't × exposure (the sky, the flat cloud deck)
   landDir: vec4f,   // the landing lights' axis (world axes); w: on (0 or 1)
+  // a lightning strike near you (sim/lightning.ts): where its light comes from, a third of the way
+  // up the bolt (camera-relative), w: how bright it is now (0: none); and where it leaves the
+  // cloud base (camera-relative)
+  strike: vec4f,
+  strikeTop: vec4f,
 }
+
+// a lightning strike's light at camera-relative wp, facing n (× its colour): falling off with the
+// square of the distance, ~1 at 2 km, from the bolt's lower third
+fn strikeLight(wp: vec3f, n: vec3f) -> f32 {
+  if (frame.strike.w <= 0.0) { return 0.0; }
+  let d = frame.strike.xyz - wp;
+  let r2 = dot(d, d);
+  return frame.strike.w * 4e6 / (r2 + 4e5) * (0.25 + 0.75 * max(dot(n, d * inverseSqrt(max(r2, 1.0))), 0.0));
+}
+const STRIKE_C: vec3f = vec3f(0.75, 0.82, 1.0);
 
 // The ship's headlights, as a physical lamp (render/shaders/headlight.glsl): a cone along the nose
 // (the camera at the origin of camera-relative positions) with inverse-square falloff; `K` turns
