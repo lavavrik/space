@@ -8,6 +8,9 @@ import type { Settings } from '../settings';
 import { occluder } from '../sim/sight';
 import { FLASH_S } from '../sim/traffic';
 import { WT } from '../constants';
+import { atmoOf } from '../sim/atmosphere';
+import { cloudCoverAt } from '../sim/clouds';
+import { CLOUD_H } from '../render/look';
 import { BOLT_POINTS, boltPath, strikeGlow } from '../sim/lightning';
 import { BLOOM_WGSL } from './shaders';
 
@@ -129,7 +132,8 @@ export class Bloom {
 /** Floats in tonemap.wgsl Post: 5 vec4, the warps and their depths, then the sea's reflections. */
 const SEA_AT = 20 + 5 * MAX_WARPS;
 const BOLT_AT = SEA_AT + 4 + 32;
-export const POST_FLOATS = BOLT_AT + 8 + 4 * BOLT_POINTS;
+const BOW_AT = BOLT_AT + 8 + 4 * BOLT_POINTS;
+export const POST_FLOATS = BOW_AT + 4;
 /** The camera's near plane (m; GpuRenderer's NEAR): a warp's depth is NEAR / its distance. */
 const NEAR = 0.5;
 /** Another ship's FTL warp: the drive's field bends space this far across (m). */
@@ -204,6 +208,37 @@ function boltOf(g: Game, vp: THREE.Matrix4, out: Float32Array) {
   out.set([x0 - 0.03, y0 - 0.03, x1 + 0.03, y1 + 0.03, k, pts.length, k * Math.min(1, (8000 / d) ** 2), 0], BOLT_AT);
 }
 
+/**
+ * A rainbow (tonemap.wgsl rainbow): under the clouds on a rainy world, by day with the sun under
+ * 42° (the bow's above the horizon only then), where it's raining a few km off away from the sun
+ * (the cover there near its most, as gpu/effects.ts rain) and the sun reaches you (the cover where
+ * its ray crosses the cloud base well under that). Its strength fades in with both.
+ */
+function bowOf(g: Game, out: Float32Array) {
+  const b = g.frameBody;
+  if (b.kind === 'star' || (b.type !== WT.EarthLike && b.type !== WT.Ocean) || g.inStation) return;
+  const air = atmoOf(b);
+  if (!air) return;
+  const up = g.ship.pos.clone().sub(b.pos);
+  const alt = up.length() - b.radius;
+  up.normalize();
+  const deck = air.H * CLOUD_H;
+  if (alt > deck * 0.4) return;
+  const L = g.cur.stars[0].pos.clone().sub(g.ship.pos).normalize();
+  const el = L.dot(up);
+  if (el < 0.02 || el > Math.sin((42 * Math.PI) / 180)) return;
+  const most = b.type === WT.Ocean ? 0.95 : 0.85;
+  const away = L.clone().negate().addScaledVector(up, el).normalize(); // (horizontal, away from the sun)
+  const there = up.clone().addScaledVector(away, 6000 / b.radius).normalize();
+  const rain = THREE.MathUtils.smoothstep(cloudCoverAt(b, there, g.simTime) / most, 0.8, 0.95);
+  const toward = up.clone().addScaledVector(L, (deck * 0.4) / Math.max(el, 0.1) / b.radius).normalize();
+  const sun = 1 - THREE.MathUtils.smoothstep(cloudCoverAt(b, toward, g.simTime) / most, 0.4, 0.7);
+  const k = rain * sun;
+  if (k <= 0.01) return;
+  const a = L.clone().negate();
+  out.set([a.x, a.y, a.z, k], BOW_AT);
+}
+
 export function postParams(g: Game, vp: THREE.Matrix4, clouds: boolean, CW: number, CH: number, set: Settings) {
   const out = new Float32Array(POST_FLOATS);
   let blur = 0;
@@ -236,15 +271,15 @@ export function postParams(g: Game, vp: THREE.Matrix4, clouds: boolean, CW: numb
   });
   warpsOf(g, vp, out);
   boltOf(g, vp, out);
+  // the view's projection both ways (the sea's reflections, the rainbow)
+  out.set(vp.elements, SEA_AT + 4);
+  out.set(vp.clone().invert().elements, SEA_AT + 20);
   // the sea's reflections (tonemap.wgsl seaReflect): on a sea world, within 200 km of it
   const b = g.frameBody;
   if (set.reflections && b.kind !== 'star' && (b.type === WT.EarthLike || b.type === WT.Ocean)) {
     const r = b.pos.clone().sub(g.ship.pos);
-    if (r.length() - b.radius < 200e3) {
-      out.set([r.x, r.y, r.z, b.radius], SEA_AT);
-      out.set(vp.elements, SEA_AT + 4);
-      out.set(vp.clone().invert().elements, SEA_AT + 20);
-    }
+    if (r.length() - b.radius < 200e3) out.set([r.x, r.y, r.z, b.radius], SEA_AT);
   }
+  bowOf(g, out);
   return out;
 }

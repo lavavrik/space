@@ -26,6 +26,26 @@ struct Post {
   bolt: vec4f,
   boltK: vec4f,
   boltP: array<vec4f, 48>,
+  // a rainbow (gpu/post.ts bowOf): the direction away from the sun (camera-relative), w: how strong
+  bow: vec4f,
+}
+
+// A rainbow's colour at `ang` degrees from the point opposite the sun: the primary bow (violet at
+// 40.6°, red at 42.4°), the secondary (reversed, 50.3–53.5°, at a third), Alexander's dark band
+// between them, and the sky a little brighter inside the primary
+fn rainbow(ang: f32) -> vec3f {
+  let x1 = clamp((ang - 40.6) / 1.8, 0.0, 1.0);
+  let p = smoothstep(40.2, 40.8, ang) * (1.0 - smoothstep(42.2, 42.9, ang));
+  let x2 = clamp((53.5 - ang) / 3.2, 0.0, 1.0);
+  let s = smoothstep(50.0, 50.6, ang) * (1.0 - smoothstep(53.2, 53.9, ang));
+  let inside = 0.12 * (1.0 - smoothstep(25.0, 40.5, ang)) * step(ang, 40.6);
+  let dark = -0.06 * smoothstep(42.6, 44.0, ang) * (1.0 - smoothstep(48.5, 50.0, ang));
+  // (paled a little: each colour's band overlaps its neighbours', the sun being a disc, not a point)
+  return mix(spectrum(x1), vec3f(0.6), 0.3) * p + mix(spectrum(x2), vec3f(0.6), 0.4) * s * 0.25 + vec3f(inside + dark);
+}
+// violet (0) … red (1)
+fn spectrum(x: f32) -> vec3f {
+  return clamp(vec3f(smoothstep(0.45, 0.85, x) + 0.35 * (1.0 - smoothstep(0.0, 0.2, x)), 1.0 - abs(x - 0.55) * 2.6, 1.0 - smoothstep(0.15, 0.5, x)), vec3f(0.0), vec3f(1.0));
 }
 @group(0) @binding(0) var hdr: texture_2d<f32>;
 @group(0) @binding(1) var clouds: texture_2d<f32>;
@@ -225,6 +245,17 @@ fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
   // (z: 0 off screen, fading in from its edges)
   if (post.a.z > 0.0 && post.c.z > 0.0) { c += flare(post.c.xy, uv, size) * post.a.z * post.c.z; }
   if (post.a.z > 0.0 && post.d.z > 0.0) { c += flare(post.d.xy, uv, size) * post.a.z * post.d.z; }
+  // a rainbow (docs/clouds.md): in the rain in front, the sun behind you
+  if (post.bow.w > 0.0) {
+    let hp = post.ivp * vec4f(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, 0.5, 1.0);
+    let vd = normalize(hp.xyz / hp.w);
+    let ang = degrees(acos(clamp(dot(vd, post.bow.xyz), -1.0, 1.0)));
+    // (in the rain between you and the scene: little of it before something near; the sky behind
+    // is all rain)
+    let sd = depthAt(uv);
+    let far = select(1.0, smoothstep(400.0, 4000.0, SSR_NEAR / max(sd, 1e-9)), sd > 0.0);
+    if (ang < 56.0) { c = max(c + rainbow(ang) * post.bow.w * 0.18 * far, vec3f(0.0)); }
+  }
   // lightning (docs/clouds.md): the bolt, a white-hot core a pixel or two across in a bluish glow,
   // hidden where the scene is nearer; and the whole view's flash
   if (post.boltK.x > 0.0) {
