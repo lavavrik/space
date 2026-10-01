@@ -6,6 +6,7 @@
  *   - belt: inside the nearest ringed world's belt, orbiting with it (rocks, their shadows, the dust)
  *   - ring shadow: the ringed world from its sunward side (the ring's shadow on it)
  *   - above / under the clouds: over and below a clouded world's deck (volumetric clouds, light shafts)
+ *   - low orbit: a circular orbit 250 km over the Earth-like world, by day (SPACE-76)
  *   - re-entry: 75 km up at 7.6 km/s, descending (plasma)
  *   - station, sky station: in front of one, matched with it (shadows, exhaust of the traffic)
  *   - star: 1 AU out, looking past it (bloom, lens flare)
@@ -188,6 +189,25 @@ export function debugSpots(g: Game): Spot[] {
     };
     out.push({ id: 'cloudsabove', label: 'Above the clouds', hint: `${b.name}, ${Math.round((deck * 1.6) / 1000)} km up`, go: () => over(deck * 1.6, -0.45, false) });
     out.push({ id: 'cloudsbelow', label: 'Under the clouds', hint: `${b.name}, 1.5 km over the ground`, go: () => over(1500, 0.3, true) });
+  }
+  if (landable) {
+    const b = landable;
+    out.push({
+      id: 'loworbit',
+      label: 'Low orbit',
+      hint: `a circular orbit 250 km over ${b.name}, by day`,
+      go: () => {
+        // (over the day side, prograde round the world's axis, looking along the way and a little
+        // down at the horizon)
+        const up = fromSunward(g, b, 0.6);
+        const rel = up.clone().multiplyScalar(b.radius + 250e3);
+        const axis = V(b.axis.x, b.axis.y, b.axis.z).normalize();
+        const vel = orbitVel(b, rel, axis);
+        const fwd = vel.clone().normalize().addScaledVector(up, -0.3).normalize();
+        place(g, b, b.pos.clone().add(rel), vel, fwd, up);
+        g.ship.fa = false; // (coasting: flight assist's speed limit near a world braked it out of orbit)
+      },
+    });
   }
   if (aired) {
     const b = aired;
