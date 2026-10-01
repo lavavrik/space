@@ -10,7 +10,7 @@
  * each (as three.js sorts them): glow, rings, dots; skies; cloud decks.
  */
 import type { Game } from '../Game';
-import { AU, FOV } from '../constants';
+import { AU, FOV, WT } from '../constants';
 import { THREE } from '../lib/three';
 import { noise3dBytes, NOISE3D_SIZE } from '../lib/noise3d';
 import { airBeta, TERRAIN_NEAR, TERRAIN_PX } from '../render/look';
@@ -380,6 +380,8 @@ export class WorldsLayer {
     f[86] = air ? 1 : 0;
     // ozone, by the air's oxygen (Earth's 21 %: 1): atmo.wgsl's twilight colours
     f[102] = Math.min((air?.gases.find(([gas]) => gas === 'O₂')?.[1] ?? 0) / 0.21, 2);
+    // a Titan's orange smog (atmo.wgsl atExt)
+    f[103] = air && b.type === WT.Icy ? 1 : 0;
     f[87] = b.pal.sea;
     f[88] = b.seed;
     f[91] = cloudH;

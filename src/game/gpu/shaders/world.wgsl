@@ -35,7 +35,7 @@ struct World {
   oct: i32,           // octaves for this size on screen (uOct)
   deckHide: f32,      // 0…1: the flat cloud deck fades out as the volumetric clouds take over (vclouds.wgsl)
   ozone: f32,         // ozone in the air, from its oxygen: 1 for Earth's (atmo.wgsl)
-  _p2: f32,
+  smog: f32,          // a Titan's orange smog, absorbing blue: 1, else 0 (atmo.wgsl atExt)
   tOff: array<vec4f, 17>, // per-octave noise offsets (terrain.wgsl)
   // shadows (shadow.wgsl): the star relative to the world's centre (world axes; w: its radius), the
   // bodies that can eclipse it (centre likewise; w: radius), its ring (inner, outer radius in planet

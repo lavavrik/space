@@ -26,7 +26,16 @@ export function airBeta(b: World) {
   // (a giant's face is its cloud tops: at full strength the haze above them washed an ice giant out
   // to white, its bands and storms gone)
   const giant = b.type === WT.GasGiant || b.type === WT.IceGiant ? 0.3 : 1;
-  return new THREE.Vector3(c.r / m, c.g / m, c.b / m).multiplyScalar(1.5e-5 * Math.sqrt(k) * giant);
+  // (a Titan's air is thick with orange smog, methane broken up by sunlight: from orbit it hides the
+  // ground. As thin as a desert's dust haze, the white ice showed through plainly; at 6× the ground
+  // under it was near black, the single scattering here missing the light that really gets down)
+  // Its scattering is near grey: the colour is its absorption's (atmo.wgsl atExt, world.smog), which
+  // takes out the blue. Scattering orange as well, the red was scattered out of the light on its way
+  // down, and the sky deep in it was olive.
+  const smog = b.type === WT.Icy ? 3 : 1;
+  const grey = b.type === WT.Icy ? 0.7 : 0;
+  const col = (x: number) => (x / m) * (1 - grey) + grey;
+  return new THREE.Vector3(col(c.r), col(c.g), col(c.b)).multiplyScalar(1.5e-5 * Math.sqrt(k) * giant * smog);
 }
 
 /** Apparent radius (px) above which a world with relief is drawn as LOD terrain instead of a sphere. */

@@ -99,6 +99,10 @@ export function makeAir(type: number, T: number, r: () => number): { bar: number
       // tidally heated moons whose volcanoes keep up a thin sulphur-dioxide haze (Io, only thicker)
       if (T < 300) return { bar: lr(r, 0.001, 0.05), gases: mix([['SO₂', 90], ['CO₂', rr(r, 2, 8)], ['N₂', rr(r, 1, 4)]]) };
       return { bar: lr(r, 20, 95), gases: mix([['CO₂', 96], ['N₂', rr(r, 2, 4)], ['SO₂', rr(r, 0.1, 0.6)]]) };
+    case 5:
+      // icy, the few that have air (universe/worlds.ts titanLike): Titan's, nitrogen with a few
+      // per cent methane, thicker than Earth's
+      return { bar: lr(r, 0.8, 3), gases: mix([['N₂', 95], ['CH₄', rr(r, 1.5, 6)], ['Ar', rr(r, 0.01, 0.1)]]) };
     case 6:
       // gas giant: 1 bar at the cloud tops
       return { bar: 1, gases: mix([['H₂', rr(r, 84, 90)], ['He', rr(r, 9, 14)], ['CH₄', rr(r, 0.2, 0.5)], ['NH₃', rr(r, 0.01, 0.05)]]) };

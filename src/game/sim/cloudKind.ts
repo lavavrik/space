@@ -8,7 +8,10 @@
  *     world clear between them (Mars);
  *   - acid (volcanic worlds with thick air, Venus): a deck of sulphuric-acid droplets high up (~3–4.4
  *     scale heights, 45–70 km on Venus), unbroken over the whole world, pale yellow; under it a dim
- *     orange day.
+ *     orange day;
+ *   - methane (the icy worlds with air, Titan): sparse convective clouds, off-white, under the air's own
+ *     thick orange haze (render/look.ts airBeta, from the palette's sky colour) which is most of what
+ *     you see.
  */
 import { WT } from '../constants';
 import { THREE } from '../lib/three';
@@ -16,7 +19,7 @@ import type { Body, World } from '../types';
 import { atmoOf } from './atmosphere';
 
 /** The kinds (World.cloudC.w; clouds.wgsl cloudKind). */
-export const CK = { Water: 0, Dust: 1, Acid: 2 } as const;
+export const CK = { Water: 0, Dust: 1, Acid: 2, Methane: 3 } as const;
 export type CloudKindId = (typeof CK)[keyof typeof CK];
 
 export interface CloudKind {
@@ -39,6 +42,7 @@ export function cloudKindOf(b: Body): CloudKind | null {
     else if (b.type === WT.Desert) k = { kind: CK.Dust, h: 0.9, color: b.pal.b.clone().lerp(new THREE.Color(1, 1, 1), 0.12) };
     // (the thick-aired ones only: a thin sulphur-dioxide haze over an Io has no deck)
     else if (b.type === WT.Volcanic && atmoOf(b)!.P0 > 5e5) k = { kind: CK.Acid, h: 4.2, color: new THREE.Color(1, 0.9, 0.66) };
+    else if (b.type === WT.Icy) k = { kind: CK.Methane, h: 1.5, color: new THREE.Color(0.96, 0.93, 0.86) };
     else k = null;
     cache.set(b, k);
   }

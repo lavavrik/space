@@ -13,6 +13,7 @@ Every world with air gets its own, generated from its seed (`makeAir`): a surfac
 | Ocean | 1–4 bar | N₂, O₂ 6–20 %, more water vapour |
 | Volcanic, hot (≥ 300 K) | 20–95 bar (Venus) | CO₂ ~96 %, N₂, SO₂ |
 | Volcanic, cold | 1–50 mbar (tidally heated moons: an Io-like haze, thicker) | SO₂ ~90 % |
+| Icy, a few (Titan) | 0.8–3 bar: only big (≥ 1,500 km) cold (< 150 K) ones, one in three (`universe/worlds.ts titanLike`; the rest have none, as Triton's and Pluto's are a hundred-thousandth as thick) | N₂ ~95 %, CH₄ 1.5–6 % |
 | Gas giant | 1 bar at the cloud tops | H₂ 84–90 %, He, CH₄, NH₃ |
 | Ice giant | 1 bar at the cloud tops | H₂ ~80 %, He 14–19 %, CH₄ 1.5–2.5 % |
 
@@ -54,7 +55,9 @@ Venydes 2 (a hot desert, 566 K, 0.45 g) used to get a fixed desert air of 0.25 k
 ## Sky, haze and sunlight (`render/shaders/atmo.glsl`)
 
 - **Model:** single scattering with the exponential density. Sunlight reaching each point along a ray is dimmed by the optical depth toward the sun (Schüler's approximation of the Chapman function; zero behind the planet). It's scattered toward the camera with a Rayleigh phase (plus a glow round the sun) and dimmed on the way out.
+  - **Each step's light** is its exact integral, (1 − e^(−ext·ρ·ds)) / ext, behind the air before it (in thin air that's just ρ·ds). Taken as ρ·ds dimmed by the step's own whole depth, a step thick enough to hide what's past it counted almost nothing: in a Titan's or a Venus's air, edge-on along the limb where the steps are long, the sky was a dark speckled band (or a thin blue line) round the world (SPACE-80).
 - **Colour:** Earth-like and ocean worlds scatter like air (∝ λ⁻⁴: blue sky, red sunsets). Other worlds scatter in their palette's sky colour, thicker the denser the air (`airBeta`).
+- **A Titan's smog** (the icy worlds with air): 3× as thick, scattering near grey, and absorbing too, the blue most (`atmo.wgsl atExt`, `world.smog`), so what it scatters and what gets through it is orange. Scattering alone, however thick, its light came out white to lavender from orbit (the red scattered out of the sunlight on its way in) and olive from the ground. At 6× it hid the ground from orbit, but under it the day was near black: single scattering misses the light that really gets down.
 - **Sky:** a shell at the top of the air (`atmosphere.frag.glsl`, 8 samples). From inside it's the sky: blue overhead, pale at the horizon, orange at sunset, darkening with height. From orbit it's the glowing limb. It dims what's behind it by its brightness, so stars disappear by day.
 - **Sunset and twilight** (`gpu/shaders/atmo.wgsl`):
   - **Ozone** (`atExt`): absorption in green and orange, by the air's oxygen (Earth's: Chappuis band, (0.65, 1.88, 0.085) × 1e-6 /m beside Rayleigh's blue 33.1e-6; `world.ozone`, 1 for 21 % O₂). It hardly shows by day; along twilight's long paths it keeps the sky blue overhead and the far side pink over the world's shadow. Without it, reddened sunlight and the scattered blue went green.

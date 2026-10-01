@@ -83,6 +83,7 @@ export function makeWorld(props: WorldProps, g: Rng): World {
     tilt = rr(g, 0, 0.45),
     spin = (2 * Math.PI) / (rr(g, 9, 40) * 3600);
   const pal = palette(props.type, g);
+  if (titanLike(props, seed)) pal.atmo = { c: hsl(0.08, 0.75, 0.55), k: 0.5 };
   const mass = ((DENSITY[props.type] * 4) / 3) * Math.PI * props.radius ** 3;
   return {
     ...props,
@@ -101,6 +102,18 @@ export function makeWorld(props: WorldProps, g: Rng): World {
     orb: worldOrbit(props, seed),
     vel: props.parent.vel.clone(),
   };
+}
+
+/**
+ * Whether an icy body keeps a thick nitrogen-methane air (Titan, sim/atmosphere.ts makeAir): only
+ * big ones (1,500 km and up: smaller ones' gravity can't hold it) that are cold (under 150 K: warmer,
+ * it escapes), and of those one in three. Of the Solar System's many icy moons only Titan has one;
+ * Triton's and Pluto's are a hundred-thousandth as thick, and none here. From its own RNG stream
+ * (seeded by the body), so the rest of the system generates exactly as before.
+ */
+function titanLike(props: WorldProps, seed: number) {
+  if (props.type !== 5 || props.T >= 150 || props.radius < 1.5e6) return false;
+  return mulberry32(Math.floor(seed * 1e6) ^ 0x7174a9)() < 1 / 3;
 }
 
 /**

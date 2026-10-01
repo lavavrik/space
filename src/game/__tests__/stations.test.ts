@@ -118,10 +118,11 @@ describe('sky stations', () => {
         expect(st.vel.clone().sub(p.vel).distanceTo(ground)).toBeLessThan(1e-6);
         const up = new THREE.Vector3(0, 0, 1).applyQuaternion(stationQuat(st, t));
         expect(up.dot(r.normalize())).toBeCloseTo(1, 9);
-        // held up: its acceleration is only the turn (ω²r across the axis), a few % of gravity
+        // held up: its acceleration is only the turn (ω²r across the axis), a few % of gravity (up to
+        // ~5 % over a small, quick-turning moon with air: a Titan, universe/worlds.ts titanLike)
         const acc = stationAcc(st);
         expect(acc.length()).toBeCloseTo(p.spin * p.spin * Math.sqrt(r.lengthSq() - r.dot(p.axis) ** 2) * st.pos.distanceTo(p.pos), 9);
-        expect(acc.length()).toBeLessThan((0.05 * p.mu) / p.radius ** 2);
+        expect(acc.length()).toBeLessThan((0.08 * p.mu) / p.radius ** 2);
       }
     }
   });

@@ -13,13 +13,14 @@ const worlds = systemsNear(new THREE.Vector3(), 40)
   .filter((b): b is World => b.kind !== 'star');
 
 describe('cloud kinds', () => {
-  it('water on Earth-like and ocean worlds, dust on deserts with air, acid under thick volcanic air, none elsewhere', () => {
+  it('water on Earth-like and ocean worlds, dust on deserts with air, acid under thick volcanic air, methane on icy worlds with air, none elsewhere', () => {
     for (const b of worlds) {
       const k = cloudKindOf(b);
       if (!atmoOf(b)) expect(k).toBeNull();
       else if (b.type === WT.EarthLike || b.type === WT.Ocean) expect(k?.kind).toBe(CK.Water);
       else if (b.type === WT.Desert) expect(k?.kind).toBe(CK.Dust);
       else if (b.type === WT.Volcanic) expect(k?.kind).toBe(atmoOf(b)!.P0 > 5e5 ? CK.Acid : undefined);
+      else if (b.type === WT.Icy) expect(k?.kind).toBe(CK.Methane);
       else expect(k).toBeNull();
     }
     expect(worlds.some((b) => cloudKindOf(b)?.kind === CK.Dust)).toBe(true);
@@ -37,5 +38,19 @@ describe('cloud kinds', () => {
     expect(deckHeight(d) / atmoOf(d)!.H).toBeLessThan(deckHeight(w) / atmoOf(w)!.H);
     for (const raw of [0, 0.15, 0.25]) expect(cloudCoverOf(d, raw)).toBeLessThan(cloudCoverOf(w, raw));
     expect(cloudCoverOf(d, 0.1)).toBe(0);
+  });
+});
+
+describe('Titan-like air', () => {
+  it('only on big, cold icy bodies, and only some of them', () => {
+    const icy = worlds.filter((b) => b.type === WT.Icy);
+    const aired = icy.filter((b) => atmoOf(b));
+    for (const b of aired) {
+      expect(b.radius).toBeGreaterThanOrEqual(1.5e6);
+      expect(b.T).toBeLessThan(150);
+      expect(atmoOf(b)!.gases[0][0]).toBe('N₂');
+    }
+    expect(aired.length).toBeGreaterThan(0);
+    expect(aired.length).toBeLessThan(icy.filter((b) => b.radius >= 1.5e6 && b.T < 150).length);
   });
 });

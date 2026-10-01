@@ -49,10 +49,12 @@ fn cloudLiftMax() -> f32 {
 
 // What the clouds are made of (sim/cloudKind.ts, docs/clouds.md "Kinds"): water cloud, dust storms
 // (desert worlds: from the ground up, soft and thin, in the sand's colour), or an acid deck
-// (volcanic worlds with thick air, Venus: high up, unbroken, pale yellow)
+// (volcanic worlds with thick air, Venus: high up, unbroken, pale yellow), or methane (icy worlds
+// with air, Titan: sparse, off-white, shaped as water cloud)
 const CK_WATER: i32 = 0;
 const CK_DUST: i32 = 1;
 const CK_ACID: i32 = 2;
+const CK_METHANE: i32 = 3;
 fn cloudKind() -> i32 { return i32(world.cloudC.w + 0.5); }
 // the layer's base, in deck heights (its top is at 1.05): an acid deck 45–70 km up on a Venus
 fn cloudBaseK() -> f32 {
@@ -201,5 +203,6 @@ fn cloudRaw(p: vec3f, oct: i32) -> f32 {
 fn cloudCover(raw: f32) -> f32 {
   if (cloudKind() == CK_DUST) { return smoothstep(0.18, 0.45, raw) * 0.9; }
   if (cloudKind() == CK_ACID) { return 0.9 + 0.1 * smoothstep(-0.3, 0.3, raw); }
+  if (cloudKind() == CK_METHANE) { return smoothstep(0.25, 0.5, raw) * 0.7; }
   return smoothstep(-0.2, 0.25, raw) * select(0.85, 0.95, world.wtype == 3);
 }

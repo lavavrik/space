@@ -1,7 +1,8 @@
 # Clouds
 
 Earth-like and ocean worlds have a cloud deck of water cloud; desert worlds with air have dust
-storms, and volcanic worlds with thick air an acid deck (see Kinds below). The rest of this page is about water cloud unless it says otherwise. Its pattern is one per world, baked once into a
+storms, volcanic worlds with thick air an acid deck, and icy worlds with air (Titans) sparse methane
+clouds (see Kinds below). The rest of this page is about water cloud unless it says otherwise. Its pattern is one per world, baked once into a
 cube map in the world's own frame (`cloudBake.wgsl`, from `clouds.wgsl cloudRaw`), and used three
 ways:
 
@@ -195,6 +196,10 @@ differ in where the layer is, how it's shaped, and its colour.
   - **Under it:** the overcast murk, orange (the light reddened on its way down; in the deck's own
     yellow over the dim ground, it was olive): Venus's dim orange day.
   - The cold, thin-aired volcanic moons (an Io's sulphur-dioxide haze) have none.
+- **Methane** (icy worlds with air: Titans, universe/worlds.ts `titanLike`): sparse convective
+  clouds, shaped as water cloud (towers, clumps), off-white, at 1.5 scale heights, on a tenth of the
+  face or so (`cloudCover` from 0.25 to 0.5, at most 0.7). The air's own orange smog (docs/
+  atmosphere.md) is most of what you see. No storms, lightning or cirrus.
 - **Every deck** is at most 1.5 % of the world's radius up (`deckHeight`; Venus's is 1.2 %): small
   hot worlds' air has scale heights of 100+ km, and their acid deck was hundreds of km up.
 

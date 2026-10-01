@@ -15,9 +15,12 @@ fn atDens(r: f32) -> f32 { return exp(-max(r - atR(), 0.0) / atH()); }
 // it keeps the sky blue overhead and the far side pink over the world's shadow, where reddened
 // sunlight plus the scattered blue went green. (Taken with the air's own profile: the real layer
 // peaks at ~25 km.)
+// A Titan's smog (tholins: methane broken up by sunlight) absorbs too, the blue most: what it
+// scatters and what gets through it is orange. Scattering alone, however thick, its light came out
+// white to lavender (the red scattered out of the sunlight on the way, what reached deep in was blue).
 fn atExt() -> vec3f {
   let beta = world.atBeta.xyz;
-  return beta + beta.z * world.ozone * vec3f(0.0196, 0.0568, 0.0026);
+  return beta + beta.z * world.ozone * vec3f(0.0196, 0.0568, 0.0026) + beta.x * world.smog * vec3f(0.05, 0.35, 1.2);
 }
 
 fn atChapman(r: f32, mu: f32) -> f32 {
@@ -70,9 +73,15 @@ fn atInscatterC(C0: vec3f, C1: vec3f, L: vec3f, n: i32) -> vec3f {
     prev = t;
     let r = length(q);
     let rho = atDens(r);
-    od += rho * ds;
-    let T = exp(-ext * (od + atChapman(r, dot(q / r, L))));
-    sum += T * rho * ds;
+    // (each step's light by its own integral, (1 − e^(−ext·ρ·ds)) / ext, behind the air before it:
+    // taken as ρ·ds dimmed by the step's whole depth, a step thick enough to hide what's past it
+    // counted almost nothing, and in a Titan's or a Venus's air, edge-on along the limb, where the
+    // steps are long, the sky was a dark speckled band round the world. In thin air it's ρ·ds.)
+    let dOd = rho * ds;
+    let Tv = exp(-ext * od);
+    od += dOd;
+    let Ts = exp(-ext * atChapman(r, dot(q / r, L)));
+    sum += Tv * Ts * select(vec3f(dOd), (1.0 - exp(-ext * dOd)) / max(ext, vec3f(1e-12)), ext * dOd > vec3f(1e-4));
   }
   atTrans = exp(-ext * od);
   let cosT = dot(dir, L);
