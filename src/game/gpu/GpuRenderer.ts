@@ -200,6 +200,8 @@ export class GpuRenderer implements GameRenderer {
     this.worlds.cloudsOn = s.clouds !== 'off';
     this.vclouds.quality = s.clouds === 'low' ? 0.5 : 1;
     this.vclouds.full = s.clouds === 'ultra';
+    // (the sun's shadow map costs the same at any size: worth it only marching every frame pixel)
+    this.vclouds.sunMapOn = s.clouds === 'ultra';
     setTerrainDetail(s.terrain === 'low');
     this.resize(this.cssW, this.cssH);
   }

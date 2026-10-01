@@ -32,12 +32,19 @@ struct VParams {
   scale: f32,      // frame pixels per march pixel
   lift: f32,       // how far the layer's lifted over the high ground under you (m; see liftAt)
   quality: f32,    // the share of the steps marched (Settings: 1, or 0.5)
+  interleave: f32, // 1: march a quarter of the pixels a frame, the rest from last frame's (main)
+  sunMapOn: f32,   // 1: the sun's shadow map is there to read (sunOD)
+  _p1: f32,
+  _p2: f32,
 }
 @group(2) @binding(0) var sceneDepth: texture_depth_multisampled_2d;
 @group(2) @binding(1) var outTex: texture_storage_2d<rgba16float, write>;
 @group(2) @binding(2) var<uniform> vp: VParams;
 @group(2) @binding(3) var history: texture_2d<f32>;
 @group(2) @binding(4) var histSamp: sampler;
+// the sun's shadow map (sunOD): read by the march, written by its own pass (sunMap)
+@group(2) @binding(5) var sunMapT: texture_2d<f32>;
+@group(2) @binding(6) var sunMapOut: texture_storage_2d<rgba16float, write>;
 
 const STEPS: i32 = 48;
 /** Inside the layer: more steps over a shorter reach (48 over 250 km banded the clouds across a gap). */
@@ -239,6 +246,77 @@ fn sunThrough(P: vec3f, L: vec3f) -> f32 {
   return exp(-od * SIGMA * 0.5);
 }
 
+// ---- The sun's shadow map (docs/clouds.md "Cost") ----
+// How much cloud lies toward the (brighter) sun, worked out once a frame on a grid round you
+// (SM_N², ±SM_R across, ~0.4 km a texel), not per sample: for the far end of each cloud sample's
+// sunlight march (half the march's cost from above), both suns' where they're close together. (The
+// light shafts' shade from it too, the bigger cost under the deck, came out softer than marched:
+// its texels blur the fine shafts. They're marched still.) A texel is a point Q on the layer's base under the
+// grid; it holds the cloud (density × m) along the sun's ray up from Q to the layer's top, above
+// each of four heights (0, ¼, ½, ¾ of the layer). Any point P lies on the ray through the Q it
+// projects to along the sun, so what's toward the sun from P is that ray's above P's height.
+const SM_N: u32 = 384u;
+const SM_R: f32 = 80000.0;
+const SM_STEPS: i32 = 24;
+struct SmFrame { g0: vec3f, e: vec3f, n: vec3f }
+// (the grid's centre under you on the base, and its axes: the same in both passes, from the world's uniforms)
+fn smFrame() -> SmFrame {
+  let C = world.atC.xyz;
+  let up = normalize(-C);
+  var e = cross(normalize(world.light.xyz), up);
+  if (dot(e, e) < 1e-6) { e = cross(vec3f(1.0, 0.0, 0.0), up); }
+  e = normalize(e);
+  return SmFrame(C + up * rBot, e, cross(up, e));
+}
+// the cloud toward the sun from camera-relative P (density × m), or −1 off the grid
+fn sunOD(P: vec3f) -> f32 {
+  if (vp.sunMapOn < 0.5) { return -1.0; }
+  let L = normalize(world.light.xyz);
+  let Cp = P - world.atC.xyz;
+  let r = length(Cp);
+  let b = dot(Cp, L);
+  let disc = b * b - (r * r - rBot * rBot);
+  if (disc < 0.0) { return -1.0; }
+  // (to the base along the sun's ray: back from above it, on from under it)
+  let s = select(b - sqrt(disc), -b + sqrt(disc), r < rBot);
+  let Q = P + L * select(-s, s, r < rBot);
+  let f = smFrame();
+  let xy = vec2f(dot(Q - f.g0, f.e), dot(Q - f.g0, f.n)) / SM_R;
+  if (any(abs(xy) > vec2f(0.98))) { return -1.0; }
+  let o = textureSampleLevel(sunMapT, histSamp, xy * 0.5 + 0.5, 0.0);
+  let hf = clamp((r - rBot) / (rTop - rBot), 0.0, 1.0) * 4.0;
+  if (hf >= 3.0) { return o.w * (4.0 - hf); }
+  if (hf >= 2.0) { return mix(o.z, o.w, hf - 2.0); }
+  if (hf >= 1.0) { return mix(o.y, o.z, hf - 1.0); }
+  return mix(o.x, o.y, hf);
+}
+@compute @workgroup_size(8, 8)
+fn sunMap(@builtin(global_invocation_id) gid: vec3u) {
+  if (gid.x >= SM_N || gid.y >= SM_N) { return; }
+  let C = world.atC.xyz;
+  rBot = world.radius + world.cloudH * cloudBaseK();
+  rTop = world.radius + world.cloudH * 1.05;
+  setLifts();
+  let f = smFrame();
+  let xy = ((vec2f(gid.xy) + 0.5) / f32(SM_N) * 2.0 - 1.0) * SM_R;
+  let Q = C + normalize(f.g0 + f.e * xy.x + f.n * xy.y - C) * rBot;
+  let L = normalize(world.light.xyz);
+  // (the sun under Q's horizon: night there, all in shadow)
+  if (dot(normalize(Q - C), L) < -0.05) { textureStore(sunMapOut, gid.xy, vec4f(6e4)); return; }
+  let tEnd = sphereSpan(L, C - Q, rTop + liftTop).y;
+  let ds = max(tEnd, 1.0) / f32(SM_STEPS);
+  var od = 0.0;
+  var below = vec3f(0.0); // (the cloud under ¼, ½ and ¾ of the layer's height)
+  for (var i = 0; i < SM_STEPS; i++) {
+    let P = Q + L * ((f32(i) + 0.5) * ds);
+    let d = density(P) * ds;
+    let hf = (length(P - C) - rBot) / (rTop - rBot);
+    below += d * vec3f(f32(hf < 0.25), f32(hf < 0.5), f32(hf < 0.75));
+    od += d;
+  }
+  textureStore(sunMapOut, gid.xy, vec4f(od, od - below));
+}
+
 // where a ray from the camera along dir crosses the sphere of radius r round C: (near, far), or (1, 0)
 fn sphereSpan(dir: vec3f, C: vec3f, r: f32) -> vec2f {
   let b = dot(dir, C);
@@ -248,9 +326,56 @@ fn sphereSpan(dir: vec3f, C: vec3f, r: f32) -> vec2f {
   return vec2f(b - s, b + s);
 }
 
+// Interleaved (docs/clouds.md "Cost"): each frame one pixel of each 2 × 2 is marched (mainMarch, a
+// quarter-size grid of them, so the GPU's lanes march together: one in four of them marching in
+// a full grid took as long as all four), in turn, in the order 0, 3, 1, 2 (diagonal neighbours a
+// frame apart, so no row or column lags); the other three keep last frame's, reprojected (mainFill).
+fn turnPx(gid: vec2u) -> vec2i {
+  let ph = u32(vp.frameN) % 4u;
+  let t = select(select(select(2u, 1u, ph == 2u), 3u, ph == 1u), 0u, ph == 0u);
+  return vec2i(gid * 2u + vec2u(t & 1u, t >> 1u));
+}
 @compute @workgroup_size(8, 8)
-fn main(@builtin(global_invocation_id) gid: vec3u) {
+fn mainMarch(@builtin(global_invocation_id) gid: vec3u) { marchPixel(turnPx(gid.xy)); }
+
+// The other three of each 2 × 2: last frame's, reprojected by the layer's middle along the ray (the
+// march's own distance isn't kept), or marched anyway where that can't be trusted: no last frame,
+// from off screen, moving through the clouds (where one distance can't place it: the parallax test
+// in marchPixel's blend), or a lightning strike's light coming and going.
+@compute @workgroup_size(8, 8)
+fn mainFill(@builtin(global_invocation_id) gid: vec3u) {
   let px = vec2i(gid.xy);
+  if (f32(px.x) >= vp.size.x || f32(px.y) >= vp.size.y) { return; }
+  if (all(px == turnPx(gid.xy / 2u))) { return; } // (marched this frame)
+  if (vp.on > 0.0 && vp.moved.w > 0.5 && frame.strike.w <= 0.0) {
+    let dir = viewDir((vec2f(px) + 0.5) * vp.scale);
+    let C = world.atC.xyz;
+    let rMid = world.radius + world.cloudH * 0.5 * (cloudBaseK() + 1.05);
+    let sp = sphereSpan(dir, C, rMid);
+    var tm = select(sp.x, sp.y, sp.x <= 0.0);
+    if (tm <= 0.0 || sp.y < sp.x) { tm = 15000.0; }
+    let d = textureLoad(sceneDepth, vec2i((vec2f(px) + 0.5) * vp.scale), 0);
+    if (d > 0.0) { tm = min(tm, vp.near / d / max(dot(dir, -normalize(frame.camRot[2].xyz)), 1e-4)); }
+    let q = vp.prevVP * vec4f(dir * tm + vp.moved.xyz, 1.0);
+    let qa = vp.prevVP * vec4f(dir * tm * 0.5 + vp.moved.xyz, 1.0);
+    let qb = vp.prevVP * vec4f(dir * tm * 2.0 + vp.moved.xyz, 1.0);
+    if (q.w > 0.0 && qa.w > 0.0 && qb.w > 0.0) {
+      let uv = vec2f(q.x / q.w * 0.5 + 0.5, 0.5 - q.y / q.w * 0.5);
+      let par = length((qa.xy / qa.w - qb.xy / qb.w) * 0.5 * vp.size);
+      if (all(uv > vec2f(0.0)) && all(uv < vec2f(1.0)) && par < 1.5) {
+        textureStore(outTex, px, textureSampleLevel(history, histSamp, uv, 0.0));
+        return;
+      }
+    }
+  }
+  marchPixel(px);
+}
+
+// every pixel marched (interleave off)
+@compute @workgroup_size(8, 8)
+fn main(@builtin(global_invocation_id) gid: vec3u) { marchPixel(vec2i(gid.xy)); }
+
+fn marchPixel(px: vec2i) {
   if (f32(px.x) >= vp.size.x || f32(px.y) >= vp.size.y || vp.on <= 0.0) {
     if (f32(px.x) < vp.size.x && f32(px.y) < vp.size.y) { textureStore(outTex, px, vec4f(0.0, 0.0, 0.0, 1.0)); }
     return;
@@ -419,13 +544,28 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     // from: its first ~1/(density × SIGMA) metres (~250 m), not its middle. From orbit the steps are
     // over a km long, and lit from deep inside them the tops of thick cloud were grey
     let Ps = dir * max(t0, t - 0.5 * dt + min(0.5 * dt, 1.0 / (dn * SIGMA)));
+    // (its first two steps marched, 120 and 240 m, for the fine shading of a cloud's own billows;
+    // the rest, out to the same ~3.8 km, from the sun's map: the difference of what's toward the
+    // sun from either end, on the same ray. Off the map, all marched)
     var od = 0.0;
     var ls = 120.0;
     var lt = 0.0;
-    for (var k = 0; k < sunSteps; k++) {
+    let near2 = min(sunSteps, 2);
+    for (var k = 0; k < near2; k++) {
       lt += ls;
       od += density(Ps + L * lt) * ls;
       ls *= 2.0;
+    }
+    let mA = sunOD(Ps + L * (lt + 0.5 * ls));
+    let mB = sunOD(Ps + L * 3840.0);
+    if (sunSteps > 2 && mA >= 0.0 && mB >= 0.0) {
+      od += max(mA - mB, 0.0);
+    } else {
+      for (var k = near2; k < sunSteps; k++) {
+        lt += ls;
+        od += density(Ps + L * lt) * ls;
+        ls *= 2.0;
+      }
     }
     // light scattered many times inside the cloud (Frostbite's approximation: octaves each less
     // attenuated, weaker and less forward): clouds are bright from every side, not just sunward
@@ -461,13 +601,21 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     // 0.05 an overcast's base was near black from under it, where it's a mid grey)
     var light = sunCol * (sun * 0.6 * sunUp + 0.2 * (0.55 + 0.45 * h) * dayK) * 0.97 + twL * (0.6 + 0.4 * h) + cityL * (1.0 - 0.7 * h) + lamp + flash + strikeC + vec3f(0.55, 0.7, 1.0) * 0.05 * (1.0 - dayK);
     if (two) {
+      // (out to ~3 km as the first's; from its map where the suns are close together, its shadows
+      // hardly differing)
       var od2 = 0.0;
       var ls2 = 240.0;
       var lt2 = 0.0;
-      for (var k = 0; k < 3; k++) {
-        lt2 += ls2;
-        od2 += density(Ps + L2 * lt2) * ls2;
-        ls2 *= 3.0;
+      let mA2 = sunOD(Ps + L * 120.0);
+      let mB2 = sunOD(Ps + L * 3240.0);
+      if (dot(L, L2) > 0.97 && mA2 >= 0.0 && mB2 >= 0.0) {
+        od2 = max(mA2 - mB2, 0.0);
+      } else {
+        for (var k = 0; k < 3; k++) {
+          lt2 += ls2;
+          od2 += density(Ps + L2 * lt2) * ls2;
+          ls2 *= 3.0;
+        }
       }
       var sun2 = 0.0;
       var a2 = 1.0;

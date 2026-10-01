@@ -13,9 +13,9 @@
  *     thick orange haze (render/look.ts airBeta, from the palette's sky colour) which is most of what
  *     you see;
  *   - giant (gas and ice giants): their face is their cloud tops (planet.wgsl giantSurface); up
- *     close, a layer you can fly down into, from just over the face to 2.5 scale heights under it,
- *     in the bands' colours (giant.wgsl giantColAt). You're crushed at 3 (sim/atmosphere.ts
- *     crushDepth).
+ *     close, a layer you can fly down into, from just over the face to 4.3 scale heights under it,
+ *     in the bands' colours (giant.wgsl giantColAt). You're crushed at 4.6, 100 bar
+ *     (sim/atmosphere.ts crushDepth).
  */
 import { WT } from '../constants';
 import { THREE } from '../lib/three';

@@ -158,8 +158,33 @@ Past the march's reach (250 km from where the ray enters the layer) the volumetr
   - This gives shafts under broken cloud and a dim world under overcast.
   - Dimming only the first 30 km, or taking that stretch's compressed haze off (`atmo.wgsl
     atRolloff`), left a yellow line along the horizon under overcast.
-- **Cost** (M-series, 2400 × 1500): about 2 ms looking down from above the deck, 3 ms from 50 km,
-  1–2 ms from below.
+- **Cost:** see Cost, below.
+
+## Cost
+
+Where it goes (an Earth-like world, a pair's two suns, measured at 1280 × 577 on an M-series GPU,
+`clouds` in the perf panel's GPU split): under the deck, the light shafts are ~65 % (their shade:
+54 density reads a pixel, cloud or not); from above it, each sample's march toward the sun is
+~half. So:
+
+- **Interleaved** (`vclouds.wgsl mainMarch`, `mainFill`; every setting): each frame only one pixel
+  of each 2 × 2 is marched, in turn (0, 3, 1, 2: diagonal neighbours a frame apart, so no row or
+  column lags), as a quarter-size grid of its own, so the GPU's lanes march together (a full grid
+  where one lane in four marched took as long as all four: ~20 % saved, not 75 %). The other three
+  keep last frame's, reprojected by the layer's middle along the ray, or are marched anyway where
+  that can't be trusted: no last frame, from off screen, moving through the clouds (the parallax
+  test, Moving through them, below), or a lightning strike. Under the deck 2.3 → 1.0 ms on High,
+  7.5 → 2.7 on Ultra; above it 1.4 → 0.8 and 3.5 → 1.6.
+- **The sun's shadow map** (`vclouds.wgsl sunMap`, `sunOD`; Ultra only): how much cloud lies toward
+  the brighter sun, once a frame on a 384² grid ±80 km round you, in four height slices. Each cloud
+  sample marches its first two steps toward the sun (120 and 240 m, for its billows' own shading)
+  and takes the rest of the same ~3.8 km from the map (the difference between either end, on the
+  same ray); the second sun's too where it's within ~14° of the first. It costs ~0.5 ms whatever
+  the resolution, so it only pays marching every pixel (Ultra): there 3.6 → 3.2 ms under the deck at
+  this size, more at 4K; on High it cost more than it saved.
+  - Not for the light shafts' shade, though that's their bigger cost: from the map (its texels
+    ~0.4 km, or 0.2 at ±40 km) the shafts came out soft and faint, and the sky under the deck ~10 %
+    darker. Marched, three samples a point, they're crisp.
 
 ## Moving through them
 
