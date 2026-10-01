@@ -6,15 +6,14 @@
  * stays where it was laid and fades away.
  *
  * Samples are taken every SAMPLE_S, and whenever the course has turned TURN since the last one, so
- * straight runs cost few points and turns stay smooth. It's cut at TRAIL_S of age and TRAIL_MAX of
- * length, and brightness falls to nothing toward either.
+ * straight runs cost few points and turns stay smooth. It's cut at TRAIL_S of age, its brightness
+ * falling to nothing toward it: by time only (SPACE-75). Cut at a length as well (0.2 AU), at FTL
+ * speeds the length won, and the trail was a fixed stretch dragged along behind the ship.
  */
 import { THREE } from '../lib/three';
-import { AU } from '../constants';
 
-/** A trail fades out over this many seconds of age, and this length (m). */
-export const TRAIL_S = 30,
-  TRAIL_MAX = 0.2 * AU;
+/** A trail fades out over this many seconds of age. */
+export const TRAIL_S = 30;
 const SAMPLE_S = 0.5,
   TURN = 0.01, // rad
   MAX_PTS = 128;
@@ -46,6 +45,11 @@ export class FtlTrail {
     if (this.pts.length > MAX_PTS) this.pts.splice(0, this.pts.length - MAX_PTS);
   }
 
+  /** Nothing left of it (all aged out): a ship that's gone keeps its trail till then. */
+  get empty() {
+    return this.pts.length === 0 && !this.active;
+  }
+
   /** Start afresh (a new system: the old positions mean nothing here). */
   clear() {
     this.pts.length = 0;
@@ -58,20 +62,14 @@ export class FtlTrail {
    */
   draw(cam: THREE.Vector3, t: number, headAt?: THREE.Vector3) {
     const { pos, fade } = this;
-    let n = 0,
-      len = 0;
-    const prev = new THREE.Vector3();
+    let n = 0;
     const put = (p: THREE.Vector3, age: number) => {
-      if (n) len += p.distanceTo(prev);
-      prev.copy(p);
       const rel = p.clone().sub(cam);
       pos.set([rel.x, rel.y, rel.z], n * 3);
-      fade[n++] = Math.max(0, Math.min(1 - age / TRAIL_S, 1 - len / TRAIL_MAX));
-      return len < TRAIL_MAX;
+      fade[n++] = Math.max(0, 1 - age / TRAIL_S);
     };
-    let go = true;
-    if (this.active) go = put(headAt ? headAt.clone().add(cam) : this.head, 0);
-    for (let i = this.pts.length - 1; i >= 0 && go; i--) go = put(this.pts[i].p, t - this.pts[i].t);
+    if (this.active) put(headAt ? headAt.clone().add(cam) : this.head, 0);
+    for (let i = this.pts.length - 1; i >= 0; i--) put(this.pts[i].p, t - this.pts[i].t);
     this.count = n;
     this.visible = n >= 2;
   }

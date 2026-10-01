@@ -266,14 +266,26 @@ export class EffectsLayer {
     this.own.record(ship.pos, ship.travelDir, ship.mode === 'ftl' && !g.jump, simTime);
     this.own.draw(ship.pos, simTime, this.tmp.copy(ship.travelDir).multiplyScalar(-80));
     this.addTrail(this.own);
+    // other ships' trails, drawn whether or not the ship is in view (they're depth-tested: a world in
+    // front hides what it covers; checked by the ship's own line of sight, the whole trail went
+    // whenever the ship did), and kept after a ship's gone from the system till they fade (SPACE-75)
+    const live = new Set(g.traffic);
     for (const npc of g.traffic) {
       let tr = this.trails.get(npc);
       if (!tr) this.trails.set(npc, (tr = new FtlTrail()));
       tr.record(npc.pos, npc.vel, npc.ftl, simTime);
-      tr.draw(ship.pos, simTime);
-      if (!occluder(g.cur.bodies, ship.pos, npc.pos)) this.addTrail(tr);
     }
-    for (const npc of [...this.trails.keys()]) if (!g.traffic.includes(npc)) this.trails.delete(npc); // gone from the system
+    for (const [npc, tr] of this.trails) {
+      if (!live.has(npc)) {
+        tr.record(npc.pos, npc.vel, false, simTime); // (gone: ends where it was last, ages out)
+        if (tr.empty) {
+          this.trails.delete(npc);
+          continue;
+        }
+      }
+      tr.draw(ship.pos, simTime);
+      this.addTrail(tr);
+    }
     // the hulls' light: the brighter sun here, and a pair's other (sim/starlight.ts)
     const suns = sunsAt(g.cur.stars, ship.pos, this.suns);
     const light = this.tmp2.subVectors(suns.s1.pos, ship.pos).normalize();

@@ -81,8 +81,12 @@ Ships are targets like bodies and stations (`types.ts Npc`, kind `ship`).
 - **Engines:** a glow at the tail while it thrusts along its nose (orange; blue in FTL), a smaller one at the nose while it thrusts against it (worked out from its change of velocity, less gravity's share).
 - **Model:** within 200 km, a small procedural ship (~60 m: tapered hull, nose cone, cockpit, twin engine pods on pylons, a fin) at its own attitude, lit by the star.
 - **Trail (`render/Trail.ts`):** in FTL each ship leaves a trail: the path it actually flew, recorded
-  as positions and drawn as a line that fades with age (30 s, `TRAIL_S`) and length (0.2 AU,
-  `TRAIL_MAX`).
+  as positions and drawn as a line that fades with age (30 s, `TRAIL_S`), by time only (SPACE-75:
+  cut at 0.2 AU of length as well, at FTL speeds the length won, and the trail was a fixed stretch
+  dragged along behind the ship).
+  - It's drawn whether or not the ship is in view (depth-tested: a world in front hides only what it
+    covers; checked by the ship's own line of sight, the whole trail went whenever the ship did), and
+    a ship gone from the system leaves its trail to fade.
   - It grows out from where the drive started.
   - It bends where the ship turned, with a sample every 0.5 s and whenever the course turns 0.6°.
   - After drop-out it stays where it was laid and fades there.

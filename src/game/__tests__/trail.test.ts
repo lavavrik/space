@@ -46,4 +46,23 @@ describe('FTL trail', () => {
     tr.record(V(2.05e9), V(1), false, 3 + TRAIL_S);
     expect(drawn(tr, 3 + TRAIL_S).length).toBe(0); // gone
   });
+
+  it('is cut by time only, however fast the ship went (SPACE-75)', () => {
+    const tr = new FtlTrail();
+    const v = 3e11; // m/s: 20 s of it is ~40 AU
+    for (let i = 0; i <= 200; i++) tr.record(V(v * i * 0.1), V(1), true, i * 0.1);
+    const pts = drawn(tr, 20);
+    // the tail is still where the drive started, 20 s back: no length cap dragging it along
+    expect(pts[pts.length - 1].p.x).toBeCloseTo(0, -6);
+    expect(pts[pts.length - 1].fade).toBeGreaterThan(0.3);
+  });
+
+  it('tells when it has all aged out', () => {
+    const tr = new FtlTrail();
+    for (let i = 0; i <= 10; i++) tr.record(V(1e8 * i), V(1), true, i * 0.1);
+    tr.record(V(1e9), V(1), false, 1.1);
+    expect(tr.empty).toBe(false);
+    tr.record(V(1e9), V(1), false, 2 + TRAIL_S);
+    expect(tr.empty).toBe(true);
+  });
 });
