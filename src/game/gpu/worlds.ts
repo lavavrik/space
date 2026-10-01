@@ -82,6 +82,10 @@ export class WorldsLayer {
   private readonly cloudSamp: GPUSampler;
   private readonly noCloud: GPUTexture;
   readonly worldLayout: GPUBindGroupLayout;
+  /** The terrain's look at last frame's clouds (group 3 of the planet pipelines; vclouds.ts coverFor, planet.wgsl hiddenByClouds). */
+  readonly coverLayout: GPUBindGroupLayout;
+  /** This frame's: the clouded world's group, the group for every other world, and which world (its bind group) the first is for. */
+  cover: { group: GPUBindGroup; none: GPUBindGroup; world: GPUBindGroup | null } | null = null;
   private readonly oneBufLayout: GPUBindGroupLayout;
   private readonly planetPipe: GPURenderPipeline;
   private readonly chunkPipe: GPURenderPipeline;
@@ -127,6 +131,13 @@ export class WorldsLayer {
     const FS = GPUShaderStage.FRAGMENT,
       VS = GPUShaderStage.VERTEX,
       CS = GPUShaderStage.COMPUTE;
+    this.coverLayout = device.createBindGroupLayout({
+      entries: [
+        { binding: 0, visibility: FS, buffer: { type: 'uniform' } },
+        { binding: 1, visibility: FS, texture: {} },
+        { binding: 2, visibility: FS, sampler: {} },
+      ],
+    });
     this.worldLayout = device.createBindGroupLayout({
       entries: [
         { binding: 0, visibility: VS | FS | CS, buffer: { type: 'uniform' } },
@@ -175,7 +186,7 @@ export class WorldsLayer {
     this.rocks = new RingFieldGpu(device, frameLayout, this.noiseTex, this.noiseSamp, casterLayout);
     this.oneBufLayout = device.createBindGroupLayout({ entries: [{ binding: 0, visibility: VS | FS, buffer: { type: 'uniform' } }] });
     const worldPL = device.createPipelineLayout({ bindGroupLayouts: [frameLayout, this.worldLayout] });
-    const planetPL = device.createPipelineLayout({ bindGroupLayouts: [frameLayout, this.worldLayout, chunkLayout] });
+    const planetPL = device.createPipelineLayout({ bindGroupLayouts: [frameLayout, this.worldLayout, chunkLayout, this.coverLayout] });
     const onePL = device.createPipelineLayout({ bindGroupLayouts: [frameLayout, this.oneBufLayout] });
 
     const posNrm: GPUVertexBufferLayout[] = [
@@ -675,6 +686,7 @@ export class WorldsLayer {
     }
     pass.setPipeline(this.planetPipe);
     pass.setBindGroup(2, this.noChunk);
+    if (this.cover) pass.setBindGroup(3, this.cover.none);
     for (const w of this.worlds) {
       if (w.pxR <= 0.6 || w.terrOn) continue;
       pass.setBindGroup(1, w.group);
@@ -689,6 +701,7 @@ export class WorldsLayer {
       pass.setPipeline(this.chunkPipe);
       for (const w of near) {
         pass.setBindGroup(1, w.group);
+        if (this.cover) pass.setBindGroup(3, w.group === this.cover.world ? this.cover.group : this.cover.none);
         w.terrain!.draw(pass);
       }
     }

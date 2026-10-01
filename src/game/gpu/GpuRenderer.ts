@@ -151,7 +151,7 @@ export class GpuRenderer implements GameRenderer {
     this.worlds = new WorldsLayer(device, this.frameLayout, this.shadows.casterLayout);
     this.stations = new StationsLayer(device, this.frameLayout, this.worlds.worldLayout, this.shadows.casterLayout);
     this.fx = new EffectsLayer(device, this.frameLayout, this.shadows.casterLayout);
-    this.vclouds = new VolumetricClouds(device, this.frameLayout, this.worlds.worldLayout, NEAR);
+    this.vclouds = new VolumetricClouds(device, this.frameLayout, this.worlds.worldLayout, this.worlds.coverLayout, NEAR);
     this.toneBuf = device.createBuffer({ label: 'post', size: POST_FLOATS * 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     this.bloom = new Bloom(device);
     this.toneSamp = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
@@ -363,6 +363,8 @@ export class GpuRenderer implements GameRenderer {
       depthView = this.depth.createView();
     // volumetric clouds near a clouded world (they read the scene's depth, so it's kept)
     const clouds = !inTunnel && this.worlds.vcOn > 0;
+    // the terrain skips shading what last frame's clouds hid (vclouds.ts coverFor)
+    this.worlds.cover = this.vclouds.coverFor(clouds ? this.worlds.vcGroup : null, this.worlds.vcRel, this.worlds.vcQ, this.worlds.vcLift);
     // (the clouds are laid over the frame in their own pass, before the particles, not by the tone map)
     const pp = postParams(g, this.vp, false, this.CW, this.CH, this.settings);
     device.queue.writeBuffer(this.toneBuf, 0, pp);

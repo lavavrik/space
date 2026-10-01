@@ -185,6 +185,15 @@ Where it goes (an Earth-like world, a pair's two suns, measured at 1280 × 577 o
   - Not for the light shafts' shade, though that's their bigger cost: from the map (its texels
     ~0.4 km, or 0.2 at ±40 km) the shafts came out soft and faint, and the sky under the deck ~10 %
     darker. Marched, three samples a point, they're crisp.
+- **Not shading the ground they hide** (`planet.wgsl hiddenByClouds`, `vclouds.ts coverFor`): from
+  above the layer, terrain under its base looks up last frame's result where that point was then
+  (the same reprojection, to now) and, where under 2 % of it showed through (the most of four
+  lookups 1.5 texels round it, as far as the composite blends), gets the skirts' plain lit colour
+  instead of the full shader: under 2 % of it shows, so it can't be told apart. Only above the top
+  to below the base, where the whole layer is in between whatever the pixel showed last frame.
+  On an RTX 4090 at 3132 × 1597 over an overcast, terrain 1.0 → 0.5 ms (the thicker the cover the
+  more); screenshots with it on and off differ no more than two taken with the same setting. `?tdbg=1048576`
+  turns it off.
 
 ## Moving through them
 

@@ -20,6 +20,36 @@ diagnostic(off, derivative_uniformity);
 // the chunk's bake (terrainBake.wgsl): two vec4s per grid vertex
 @group(2) @binding(1) var<storage, read> bake: array<vec4f>;
 
+// Last frame's volumetric clouds (vclouds.ts coverFor): over thick cloud from above, the ground
+// under it is shaded for nothing (~1.5 ms of a 2 ms terrain pass at 4K over an overcast).
+struct Cover {
+  reproj: mat4x4f, // a camera-relative point now → last frame's clip space (following the world's turn)
+  k: vec4f,        // 1 / the result's size (x, y), the layer's lift (m), on (0: no last frame, or another world)
+}
+@group(3) @binding(0) var<uniform> cover: Cover;
+@group(3) @binding(1) var coverTex: texture_2d<f32>;
+@group(3) @binding(2) var coverSamp: sampler;
+
+// Whether last frame's clouds let (next to) nothing of this ground point through. Only where that
+// holds for certain: from above the layer's top to ground below its base, the whole layer is in
+// between whatever the pixel showed last frame (a ship's, a station's or a mountain's nearer pixel
+// had less cloud in front: shaded anyway). The most let through of four lookups 1.5 texels round
+// it, as the composite blends that far; under 2 % of the ground showing, its cheap colour can't be told
+// from the real one.
+fn hiddenByClouds(wp: vec3f) -> bool {
+  if (cover.k.w < 0.5 || world.cloudH <= 0.0) { return false; }
+  if (world.camAlt < world.cloudH * 1.05 + cover.k.z + 200.0) { return false; }
+  if (length(wp - world.atC.xyz) - world.radius > world.cloudH * cloudBaseK()) { return false; }
+  let q = cover.reproj * vec4f(wp, 1.0);
+  if (q.w <= 0.0) { return false; }
+  let uv = vec2f(q.x / q.w * 0.5 + 0.5, 0.5 - q.y / q.w * 0.5);
+  let o = cover.k.xy * 1.5;
+  if (any(uv - o <= vec2f(0.0)) || any(uv + o >= vec2f(1.0))) { return false; }
+  let a = max(max(textureSampleLevel(coverTex, coverSamp, uv - o, 0.0).a, textureSampleLevel(coverTex, coverSamp, uv + o, 0.0).a),
+              max(textureSampleLevel(coverTex, coverSamp, uv + vec2f(o.x, -o.y), 0.0).a, textureSampleLevel(coverTex, coverSamp, uv + vec2f(-o.x, o.y), 0.0).a));
+  return a < 0.02;
+}
+
 struct Out {
   @builtin(position) pos: vec4f,
   @location(0) obj: vec3f,
@@ -283,8 +313,9 @@ fn fs(in: Out) -> @location(0) vec4f {
   let dbg = u32(world._pq);
   if (terr && (dbg & 1024u) != 0u) { return vec4f(0.2, 0.2, 0.2, 1.0); }
   // Skirts hang below every chunk's edge to hide the cracks between levels; a crack only ever shows
-  // a skirt's top, so that keeps the full shader and the rest gets plain lit ground colour.
-  if (terr && in.t.x > 0.5) {
+  // a skirt's top, so that keeps the full shader and the rest gets plain lit ground colour. So does
+  // ground that last frame's clouds hid (hiddenByClouds; tdbg bit 1048576 turns that off).
+  if (terr && (in.t.x > 0.5 || ((dbg & 1048576u) == 0u && hiddenByClouds(in.wp)))) {
     let d0 = clamp(dot(normalize(in.wn), normalize(world.light.xyz)) * 1.05 + 0.03, 0.0, 1.0);
     let d02 = select(0.0, clamp(dot(normalize(in.wn), L2dir()) * 1.05 + 0.03, 0.0, 1.0), has2());
     let c0 = mix(world.pa.rgb, world.pb.rgb, 0.5) * (d0 * in.t.z * in.sun + d02 * in.sun2 + 0.0002);

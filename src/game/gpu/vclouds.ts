@@ -46,9 +46,15 @@ export class VolumetricClouds {
   private hasPrev = false;
   private readonly reproj = new THREE.Matrix4();
   private readonly tmpM = new THREE.Matrix4();
+  private readonly tmpM2 = new THREE.Matrix4();
   private readonly tmpQ = new THREE.Quaternion();
   private w = 1;
   private h = 1;
+  /** The terrain's look at last frame's result (coverFor; planet.wgsl hiddenByClouds): a group per texture, and one for no clouds. */
+  private readonly coverBuf: GPUBuffer;
+  private readonly coverData = new Float32Array(20);
+  private coverGroups: GPUBindGroup[] = [];
+  private readonly coverNone: GPUBindGroup;
   private n = 0;
   /** Frame pixels per march pixel. */
   private scale = 2;
@@ -68,6 +74,7 @@ export class VolumetricClouds {
     private readonly device: GPUDevice,
     frameLayout: GPUBindGroupLayout,
     worldLayout: GPUBindGroupLayout,
+    private readonly coverLayout: GPUBindGroupLayout,
     private readonly near: number,
   ) {
     const CS = GPUShaderStage.COMPUTE;
@@ -105,6 +112,18 @@ export class VolumetricClouds {
       fragment: { module: cm, entryPoint: 'fsComposite', targets: [{ format: 'rgba16float', blend: { color: { srcFactor: 'one', dstFactor: 'src-alpha' }, alpha: { srcFactor: 'zero', dstFactor: 'one' } } }] },
     });
     this.params = device.createBuffer({ label: 'volumetric clouds', size: PARAM_BYTES, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    this.coverBuf = device.createBuffer({ label: 'clouds cover', size: 80, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    // (no clouds: its own buffer, all zeros, so off)
+    const none = device.createBuffer({ label: 'no clouds cover', size: 80, usage: GPUBufferUsage.UNIFORM });
+    const noneTex = device.createTexture({ label: 'no clouds cover', size: [1, 1], format: 'rgba16float', usage: GPUTextureUsage.TEXTURE_BINDING });
+    this.coverNone = device.createBindGroup({
+      layout: coverLayout,
+      entries: [
+        { binding: 0, resource: { buffer: none } },
+        { binding: 1, resource: noneTex.createView() },
+        { binding: 2, resource: this.samp },
+      ],
+    });
     // the sun's shadow map: written by its own pass (the params, the map), read by the march
     const mapLayout = device.createBindGroupLayout({
       entries: [
@@ -159,7 +178,36 @@ export class VolumetricClouds {
         ],
       }),
     );
+    this.coverGroups = [0, 1].map((k) =>
+      this.device.createBindGroup({
+        layout: this.coverLayout,
+        entries: [
+          { binding: 0, resource: { buffer: this.coverBuf } },
+          { binding: 1, resource: this.tex[k].createView() },
+          { binding: 2, resource: this.samp },
+        ],
+      }),
+    );
     this.hasPrev = false;
+  }
+
+  /**
+   * Before the scene is drawn: what the terrain reads to skip shading ground that last frame's clouds
+   * hid (planet.wgsl hiddenByClouds): last frame's result, and where a camera-relative point now was
+   * on it (as dispatch's reprojection, but to now, before this frame's march). `group` is for the
+   * world `world` (its bind group); `none` for the rest, or when there's no last frame to go by.
+   */
+  coverFor(worldGroup: GPUBindGroup | null, rel: THREE.Vector3, q: THREE.Quaternion, lift: number) {
+    const ok = !!worldGroup && this.hasPrev && worldGroup === this.prevGroup && this.coverGroups.length > 0;
+    if (ok) {
+      this.tmpQ.copy(q).invert().premultiply(this.prevQ);
+      const m = this.tmpM2.makeTranslation(-rel.x, -rel.y, -rel.z).premultiply(this.tmpM.makeRotationFromQuaternion(this.tmpQ)).premultiply(this.tmpM.makeTranslation(this.prevRel.x, this.prevRel.y, this.prevRel.z));
+      m.premultiply(this.tmpM.fromArray(this.prevVP));
+      this.coverData.set(m.elements, 0);
+      this.coverData.set([1 / this.w, 1 / this.h, lift, 1], 16);
+      this.device.queue.writeBuffer(this.coverBuf, 0, this.coverData);
+    }
+    return { group: ok ? this.coverGroups[this.cur] : this.coverNone, none: this.coverNone, world: ok ? worldGroup : null };
   }
 
   /** Lay this frame's clouds over the frame (a pass on the resolved frame, after dispatch). */
