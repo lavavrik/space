@@ -200,6 +200,7 @@ export class GpuRenderer implements GameRenderer {
     this.dynres.enable(s.dynres);
     this.worlds.cloudsOn = s.clouds !== 'off';
     this.vclouds.quality = s.clouds === 'low' ? 0.5 : 1;
+    this.vclouds.full = s.clouds === 'ultra';
     setTerrainDetail(s.terrain === 'low');
     this.resize(this.cssW, this.cssH);
   }

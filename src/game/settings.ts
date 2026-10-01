@@ -15,8 +15,8 @@ export interface Settings {
   dynres: boolean;
   /** The scene's resolution at most, as a share of the canvas's (1 = full). */
   resScale: 1 | 0.75 | 0.5;
-  /** Volumetric clouds: full quality, half the steps, or off (the flat deck only). */
-  clouds: 'high' | 'low' | 'off';
+  /** Volumetric clouds: at every pixel (heavy), full quality, half the steps, or off (the flat deck only). */
+  clouds: 'ultra' | 'high' | 'low' | 'off';
   bloom: boolean;
   flare: boolean;
   /** The sea mirroring land, ships and stations (tonemap.wgsl seaReflect; the sky's always in it). */

@@ -450,7 +450,9 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     // (only well inside it: near its top or base the rays skimming along it cross thin, shadowed
     // edges, and taken as the layer's colour they drew a dark band along the horizon)
     let hc = (camR - liftCam - rBot) / (rTop - rBot);
-    let deep = smoothstep(0.05, 0.25, hc) * (1.0 - smoothstep(0.6, 0.85, hc));
+    // (and only from inside a cloud, where the view is fog anyway: from clear air between them, at
+    // sunrise, its colour was a dark band over the lit clouds toward the horizon)
+    let deep = smoothstep(0.05, 0.25, hc) * (1.0 - smoothstep(0.6, 0.85, hc)) * smoothstep(0.02, 0.2, density(vec3f(0.0)));
     let fk = (1.0 - exp(-min(tNat - t1, 300000.0) * covC * 2e-5)) * deep;
     let base = sunCol * (0.45 * sunUp + 0.15 * dayK) + twL;
     var meanC = base;
@@ -508,7 +510,9 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
         // showed at once only where the view had turned past last frame's, a ghost the screen's shape)
         let lH = dot(hist.rgb, vec3f(0.2126, 0.7152, 0.0722));
         let lR = dot(res.rgb, vec3f(0.2126, 0.7152, 0.0722));
-        let jump = smoothstep(0.35, 0.7, abs(lH - lR) / (max(lH, lR) + 0.02));
+        // (brightening only, and sharply: a flash. Both ways, the march's own noise at cloud edges
+        // dropped the history too, and the clouds shimmered)
+        let jump = smoothstep(0.5, 0.8, (lR - lH) / (lR + 0.02));
         res = mix(hist, res, max(mix(0.2, 0.6, smoothstep(0.25, 0.6, abs(hist.a - res.a))), jump));
       }
     }

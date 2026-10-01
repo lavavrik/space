@@ -134,7 +134,7 @@ function SettingsBox({ s, set, back }: { s: Settings; set: Actions['setting']; b
       <Choice label="Frame rate" value={s.fps} options={[['display', 'Display'], ['60', '60 fps']]} pick={(v) => set('fps', v)} />
       <Choice label="Dynamic resolution" value={s.dynres} options={ONOFF} pick={(v) => set('dynres', v)} />
       <Choice label="Resolution" value={s.resScale} options={[[1, '100 %'], [0.75, '75 %'], [0.5, '50 %']]} pick={(v) => set('resScale', v)} />
-      <Choice label="Clouds" value={s.clouds} options={[['high', 'High'], ['low', 'Low'], ['off', 'Off']]} pick={(v) => set('clouds', v)} />
+      <Choice label="Clouds" value={s.clouds} options={[['ultra', 'Ultra'], ['high', 'High'], ['low', 'Low'], ['off', 'Off']]} pick={(v) => set('clouds', v)} />
       <Choice label="Terrain detail" value={s.terrain} options={[['high', 'High'], ['low', 'Low']]} pick={(v) => set('terrain', v)} />
       <Choice label="Shadows" value={s.shadows} options={ONOFF} pick={(v) => set('shadows', v)} />
       <Choice label="Water reflections" value={s.reflections} options={ONOFF} pick={(v) => set('reflections', v)} />

@@ -12,7 +12,7 @@ takes its default.
 | Frame rate | Display · 60 fps | 60: the display's in-between refreshes are skipped (cooler, quieter), and the dynamic resolution aims for 60 |
 | Dynamic resolution | On · Off | `gpu/dynres.ts`; `?fullres` in the URL still turns it off whatever this says |
 | Resolution | 100 · 75 · 50 % | the scene's resolution at most, as a share of the canvas's; the dynamic resolution scales within it, and the HUD stays sharp |
-| Clouds | High · Low · Off | volumetric clouds with all their steps, half of them, or none (the flat deck all the way down) |
+| Clouds | Ultra · High · Low · Off | volumetric clouds marched at every pixel with no cap (heavy: at 3456 × 1790, ~15× the work), at half resolution (at most 0.4 MP) with all their steps, half of them, or none (the flat deck all the way down) |
 | Terrain detail | High · Low | how fine the terrain's chunks split (gpu/terrain.ts): low splits at twice the quads' size on screen, ~a quarter of the chunks (SPACE-77) |
 | Shadows | On · Off | near things' shadows (ships, stations, sky stations, ring rocks, the ground near you: gpu/shadowmap.ts); off skips their passes. Mountains' baked shadows and eclipses stay |
 | Water reflections | On · Off | the sea mirroring land, ships and stations (docs/water.md, screen-space); off leaves it mirroring the sky and clouds only |

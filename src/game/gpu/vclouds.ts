@@ -44,6 +44,9 @@ export class VolumetricClouds {
   private scale = 2;
   /** Settings: the share of the steps marched (1, or 0.5 for 'low'). */
   quality = 1;
+  /** Settings ('ultra'): march every frame pixel, no cap (at half resolution, capped at MAX_PIXELS,
+   *  the march's noise and its temporal blend can shimmer at cloud edges). Takes effect on resize. */
+  full = false;
 
   constructor(
     private readonly device: GPUDevice,
@@ -91,7 +94,7 @@ export class VolumetricClouds {
   /** A new frame size: `depth` is the scene's (multisampled) depth. */
   resize(depth: GPUTexture, W: number, H: number) {
     for (const t of this.tex) t.destroy();
-    const k = Math.min(0.5, Math.sqrt(MAX_PIXELS / Math.max(1, W * H)));
+    const k = this.full ? 1 : Math.min(0.5, Math.sqrt(MAX_PIXELS / Math.max(1, W * H)));
     this.w = Math.max(1, Math.ceil(W * k));
     this.h = Math.max(1, Math.ceil(H * k));
     this.scale = 1 / k;
