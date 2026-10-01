@@ -57,6 +57,12 @@ The old shader chain `sp = 1.6·dir + seedOffset`, multiplied by 2.03 per octave
 - **Vertices:** the vertex shader (`planet.vert.glsl` with `TERRAIN`) raises each vertex by the height, using only the octaves its spacing can show (`uVOct`). Normals come from two nearby height samples.
 - **Finer detail:** the fragment shader computes the full height. It bump-maps the octaves the vertices don't have, using screen-space derivatives (Mikkelsen's surface-gradient method). Shading therefore doesn't change when a chunk splits; only the silhouette sharpens.
 - **Albedo detail:** colour varies from octave 6 on (`tDet`), about the same contrast at every scale.
+- **The ground up close** (`planet.wgsl groundDetail`): what the octaves can't give a metre-scale view.
+  - **Patches** of soil and growth at 48 and 9.6 m: brightness, drier or greener.
+  - **Bare rock** where the ground itself is steep. By the bumps' slope it was rock everywhere.
+  - **Stones**, dark and scattered, at 2.4 and 0.6 m.
+  - **Fine grain** at the same scales, and **small bumps** that catch the light (their slope from the noise, as the water's waves).
+  - Each layer fades in over a few pixels. Coordinates are the waves' near-camera frame (`world.waveO`), so they stay precise at a metre on a 6,000 km world.
 - **Skirts** hang from chunk edges to hide cracks between levels.
 - **Culling:** chunks past the horizon (allowing for mountains) aren't drawn. At most 12 chunks are built per frame, and ones unused for 240 frames are freed.
 - **Shadows:** each terrain vertex marches 12 steps toward the sun over the height field, using up to 9 octaves (mountains and big craters). The steps grow from 2 vertex spacings to 60 relief amplitudes (a 12 km peak's shadow at a 3° sun). The result is a soft shadow term (`vShadow`, the ray's closest clearance against the distance travelled). It's per vertex, so shadows are as sharp as the chunk is detailed, about the same on screen near and far. The far sphere has none.

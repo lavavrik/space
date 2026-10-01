@@ -230,6 +230,61 @@ fn waterWaves(wp: vec3f, fw: f32) -> vec4f {
   return vec4f(g, seen);
 }
 
+// The ground up close (docs/terrain.md): what the terrain's octaves can't give a metre-scale view.
+// In the near-camera frame the waves use (world.waveO: small, precise numbers), so every length's
+// noise period (8 ×) divides worlds.ts WAVE_PERIOD. Each layer fades in only where it's over a few
+// pixels:
+//   - patches of soil and growth, 48 and 9.6 m: brightness and a drier or greener tint;
+//   - bare rock where it's steep (by the ground's own slope);
+//   - stones: dark, a little rough, scattered at 2.4 and 0.6 m;
+//   - grain: fine brightness at 2.4 and 0.6 m, and small bumps that catch the light (their slope
+//     from the noise, as the waves').
+// Returns the colour and the normal.
+struct Ground {
+  col: vec3f,
+  N: vec3f,
+}
+fn groundDetail(col0: vec3f, N0: vec3f, up: vec3f, wp: vec3f, fw: f32, wet: bool) -> Ground {
+  let q = toLocal3() * wp + world.waveO.xyz;
+  let pm = max(fw * world.radius, 1e-3);
+  let vis = vec4f(smoothstep(vec4f(2.0), vec4f(8.0), vec4f(48.0, 9.6, 2.4, 0.6) / pm));
+  var col = col0;
+  var N = N0;
+  if (vis.x < 0.01) { return Ground(col, N); }
+  // patches: brightness, and toward dry or green
+  let n1 = tnoise(q / 48.0 + 1.3);
+  let n2 = tnoise(q / 9.6 + 7.1);
+  col *= 1.0 + vis.x * 0.22 * n1 + vis.y * 0.12 * n2;
+  let lum = dot(col, vec3f(0.333));
+  let dry = vec3f(lum * 1.15, lum * 1.0, lum * 0.7);
+  let green = col * vec3f(0.85, 1.08, 0.8);
+  col = mix(col, select(dry, green, n2 > 0.0), vis.y * 0.25 * abs(n2) * select(1.0, 0.0, !wet));
+  // small bumps: their slope from fine noise (central differences, as the waves')
+  var g = vec3f(0.0);
+  for (var i = 0; i < 2; i++) {
+    let l = select(0.6, 2.4, i == 0);
+    let v = select(vis.w, vis.z, i == 0);
+    if (v < 0.01) { continue; }
+    let u = q / l + vec3f(f32(i) * 5.3);
+    let e = 0.06;
+    let d = vec3f(tnoise(u + vec3f(e, 0.0, 0.0)) - tnoise(u - vec3f(e, 0.0, 0.0)), tnoise(u + vec3f(0.0, e, 0.0)) - tnoise(u - vec3f(0.0, e, 0.0)), tnoise(u + vec3f(0.0, 0.0, e)) - tnoise(u - vec3f(0.0, 0.0, e))) / (2.0 * e);
+    g += 0.06 * v * d;
+  }
+  let gw = transpose(toLocal3()) * g;
+  N = normalize(N - (gw - N * dot(gw, N)));
+  // bare rock where it's steep (the ground's own slope, not the bumps': by those, rock everywhere)
+  let steep = 1.0 - dot(N0, up);
+  let rock = vec3f(0.36, 0.34, 0.31) * (0.85 + 0.3 * n2);
+  col = mix(col, rock, smoothstep(0.18, 0.4, steep + 0.08 * n1) * select(0.6, 0.9, wet));
+  // stones, and fine grain
+  let s1 = tnoise(q / 2.4 + 3.3);
+  let s2 = tnoise(q / 0.6 + 9.1);
+  let stones = max(smoothstep(0.32, 0.4, s1) * vis.z, smoothstep(0.36, 0.44, s2) * vis.w);
+  col = mix(col, rock * 0.75, stones * 0.8);
+  col *= 1.0 + 0.1 * (vis.z * s1 + vis.w * s2);
+  return Ground(col, N);
+}
+
 // the sky seen in the water, along `R` from `Pc` (relative to the world's centre): the air's own
 // light out to its top (as the sky shell draws it), each sun's, dimmed by their eclipses
 fn waterSky(Pc: vec3f, R: vec3f, L: vec3f, two: bool, L2: vec3f, shade: f32) -> vec3f {
@@ -357,6 +412,12 @@ fn fs(in: Out) -> @location(0) vec4f {
     }
   }
   col *= mix(det, 1.0, spec);
+  // the ground up close: patches, rock on steep ground, stones, grain and small bumps
+  if (terr && spec <= 0.0 && ty < 6 && !dark) {
+    let gd = groundDetail(col, N, normalize(in.wp - world.atC.xyz), in.wp, fw, ty == 2 || ty == 3);
+    col = gd.col;
+    N = gd.N;
+  }
   ndl = dot(N, L);
   var diff = clamp(ndl * 1.05 + 0.03, 0.0, 1.0) * in.t.z;
   let diff2 = select(0.0, clamp(dot(N, L2) * 1.05 + 0.03, 0.0, 1.0), two);
