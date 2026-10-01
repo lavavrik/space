@@ -547,5 +547,7 @@ fn fs(in: Out) -> @location(0) vec4f {
     col += world.atmoCol.rgb * world.atmoCol.w * rim * clamp(ndl + 0.25, 0.0, 1.0) * 1.1;
   }
   col += emit;
-  return vec4f(col * frame.exposure, 1.0);
+  // (alpha 0.5 marks the sea for its reflections, tonemap.wgsl seaReflect; the exposure meter takes
+  // it as half physical, which hardly matters)
+  return vec4f(col * frame.exposure, select(1.0, 0.5, spec > 0.5));
 }

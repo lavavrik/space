@@ -7,6 +7,7 @@ import { THREE } from '../lib/three';
 import type { Settings } from '../settings';
 import { occluder } from '../sim/sight';
 import { FLASH_S } from '../sim/traffic';
+import { WT } from '../constants';
 import { BLOOM_WGSL } from './shaders';
 
 /** Warps (FTL in and out) drawn at once (tonemap.wgsl). */
@@ -124,8 +125,9 @@ export class Bloom {
  * as strong as your speed (from ~1,000 to ~1,000,000 km/s), the bloom and flare strengths, and
  * the canvas's size (CW × CH px).
  */
-/** Floats in tonemap.wgsl Post: 5 vec4, then the warps and their depths. */
-export const POST_FLOATS = 20 + 5 * MAX_WARPS;
+/** Floats in tonemap.wgsl Post: 5 vec4, the warps and their depths, then the sea's reflections. */
+const SEA_AT = 20 + 5 * MAX_WARPS;
+export const POST_FLOATS = SEA_AT + 4 + 32;
 /** The camera's near plane (m; GpuRenderer's NEAR): a warp's depth is NEAR / its distance. */
 const NEAR = 0.5;
 /** Another ship's FTL warp: the drive's field bends space this far across (m). */
@@ -193,5 +195,15 @@ export function postParams(g: Game, vp: THREE.Matrix4, clouds: boolean, CW: numb
     if (q.w > 0 && edge > 0 && !occluder(g.cur.bodies, g.ship.pos, s.pos)) out.set([u, v, Math.min(1, edge / 0.05)], 8 + 4 * k);
   });
   warpsOf(g, vp, out);
+  // the sea's reflections (tonemap.wgsl seaReflect): on a sea world, within 200 km of it
+  const b = g.frameBody;
+  if (b.kind !== 'star' && (b.type === WT.EarthLike || b.type === WT.Ocean)) {
+    const r = b.pos.clone().sub(g.ship.pos);
+    if (r.length() - b.radius < 200e3) {
+      out.set([r.x, r.y, r.z, b.radius], SEA_AT);
+      out.set(vp.elements, SEA_AT + 4);
+      out.set(vp.clone().invert().elements, SEA_AT + 20);
+    }
+  }
   return out;
 }

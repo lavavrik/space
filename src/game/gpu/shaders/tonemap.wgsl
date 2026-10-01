@@ -15,6 +15,11 @@ struct Post {
   // …and each one's depth (reversed-Z: NEAR / distance; 1 for yours, round the camera): it bends
   // only what's behind it
   warpD: array<vec4f, 2>,
+  // the sea's reflections (seaReflect): the nearest sea world's centre (camera-relative, m) and its
+  // radius (the water's surface; 0: none), and the camera-relative view-projection and its inverse
+  sea: vec4f,
+  vp: mat4x4f,
+  ivp: mat4x4f,
 }
 @group(0) @binding(0) var hdr: texture_2d<f32>;
 @group(0) @binding(1) var clouds: texture_2d<f32>;
@@ -33,6 +38,73 @@ fn depthAt(uv: vec2f) -> f32 {
 fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
   let p = vec2f(f32((i << 1u) & 2u), f32(i & 2u));
   return vec4f(p * 2.0 - 1.0, 0.0, 1.0);
+}
+
+// The sea mirrors what's on screen (docs/water.md): the water's own shader mirrors the sky and the
+// cloud deck, but not the land, ships or stations, which only the frame has. Here, where the pixel
+// is the sea's surface (the depth's point lies at the water's radius, within a few cm per km), the
+// ray mirrored off it (off the flat surface: the waves' ripples come back as a vertical smear) is
+// traced across the screen through the depth buffer: 24 steps growing 1.35× from 1 % of the
+// distance, then halved 5 times onto the surface it went behind. Where it hits, that's what the
+// water mirrors, by Fresnel, fading toward the screen's edges (what's off screen can't be seen);
+// where it doesn't (the sky, off screen), the water keeps its own sky.
+const SSR_NEAR: f32 = 0.5; // (GpuRenderer's NEAR: depth = NEAR / view depth)
+fn ssrHit(P: vec3f, R: vec3f, t: f32) -> vec4f {
+  // (x, y: the screen point; z: how far the ray is behind what's drawn there (m, > 0 behind); w: 0
+  // off screen or behind the camera)
+  let q = post.vp * vec4f(P + R * t, 1.0);
+  if (q.w <= 1e-3) { return vec4f(0.0); }
+  let s = vec2f(q.x / q.w * 0.5 + 0.5, 0.5 - q.y / q.w * 0.5);
+  if (any(s < vec2f(0.0)) || any(s > vec2f(1.0))) { return vec4f(0.0); }
+  let sd = depthAt(s);
+  return vec4f(s, select(-1e9, q.w - SSR_NEAR / max(sd, 1e-9), sd > 0.0), 1.0);
+}
+fn seaReflect(uv: vec2f, c: vec3f) -> vec3f {
+  if (post.sea.w <= 0.0) { return c; }
+  // (the sea marks itself, alpha 0.5, planet.wgsl: by the depth's point at the water's radius, the
+  // water near a coast missed out, its big far triangles lifted by the land's heights at their
+  // corners; a blend of it with land or sky at an edge reads as neither)
+  if (abs(textureSampleLevel(hdr, samp, uv, 0.0).a - 0.5) > 0.06) { return c; }
+  let d0 = depthAt(uv);
+  if (d0 <= 0.0) { return c; }
+  let h = post.ivp * vec4f(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, d0, 1.0);
+  let P = h.xyz / h.w;
+  let dist = length(P);
+  let N = normalize(P - post.sea.xyz);
+  let V = P / dist;
+  let F = 0.02 + 0.98 * pow(1.0 - max(-dot(V, N), 0.0), 5.0);
+  let R = reflect(V, N);
+  var t = max(0.5, dist * 0.01);
+  var tPrev = 0.0;
+  var hit = vec4f(0.0);
+  for (var i = 0; i < 24; i++) {
+    let s = ssrHit(P, R, t);
+    if (s.w == 0.0) { break; }
+    if (s.z > 0.0 && s.z < max((t - tPrev) * 2.0, t * 0.05)) {
+      var lo = tPrev;
+      var hi = t;
+      for (var k = 0; k < 5; k++) {
+        let m = 0.5 * (lo + hi);
+        let sm = ssrHit(P, R, m);
+        if (sm.w > 0.0 && sm.z > 0.0) { hi = m; } else { lo = m; }
+      }
+      hit = ssrHit(P, R, hi);
+      break;
+    }
+    tPrev = t;
+    t *= 1.35;
+  }
+  if (hit.w == 0.0) { return c; }
+  // (the sea itself, where a ray skimming the horizon met the water beyond, the world curving down:
+  // that's the sky's to mirror, which the water's own shader has)
+  if (abs(textureSampleLevel(hdr, samp, hit.xy, 0.0).a - 0.5) < 0.06) { return c; }
+  let e = min(min(hit.x, 1.0 - hit.x), min(hit.y, 1.0 - hit.y));
+  let fade = smoothstep(0.0, 0.06, e);
+  // (smeared up and down as ripples stretch a reflection, more the farther it is)
+  let o = clamp(0.002 + dist * 2e-6, 0.002, 0.012);
+  var rc = vec3f(0.0);
+  for (var k = -2; k <= 2; k++) { rc += max(textureSampleLevel(hdr, samp, hit.xy + vec2f(0.0, f32(k) * o), 0.0).rgb, vec3f(0.0)); }
+  return mix(c, rc / 5.0, F * fade * 0.9);
 }
 
 // a star's lens-flare ghosts at `uv`, for the star at `sp` on screen
@@ -119,6 +191,7 @@ fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     c = max(vec3f(textureSampleLevel(hdr, samp, uv0 + wp.xy * 0.94, 0.0).r, textureSampleLevel(hdr, samp, uv, 0.0).g, textureSampleLevel(hdr, samp, uv0 + wp.xy * 1.06, 0.0).b), vec3f(0.0));
   } else {
     c = max(textureSampleLevel(hdr, samp, uv, 0.0).rgb, vec3f(0.0));
+    c = seaReflect(uv, c);
   }
   // FTL: a zoom blur toward (or away from) the point you're heading for, stronger toward the edges
   if (post.a.w > 0.0) {

@@ -22,10 +22,11 @@ Seas on Earth-like and ocean worlds (`planet.wgsl`, where `spec` marks water). T
 - **Shallows:** clear turquoise, fading into the deep's colour by ~25 m, the sandy bottom showing through in the last few metres (by the water's depth in metres, from the terrain under it).
 - **Surf:** at the water's edge, under ~2.5 m, a band of white foam broken up by two octaves of noise moving with the wind. It hides the water's mirror where it lies.
 - **Ship lamps:** the landing lights and headlights light the water like the ground.
+- **Land, ships and stations in the water** (`tonemap.wgsl seaReflect`, screen-space): in the final pass, where a pixel is sea (the water writes alpha 0.5; by the depth's point at the water's radius, the water by a coast missed out, its big far triangles lifted by the land's heights at their corners), the ray mirrored off the flat surface is traced across the screen through the depth buffer: 24 steps growing 1.35× from 1 % of the distance, then halved 5 times onto the surface it went behind. Where it hits, the water mirrors that by Fresnel, smeared up and down as ripples stretch a reflection, fading toward the screen's edges. Where it misses (sky, off screen), or meets the sea itself (a ray skimming the horizon, the world curving down), the water keeps its own sky. Only within 200 km of a sea world. What's off screen can't be mirrored, as with any screen-space reflection.
+- **The glint at a coast:** it ends where the land starts (land doesn't mirror the sun); from orbit that edge is sharp.
 
 ## Not yet
 
-- Reflections of the land and ships (a screen-space reflection pass).
 - Breaking waves rolling in to the shore.
 - Spray and swell that move the geometry.
 - Night-time city-light reflections.
