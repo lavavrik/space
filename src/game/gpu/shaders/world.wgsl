@@ -50,6 +50,9 @@ struct World {
   lightL2: vec4f,
   sunC2: vec4f,
   lightC2: vec4f,
+  // the water's waves (planet.wgsl waterWaves): the camera's place in the world's frame less a whole
+  // number of the waves' common period (m), so their coordinates stay small and precise near you
+  waveO: vec4f,
 }
 
 @group(1) @binding(0) var<uniform> world: World;

@@ -200,6 +200,50 @@ fn giantSurface(p: vec3f, seed: f32, gas: bool, oct: i32, dark: bool) -> vec3f {
 /** The night's own light on the ground (starlight, airglow), in daylight's units. */
 const NIGHT_AMB: f32 = 0.15; // (the ground's dark: 0.02 of it was lost in black)
 
+// Water (docs/water.md). Waves: three octaves of moving noise, 60, 24 and 9.6 m long (their noise
+// periods, 8 × each, all divide worlds.ts WAVE_PERIOD), drifting at deep water's speed for their
+// length, each fading out below a few pixels. Returns the height (m) and the share of the waves'
+// slope resolved here (1 up close, 0 where they're all sub-pixel).
+const WAVE_L = array<f32, 3>(60.0, 24.0, 9.6);
+fn waterWaves(wp: vec3f, fw: f32) -> vec2f {
+  let q = toLocal3() * wp + world.waveO.xyz; // (m, the world's frame, small near you)
+  let pm = max(fw * world.radius, 1e-3);      // m a pixel
+  let wind = normalize(vec3f(1.0, 0.0, 0.6));
+  var h = 0.0;
+  var seen = 0.0;
+  for (var i = 0; i < 3; i++) {
+    let l = WAVE_L[i];
+    let vis = smoothstep(2.0, 6.0, l / pm);
+    seen += vis / 3.0;
+    if (vis < 0.01) { continue; }
+    let c = sqrt(9.81 * l / 6.2832); // deep water's phase speed
+    h += 0.03 * l * vis * tnoise(q / l + wind * (c / l) * world.time + vec3f(f32(i) * 3.7));
+  }
+  return vec2f(h, seen);
+}
+
+// the sky seen in the water, along `R` from `Pc` (relative to the world's centre): the air's own
+// light out to its top (as the sky shell draws it), each sun's, dimmed by their eclipses
+fn waterSky(Pc: vec3f, R: vec3f, L: vec3f, two: bool, L2: vec3f, shade: f32) -> vec3f {
+  if (world.atOn < 0.5) { return vec3f(0.0); } // (no air: black space in the water)
+  let b = dot(R, Pc);
+  let t = -b + sqrt(max(b * b - (dot(Pc, Pc) - world.atTop * world.atTop), 0.0));
+  var c = atInscatterC(Pc, Pc + R * t, L, 4) * shade;
+  if (two) { c += atInscatterC(Pc, Pc + R * t, L2, 4) * world.lightC2.rgb; }
+  return c;
+}
+
+// a sun's glitter in the water: the mirror lobe (normalised Blinn-Phong, sharpness n) × Fresnel at it,
+// × GLINT_K: the sun's disc is thousands of times brighter than what it lights, so even at the 2 %
+// a high sun's light reflects straight up the glints blaze (and bloom); at 1 they read as pale flecks
+const GLINT_K: f32 = 8.0;
+fn waterGlint(Nw: vec3f, N: vec3f, V: vec3f, L: vec3f, n: f32) -> f32 {
+  if (dot(N, L) <= 0.0) { return 0.0; }
+  let H = normalize(L + V);
+  let F = 0.02 + 0.98 * pow(1.0 - max(dot(H, V), 0.0), 5.0);
+  return GLINT_K * (n + 8.0) / 25.13 * pow(max(dot(Nw, H), 0.0), n) * F;
+}
+
 @fragment
 fn fs(in: Out) -> @location(0) vec4f {
   let terr = in.t.y > 0.5;
@@ -339,9 +383,26 @@ fn fs(in: Out) -> @location(0) vec4f {
   if (terr && two) { sunC2 *= shadowAt2(in.wp, N); }
   let sky = select(0.0, 0.07 * smoothstep(-0.12, 0.35, ndl0), world.atOn > 0.5);
   let sky2 = select(vec3f(0.0), 0.07 * smoothstep(-0.12, 0.35, ndl20) * world.lightC2.rgb, world.atOn > 0.5 && two);
-  let R = reflect(-L, N);
-  let s = pow(max(dot(R, V), 0.0), 60.0) * 0.7 * spec * diff;
-  let s2 = pow(max(dot(reflect(-L2, N), V), 0.0), 60.0) * 0.7 * spec * diff2;
+  // Water (spec: its share here; docs/water.md): it shows the sky by Fresnel (dark looking down
+  // into it, a mirror toward the horizon) over its own colour, and the suns' glitter, the sharper the
+  // more of the waves are resolved here: glints on each wave up close, a broad glitter path far off.
+  var waterF = 0.0;
+  var waterAdd = vec3f(0.0);
+  if (spec > 0.0) {
+    let wv = waterWaves(in.wp, fw);
+    let Nw = bumpN(N, wv.x, in.obj, in.wp, terr);
+    let F = 0.02 + 0.98 * pow(1.0 - clamp(dot(Nw, V), 0.0, 1.0), 5.0);
+    // (a wave's back facing away would mirror the sea itself: kept just above the horizon)
+    let up = normalize(Pc);
+    var Rv = reflect(-V, Nw);
+    if (dot(Rv, up) < 0.01) { Rv = normalize(Rv + up * (0.01 - dot(Rv, up))); }
+    let skyR = waterSky(Pc, Rv, L, two, L2, shade);
+    let n = mix(40.0, 900.0, wv.y);
+    var glint = vec3f(1.0, 0.97, 0.9) * waterGlint(Nw, N, V, L, n) * sunC;
+    if (two) { glint += waterGlint(Nw, N, V, L2, n) * sunC2; }
+    waterF = F * spec;
+    waterAdd = (skyR * F + glint) * spec;
+  }
   // (the ship's lamps, near: headlights and landing lights; world.wgsl lights up close only matter
   // for the ground under you)
   let lamps = select(vec3f(0.0), shipLights(N, in.wp, col), terr);
@@ -349,7 +410,7 @@ fn fs(in: Out) -> @location(0) vec4f {
   // overcast night isn't pitch black (it was 0.0002)
   let night2 = 1.0 - smoothstep(-0.2, 0.05, ndl20) * up2;
   let nightAmb = NIGHT_AMB * vec3f(0.55, 0.7, 1.0) * (1.0 - smoothstep(-0.2, 0.05, ndl0)) * night2;
-  col = col * (diff * sunC + diff2 * sunC2 + sky + sky2 + 0.0002 + nightAmb) + vec3f(1.0, 0.95, 0.85) * (s * sunC + s2 * sunC2) + lamps;
+  col = col * (diff * sunC + diff2 * sunC2 + sky + sky2 + 0.0002 + nightAmb) * (1.0 - waterF) + waterAdd + lamps;
   if (pop > 0.0) {
     let night = sm(0.1, -0.08, ndl0) * (1.0 - sm(-0.08, 0.1, ndl20) * up2);
     if (night > 0.0) {

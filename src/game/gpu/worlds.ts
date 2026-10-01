@@ -27,8 +27,10 @@ import { CHUNK_BYTES, TerrainGpu, TerrainShared } from './terrain';
 import { DEPTH_FORMAT, HDR_FORMAT, SAMPLES } from './formats';
 import { RingFieldGpu } from './rings';
 
-const WORLD_BYTES = 848;
+const WORLD_BYTES = 864;
 const STAR_BYTES = 128;
+/** The water's three wave octaves all repeat over this (m; planet.wgsl WAVE_L × the noise's period of 8). */
+const WAVE_PERIOD = 3840;
 const RING_BYTES = 160;
 const CLOUD_CUBE = 1024;
 const MAXDOTS = 2048; // bodies, stations, ships, dust, the laser's plume
@@ -482,6 +484,12 @@ export class WorldsLayer {
         f.set([s2.pos.x - b.pos.x, s2.pos.y - b.pos.y, s2.pos.z - b.pos.z, s2.radius], 204);
         f.set([suns.c2.r, suns.c2.g, suns.c2.b, 0], 208);
       } else f.fill(0, 196, 212);
+      // the waves' origin (planet.wgsl waterWaves): the camera's place in the world's frame, less a
+      // whole number of WAVE_PERIOD (in doubles here, so what the shader adds to its small
+      // camera-relative positions is small too)
+      const camL = v.subVectors(ship.pos, b.pos).applyQuaternion(qInv);
+      f.set([camL.x - Math.round(camL.x / WAVE_PERIOD) * WAVE_PERIOD, camL.y - Math.round(camL.y / WAVE_PERIOD) * WAVE_PERIOD, camL.z - Math.round(camL.z / WAVE_PERIOD) * WAVE_PERIOD, 0], 212);
+      v.subVectors(b.pos, ship.pos); // (rel again: v is reused)
       const occ = occludersOf(b, cur.bodies, s1);
       occ.forEach((o, k) => f.set([o.pos.x - b.pos.x, o.pos.y - b.pos.y, o.pos.z - b.pos.z, o.radius], 176 + k * 4));
       f.set([b.ring?.inner ?? 0, b.ring?.outer ?? 0, b.ring?.seed ?? 0, occ.length], 192);
