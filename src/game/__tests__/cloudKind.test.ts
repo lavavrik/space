@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { WT } from '../constants';
 import { THREE } from '../lib/three';
-import { atmoOf } from '../sim/atmosphere';
+import { atmoOf, crushDepth, density } from '../sim/atmosphere';
 import { CK, cloudKindOf, deckHeight } from '../sim/cloudKind';
 import { cloudCoverOf } from '../sim/clouds';
 import { systemsNear } from '../universe/galaxy';
@@ -21,6 +21,7 @@ describe('cloud kinds', () => {
       else if (b.type === WT.Desert) expect(k?.kind).toBe(CK.Dust);
       else if (b.type === WT.Volcanic) expect(k?.kind).toBe(atmoOf(b)!.P0 > 5e5 ? CK.Acid : undefined);
       else if (b.type === WT.Icy) expect(k?.kind).toBe(CK.Methane);
+      else if (b.type >= WT.GasGiant) expect(k?.kind).toBe(CK.Giant);
       else expect(k).toBeNull();
     }
     expect(worlds.some((b) => cloudKindOf(b)?.kind === CK.Dust)).toBe(true);
@@ -38,6 +39,16 @@ describe('cloud kinds', () => {
     expect(deckHeight(d) / atmoOf(d)!.H).toBeLessThan(deckHeight(w) / atmoOf(w)!.H);
     for (const raw of [0, 0.15, 0.25]) expect(cloudCoverOf(d, raw)).toBeLessThan(cloudCoverOf(w, raw));
     expect(cloudCoverOf(d, 0.1)).toBe(0);
+  });
+});
+
+describe('giants', () => {
+  it('can be flown down into, the air thickening under the face, to the crush depth', () => {
+    const b = worlds.find((w) => w.type === WT.GasGiant)!;
+    const a = atmoOf(b)!;
+    expect(crushDepth(a)).toBeCloseTo(3 * a.H);
+    expect(density(a, -a.H)).toBeCloseTo(density(a, 0) * Math.E, 6);
+    expect(density(a, -10 * a.H)).toBeCloseTo(density(a, -crushDepth(a)), 6);
   });
 });
 

@@ -1,6 +1,6 @@
 # Atmospheres and clouds
 
-Desert, Earth-like, ocean, some volcanic worlds and the giants have air. It drags on the ship, heats it on the way in, colours the sky, hazes the distance, reddens the sun toward sunset, and carries a cloud layer on Earth-like and ocean worlds.
+Desert, Earth-like, ocean, some volcanic worlds, a few big cold icy ones and the giants have air. It drags on the ship, heats it on the way in, colours the sky, hazes the distance, reddens the sun toward sunset, and carries clouds: water on Earth-like and ocean worlds, dust storms on deserts, an acid deck on Venus-like worlds, methane on Titans, and the giants' own (docs/clouds.md "Kinds").
 
 ## The air (`sim/atmosphere.ts`)
 

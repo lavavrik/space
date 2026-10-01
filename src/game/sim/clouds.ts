@@ -46,6 +46,7 @@ export function cloudCoverOf(b: World, raw: number) {
   if (k === CK.Dust) return smooth(0.18, 0.45, raw) * 0.9;
   if (k === CK.Acid) return 0.9 + 0.1 * smooth(-0.3, 0.3, raw);
   if (k === CK.Methane) return smooth(0.25, 0.5, raw) * 0.7;
+  if (k === CK.Giant) return 0.85 + 0.15 * smooth(-0.3, 0.3, raw);
   return smooth(-0.2, 0.25, raw) * (b.type === WT.Ocean ? 0.95 : 0.85);
 }
 

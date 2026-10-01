@@ -13,6 +13,7 @@ import { applyThrust, refillShip } from './resources';
 import { stationLimits } from './docking';
 import { TEMP } from './thermal';
 import { altitudeAt, reliefAmp, surfaceRadius } from './terrain';
+import { atmoOf, crushDepth } from './atmosphere';
 import { RING_HALF_THICK } from './rings';
 import { shipLost } from './contracts';
 import { leaveWreck } from './wreck';
@@ -151,7 +152,9 @@ export function collide(g: Game, dt: number) {
     const d = rel.length();
     // cheap reject before sampling the terrain: above the highest peaks
     if (d > b.radius * 1.01 + 200 && ship.landed !== b) continue;
-    const min = surfaceRadius(b, ship.pos) + CLEARANCE;
+    // (a giant has no surface: under its face, its clouds, you're crushed at crushDepth)
+    const air = b.kind !== 'star' && b.type >= WT.GasGiant ? atmoOf(b) : null;
+    const min = air ? b.radius - crushDepth(air) : surfaceRadius(b, ship.pos) + CLEARANCE;
     if (d >= min) {
       if (ship.landed === b && d > min + 20) ship.landed = null;
       continue;
@@ -169,7 +172,7 @@ export function collide(g: Game, dt: number) {
     }
     if (b.type >= WT.GasGiant) {
       ship.vel.add(bv);
-      destroyShip(g, `Crushed in the atmosphere of ${b.name} · gas giants have no surface`, b);
+      destroyShip(g, `Crushed in the depths of ${b.name} · gas giants have no surface`, b);
       return;
     }
     // a hard landing damages the hull, the harder the worse: a whole hull's worth at CRASH_SPEED

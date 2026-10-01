@@ -13,6 +13,7 @@ import noise3d from './noise3d.wgsl?raw';
 import terrain from './terrain.wgsl?raw';
 import atmo from './atmo.wgsl?raw';
 import clouds from './clouds.wgsl?raw';
+import giant from './giant.wgsl?raw';
 import city from './city.wgsl?raw';
 import planet from './planet.wgsl?raw';
 import atmosphere from './atmosphere.wgsl?raw';
@@ -41,7 +42,7 @@ import particles from './particles.wgsl?raw';
 import fields from './fields.wgsl?raw';
 import bloom from './bloom.wgsl?raw';
 
-const parts: Record<string, string> = { noise, frame, world, chunk, rock, stationBody, ringband, shadow, sprite, noise3d, terrain, atmo, clouds, city };
+const parts: Record<string, string> = { noise, frame, world, chunk, rock, stationBody, ringband, shadow, sprite, noise3d, terrain, atmo, clouds, giant, city };
 const build = (src: string) => src.replace(/^\/\/ #include (\w+)$/gm, (_, name: string) => parts[name] ?? `// (no ${name})`);
 
 export const SKY_BAKE_WGSL = build(skyBake);

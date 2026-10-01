@@ -17,6 +17,7 @@
 // #include noise3d
 // #include city
 // #include clouds
+// #include giant
 // #include atmo
 // #include ringband
 // #include shadow
@@ -121,14 +122,26 @@ fn density(P: vec3f) -> f32 {
   // towers: thicker cover rises higher, and ~8 km cells rise and fall, so the tops aren't one carpet
   let cell = 0.5 + 0.5 * tnoise(kw * 0.27 + 5.0 + tv * 2.8e-4);
   var top = clamp(mix(0.25, 1.0, cov) * (0.45 + 0.75 * cell), 0.15, 1.0);
-  // (an acid deck: one sheet, its top rolling a little, not towers)
+  // (an acid deck: one sheet, its top rolling a little, not towers; a giant's too, its tops at its
+  // face, 0.9 of the layer's depth, up to a quarter of a scale height over it)
   let acid = cloudKind() == CK_ACID;
+  let giant = cloudKind() == CK_GIANT;
   if (acid) { top = 0.85 + 0.15 * cell; }
+  if (giant) { top = 0.86 + 0.14 * cell; }
   // storms (clouds.wgsl stormAt): towers up to the layer's top, under an anvil, a flat sheet spread
   // over the storm near the top (12–14 km on an Earth)
   let st = stormAt(lp, cov0);
   top = mix(top, 1.0, st * smoothstep(0.35, 0.6, cell));
-  let profile = smoothstep(0.0, 0.08, h) * (1.0 - smoothstep(top * 0.5, top, h));
+  // (a giant's tops crisp, over a couple of km: fading over the layer's upper half, 20 km on a
+  // giant, they were a featureless glow from above)
+  var profile = smoothstep(0.0, 0.08, h) * (1.0 - smoothstep(select(top * 0.5, top - 0.06, giant), top, h));
+  // (and two decks, as a Jupiter's are (ammonia over ammonium hydrosulphide), clear air between,
+  // ~11–16 km under the face, its floor and ceiling rolling: one 45 km sheet was a featureless fog
+  // all the way down)
+  if (giant) {
+    let gw = 0.03 * tnoise(kw * 0.05 + 43.0);
+    profile *= 1.0 - smoothstep(0.56 + gw, 0.6 + gw, h) * (1.0 - smoothstep(0.7 - gw, 0.74 - gw, h));
+  }
   var base = cov * profile;
   // (its underside rising and falling, ~±1 km over tens of km, and its thickness patchy, so the
   // erosion below breaks it up: a flat, even sheet was featureless fog from inside it, its
@@ -147,7 +160,7 @@ fn density(P: vec3f) -> f32 {
   // (and they boil: the finest detail changes over a few minutes)
   let kb = k + vec3f(0.0, world.time * 3e-4, 0.0);
   let n = 0.55 * tnoise(kb) + 0.3 * tnoise(kb * 3.1) + 0.15 * tnoise(kb * 9.3);
-  let bite = select(mix(0.75, 0.45, smoothstep(0.5, 0.9, cov)), 0.3, acid);
+  let bite = select(select(mix(0.75, 0.45, smoothstep(0.5, 0.9, cov)), 0.3, acid), 0.55, giant);
   // (an acid haze, not cloud: a few km of visibility in it, ACID_THIN of a cloud's density)
   return clamp((base - (1.0 - base) * (bite - bite * n)) * 3.0, 0.0, 1.0) * select(1.0, ACID_THIN, acid);
 }
@@ -354,6 +367,10 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   let mid = dir * (0.5 * (t0 + t1)) - C;
   let sunCol = atSunlightC(normalize(mid) * (world.radius + world.cloudH), L) * sunShade(mid) * world.atSunI / 45.0;
   let dayK = smoothstep(-0.15, 0.3, dot(normalize(mid), L));
+  // what the clouds are made of: their colour (a giant's, its bands' where this ray's clouds are,
+  // giant.wgsl: from above they carry on its painted face)
+  var cloudCol = world.cloudC.rgb;
+  if (cloudKind() == CK_GIANT) { cloudCol = giantColAt(toLocalM() * normalize(mid)); }
   let sunUp = smoothstep(-0.15, 0.0, dot(normalize(mid), L));
   // (twilight's light from the sky over them, atmo.wgsl atTwilight: blue-hour clouds aren't black)
   let twL = atTwilight(normalize(mid), L, normalize(mid)) * 2.0;
@@ -460,8 +477,12 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
       // (and the shadows of what's near from it, as the first sun's: a sky station's on the clouds)
       light += sunCol2 * (sun2 * 0.6 * shadowAtPoint2(P) + 0.12 * (0.4 + 0.6 * h)) * 0.97;
     }
+    // (a giant's lower deck is under the upper one, 7 km of cloud the short march toward the sun
+    // doesn't reach through: lit as if it weren't there, it was a bright flat floor. A tenth gets
+    // down, diffused)
+    if (cloudKind() == CK_GIANT) { light *= mix(0.1, 1.0, smoothstep(0.62, 0.72, h)); }
     let tStep = exp(-dn * SIGMA * dt);
-    S += T * light * world.cloudC.rgb * (1.0 - tStep); // (× what they're made of: dust is the sand's colour)
+    S += T * light * cloudCol * (1.0 - tStep); // (× what they're made of: dust is the sand's colour)
     tSum += t * T * (1.0 - tStep);
     wSum += T * (1.0 - tStep);
     T *= tStep;
@@ -479,7 +500,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     // sunrise, its colour was a dark band over the lit clouds toward the horizon)
     let deep = smoothstep(0.05, 0.25, hc) * (1.0 - smoothstep(0.6, 0.85, hc)) * smoothstep(0.02, 0.2, density(vec3f(0.0)));
     let fk = (1.0 - exp(-min(tNat - t1, 300000.0) * covC * 2e-5)) * deep;
-    let base = (sunCol * (0.45 * sunUp + 0.15 * dayK) + twL) * world.cloudC.rgb;
+    let base = (sunCol * (0.45 * sunUp + 0.15 * dayK) + twL) * cloudCol;
     var meanC = base;
     if (T < 0.95) { meanC = max(S / (1.0 - T), base * 0.8); }
     S += T * fk * meanC;

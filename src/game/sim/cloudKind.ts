@@ -11,7 +11,11 @@
  *     orange day;
  *   - methane (the icy worlds with air, Titan): sparse convective clouds, off-white, under the air's own
  *     thick orange haze (render/look.ts airBeta, from the palette's sky colour) which is most of what
- *     you see.
+ *     you see;
+ *   - giant (gas and ice giants): their face is their cloud tops (planet.wgsl giantSurface); up
+ *     close, a layer you can fly down into, from just over the face to 2.5 scale heights under it,
+ *     in the bands' colours (giant.wgsl giantColAt). You're crushed at 3 (sim/atmosphere.ts
+ *     crushDepth).
  */
 import { WT } from '../constants';
 import { THREE } from '../lib/three';
@@ -19,7 +23,7 @@ import type { Body, World } from '../types';
 import { atmoOf } from './atmosphere';
 
 /** The kinds (World.cloudC.w; clouds.wgsl cloudKind). */
-export const CK = { Water: 0, Dust: 1, Acid: 2, Methane: 3 } as const;
+export const CK = { Water: 0, Dust: 1, Acid: 2, Methane: 3, Giant: 4 } as const;
 export type CloudKindId = (typeof CK)[keyof typeof CK];
 
 export interface CloudKind {
@@ -43,6 +47,8 @@ export function cloudKindOf(b: Body): CloudKind | null {
     // (the thick-aired ones only: a thin sulphur-dioxide haze over an Io has no deck)
     else if (b.type === WT.Volcanic && atmoOf(b)!.P0 > 5e5) k = { kind: CK.Acid, h: 4.2, color: new THREE.Color(1, 0.9, 0.66) };
     else if (b.type === WT.Icy) k = { kind: CK.Methane, h: 1.5, color: new THREE.Color(0.96, 0.93, 0.86) };
+    // (the layer's top at 0.26 scale heights over the face; its colour is the bands', per pixel)
+    else if (b.type === WT.GasGiant || b.type === WT.IceGiant) k = { kind: CK.Giant, h: 0.25, color: b.pal.a.clone() };
     else k = null;
     cache.set(b, k);
   }

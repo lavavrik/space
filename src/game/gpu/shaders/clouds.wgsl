@@ -39,11 +39,13 @@ const LIFT_CLEAR: f32 = 1200.0;
 fn cloudLiftAt(p: vec3f) -> f32 {
   let g = textureSampleLevel(cloudTex, cloudSamp, p, 0.0).g;
   if (cloudKind() == CK_DUST) { return max(g - 0.15 * world.terrA, 0.0); }
+  if (cloudKind() == CK_GIANT) { return 0.0; } // (no ground)
   return max(g + (LIFT_CLEAR + 0.2 * world.terrA) * smoothstep(0.0, 500.0, g) - world.cloudH * cloudBaseK(), 0.0); // (none over the sea)
 }
 // …at most (the ground's at most ~1.3 × the relief)
 fn cloudLiftMax() -> f32 {
   if (cloudKind() == CK_DUST) { return world.terrA * 1.3; }
+  if (cloudKind() == CK_GIANT) { return 0.0; }
   return max(world.terrA * 1.6 + LIFT_CLEAR - world.cloudH * cloudBaseK(), 0.0);
 }
 
@@ -55,10 +57,13 @@ const CK_WATER: i32 = 0;
 const CK_DUST: i32 = 1;
 const CK_ACID: i32 = 2;
 const CK_METHANE: i32 = 3;
+const CK_GIANT: i32 = 4; // (gas and ice giants: under their face, in the bands' colours, giant.wgsl)
 fn cloudKind() -> i32 { return i32(world.cloudC.w + 0.5); }
-// the layer's base, in deck heights (its top is at 1.05): an acid deck 45–70 km up on a Venus
+// the layer's base, in deck heights (its top is at 1.05): an acid deck 45–70 km up on a Venus; a
+// giant's under its face, 2.5 scale heights down (its deck is 0.25 of one)
 fn cloudBaseK() -> f32 {
   let k = cloudKind();
+  if (k == CK_GIANT) { return -10.0; }
   return select(select(0.4, 0.65, k == CK_ACID), 0.0, k == CK_DUST);
 }
 
@@ -204,5 +209,6 @@ fn cloudCover(raw: f32) -> f32 {
   if (cloudKind() == CK_DUST) { return smoothstep(0.18, 0.45, raw) * 0.9; }
   if (cloudKind() == CK_ACID) { return 0.9 + 0.1 * smoothstep(-0.3, 0.3, raw); }
   if (cloudKind() == CK_METHANE) { return smoothstep(0.25, 0.5, raw) * 0.7; }
+  if (cloudKind() == CK_GIANT) { return 0.85 + 0.15 * smoothstep(-0.3, 0.3, raw); }
   return smoothstep(-0.2, 0.25, raw) * select(0.85, 0.95, world.wtype == 3);
 }

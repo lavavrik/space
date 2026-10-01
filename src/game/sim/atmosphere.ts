@@ -139,14 +139,20 @@ export function atmoOf(b: Body): Atmo | null {
   return a;
 }
 
-/** Air pressure (Pa) at a height above the mean radius. */
-export const pressure = (a: Atmo, h: number) => (h > a.top ? 0 : a.P0 * Math.exp(-Math.max(h, 0) / a.H));
+/**
+ * How far under a giant's face (its cloud tops, 1 bar) you can go before you're crushed (m): 3 scale
+ * heights, ~20 bar (sim/flight.ts collide). Its clouds go down to 2.5 (sim/cloudKind.ts).
+ */
+export const crushDepth = (a: Atmo) => 3 * a.H;
+
+/** Air pressure (Pa) at a height above the mean radius (under it too, down to a giant's crush depth). */
+export const pressure = (a: Atmo, h: number) => (h > a.top ? 0 : a.P0 * Math.exp(-Math.max(h, -crushDepth(a)) / a.H));
 
 /** Air temperature (K) at a height: the surface's, cooling toward the skin temperature aloft. */
 export const airTemp = (a: Atmo, h: number) => a.Tskin + (a.Ts - a.Tskin) * Math.exp(-Math.max(h, 0) / (1.5 * a.H));
 
 /** Air density (kg/m³) at a height above the mean radius. */
-export const density = (a: Atmo, h: number) => (h > a.top ? 0 : a.rho0 * Math.exp(-Math.max(h, 0) / a.H));
+export const density = (a: Atmo, h: number) => (h > a.top ? 0 : a.rho0 * Math.exp(-Math.max(h, -crushDepth(a)) / a.H));
 
 const tmp = new THREE.Vector3(),
   airVel = new THREE.Vector3(),

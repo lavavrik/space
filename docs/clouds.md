@@ -2,7 +2,7 @@
 
 Earth-like and ocean worlds have a cloud deck of water cloud; desert worlds with air have dust
 storms, volcanic worlds with thick air an acid deck, and icy worlds with air (Titans) sparse methane
-clouds (see Kinds below). The rest of this page is about water cloud unless it says otherwise. Its pattern is one per world, baked once into a
+clouds, and the giants a layer under their face you can fly down into (see Kinds below; docs/giants.md). The rest of this page is about water cloud unless it says otherwise. Its pattern is one per world, baked once into a
 cube map in the world's own frame (`cloudBake.wgsl`, from `clouds.wgsl cloudRaw`), and used three
 ways:
 
@@ -200,6 +200,7 @@ differ in where the layer is, how it's shaped, and its colour.
   clouds, shaped as water cloud (towers, clumps), off-white, at 1.5 scale heights, on a tenth of the
   face or so (`cloudCover` from 0.25 to 0.5, at most 0.7). The air's own orange smog (docs/
   atmosphere.md) is most of what you see. No storms, lightning or cirrus.
+- **Giant** (gas and ice giants): docs/giants.md "Clouds".
 - **Every deck** is at most 1.5 % of the world's radius up (`deckHeight`; Venus's is 1.2 %): small
   hot worlds' air has scale heights of 100+ km, and their acid deck was hundreds of km up.
 

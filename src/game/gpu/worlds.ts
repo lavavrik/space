@@ -535,7 +535,8 @@ export class WorldsLayer {
         // the ground under you, if it's high: the cloud base (0.4 deck heights) kept ~1.2 km over it;
         // dust's base is the ground itself (clouds.wgsl cloudBaseK)
         const ground = surfaceRadius(b, ship.pos) - b.radius;
-        this.vcLift = cloudKindOf(b)?.kind === CK.Dust ? Math.max(0, ground) : Math.max(0, ground + 1200 - 0.4 * deckH);
+        const ck = cloudKindOf(b)?.kind;
+        this.vcLift = ck === CK.Giant ? 0 : ck === CK.Dust ? Math.max(0, ground) : Math.max(0, ground + 1200 - 0.4 * deckH);
       }
       // up close, LOD terrain replaces the sphere: big on screen and actually close (render/look.ts)
       w.terrOn = !!w.terrain && pxR > TERRAIN_PX && d < b.radius * TERRAIN_NEAR;
@@ -710,7 +711,9 @@ export class WorldsLayer {
     }
     pass.setPipeline(this.cloudPipe);
     for (const w of far) {
-      if (!w.cloud || w.pxR <= 2) continue;
+      // (a giant's face is its cloud tops already, planet.wgsl: no deck over it, only the volumetric
+      // layer up close)
+      if (!w.cloud || w.pxR <= 2 || cloudKindOf(w.b)?.kind === CK.Giant) continue;
       pass.setBindGroup(1, w.group);
       this.drawMesh(pass, this.sphere.hi, false);
     }
