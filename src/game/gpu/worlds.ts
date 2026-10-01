@@ -75,6 +75,7 @@ const blendAlpha: GPUBlendState = { color: { srcFactor: 'src-alpha', dstFactor: 
 export class WorldsLayer {
   private readonly sphere: { hi: Mesh; mid: Mesh; lo: Mesh };
   private readonly noiseTex: GPUTexture;
+  private readonly tmpV = new THREE.Vector3();
   private readonly noiseSamp: GPUSampler;
   private readonly cloudSamp: GPUSampler;
   private readonly noCloud: GPUTexture;
@@ -441,6 +442,22 @@ export class WorldsLayer {
       f.set([gc.r, gc.g, gc.b, I], 20);
       f.set([rel.x, rel.y, rel.z, size], 24);
       f[28] = simTime;
+      // an eclipse (star.wgsl corona): how much of the disc nearer bodies cover, by their angular
+      // sizes and separation (a body smaller than the disc covers at most its share of its area)
+      const rs = Math.asin(Math.min(1, b.radius / d));
+      let cov = 0;
+      for (const o of cur.bodies) {
+        if (o.kind === 'star') continue;
+        const ro = this.tmpV.subVectors(o.pos, ship.pos);
+        const dO = ro.length();
+        if (dO >= d || dO <= o.radius) continue;
+        const rb = Math.asin(Math.min(1, o.radius / dO));
+        const sep = ro.angleTo(rel);
+        const c = THREE.MathUtils.clamp((rb + rs - sep) / (2 * rs), 0, 1);
+        cov = Math.max(cov, rb < rs ? c * (rb / rs) ** 2 : c);
+      }
+      f[29] = cov;
+      f[30] = b.radius / size; // (the disc's radius in the glow's units)
       device.queue.writeBuffer(st.buf, 0, f);
     }
     this.dotCount = 0;

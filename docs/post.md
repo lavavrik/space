@@ -34,3 +34,7 @@ The HUD and the overlay are drawn separately, so they stay sharp.
 
 **Dev note:** after editing shaders or constants, reload with a fresh URL (`?r=n`) or restart the dev
 server: a page that has taken hot updates can keep serving old module versions.
+
+## Eclipses (`gpu/worlds.ts`, `star.wgsl fsGlow`)
+
+Each frame, how much of each star's disc nearer bodies cover (by their angular sizes and separation; a body smaller than the disc covers at most its share of the area). As it nears total, the star's glow dims (by 92 % at totality) and the corona shows: pearly streamers round the covered disc, out to a few of its radii, uneven round it (otherwise lost in the glare). Under the shadow the sky darkens too (the eclipse already dims the sky, the air and the ground: shadow.wgsl), and the lens flare, reading the frame at the star, goes with the light.
