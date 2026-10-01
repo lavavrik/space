@@ -1,0 +1,137 @@
+/* Touch layout (ui/hooks/useTouchMode.ts puts `touch` on <body>): on-screen controls
+   (ui/components/TouchControls.tsx) and the HUD squeezed to fit a phone held sideways. Gauges, target
+   and location move to the top edge, the flight cluster stays bottom centre between the thumbs. */
+
+body.touch { touch-action: none; overscroll-behavior: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+/* the HUD scales with the window's height here: landscape phones are wide but short */
+:root:has(body.touch) { font-size: clamp(12px, 2.4vh + 3px, 16px); }
+/* things for a mouse */
+body.touch #relock, body.touch #help { display: none; }
+body.touch .tip { display: none; }
+
+/* --- compact HUD --- */
+body.touch #leftcol {
+  top: calc(.5rem + env(safe-area-inset-top, 0px)); left: calc(.6rem + env(safe-area-inset-left, 0px));
+  width: min(22rem, 40vw); max-height: calc(100% - 14rem) !important; gap: .4rem;
+}
+body.touch #loc { margin-bottom: 0; gap: 0; max-width: 18rem; }
+body.touch .lsys { font-size: 1.05rem; }
+body.touch .lstar { font-size: .75rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.touch .lsub { display: none; }
+body.touch .ljump, body.touch .ljump.hint { font-size: .75rem; margin-top: 0; }
+
+body.touch #hud { grid-template-columns: 1fr; justify-items: center; padding: 0 0 calc(.5rem + env(safe-area-inset-bottom, 0px)); }
+body.touch #flight { width: 16rem; padding: .3rem .7rem .4rem; gap: .15rem; }
+/* only the lamps that are lit: the dim row of 24 would take three lines */
+body.touch #lamps { padding-bottom: .2rem; gap: .1rem; min-height: 1.2rem; }
+body.touch .lamp { font-size: .95rem; }
+body.touch .lamp:not(.on):not(.ftl):not(.warn) { display: none; }
+/* toasts: smaller, and clear of the ctx keys */
+body.touch #msg { font-size: .8rem; letter-spacing: .08em; padding: .3rem .8rem; max-width: 60vw; }
+body.touch #hMode { font-size: .65rem; padding: .05rem .5rem; }
+body.touch .spd { font-size: 2.2rem; }
+body.touch .unit { font-size: .65rem; margin-top: -.1rem; }
+body.touch .barcap, body.touch .pills { display: none; }
+body.touch .fline { font-size: .75rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* gauges: slim bars along the top right, left of the pause button */
+body.touch #gauges {
+  position: fixed; top: calc(.5rem + env(safe-area-inset-top, 0px)); right: calc(3.6rem + env(safe-area-inset-right, 0px));
+  width: 11rem; padding: .35rem .6rem .4rem; gap: .15rem; clip-path: none;
+}
+body.touch #gauges > .h, body.touch #gauges .gsubl, body.touch #gauges .gnote { display: none; }
+body.touch #gauges .gauge { margin-bottom: .15rem; gap: .1rem; }
+body.touch #gauges .gtop { font-size: .68rem; letter-spacing: .06em; }
+body.touch #gauges .gtop b { font-size: .75rem; }
+body.touch #gauges .bar { height: .3rem; }
+
+/* target: name and distance, top centre */
+body.touch #target.card {
+  position: fixed; top: calc(.5rem + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%);
+  width: 14rem; padding: .35rem .7rem .4rem; gap: .05rem; clip-path: none;
+}
+body.touch #target > .h, body.touch #target .ttype, body.touch #target .appr { display: none; }
+body.touch #target .tname { font-size: .95rem; }
+body.touch #target.none .tname { font-size: .8rem; }
+body.touch #target .tdist { margin-top: 0; }
+body.touch #target .tdist b { font-size: 1.05rem; }
+body.touch #target .tdist span { font-size: .75rem; }
+
+/* panels from the right (planner, navigation, autopilot) sit under the gauges */
+body.touch #rightcol {
+  top: calc(6.5rem + env(safe-area-inset-top, 0px)); right: calc(.6rem + env(safe-area-inset-right, 0px));
+  width: min(20rem, 38vw); max-height: calc(100% - 17.5rem) !important;
+}
+
+/* --- on-screen controls --- */
+.tc { position: fixed; inset: 0; z-index: 20; pointer-events: none; }
+.tc-btn {
+  pointer-events: auto; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+  display: grid; place-items: center; padding: 0; width: 3.4rem; height: 3.4rem; border-radius: 50%;
+  font: 700 .7rem var(--ui-font); letter-spacing: .08em; color: var(--amber);
+  background: rgba(16, 11, 6, .6); border: 1px solid var(--amber-dim);
+}
+.tc-btn.down { background: rgba(255, 165, 58, .38); color: var(--text); }
+
+.tc-left {
+  position: absolute; left: calc(1rem + env(safe-area-inset-left, 0px)); bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  display: flex; align-items: flex-end; gap: .7rem;
+}
+.tc-stick {
+  pointer-events: auto; touch-action: none; position: relative; width: 8rem; height: 8rem; border-radius: 50%;
+  border: 1px solid var(--amber-dim); background: radial-gradient(circle, rgba(255, 165, 58, .1), rgba(16, 11, 6, .55));
+}
+.tc-knob {
+  position: absolute; left: 50%; top: 50%; width: 3.4rem; height: 3.4rem; margin: -1.7rem 0 0 -1.7rem; border-radius: 50%;
+  background: rgba(255, 165, 58, .32); border: 1px solid var(--amber); pointer-events: none;
+}
+.tc-dir { position: absolute; font: 600 .6rem var(--ui-font); color: var(--amber-dim); pointer-events: none; }
+.tc-dir.n { top: .25rem; left: 50%; transform: translateX(-50%); }
+.tc-dir.s { bottom: .25rem; left: 50%; transform: translateX(-50%); }
+.tc-dir.w { left: .35rem; top: 50%; transform: translateY(-50%); }
+.tc-dir.e { right: .35rem; top: 50%; transform: translateY(-50%); }
+.tc-vert { display: grid; grid-template-columns: 2.6rem 2.6rem; gap: .4rem; }
+.tc-vert .tc-btn { width: 2.6rem; height: 2.6rem; font-size: 1rem; }
+
+.tc-right {
+  position: absolute; right: calc(1rem + env(safe-area-inset-right, 0px)); bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  display: grid; grid-template-columns: 3.4rem 3.4rem; gap: .5rem;
+}
+.tc-ftl { color: var(--cyan); border-color: var(--cyan); }
+.tc-boost { border-color: var(--text); color: var(--text); }
+.tc-stop { color: var(--red); border-color: var(--red); }
+
+.tc-pause {
+  position: absolute; top: calc(.5rem + env(safe-area-inset-top, 0px)); right: calc(.6rem + env(safe-area-inset-right, 0px));
+  width: 2.4rem; height: 2.4rem; font-size: .7rem;
+}
+/* the keys the open panel wants, above the flight cluster */
+.tc-ctx {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(7.8rem + env(safe-area-inset-bottom, 0px));
+  display: flex; gap: .3rem; flex-wrap: wrap; justify-content: center; max-width: 24rem;
+}
+.tc-key { width: 2.4rem; height: 2.4rem; border-radius: .3rem; font-size: .85rem; }
+.tc-close {
+  position: absolute; top: calc(.5rem + env(safe-area-inset-top, 0px)); right: calc(.6rem + env(safe-area-inset-right, 0px));
+  width: auto; padding: 0 1rem; height: 2.4rem; border-radius: .3rem;
+}
+
+/* the "more" sheet: every other action, in the keyboard's groups */
+.tc-sheet { position: absolute; inset: 0; pointer-events: auto; background: rgba(0, 0, 0, .55); display: grid; place-items: center; }
+.tc-sheetbox {
+  width: min(46rem, calc(100% - 2rem)); max-height: calc(100% - 1.5rem); overflow-y: auto; padding: .6rem .8rem .8rem;
+  background: rgba(16, 11, 6, .94); border: 1px solid var(--amber-faint); display: flex; flex-direction: column; gap: .4rem;
+}
+.tc-sheetbox h4 { margin: .2rem 0 .25rem; font-size: .7rem; letter-spacing: .2em; color: var(--amber-dim); font-weight: 600; }
+.tc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(6.2rem, 1fr)); gap: .35rem; }
+.tc-act { width: auto; height: 2.4rem; border-radius: .3rem; font-size: .7rem; letter-spacing: .04em; text-transform: uppercase; }
+.tc-done { align-self: stretch; margin-top: .3rem; color: var(--text); }
+
+/* portrait: flying wants the screen sideways */
+@media (orientation: portrait) {
+  body.touch::after {
+    content: 'TURN YOUR DEVICE SIDEWAYS TO FLY'; position: fixed; left: 0; right: 0; top: 40%; text-align: center;
+    padding: .6rem; font: 700 .85rem var(--ui-font); letter-spacing: .16em; color: var(--text);
+    background: rgba(16, 11, 6, .8); border-block: 1px solid var(--amber-dim); pointer-events: none; z-index: 30;
+  }
+}

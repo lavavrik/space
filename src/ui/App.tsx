@@ -14,13 +14,16 @@ import { OutfitPanel } from './components/OutfitPanel';
 import { RadarPanel } from './components/RadarPanel';
 import { OrbitPlanner } from './components/OrbitPlanner';
 import { Toast } from './components/Toast';
+import { TouchControls } from './components/TouchControls';
 import { useGame, useHud } from './hooks/useGame';
 import { useLeftRoom } from './hooks/useLeftRoom';
+import { useTouchMode } from './hooks/useTouchMode';
 
 export function App() {
   const { hostRef, game } = useGame();
   const hud = useHud(game);
   useLeftRoom(!!hud && !hud.mapOpen);
+  const touch = useTouchMode();
   return (
     <>
       <div ref={hostRef} />
@@ -115,6 +118,7 @@ export function App() {
           </div>
         </>
       )}
+      {touch && game && hud && <TouchControls input={game.input} hud={hud} />}
     </>
   );
 }

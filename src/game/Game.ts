@@ -290,7 +290,7 @@ export class Game {
         const { W, H } = this.view;
         const hit = pickAt(this, locked ? W / 2 : x, locked ? H / 2 : y);
         // clicking empty space captures the mouse, as before
-        if (!hit && !locked) this.input.requestLock();
+        if (!hit && !locked && !this.input.touch) this.input.requestLock();
         this.invalidateHud();
       },
       isActive: () => true,

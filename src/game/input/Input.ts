@@ -5,6 +5,25 @@ const HANDLED = new Set([
   'KeyZ', 'KeyV', 'KeyF', 'KeyI', 'KeyU', 'KeyB', 'KeyY', 'KeyM', 'Slash', 'KeyL', 'Backquote', 'Backspace', 'KeyO', 'KeyR', 'KeyP', 'KeyK', 'BracketLeft', 'BracketRight', 'Enter', 'NumpadEnter', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Comma', 'Period', 'Escape',
 ]);
 
+/** A finger on the canvas. */
+interface Finger {
+  x: number;
+  y: number;
+  x0: number;
+  y0: number;
+  t0: number;
+  /** Still a tap: hasn't moved past TAP_SLOP and is the only finger. */
+  tap: boolean;
+}
+
+/** A touch that moves less than this many px and lifts within TAP_MS is a tap, not a drag. */
+const TAP_SLOP = 10;
+const TAP_MS = 350;
+/** Look speed of a dragging finger relative to a mouse (a finger covers less distance than a wrist). */
+const TOUCH_LOOK = 1.6;
+/** Pinch distance (px) per zoom step. */
+const PINCH_STEP = 28;
+
 export type Keys = Record<string, boolean | undefined>;
 
 export interface InputHandlers {
@@ -29,13 +48,19 @@ export class Input {
   private mdy = 0;
   private dragging = false;
   private dragDist = 0; // px moved since mousedown, to tell a click from a drag
+  /** Fingers on the canvas one looks or taps, two pinch. */
+  private readonly fingers = new Map<number, Finger>();
+  private pinch = 0; // distance between two fingers last move
+  private pinchAcc = 0; // px of pinch not yet turned into a zoom step
   /** Cursor over the canvas (CSS px), for hover highlights; `over` is false when it's elsewhere. */
+  /** A touch screen is in use (a finger has touched the canvas, or the primary pointer is coarse): no pointer lock to ask for. */
+  touch = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
   readonly mouse = { x: 0, y: 0, over: false };
   private readonly cleanup: (() => void)[] = [];
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
-    handlers: InputHandlers,
+    private readonly handlers: InputHandlers,
   ) {
     this.listen(window, 'keydown', (e: KeyboardEvent) => {
       // typing into a text field (the nav search) goes to the field, not the ship
@@ -84,6 +109,7 @@ export class Input {
         this.mdy += e.movementY;
       }
     });
+    this.listenTouch(canvas);
     this.listen(document, 'pointerlockchange', () => handlers.onPointerLockChange(this.isLocked()));
   }
 
@@ -98,6 +124,81 @@ export class Input {
     } catch {
       // pointer lock is unavailable (e.g. in an iframe); dragging still steers
     }
+  }
+
+  /** Hold or release a key from a touch control: polled each frame like a real one. */
+  setKey(code: string, down: boolean) {
+    this.keys[code] = down;
+  }
+
+  /** A key press from a touch button; Shift is held for the length of it when `shift`, and not when it isn't (even if boost is held). */
+  press(code: string, shift = false) {
+    const [l, r] = [this.keys.ShiftLeft, this.keys.ShiftRight];
+    this.keys.ShiftLeft = shift;
+    this.keys.ShiftRight = false;
+    this.handlers.onPress(code);
+    this.keys.ShiftLeft = l;
+    this.keys.ShiftRight = r;
+  }
+
+  /**
+   * Fingers on the canvas (the HUD lets touches through): one finger dragging steers like the
+   * mouse, a short still touch taps (targets what's under it), two fingers pinch (zoom). Touches
+   * that start on a control are theirs and never reach the canvas.
+   */
+  private listenTouch(canvas: HTMLCanvasElement) {
+    this.listen(canvas, 'pointerdown', (e: PointerEvent) => {
+      if (e.pointerType !== 'touch') return;
+      e.preventDefault(); // no emulated mouse events after it
+      this.touch = true;
+      canvas.setPointerCapture(e.pointerId);
+      this.fingers.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t0: e.timeStamp, tap: this.fingers.size === 0 });
+      if (this.fingers.size === 2) {
+        this.pinch = this.span();
+        this.pinchAcc = 0;
+      }
+    });
+    this.listen(canvas, 'pointermove', (e: PointerEvent) => {
+      const f = this.fingers.get(e.pointerId);
+      if (!f) return;
+      if (this.fingers.size >= 2) {
+        const d = this.span();
+        // one zoom step (a wheel notch) per PINCH_STEP px the fingers spread or close
+        this.pinchAcc += this.pinch - d;
+        this.pinch = d;
+        while (Math.abs(this.pinchAcc) >= PINCH_STEP) {
+          this.handlers.onWheel(Math.sign(this.pinchAcc));
+          this.pinchAcc -= Math.sign(this.pinchAcc) * PINCH_STEP;
+        }
+        f.x = e.clientX;
+        f.y = e.clientY;
+        f.tap = false;
+        return;
+      }
+      if (Math.hypot(e.clientX - f.x0, e.clientY - f.y0) >= TAP_SLOP) f.tap = false;
+      if (!f.tap) {
+        this.mdx += (e.clientX - f.x) * TOUCH_LOOK;
+        this.mdy += (e.clientY - f.y) * TOUCH_LOOK;
+      }
+      f.x = e.clientX;
+      f.y = e.clientY;
+    });
+    const up = (e: PointerEvent) => {
+      const f = this.fingers.get(e.pointerId);
+      if (!f) return;
+      this.fingers.delete(e.pointerId);
+      if (e.type === 'pointerup' && f.tap && e.timeStamp - f.t0 < TAP_MS && this.handlers.isActive()) {
+        const r = canvas.getBoundingClientRect();
+        this.handlers.onClick(f.x - r.left, f.y - r.top, false);
+      }
+    };
+    this.listen(canvas, 'pointerup', up);
+    this.listen(canvas, 'pointercancel', up);
+  }
+
+  private span() {
+    const [a, b] = [...this.fingers.values()];
+    return Math.hypot(a.x - b.x, a.y - b.y);
   }
 
   /** Mouse movement since the last call, in pixels. */
