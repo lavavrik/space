@@ -295,10 +295,16 @@ export class EffectsLayer {
         this.instData[this.hulls++ * 17 + 16] = sunFraction(g.cur.bodies, suns.s1, npc.pos);
       }
       if (docked) continue;
-      // marker, and the engines: main at the tail while thrusting, retro at the nose while braking
+      // marker, and the engines: main at the tail while thrusting, retro at the nose while braking.
+      // They fade with distance as lights that size would (they were drawn at any distance, so ships
+      // hundreds of thousands of km off read as stars round a world, SPACE-72): its lights by
+      // ~1,000 km, an engine's glow by ~10,000 km, a drive's in FTL by ~100,000 km
       const ftl = npc.ftl;
+      const dist = rel.length();
+      const fade = (near: number, far: number) => 1 - THREE.MathUtils.smoothstep(dist, near, far);
+      const mk = ftl ? fade(2e7, 1e8) : fade(2e5, 1e6);
       const mc = ftl ? [0.5, 0.9, 1.0] : [0.85, 0.85, 0.8];
-      worlds.addDot(rel, mc[0], mc[1], mc[2], (ftl ? 5 : 3.5) * pr);
+      if (mk > 0.01) worlds.addDot(rel, mc[0] * mk, mc[1] * mk, mc[2] * mk, (ftl ? 5 : 3.5) * pr);
       if (npc.thrust !== 0) {
         // where it fires from: the main engine at the tail (pushing along the nose), the retros at
         // the nose (against it), or the lift jets under the hull (across it: hovering down onto a
@@ -309,7 +315,8 @@ export class EffectsLayer {
         const kind = ftl || along > 0.6 ? 'main' : along < -0.6 ? 'retro' : 'lift';
         const at = kind === 'main' ? rel.clone().addScaledVector(nose, -36) : kind === 'retro' ? rel.clone().addScaledVector(nose, 34) : rel.clone().addScaledVector(td, -8);
         const c = ftl ? [0.6, 0.95, 1.4] : kind === 'main' ? [1.4, 0.8, 0.4] : [1.0, 0.7, 0.45];
-        worlds.addDot(at, c[0], c[1], c[2], (ftl ? 9 : kind === 'main' ? 6 : 4) * pr);
+        const ek = ftl ? fade(2e7, 1e8) : fade(2e6, 1e7);
+        if (ek > 0.01) worlds.addDot(at, c[0] * ek, c[1] * ek, c[2] * ek, (ftl ? 9 : kind === 'main' ? 6 : 4) * pr);
         // its exhaust: a plume of glowing gas, the other way from the push (particles; in normal
         // space, within 60 km)
         if (!ftl && rel.length() < 60e3) {
@@ -322,7 +329,7 @@ export class EffectsLayer {
       // a burst at its heart that swells and fades (half the size it was before the warps)
       const fu = (simTime - npc.flashAt) / FLASH_S;
       if (fu >= 0 && fu < 1) {
-        const k = (1 - fu) * (1 - fu) * 2.5;
+        const k = (1 - fu) * (1 - fu) * 2.5 * fade(2e8, 1e9); // (out of sight past ~1 million km, as its lights)
         worlds.addDot(rel, 0.8 * k, 0.95 * k, 1.2 * k, (7 + 55 * Math.sqrt(fu)) * pr);
       }
     }
