@@ -110,7 +110,15 @@ fn density(P: vec3f) -> f32 {
   top = mix(top, 1.0, st * smoothstep(0.35, 0.6, cell));
   let profile = smoothstep(0.0, 0.08, h) * (1.0 - smoothstep(top * 0.5, top, h));
   var base = cov * profile;
-  if (st > 0.0) { base = max(base, st * 0.85 * smoothstep(0.74, 0.84, h) * (1.0 - smoothstep(0.94, 1.0, h))); }
+  // (its underside rising and falling, ~±1 km over tens of km, and its thickness patchy, so the
+  // erosion below breaks it up: a flat, even sheet was featureless fog from inside it, its
+  // underside a straight line across the view)
+  if (st > 0.0) {
+    let nA = tnoise(kw * 0.04 + 31.0);
+    let nB = tnoise(kw * 0.25 + 37.0);
+    let hb = 0.76 + 0.12 * nA;
+    base = max(base, st * (0.3 + 0.45 * smoothstep(-0.2, 0.25, nB)) * smoothstep(hb, hb + 0.08, h) * (1.0 - smoothstep(0.94, 1.0, h)));
+  }
   if (base < 0.01) { return 0.0; }
   // erosion: billows a couple of km across and finer wisps (drifting with the wind), strongest at
   // the edges, so what's left is lumpy cauliflower rather than fog
@@ -240,6 +248,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     t1 = min(t1, sceneT);
   }
   let inLayer = camR >= rBot && camR < rTop + liftCam;
+  let tNat = t1; // (where the ray leaves the layer or meets the scene, before the march's reach caps it)
   t1 = min(t1, t0 + select(MAX_DIST, MAX_DIST_IN, inLayer));
   let L = normalize(world.light.xyz);
   let j = fract(52.9829189 * fract(dot(vec2f(px) + vp.frameN * 5.588238, vec2f(0.06711056, 0.00583715))));
@@ -421,6 +430,17 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     T *= tStep;
     if (T < 0.01) { break; }
   }
+  // inside the layer, past the march's reach (100 km) the layer goes on: by the cover over you, a
+  // haze of the light the clouds marched so far showed (an e-fold every ~50 km under full cover).
+  // Cut off there, the view cleared abruptly, a band along the horizon from inside the clouds
+  if (inLayer && tNat > t1 + 1.0 && T > 0.01) {
+    let covC = cloudCover(cloudMap(toLocalM() * normalize(-C)));
+    let fk = 1.0 - exp(-min(tNat - t1, 300000.0) * covC * 2e-5);
+    var meanC = sunCol * (0.45 * sunUp + 0.15 * dayK) + twL;
+    if (T < 0.95) { meanC = S / (1.0 - T); }
+    S += T * fk * meanC;
+    T *= 1.0 - fk;
+  }
   // the air in front of the cloud: its haze and how much it dims
   if (tFirst > 0.0 && world.atOn > 0.5) {
     let span = atSpan(dir);
@@ -434,9 +454,12 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   // (an e-fold every ~12 km), over everything in front of the scene or the cloud base. The air's own
   // blue haze stayed as on a clear day, and the far land sharp and blue under a grey ceiling.
   // (Taken from the cover over you; for 85 % of the ground behind at most: the far coast still shows.)
-  if (world.atOn > 0.5 && camR < rBot + liftCam) {
+  // (fading out over the layer's lowest 2 km as you rise into it: cut off at the base, the view
+  // changed at once there, from a grey murk to the clouds' own)
+  let fogIn = 1.0 - smoothstep(rBot + liftCam - 500.0, rBot + liftCam + 2000.0, camR);
+  if (world.atOn > 0.5 && fogIn > 0.0) {
     let upC = normalize(-C);
-    let k = smoothstep(0.5, 0.8, cloudCover(cloudMap(toLocalM() * upC)));
+    let k = smoothstep(0.5, 0.8, cloudCover(cloudMap(toLocalM() * upC))) * fogIn;
     if (k > 0.0) {
       var dF = min(sceneT, 200000.0);
       if (bot.y > 0.0 && camR < rBot) { dF = min(dF, bot.y); }
@@ -464,7 +487,12 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
         // (where last frame's differs a lot in what shows through, it was something else there, a
         // cloud's edge that's since moved across: this frame's counts for more, or it trailed ghosts)
         let hist = textureSampleLevel(history, histSamp, uv, 0.0);
-        res = mix(hist, res, mix(0.2, 0.6, smoothstep(0.25, 0.6, abs(hist.a - res.a))));
+        // (and where it's much brighter or darker than then, lightning came or went: blended, a flash
+        // showed at once only where the view had turned past last frame's, a ghost the screen's shape)
+        let lH = dot(hist.rgb, vec3f(0.2126, 0.7152, 0.0722));
+        let lR = dot(res.rgb, vec3f(0.2126, 0.7152, 0.0722));
+        let jump = smoothstep(0.35, 0.7, abs(lH - lR) / (max(lH, lR) + 0.02));
+        res = mix(hist, res, max(mix(0.2, 0.6, smoothstep(0.25, 0.6, abs(hist.a - res.a))), jump));
       }
     }
   }

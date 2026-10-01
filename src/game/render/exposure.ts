@@ -69,8 +69,8 @@ export function twilightBoost(sinEl: number, altH: number): number {
 
 /**
  * Overcast (with auto-exposure off): under thick cloud the day is ~1/5 as bright, and the eye adapts
- * to that too: up to OVERCAST_K× under full cover (`cover`: 0…1 overhead), below the cloud base only
- * (`below`: 0…1).
+ * to that too: up to OVERCAST_K× under full cover (`cover`: 0…1 overhead), under the clouds or in them
+ * (`below`: 0…1, 0 above them).
  */
 export const OVERCAST_K = 1.8;
 export function overcastBoost(cover: number, below: number): number {

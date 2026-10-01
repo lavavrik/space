@@ -270,9 +270,10 @@ export class GpuRenderer implements GameRenderer {
       let sinEl = -1;
       for (const st of g.cur.stars) sinEl = Math.max(sinEl, this.tw2.subVectors(st.pos, ship.pos).normalize().dot(up));
       twK = twilightBoost(sinEl, alt / air.H);
-      // (and to an overcast, under the cloud base, 0.4 deck heights: vclouds.wgsl)
+      // (and to an overcast, under the clouds or in them, up to the layer's top, 1.05 deck heights:
+      // vclouds.wgsl; stopping at the base, the inside of a thick cloud was a dark murk)
       if (fb.kind !== 'star' && (fb.type === WT.EarthLike || fb.type === WT.Ocean)) {
-        twK *= overcastBoost(cloudCoverAt(fb, up, g.simTime), 1 - THREE.MathUtils.smoothstep(alt, air.H * CLOUD_H * 0.3, air.H * CLOUD_H * 0.5));
+        twK *= overcastBoost(cloudCoverAt(fb, up, g.simTime), 1 - THREE.MathUtils.smoothstep(alt, air.H * CLOUD_H * 0.9, air.H * CLOUD_H * 1.1));
       }
       e *= twK;
     }
