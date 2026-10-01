@@ -1,8 +1,11 @@
 /**
  * Landing lights: two floodlights under the hull, angled a little forward (gpu/shaders/frame.wgsl
  * shipLights), switched by the ship itself. On low over a world (under LAND_ALT above the ground)
- * when it's dark there: night, or under thick cloud (sim/clouds.ts). Off again when it's light or
- * you climb, with a margin both ways so they don't flicker at the edge.
+ * when it's dark there: dusk and night, or under the very thickest cloud (sim/clouds.ts). Off again
+ * when it's light or you climb, with a margin both ways so they don't flicker at the edge. (Under any
+ * thick cover they came on by day: an Earth-like world is clouded over most of its face, by the
+ * map, even where the sky shows gaps, and an overcast day is plenty light; their pool of light on
+ * the ground or the sea was a glaring disc at noon.)
  */
 import type { Game } from '../Game';
 import { WT } from '../constants';
@@ -26,9 +29,11 @@ function darkness(g: Game) {
   let dark = 1 - Math.min(1, Math.max(0, (sunEl + 0.08) / 0.16));
   const air = b.kind !== 'star' ? atmoOf(b) : null;
   if (air && b.kind !== 'star' && (b.type === WT.EarthLike || b.type === WT.Ocean)) {
-    // under the clouds (below the deck's top), thick cover overhead is as good as dusk
+    // under the clouds (below the deck's top), the thickest cover overhead deepens a dusk; by full
+    // day it only counts as much as the sun's low
     const alt = g.ship.pos.distanceTo(b.pos) - b.radius;
-    if (alt < air.H * CLOUD_H * 1.05) dark = Math.max(dark, Math.min(1, Math.max(0, (cloudCoverAt(b, up, g.simTime) - 0.5) / 0.3)));
+    const low = 1 - Math.min(1, Math.max(0, (sunEl - 0.15) / 0.35)); // (1 under ~9°, 0 over ~29°)
+    if (alt < air.H * CLOUD_H * 1.05) dark = Math.max(dark, low * Math.min(1, Math.max(0, (cloudCoverAt(b, up, g.simTime) - 0.85) / 0.1)));
   }
   return dark;
 }
