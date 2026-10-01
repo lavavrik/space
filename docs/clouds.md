@@ -161,6 +161,15 @@ Past the march's reach (250 km from where the ray enters the layer) the volumetr
 - **Cost** (M-series, 2400 × 1500): about 2 ms looking down from above the deck, 3 ms from 50 km,
   1–2 ms from below.
 
+## Moving through them
+
+The march's result is blended with last frame's, reprojected by one distance per pixel (where its
+visible cloud mostly is). Moving through the clouds, what a pixel shows is spread over many
+distances, and at one, last frame's slid off where it was: ghosts trailed (stacked copies of an
+edge) as you flew. So last frame's counts for little (15 %) where the view at half and twice that
+distance would land over ~4 march pixels apart: the parallax one distance can't account for. Near
+still clouds and turning only, nothing changes.
+
 ## Kinds
 
 What a world's clouds are made of (`sim/cloudKind.ts`, into `world.cloudC`: their colour, w the

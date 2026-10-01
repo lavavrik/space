@@ -568,7 +568,18 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
         // (brightening only, and sharply: a flash. Both ways, the march's own noise at cloud edges
         // dropped the history too, and the clouds shimmered)
         let jump = smoothstep(0.5, 0.8, (lR - lH) / (lR + 0.02));
-        res = mix(hist, res, max(mix(0.2, 0.6, smoothstep(0.25, 0.6, abs(hist.a - res.a))), jump));
+        // (and where the reprojection is unsure: moving through the clouds, what this pixel shows is
+        // spread over many distances, and taken at one, last frame's slid off where it was, ghosts
+        // trailing as you flew through them. How far apart (march pixels) the same view lands for
+        // half and twice that distance: the parallax that one distance can't account for)
+        let qa = vp.prevVP * vec4f(dir * tr * 0.5 + vp.moved.xyz, 1.0);
+        let qb = vp.prevVP * vec4f(dir * tr * 2.0 + vp.moved.xyz, 1.0);
+        var unsure = 1.0;
+        if (qa.w > 0.0 && qb.w > 0.0) {
+          let par = length((qa.xy / qa.w - qb.xy / qb.w) * 0.5 * vp.size);
+          unsure = smoothstep(0.75, 4.0, par);
+        }
+        res = mix(hist, res, max(max(mix(0.2, 0.6, smoothstep(0.25, 0.6, abs(hist.a - res.a))), jump), 0.85 * unsure));
       }
     }
   }
