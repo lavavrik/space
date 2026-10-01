@@ -42,6 +42,10 @@ const STEPS: i32 = 48;
 const STEPS_IN: i32 = 64;
 const MAX_DIST_IN: f32 = 100000.0;
 const SUN_STEPS: i32 = 5;
+// the share of the light a cloud sends back toward the sun (a weaker, backward lobe of the phase
+// function): thick cloud is bright seen from the sun's side, as from orbit by day (at 0.25 the tops
+// were grey, darker than the snow under them)
+const BACK: f32 = 0.5;
 /** The haze's particles' scattering at ground density (1/m, grey): the god rays' light. */
 const MIE_B: f32 = 6e-6;
 const SIGMA: f32 = 0.004;    // extinction per metre at full density (visibility a few hundred m)
@@ -91,17 +95,11 @@ fn density(P: vec3f) -> f32 {
   //   - the heart of a weather system (thick cover) stays a sheet: tens-of-km swells in how thick
   //     it is, not holes (overcast is stratus);
   //   - its edges (thinner cover) break up into clumps a few km across with gaps between (cumulus).
-  let east = normalize(vec3f(lp.z, 0.0, -lp.x) + vec3f(1e-3, 0.0, 0.0));
-  let ks = k - east * (dot(k, east) * 0.55);
-  let sw = tnoise(ks * 0.06 + 3.0);
-  let kw = ks + vec3f(sw, -0.7 * sw, 0.5 * sw) * 6.0;
-  // (shapes evolve too: swells over ~an hour, clumps and towers over ~15 min)
+  // (clouds.wgsl weatherCover: the flat deck shapes its cover the same way)
+  let wc = weatherCover(lp, cov0, 1.0);
+  let kw = wc.kw;
   let tv = vec3f(0.0, world.time, 0.0);
-  let swell = tnoise(kw * 0.035 + 11.0 + tv * 7e-5);
-  let c = 0.7 * tnoise(kw * 0.18 + 23.0 + tv * 2.8e-4) + 0.3 * tnoise(kw * 0.5 + 7.0 + tv * 2.8e-4);
-  let broken = 1.0 - smoothstep(0.45, 0.8, cov0);
-  let clump = mix(1.0, smoothstep(-0.15, 0.1, c + 0.3 * swell), broken);
-  let cov = min(cov0 * clump * (0.9 + 0.6 * swell), 1.0);
+  let cov = wc.cov;
   if (cov < 0.02) { return 0.0; }
   // towers: thicker cover rises higher, and ~8 km cells rise and fall, so the tops aren't one carpet
   let cell = 0.5 + 0.5 * tnoise(kw * 0.27 + 5.0 + tv * 2.8e-4);
@@ -319,13 +317,16 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     let dn = density(P);
     if (dn <= 0.0) { continue; }
     if (tFirst < 0.0) { tFirst = t; }
-    // sunlight reaching here through the cloud toward the sun
+    // sunlight reaching here through the cloud toward the sun, taken where this step's light comes
+    // from: its first ~1/(density × SIGMA) metres (~250 m), not its middle. From orbit the steps are
+    // over a km long, and lit from deep inside them the tops of thick cloud were grey
+    let Ps = dir * max(t0, t - 0.5 * dt + min(0.5 * dt, 1.0 / (dn * SIGMA)));
     var od = 0.0;
     var ls = 120.0;
     var lt = 0.0;
     for (var k = 0; k < sunSteps; k++) {
       lt += ls;
-      od += density(P + L * lt) * ls;
+      od += density(Ps + L * lt) * ls;
       ls *= 2.0;
     }
     // light scattered many times inside the cloud (Frostbite's approximation: octaves each less
@@ -335,7 +336,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     var bw = 1.0;
     var g = 0.65;
     for (var o = 0; o < 3; o++) {
-      sun += bw * exp(-od * SIGMA * a) * mix(hg(cosT, g), hg(cosT, -0.2 * g), 0.25);
+      sun += bw * exp(-od * SIGMA * a) * mix(hg(cosT, g), hg(cosT, -0.3 * g), BACK);
       a *= 0.35;
       bw *= 0.5;
       g *= 0.5;
@@ -353,7 +354,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
       var lt2 = 0.0;
       for (var k = 0; k < 3; k++) {
         lt2 += ls2;
-        od2 += density(P + L2 * lt2) * ls2;
+        od2 += density(Ps + L2 * lt2) * ls2;
         ls2 *= 3.0;
       }
       var sun2 = 0.0;
@@ -361,7 +362,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
       var bw2 = 1.0;
       var g2 = 0.65;
       for (var o = 0; o < 3; o++) {
-        sun2 += bw2 * exp(-od2 * SIGMA * a2) * mix(hg(cosT2, g2), hg(cosT2, -0.2 * g2), 0.25);
+        sun2 += bw2 * exp(-od2 * SIGMA * a2) * mix(hg(cosT2, g2), hg(cosT2, -0.3 * g2), BACK);
         a2 *= 0.35;
         bw2 *= 0.5;
         g2 *= 0.5;

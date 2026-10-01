@@ -5,7 +5,11 @@ cube map in the world's own frame (`cloudBake.wgsl`, from `clouds.wgsl cloudRaw`
 ways:
 
 - **From afar: a flat deck** (`cloudLayer.wgsl`): a shell at the deck's height (1.3 scale heights),
-  its cover from the cube plus finer noise octaves, lit and hazed like the ground.
+  its cover from the cube plus finer noise octaves, lit and hazed like the ground. The cover is
+  shaped as the volumetric clouds' is (`clouds.wgsl weatherCover`: a system's heart a sheet, its
+  thinner edges broken into clumps), then eroded, so each clump is opaque with a crisp edge; where
+  clumps or billows are under a pixel they average out. Taken plainly as an opacity, thin cover was
+  a faint veil spread wide, and the systems faded out at their edges.
 - **Their shadows on the ground** (`planet.wgsl`): the cover where the sun's ray from a surface
   point crosses the deck.
 - **Up close: volumetric clouds** (`vclouds.wgsl`, `gpu/vclouds.ts`), for the nearest clouded world
@@ -37,9 +41,9 @@ hull showed dimly, as if beyond the clouds. Bloom and the lens flare see the clo
   Then a height profile (thicker cover rises higher; ~8 km cells rise and fall; soft base, rounded
   tops), eroded by three octaves of 3D noise (softer inside thick cover, or its tops were pocked
   with shadowed pits), drifting with the wind.
-- **Light:** at each sample, the sun through the cloud above it (5 steps toward it, doubling from
+- **Light:** at each sample (from where its light comes from: a step's first ~250 m, not its middle; from orbit the steps are over a km long, and lit from deep inside them the tops of thick cloud were grey), the sun through the cloud above it (5 steps toward it, doubling from
   120 m), with multiple scattering approximated as octaves each less attenuated, weaker and less
-  forward (Frostbite's): clouds are bright from every side, with a silver lining toward the sun. Plus
+  forward (Frostbite's): clouds are bright from every side, with a silver lining toward the sun. Half of each octave's light goes to a weaker backward lobe (`BACK`): thick cloud is bright seen from the sun's side, as from orbit by day (at a quarter, the tops were greyer than the snow under them). Plus
   a little skylight, the sunlight's colour through the air, and eclipses and ring shadows
   (`shadow.wgsl sunShade`).
 - **Air:** the haze between the camera and the first cloud, as for the ground. All the air's

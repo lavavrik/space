@@ -71,7 +71,23 @@ fn fs(in: Out) -> FragOut {
     a *= 0.5;
     k *= 2.03;
   }
-  let cov = cloudCover(raw);
+  // shaped as the volumetric clouds are (clouds.wgsl weatherCover): a system's heart a sheet, its
+  // thinner edges broken into clumps with clear gaps, each opaque with a crisp, eroded edge. By
+  // the cover alone, as an opacity, thin cover was a faint veil spread wide (purplish, the ground
+  // through it), and the systems faded out at their edges
+  let cov0 = cloudCover(raw);
+  if (cov0 < 0.004) { discard; }
+  let pm = fw * world.cloudR; // (m: a pixel's footprint)
+  let wc = weatherCover(p * world.cloudR, cov0, 1.0 - smoothstep(1500.0, 6000.0, pm));
+  // erosion: billows a couple of km across (as vclouds.wgsl's), strongest at the edges; under a
+  // pixel, their mean
+  let kb = p * world.cloudR * 0.00045 + vec3f(0.0, world.time * 3e-4, 0.0);
+  let nv = 1.0 - smoothstep(600.0, 2500.0, pm);
+  var nb = 0.0;
+  if (nv > 0.01) { nb = (0.65 * tnoise(kb) + 0.35 * tnoise(kb * 3.1)) * nv; }
+  let bite = mix(0.75, 0.45, smoothstep(0.5, 0.9, wc.cov));
+  let dens = clamp((wc.cov - (1.0 - wc.cov) * (bite - bite * nb)) * 3.0, 0.0, 1.0);
+  let cov = mix(wc.cov, dens, mix(0.5, 1.0, nv)); // (unresolved: between the eroded and the plain)
   if (cov < 0.004) { discard; }
   let L = normalize(world.light.xyz);
   let lit = clamp(dot(n, L) * 1.05 + 0.05, 0.0, 1.0) * sunShade(P - C);

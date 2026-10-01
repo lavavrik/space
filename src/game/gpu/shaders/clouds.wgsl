@@ -41,6 +41,36 @@ fn cloudLiftAt(p: vec3f) -> f32 {
 // …at most (the ground's at most ~1.3 × the relief)
 fn cloudLiftMax() -> f32 { return max(world.terrA * 1.6 + LIFT_CLEAR - world.cloudH * 0.4, 0.0); }
 
+// The cover shaped like weather (vclouds.wgsl density, and the flat deck: they match), from the
+// cube's cover `cov0` at `lp`, a point in the weather's own turning frame (m, cloudDir):
+//   - the wind blows round the world's axis (its local y): shapes are stretched ~2× along it,
+//     so clouds run in streets and bands, and a slow swirl warps them, so edges are ragged;
+//   - the heart of a weather system (thick cover) stays a sheet: tens-of-km swells in how thick
+//     it is, not holes (overcast is stratus);
+//   - its edges (thinner cover) break up into clumps a few km across with gaps between (cumulus).
+// (tnoise is value noise, mostly within ±0.35, so thresholds are narrow; a noise unit of kw is
+// ~2.2 km.) `res`: how far the clumps are resolved (1 up close; toward 0 where they're under a
+// pixel, they average out to their share of the area)
+struct Weather {
+  cov: f32,
+  kw: vec3f, // (the warped, stretched coordinates, for more shapes on the same streets)
+}
+fn weatherCover(lp: vec3f, cov0: f32, res: f32) -> Weather {
+  let k = lp * 0.00045;
+  let east = normalize(vec3f(lp.z, 0.0, -lp.x) + vec3f(1e-3, 0.0, 0.0));
+  let ks = k - east * (dot(k, east) * 0.55);
+  let sw = tnoise(ks * 0.06 + 3.0);
+  let kw = ks + vec3f(sw, -0.7 * sw, 0.5 * sw) * 6.0;
+  // (shapes evolve too: swells over ~an hour, clumps and towers over ~15 min)
+  let tv = vec3f(0.0, world.time, 0.0);
+  let swell = tnoise(kw * 0.035 + 11.0 + tv * 7e-5);
+  var c = 0.0;
+  if (res > 0.01) { c = 0.7 * tnoise(kw * 0.18 + 23.0 + tv * 2.8e-4) + 0.3 * tnoise(kw * 0.5 + 7.0 + tv * 2.8e-4); }
+  let broken = 1.0 - smoothstep(0.45, 0.8, cov0);
+  let clump = mix(1.0, mix(0.55, smoothstep(-0.15, 0.1, c + 0.3 * swell), res), broken);
+  return Weather(min(cov0 * clump * (0.9 + 0.6 * swell), 1.0), kw);
+}
+
 fn cloudRaw(p: vec3f, oct: i32) -> f32 {
   let s = world.seed;
   let cp = (p * 1.6 + vec3f(s * 1.7, s * 2.3, s * 0.9)) * 1.25;
