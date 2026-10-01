@@ -33,7 +33,7 @@ hull showed dimly, as if beyond the clouds. Bloom and the lens flare see the clo
 - **Density:** the cube's cover (where the weather is, hundreds of km), shaped like weather rather
   than a sponge (cutting holes all over it with one noise read as round craters of one size):
   - the wind blows round the world's axis: shapes are stretched ~2× along it (streets, bands), and
-    a slow swirl warps them so edges are ragged;
+    a slow swirl warps them so edges are ragged. See **Stretched along the wind** below;
   - the heart of a system (thick cover) stays a sheet, with swells tens of km across in how thick
     it is (stratus);
   - its edges (thinner cover) break into clumps a few km across with gaps between (cumulus).
@@ -59,18 +59,27 @@ hull showed dimly, as if beyond the clouds. Bloom and the lens flare see the clo
   marched: one lookup where the ray crosses it (`vclouds.wgsl cirrus`), drawn at full resolution
   in the pass that lays the clouds over the frame (`fsComposite`). At the march's half resolution,
   blurred, it was soft.
-  - **Laid out along the latitude circles** (arc along the circle, height along the axis), so it
-    can be stretched along the wind. Squashing a point's own coordinates along its east did
-    nothing (east is square to where the point is), and it came out round: fuzzy blobs fading out
-    at their edges from orbit. The longitude wraps, so a second layout with its seam on the other
-    side takes over near the first's.
+  - Stretched along the wind as the lower clouds are (below). Round, it was fuzzy blobs fading
+    out at their edges from orbit.
   - **Plumes** a few hundred km long, ~3× along the wind and swirled, their edges frayed by the
     streaks in them.
-  - **Filaments:** ridged noise (thin lines) ~7× along the wind, every ~16, 4, 1.4 and 0.5 km;
-    each fades to its mean once under a couple of pixels. The 16 km ones hold from orbit. At 25×
-    they were scratches; swirled as much as the plumes, they meandered like rivers.
-  - Opacity up to ~0.55 (more seen edge-on). It's lit white, brighter toward the sun, with the air in front hazing it. It lies in
+  - **Filaments:** ridged noise (thin lines) ~7× along the wind, every ~16 and 4 km, and finer
+    streaky texture at 1.4 and 0.5 km; each fades to its mean once under a couple of pixels. The
+    16 km ones hold from orbit. At 25× they were scratches; swirled as much as the plumes, they
+    meandered like rivers; the fine ones as ridged lines were scratches too, or less stretched, a
+    web of veins.
+  - **A soft veil** round the filaments (alone, the lines read as scratches on the view).
+  - Opacity up to ~0.5 (more seen edge-on). It's lit white, brighter toward the sun, with the air in front hazing it. It lies in
   front of the lower clouds from above and behind them from below.
+- **Stretched along the wind** (`clouds.wgsl windStretch`, SPACE-74): the wind blows along the
+  latitude circles, so a point's longitude in the weather's frame is scaled by s (each latitude
+  circle turned by its own angle), and 3D noise read there is 1/s longer along the wind, with no
+  shear. Squashing a point's own coordinates along its east, as before, did nothing (east is
+  square to where the point is): the lower clouds had no streets, the cirrus was round. The scaled
+  longitude jumps where it wraps; that seam is on the meridian opposite the camera (`windSeam`),
+  and a second layout seamed under the camera takes over within ~45° of it (`windBlend`). Each
+  layout only changes where its weight is 0 as you move, so nothing visibly jumps; near a pole,
+  where the far meridian can be in view, the two blend there.
 - **Changing shape:** the cloud map is read twice (`clouds.wgsl cloudMap`), once with the wind and
   once slower, round a tilted axis and from another part of the map. The two slide past each other,
   so weather systems grow, merge and die away over hours. Swells evolve over ~an hour, clumps and

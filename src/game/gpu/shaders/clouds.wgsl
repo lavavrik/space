@@ -41,10 +41,36 @@ fn cloudLiftAt(p: vec3f) -> f32 {
 // …at most (the ground's at most ~1.3 × the relief)
 fn cloudLiftMax() -> f32 { return max(world.terrA * 1.6 + LIFT_CLEAR - world.cloudH * 0.4, 0.0); }
 
+// Shapes stretched along the wind, which blows along the latitude circles (round the local y axis):
+// a point's longitude in the weather's frame is scaled by `s` (each latitude circle turned by its
+// own angle), so 3D noise read there is 1/s longer along the wind, with no shear. (Squashing a
+// point's own coordinates along its east does nothing: east is square to where the point is. The
+// shapes came out round, SPACE-74.) The scaled longitude jumps where it wraps; that seam is put on
+// the meridian opposite the camera (`seam`, windSeam), and a second layout, seamed under the camera,
+// takes over within ~45° of it (windBlend). Each layout's value only changes where its weight is 0
+// as you move, so nothing visibly jumps. `p`: a point in the weather's frame (m).
+const TAU: f32 = 6.2831853;
+fn windSeam() -> f32 {
+  let toL = mat3x3f(world.toLocal[0].xyz, world.toLocal[1].xyz, world.toLocal[2].xyz);
+  let c = cloudDir(toL * -world.atC.xyz);
+  return atan2(c.x, c.z) + 0.5 * TAU;
+}
+fn windStretch(p: vec3f, s: f32, seam: f32) -> vec3f {
+  let lon = atan2(p.x, p.z);
+  let a = (seam + fract((lon - seam) / TAU) * TAU) * s;
+  let rxz = length(p.xz);
+  return vec3f(rxz * sin(a), p.y, rxz * cos(a));
+}
+// the second layout's share at p (its seam is seam − π)
+fn windBlend(p: vec3f, seam: f32) -> f32 {
+  let d = abs(fract((atan2(p.x, p.z) - seam) / TAU + 0.5) - 0.5) * TAU; // (angle from the seam)
+  return 1.0 - smoothstep(0.1 * TAU, 0.13 * TAU, d);
+}
+
 // The cover shaped like weather (vclouds.wgsl density, and the flat deck: they match), from the
 // cube's cover `cov0` at `lp`, a point in the weather's own turning frame (m, cloudDir):
-//   - the wind blows round the world's axis (its local y): shapes are stretched ~2× along it,
-//     so clouds run in streets and bands, and a slow swirl warps them, so edges are ragged;
+//   - the wind blows round the world's axis: shapes are stretched ~2× along it (windStretch), so
+//     clouds run in streets and bands, and a slow swirl warps them, so edges are ragged;
 //   - the heart of a weather system (thick cover) stays a sheet: tens-of-km swells in how thick
 //     it is, not holes (overcast is stratus);
 //   - its edges (thinner cover) break up into clumps a few km across with gaps between (cumulus).
@@ -55,10 +81,8 @@ struct Weather {
   cov: f32,
   kw: vec3f, // (the warped, stretched coordinates, for more shapes on the same streets)
 }
-fn weatherCover(lp: vec3f, cov0: f32, res: f32) -> Weather {
-  let k = lp * 0.00045;
-  let east = normalize(vec3f(lp.z, 0.0, -lp.x) + vec3f(1e-3, 0.0, 0.0));
-  let ks = k - east * (dot(k, east) * 0.55);
+fn weatherAt(lp: vec3f, seam: f32, cov0: f32, res: f32) -> Weather {
+  let ks = windStretch(lp, 0.45, seam) * 0.00045;
   let sw = tnoise(ks * 0.06 + 3.0);
   let kw = ks + vec3f(sw, -0.7 * sw, 0.5 * sw) * 6.0;
   // (shapes evolve too: swells over ~an hour, clumps and towers over ~15 min)
@@ -69,6 +93,14 @@ fn weatherCover(lp: vec3f, cov0: f32, res: f32) -> Weather {
   let broken = 1.0 - smoothstep(0.45, 0.8, cov0);
   let clump = mix(1.0, mix(0.55, smoothstep(-0.15, 0.1, c + 0.3 * swell), res), broken);
   return Weather(min(cov0 * clump * (0.9 + 0.6 * swell), 1.0), kw);
+}
+fn weatherCover(lp: vec3f, cov0: f32, res: f32) -> Weather {
+  let seam = windSeam();
+  let w = weatherAt(lp, seam, cov0, res);
+  let b = windBlend(lp, seam);
+  if (b <= 0.0) { return w; }
+  let w2 = weatherAt(lp, seam - 0.5 * TAU, cov0, res);
+  return Weather(mix(w.cov, w2.cov, b), select(w.kw, w2.kw, b > 0.5));
 }
 
 fn cloudRaw(p: vec3f, oct: i32) -> f32 {

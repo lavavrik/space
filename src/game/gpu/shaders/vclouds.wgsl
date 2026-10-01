@@ -135,30 +135,22 @@ fn hg(c: f32, g: f32) -> f32 {
 // Opacity 0…~0.5.
 const CIRRUS_H: f32 = 1.35;
 fn cirrus(lq: vec3f, pm: f32) -> f32 {
-  // Along the wind is along the latitude circles: the pattern is laid out in (arc along the circle,
-  // height along the axis), so it can be stretched along it. (Squashing a point's own coordinates
-  // along its east does nothing: east is square to where the point is. It came out round.) The
-  // longitude wraps: a second layout, its seam on the other side, takes over near the first's.
-  let rxz = max(length(lq.xz), 1.0);
-  let lon = atan2(lq.x, lq.z);
-  let wB = smoothstep(0.65 * 3.14159, 0.9 * 3.14159, abs(lon));
-  var a = 0.0;
-  if (wB < 1.0) { a += (1.0 - wB) * cirrusPat(vec2f(lon * rxz, lq.y), 0.0, pm); }
-  if (wB > 0.0) { a += wB * cirrusPat(vec2f(atan2(-lq.x, -lq.z) * rxz, lq.y), 57.0, pm); }
-  return a;
+  // (stretched along the wind as the lower clouds are, clouds.wgsl windStretch)
+  let seam = windSeam();
+  let a = cirrusPat(lq, seam, pm);
+  let b = windBlend(lq, seam);
+  if (b <= 0.0) { return a; }
+  return mix(a, cirrusPat(lq, seam - 0.5 * TAU, pm), b);
 }
-// `c`: (along the wind, across it) in m
-fn cirrusPat(c: vec2f, z: f32, pm: f32) -> f32 {
-  let k = vec3f(c * 0.00012, z);
-  let ks = vec3f(k.x * 0.35, k.y, k.z); // (~3× along the wind)
+fn cirrusPat(lq: vec3f, seam: f32, pm: f32) -> f32 {
+  let ks = windStretch(lq, 0.35, seam) * 0.00012; // (~3× along the wind)
   let sw = tnoise(ks * 0.08 + 17.0);
   let kf = ks + vec3f(sw, 0.6 * sw, -0.4 * sw) * 6.0;
   // (the streaks: swirled less, or they meandered like rivers, and stretched ~7× along the wind:
   // at 25× they were scratches)
-  let kw2 = ks + vec3f(sw, 0.6 * sw, -0.4 * sw) * 3.0;
-  let kf2 = vec3f(kw2.x * 0.4, kw2.y, kw2.z);
+  let kf2 = windStretch(lq, 0.14, seam) * 0.00012 + vec3f(sw, 0.6 * sw, -0.4 * sw) * 3.0;
   let streak = tnoise(kf2 * 0.5 + 13.0);
-  let area = smoothstep(0.0, 0.08, tnoise(kf * 0.025 + 41.0) + 0.3 * streak);
+  let area = smoothstep(0.04, 0.12, tnoise(kf * 0.025 + 41.0) + 0.3 * streak);
   if (area <= 0.0) { return 0.0; }
   // filaments: ridged noise (thin lines where it crosses zero) along the wind; a noise unit of kf2
   // is ~8 km across it, so lines every ~16, 4, 1.4 and 0.5 km. Under a pixel each fades to its
@@ -166,12 +158,16 @@ fn cirrusPat(c: vec2f, z: f32, pm: f32) -> f32 {
   let v = 1.0 - smoothstep(vec3f(0.5), vec3f(1.5), pm / vec3f(4000.0, 1400.0, 500.0));
   let f1 = cirrusRidge(streak);
   let f2 = mix(0.25, cirrusRidge(tnoise(kf2 * 2.0 + 3.0)), v.x);
-  let f3 = mix(0.25, cirrusRidge(tnoise(kf2 * 6.0 + 9.0)), v.y);
-  let f4 = mix(0.25, cirrusRidge(tnoise(kf2 * 16.0 + 5.0)), v.z);
+  // (the finer ones soft streaky texture, not lines: as ridged lines along the streaks they were
+  // scratches, and less stretched, a web of veins)
+  let f3 = 0.25 + 0.6 * tnoise(kf2 * 6.0 + 9.0) * v.y;
+  let f4 = 0.25 + 0.6 * tnoise(kf2 * 16.0 + 5.0) * v.z;
   let fib = 0.45 * f1 + 0.25 * f2 + 0.18 * f3 + 0.12 * f4;
   // (and where along a band it's thicker: swells tens of km long)
   let body = tnoise(kf * 0.3 + 29.0);
-  return area * smoothstep(0.15, 0.55, fib + 0.5 * body) * 0.55;
+  // (a soft veil round the filaments: alone, the lines read as scratches on the view)
+  let veil = smoothstep(-0.1, 0.25, body + 0.3 * streak);
+  return area * max(smoothstep(0.15, 0.55, fib + 0.5 * body), 0.35 * veil) * 0.5;
 }
 fn cirrusRidge(n: f32) -> f32 {
   let r = max(1.0 - abs(n) * 3.5, 0.0);
