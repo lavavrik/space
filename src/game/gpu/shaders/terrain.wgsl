@@ -94,6 +94,20 @@ fn terrH(d: vec3f, oct: i32, split: i32) -> f32 {
 fn octA(i: i32) -> f32 { return 0.5 * pow(TERR_GAIN, f32(min(i, FINE_FROM))) * pow(FINE_GAIN, f32(max(i - FINE_FROM, 0))); }
 fn octAm(i: i32) -> f32 { return 0.5 * pow(MTN_GAIN, f32(min(i, FINE_FROM) - MTN_FROM)) * pow(FINE_GAIN, f32(max(i - FINE_FROM, 0))); }
 
+// The most octaves o0…oct can raise h by (each fBm octave's ±amplitude, a little over for simplex's
+// overshoot, and the ridges' full height): with hc + this under the sea, the point is sea whatever
+// they add (planet.wgsl skips them: zoomed in on the sea, every pixel ran all 17 for nothing)
+fn terrRise(o0: i32, oct: i32) -> f32 {
+  var s = 0.0;
+  for (var i = 0; i < T_OCT_MAX; i++) {
+    if (i < o0) { continue; }
+    if (i >= oct) { break; }
+    s += octA(i) * 1.15;
+    if (i >= MTN_FROM) { s += octAm(i) * MTN_K; }
+  }
+  return s;
+}
+
 // terrH's octaves from…oct only, added to hc (baked per vertex), with the range mask found there
 fn terrHFrom(d: vec3f, o0: i32, oct: i32, hc: f32, mask0: f32) -> f32 {
   var s = 0.0;

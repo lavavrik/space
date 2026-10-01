@@ -248,9 +248,13 @@ fn fs(in: Out) -> @location(0) vec4f {
     tUseOff = terr;
     tOffDir = in.offDir;
     let hc = in.t.w;
-    let h = terrHFrom(p, i32(in.t.y + 0.5), oct, hc, in.mask);
-    tUseOff = false;
     let seaOn = ty == 2 || ty == 3;
+    let o0 = i32(in.t.y + 0.5);
+    // (open sea whatever the finer octaves add: they're skipped, flat water)
+    var h = hc;
+    tDet = 0.0;
+    if (!(terr && seaOn && hc + terrRise(o0, oct) < world.sea)) { h = terrHFrom(p, o0, oct, hc, in.mask); }
+    tUseOff = false;
     elev = terrElev(h, world.sea, seaOn);
     N = bumpN(N, elev - terrElev(hc, world.sea, seaOn), in.obj, in.wp, terr);
     det = 1.0 + 0.1 * tDet;
