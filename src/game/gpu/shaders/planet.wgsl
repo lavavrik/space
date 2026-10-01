@@ -61,7 +61,7 @@ fn vsChunk(@location(0) position: vec3f, @location(1) dir: vec3f, @location(2) g
   let A = bake[2u * gi];
   let B = bake[2u * gi + 1u];
   let pos = position + dir * (A.w - skirt * chunk.skirtD);
-  let wp = chunk.model * vec4f(pos, 1.0);
+  let wp = chunkModel() * vec4f(pos, 1.0);
   o.obj = dir;
   o.wp = wp.xyz;
   o.wn = normalize((world.rotN * vec4f(A.xyz, 0.0)).xyz);
@@ -70,7 +70,7 @@ fn vsChunk(@location(0) position: vec3f, @location(1) dir: vec3f, @location(2) g
   o.mask = B.z;
   // the air between the camera and here varies smoothly: per vertex, not per pixel (at the ground:
   // skirt vertices hang far below it, where the air's density would blow up)
-  let ground = (chunk.model * vec4f(pos + dir * skirt * chunk.skirtD, 1.0)).xyz;
+  let ground = (chunkModel() * vec4f(pos + dir * skirt * chunk.skirtD, 1.0)).xyz;
   let L = normalize(world.light.xyz);
   let vd = normalize(ground);
   o.haze = atInscatter(vd * atSpan(vd).x, ground, L, 5);

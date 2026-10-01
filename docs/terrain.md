@@ -50,6 +50,9 @@ The old shader chain `sp = 1.6·dir + seedOffset`, multiplied by 2.03 per octave
     - split chunks are marked in use, so their children's parents aren't freed and rebuilt;
     - when a split can't finish this frame, it falls back to the chunk if it already exists, and never builds a coarse one to stand in.
 - **Chunks:** each is a 32×32 grid. Positions are built on the CPU in double precision relative to the chunk centre, and the mesh sits at that centre, so there's no jitter on a 6,000 km world.
+- **Uploads:** each chunk's transform changes every frame. It has a fixed slot in one buffer per world (`chunk.wgsl chunkModels`), written in a single upload. A separate write per chunk, ~1,100 a frame landed, was the bulk of the frame's driver calls. Under D3D12 (Windows) each call costs far more than on Metal.
+- **Pooling:** a freed chunk's buffers, bind groups and slot go to a pool (up to 512) for the next chunk built, instead of being destroyed and created again. Zooming built and freed ~100 buffers a frame.
+- **CPU:** walking the quadtree costs ~6 ms per frame landed on an M5 Pro, and encoding ~900 chunk draws ~2.4 ms. Both are candidates if the CPU turns out to be what limits the frame.
 - **Vertices:** the vertex shader (`planet.vert.glsl` with `TERRAIN`) raises each vertex by the height, using only the octaves its spacing can show (`uVOct`). Normals come from two nearby height samples.
 - **Finer detail:** the fragment shader computes the full height. It bump-maps the octaves the vertices don't have, using screen-space derivatives (Mikkelsen's surface-gradient method). Shading therefore doesn't change when a chunk splits; only the silhouette sharpens.
 - **Albedo detail:** colour varies from octave 6 on (`tDet`), about the same contrast at every scale.

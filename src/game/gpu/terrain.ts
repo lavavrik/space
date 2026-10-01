@@ -39,6 +39,11 @@ const TARGET_PX = 6,
 const MIN_SPACING = 8; // m between vertices at the finest level
 const MAX_BUILDS = 24; // chunk meshes built per frame at most (the rest wait a frame)
 const KEEP_FRAMES = 240; // free a chunk unused this long
+/** Chunks a world can hold at once (their transforms' slots in one buffer). */
+const MAX_SLOTS = 8192;
+/** Freed chunks' GPU buffers kept for the next built ones, at most (creating and destroying them,
+ *  ~100 a frame while zooming, is costly in the driver: D3D12 on Windows). */
+const POOL_MAX = 512;
 const SUN_REBAKE = Math.cos(0.004); // re-bake a chunk's shadows once the sun has moved ~0.2° over it
 const MAX_REBAKES = 8; // shadow re-bakes per frame
 const SKIRT_SPACINGS = 1; // skirt depth beyond the missing octaves' amplitude, in vertex spacings
@@ -86,6 +91,8 @@ interface Chunk {
   bake: GPUBuffer;
   draw: GPUBindGroup;
   compute: GPUBindGroup;
+  /** Its transform's slot in the world's `models` buffer (chunk.wgsl chunkModels). */
+  slot: number;
   used: number;
   sun: THREE.Vector3; // the sun direction it was baked with (the world's frame)
 }
@@ -200,13 +207,20 @@ export class TerrainGpu {
   private toBake: Chunk[] = [];
   private readonly m = new THREE.Matrix4();
   private readonly mc = new THREE.Matrix4();
-  private readonly model = new Float32Array(16);
+  /** Every chunk's transform, by slot, written in one go each frame (chunk.wgsl chunkModels). */
+  private readonly models: GPUBuffer;
+  private readonly modelData = new Float32Array(MAX_SLOTS * 16);
+  private readonly freeSlots: number[] = [];
+  private slots = 0;
+  /** Freed chunks' buffers, bind groups and slots, for reuse. */
+  private readonly pool: Pick<Chunk, 'pos' | 'dir' | 'uni' | 'bake' | 'draw' | 'compute' | 'slot'>[] = [];
 
   constructor(
     b: World,
     private readonly sh: TerrainShared,
     private readonly worldGroup: GPUBindGroup,
   ) {
+    this.models = sh.device.createBuffer({ label: 'chunk models', size: MAX_SLOTS * 64, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
     this.b = b;
     this.R = b.radius;
     this.A = reliefAmp(b);
@@ -251,9 +265,10 @@ export class TerrainGpu {
     this.m.compose(rel, q, new THREE.Vector3(1, 1, 1));
     for (const c of this.shown) {
       this.mc.makeTranslation(c.cen.x, c.cen.y, c.cen.z).premultiply(this.m);
-      this.model.set(this.mc.elements);
-      this.sh.device.queue.writeBuffer(c.uni, 0, this.model);
+      this.modelData.set(this.mc.elements, c.slot * 16);
     }
+    // (all of them in one write: one per chunk cost more in the driver than the GPU's whole frame)
+    if (this.slots) this.sh.device.queue.writeBuffer(this.models, 0, this.modelData, 0, this.slots * 16);
   }
 
   private visit(f: number, L: number, i: number, j: number, cam: THREE.Vector3, camDir: THREE.Vector3, horizon: number) {
@@ -411,8 +426,12 @@ export class TerrainGpu {
       spacing = edge / N;
     // octaves the vertices can show: lattice cells at least ~3 vertex spacings across
     const vOct = Math.max(1, Math.min(17, Math.floor(Math.log(R / (1.6 * 3 * spacing)) / Math.log(2.03)) + 1));
+    // its GPU side: a freed chunk's, or new (a slot for its transform with it)
+    const reuse = this.pool.pop();
+    if (!reuse && !this.freeSlots.length && this.slots >= MAX_SLOTS) this.evictOldest(); // (out of slots: the longest unused goes)
+    const slot = reuse?.slot ?? this.freeSlots.pop() ?? this.slots++;
     const u = new Float32Array(CHUNK_BYTES / 4);
-    // (the model, at 0…15, is written per frame)
+    u[0] = slot; // (its transform is written per frame, into the world's models buffer)
     u[16] = vOct;
     u[17] = spacing;
     // deep enough to cover the crack to a coarser neighbour, no deeper: skirts are shaded even where hidden
@@ -420,6 +439,12 @@ export class TerrainGpu {
     u[19] = N + 1;
     this.latticeAt(cen, 8, u, 20);
     this.latticeAt(cen, 2312, u, 20 + 17 * 4);
+    if (reuse) {
+      device.queue.writeBuffer(reuse.pos, 0, pos);
+      device.queue.writeBuffer(reuse.dir, 0, dir);
+      device.queue.writeBuffer(reuse.uni, 0, u);
+      return { f, L, i, j, cen: new THREE.Vector3(cx, cy, cz), ...reuse, used: 0, sun: new THREE.Vector3() };
+    }
     const mk = (data: Float32Array<ArrayBuffer>, usage: number, label: string) => {
       const b = device.createBuffer({ label, size: data.byteLength, usage: usage | GPUBufferUsage.COPY_DST });
       device.queue.writeBuffer(b, 0, data);
@@ -434,6 +459,7 @@ export class TerrainGpu {
       entries: [
         { binding: 0, resource: { buffer: uni } },
         { binding: 1, resource: { buffer: bake } },
+        { binding: 4, resource: { buffer: this.models } },
       ],
     });
     const compute = device.createBindGroup({
@@ -445,19 +471,37 @@ export class TerrainGpu {
         { binding: 3, resource: { buffer: dirB } },
       ],
     });
-    return { f, L, i, j, cen: new THREE.Vector3(cx, cy, cz), pos: posB, dir: dirB, uni, bake, draw, compute, used: 0, sun: new THREE.Vector3() };
+    return { f, L, i, j, cen: new THREE.Vector3(cx, cy, cz), pos: posB, dir: dirB, uni, bake, draw, compute, slot, used: 0, sun: new THREE.Vector3() };
   }
 
-  private free(c: Chunk) {
+  /** Free the chunk unused longest (not one in use this frame), its slot going back. */
+  private evictOldest() {
+    let oldest: [string, Chunk] | null = null;
+    for (const e of this.chunks) if (e[1].used < this.frame && (!oldest || e[1].used < oldest[1].used)) oldest = e;
+    if (!oldest) throw new Error('terrain: every chunk slot in use');
+    this.free(oldest[1], false);
+    this.chunks.delete(oldest[0]);
+  }
+
+  /** A chunk no longer needed: its GPU side kept for the next one built (up to POOL_MAX), or destroyed. */
+  private free(c: Chunk, keep = true) {
+    if (keep && this.pool.length < POOL_MAX) {
+      this.pool.push({ pos: c.pos, dir: c.dir, uni: c.uni, bake: c.bake, draw: c.draw, compute: c.compute, slot: c.slot });
+      return;
+    }
     c.pos.destroy();
     c.dir.destroy();
     c.uni.destroy();
     c.bake.destroy();
+    this.freeSlots.push(c.slot);
   }
 
   dispose() {
-    for (const c of this.chunks.values()) this.free(c);
+    for (const c of this.chunks.values()) this.free(c, false);
     this.chunks.clear();
+    for (const p of this.pool) for (const b of [p.pos, p.dir, p.uni, p.bake]) b.destroy();
+    this.pool.length = 0;
+    this.models.destroy();
   }
 }
 

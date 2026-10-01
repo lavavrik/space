@@ -136,6 +136,7 @@ export class WorldsLayer {
       entries: [
         { binding: 0, visibility: VS | FS, buffer: { type: 'uniform' } },
         { binding: 1, visibility: VS, buffer: { type: 'read-only-storage' } },
+        { binding: 4, visibility: VS, buffer: { type: 'read-only-storage' } }, // (the world's chunk transforms, chunk.wgsl chunkModels)
       ],
     });
     const chunkBakeLayout = device.createBindGroupLayout({
@@ -149,12 +150,14 @@ export class WorldsLayer {
     this.noChunkBufs = [
       device.createBuffer({ size: CHUNK_BYTES, usage: GPUBufferUsage.UNIFORM }),
       device.createBuffer({ size: 32, usage: GPUBufferUsage.STORAGE }),
+      device.createBuffer({ size: 64, usage: GPUBufferUsage.STORAGE }),
     ];
     this.noChunk = device.createBindGroup({
       layout: chunkLayout,
       entries: [
         { binding: 0, resource: { buffer: this.noChunkBufs[0] } },
         { binding: 1, resource: { buffer: this.noChunkBufs[1] } },
+        { binding: 4, resource: { buffer: this.noChunkBufs[2] } },
       ],
     });
     const bakeModule = device.createShaderModule({ label: 'terrain bake', code: TERRAIN_BAKE_WGSL });
