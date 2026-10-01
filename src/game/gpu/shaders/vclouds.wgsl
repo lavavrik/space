@@ -34,7 +34,7 @@ struct VParams {
   quality: f32,    // the share of the steps marched (Settings: 1, or 0.5)
   interleave: f32, // 1: march a quarter of the pixels a frame, the rest from last frame's (main)
   sunMapOn: f32,   // 1: the sun's shadow map is there to read (sunOD)
-  _p1: f32,
+  gsOn: f32,       // 1: the ground's shadow map is there (groundShadowMap: the composite shades what's near with it)
   _p2: f32,
 }
 @group(2) @binding(0) var sceneDepth: texture_depth_multisampled_2d;
@@ -45,6 +45,9 @@ struct VParams {
 // the sun's shadow map (sunOD): read by the march, written by its own pass (sunMap)
 @group(2) @binding(5) var sunMapT: texture_2d<f32>;
 @group(2) @binding(6) var sunMapOut: texture_storage_2d<rgba16float, write>;
+// the clouds' shadow on what's near (gsAt): written by its own pass (groundShadowMap), read by the composite
+@group(2) @binding(7) var gsOut: texture_storage_2d<rgba16float, write>;
+@group(2) @binding(8) var gsMapT: texture_2d<f32>;
 
 const STEPS: i32 = 48;
 /** Inside the layer: more steps over a shorter reach (48 over 250 km banded the clouds across a gap). */
@@ -235,14 +238,18 @@ fn cirrusRidge(n: f32) -> f32 {
 // how much sunlight reaches camera-relative point P (below the deck or in it) through the clouds
 // above it (in the layer the march starts at P: it counted as clear there, and the ground under
 // you brightened as you rose into the clouds)
-fn sunThrough(P: vec3f, L: vec3f) -> f32 {
+fn sunThrough(P: vec3f, L: vec3f) -> f32 { return sunThroughN(P, L, 3); }
+// …in n samples: 3 for the light shafts' shade (12 of them a pixel, soft anyway); a surface's own
+// shadow takes more (3 over a layer km thick missed much of a broken cloud's shadow, and the
+// shadows came out faint and smeared)
+fn sunThroughN(P: vec3f, L: vec3f, n: i32) -> f32 {
   let Cp = world.atC.xyz - P;
   let a = select(sphereSpan(L, Cp, rBot).y, 0.0, length(Cp) >= rBot);
   let b = sphereSpan(L, Cp, rTop + liftTop).y; // (the lifted top: from a point above the unlifted one it saw clear sky)
   if (b <= a || a < 0.0) { return 1.0; }
   var od = 0.0;
-  let ds = (b - a) / 3.0;
-  for (var i = 0; i < 3; i++) { od += density(P + L * (a + (f32(i) + 0.5) * ds)) * ds; }
+  let ds = (b - a) / f32(n);
+  for (var i = 0; i < n; i++) { od += density(P + L * (a + (f32(i) + 0.5) * ds)) * ds; }
   return exp(-od * SIGMA * 0.5);
 }
 
@@ -315,6 +322,72 @@ fn sunMap(@builtin(global_invocation_id) gid: vec3u) {
     od += d;
   }
   textureStore(sunMapOut, gid.xy, vec4f(od, od - below));
+}
+
+// ---- The clouds' shadow on what's near (docs/clouds.md "Shadows") ----
+// The march darkens what's behind each of its pixels by the cloud toward the sun from there, at its
+// own resolution: on the ground, at full resolution, the shadows' edges were smeared over a few of
+// its pixels. Near you (GS_R) it's worked out once a frame on a finer grid instead (GS_N², ~60 m a
+// texel, the sunMap's frame), as the darkening itself, and the composite applies it per frame pixel;
+// the march keeps it for what's beyond, the two crossfading over 18–27 km.
+const GS_N: u32 = 1024u;
+const GS_R: f32 = 30000.0;
+const GS_STEPS: i32 = 12;
+// camera-relative P's place on the grid (xy, ±1 across) and how much the grid takes over there (z);
+// rBot (and the lifts) set
+fn gsAt(P: vec3f) -> vec3f {
+  let L = normalize(world.light.xyz);
+  let Cp = P - world.atC.xyz;
+  let r = length(Cp);
+  let b = dot(Cp, L);
+  let disc = b * b - (r * r - rBot * rBot);
+  if (disc < 0.0) { return vec3f(0.0); }
+  // (along the sun's ray to the base: on from under it, back from above it, as sunOD)
+  let s = select(b - sqrt(disc), -b + sqrt(disc), r < rBot);
+  let Q = P + L * select(-s, s, r < rBot);
+  let f = smFrame();
+  let xy = vec2f(dot(Q - f.g0, f.e), dot(Q - f.g0, f.n)) / GS_R;
+  let edge = 1.0 - smoothstep(0.85, 0.97, max(abs(xy.x), abs(xy.y)));
+  // (not for what's up at the layer's base or in it, a mountain's top: a texel's ray starts at the base,
+  // under it, and counted the cloud below it too; the march starts at the point)
+  let low = 1.0 - smoothstep(rBot - 400.0, rBot, r);
+  return vec3f(xy, edge * low * (1.0 - smoothstep(0.6 * GS_R, 0.9 * GS_R, length(P))));
+}
+// A texel: the ray up toward the sun from the point Q on the base under it, through the layer
+// (GS_STEPS samples, as sunThrough), and what the march would make of it: what's under it darkened
+// by dimK of the sun it takes away (a lone cloud's shadow keeping the sky's light, an overcast's
+// less), only by day, with the camera under the deck (fading out as it rises into it). r: that
+// factor; g: the sunlight let through.
+@compute @workgroup_size(8, 8)
+fn groundShadowMap(@builtin(global_invocation_id) gid: vec3u) {
+  if (gid.x >= GS_N || gid.y >= GS_N) { return; }
+  let C = world.atC.xyz;
+  rBot = world.radius + world.cloudH * cloudBaseK();
+  rTop = world.radius + world.cloudH * 1.05;
+  setLifts();
+  let L = normalize(world.light.xyz);
+  let fade = smoothstep(mix(rBot, rTop, 0.6) + liftCam, rTop + liftCam, length(C));
+  let camDay = smoothstep(-0.1, 0.1, dot(normalize(-C), L));
+  var m = 1.0;
+  var T = 1.0;
+  if (fade < 1.0 && camDay > 0.0 && world.atOn > 0.5) {
+    let f = smFrame();
+    let xy = ((vec2f(gid.xy) + 0.5) / f32(GS_N) * 2.0 - 1.0) * GS_R;
+    let Q = C + normalize(f.g0 + f.e * xy.x + f.n * xy.y - C) * rBot;
+    let upQ = normalize(Q - C);
+    if (dot(upQ, L) > -0.05) {
+      let ds = max(sphereSpan(L, C - Q, rTop + liftTop).y, 1.0) / f32(GS_STEPS);
+      var od = 0.0;
+      for (var i = 0; i < GS_STEPS; i++) { od += density(Q + L * ((f32(i) + 0.5) * ds)) * ds; }
+      T = exp(-od * SIGMA * 0.5);
+      // (by the weather's cover there for how overcast it is: the march goes by the air's shade along
+      // its view, which a texel hasn't; on the cover's own scale, broken cloud read as overcast and
+      // its shadows came out much darker than the march's)
+      let dimK = mix(0.55, 0.8, smoothstep(0.7, 0.95, cloudCover(cloudMap(toLocalM() * upQ))));
+      m = 1.0 - dimK * camDay * (1.0 - fade) * (1.0 - T);
+    }
+  }
+  textureStore(gsOut, gid.xy, vec4f(m, T, 0.0, 0.0));
 }
 
 // where a ray from the camera along dir crosses the sphere of radius r round C: (near, far), or (1, 0)
@@ -485,7 +558,10 @@ fn marchPixel(px: vec2i) {
     // (a lone cloud's shadow keeps the blue sky's light: ~45 % left under it on a clear day, down to a
     // fifth as the sky clouds over; by the air's shade along the ray, how overcast it is)
     if (sceneT < 1e29) {
-      dimShare = (1.0 - sunThrough(dir * sceneT, L)) * (1.0 - smoothstep(20000.0, 60000.0, sceneT));
+      // (near you the composite takes it from the ground's shadow map, per frame pixel: here only the rest)
+      let wg = select(0.0, gsAt(dir * sceneT).z, vp.gsOn > 0.5);
+      dimShare = 0.0;
+      if (wg < 0.999) { dimShare = (1.0 - sunThroughN(dir * sceneT, L, 8)) * (1.0 - smoothstep(20000.0, 60000.0, sceneT)) * (1.0 - wg); }
       dimK = mix(0.55, 0.8, airShare);
     }
     skyDim = 1.0 - dimK * camDay * dimShare;
@@ -787,6 +863,11 @@ fn fsComposite(@builtin(position) pos: vec4f) -> @location(0) vec4f {
   let cosT = dot(dir, L);
   var sceneT = 1e30;
   if (dc > 0.0) { sceneT = vp.near / dc / max(dot(dir, -normalize(frame.camRot[2].xyz)), 1e-4); }
+  // the clouds' shadow on what's near, at this resolution (groundShadowMap; the march left it out there)
+  if (vp.gsOn > 0.5 && dc > 0.0 && vp.on > 0.0) {
+    let g = gsAt(dir * sceneT);
+    if (g.z > 0.0) { cl.a *= mix(1.0, textureSampleLevel(gsMapT, histSamp, g.xy * 0.5 + 0.5, 0.0).r, g.z * min(vp.on, 1.0)); }
+  }
   let rCi = world.radius + world.cloudH * CIRRUS_H;
   let ciSpan = sphereSpan(dir, C, rCi);
   var tCi = -1.0;

@@ -16,6 +16,8 @@ const PARAM_BYTES = 64 + 16 + 48;
 const MAX_PIXELS = 400e3;
 /** The sun's shadow map's size (texels a side; vclouds.wgsl SM_N). */
 const SM_N = 384;
+/** The ground's shadow map's (vclouds.wgsl GS_N). */
+const GS_N = 1024;
 
 export class VolumetricClouds {
   private readonly pipe: GPUComputePipeline;
@@ -27,6 +29,10 @@ export class VolumetricClouds {
   private readonly mapPipe: GPUComputePipeline;
   private readonly sunMap: GPUTexture;
   private readonly mapGroup: GPUBindGroup;
+  /** The clouds' shadow on what's near (vclouds.wgsl groundShadowMap): its pass, each frame; the composite reads it. */
+  private readonly gsPipe: GPUComputePipeline;
+  private readonly gsMap: GPUTexture;
+  private readonly gsGroup: GPUBindGroup;
   private readonly params: GPUBuffer;
   private readonly data = new Float32Array(PARAM_BYTES / 4);
   /** Ping-pong: this frame's result and last frame's (the history it's blended with). */
@@ -67,6 +73,8 @@ export class VolumetricClouds {
   /** Settings ('ultra'): march every frame pixel, no cap (at half resolution, capped at MAX_PIXELS,
    *  the march's noise and its temporal blend can shimmer at cloud edges). Takes effect on resize. */
   full = false;
+  /** The clouds' shadow on what's near at full resolution (groundShadowMap); off, the march's own, at its resolution. */
+  groundShadow = true;
   /** The march's cap below Ultra (pixels; Settings: High's, Low's). */
   maxPixels = MAX_PIXELS;
 
@@ -101,6 +109,8 @@ export class VolumetricClouds {
         { binding: 0, visibility: FS, texture: { sampleType: 'depth', multisampled: true } },
         { binding: 2, visibility: FS, buffer: { type: 'uniform' } },
         { binding: 3, visibility: FS, texture: { sampleType: 'unfilterable-float' } },
+        { binding: 4, visibility: FS, sampler: {} },
+        { binding: 8, visibility: FS, texture: {} },
       ],
     });
     const cm = module;
@@ -144,6 +154,25 @@ export class VolumetricClouds {
         { binding: 6, resource: this.sunMap.createView() },
       ],
     });
+    const gsLayout = device.createBindGroupLayout({
+      entries: [
+        { binding: 2, visibility: CS, buffer: { type: 'uniform' } },
+        { binding: 7, visibility: CS, storageTexture: { access: 'write-only', format: 'rgba16float' } },
+      ],
+    });
+    this.gsPipe = device.createComputePipeline({
+      label: 'clouds ground shadow map',
+      layout: device.createPipelineLayout({ bindGroupLayouts: [frameLayout, worldLayout, gsLayout] }),
+      compute: { module, entryPoint: 'groundShadowMap' },
+    });
+    this.gsMap = device.createTexture({ label: 'clouds ground shadow map', size: [GS_N, GS_N], format: 'rgba16float', usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING });
+    this.gsGroup = device.createBindGroup({
+      layout: gsLayout,
+      entries: [
+        { binding: 2, resource: { buffer: this.params } },
+        { binding: 7, resource: this.gsMap.createView() },
+      ],
+    });
   }
 
   /** A new frame size: `depth` is the scene's (multisampled) depth. */
@@ -175,6 +204,8 @@ export class VolumetricClouds {
           { binding: 0, resource: depth.createView() },
           { binding: 2, resource: { buffer: this.params } },
           { binding: 3, resource: this.tex[k].createView() },
+          { binding: 4, resource: this.samp },
+          { binding: 8, resource: this.gsMap.createView() },
         ],
       }),
     );
@@ -251,7 +282,7 @@ export class VolumetricClouds {
     this.reproj.premultiply(this.tmpM.fromArray(this.prevVP));
     d.set(this.reproj.elements, 0);
     d.set([0, 0, 0, this.hasPrev ? 1 : 0], 16);
-    d.set([this.w, this.h, on, this.n++, this.near, this.scale, lift, this.quality, this.interleave ? 1 : 0, this.sunMapOn ? 1 : 0, 0, 0], 20);
+    d.set([this.w, this.h, on, this.n++, this.near, this.scale, lift, this.quality, this.interleave ? 1 : 0, this.sunMapOn ? 1 : 0, this.groundShadow ? 1 : 0, 0], 20);
     this.device.queue.writeBuffer(this.params, 0, d);
     this.prevVP.set(vp.elements);
     this.prevRel.copy(rel);
@@ -260,6 +291,7 @@ export class VolumetricClouds {
     this.hasPrev = true;
     // the sun's shadow map first (its own pass: the march reads it)
     if (this.sunMapOn) this.sunMapPass(enc, frameGroup, worldGroup, tw);
+    if (this.groundShadow) this.groundShadowPass(enc, frameGroup, worldGroup, tw);
     pass_: {
       if (this.interleave) {
         // a quarter marched (each 2 × 2's pixel in turn), then the rest from last frame's: timed apart,
@@ -295,6 +327,16 @@ export class VolumetricClouds {
     return `clouds march ${this.w}×${this.h} (1/${this.scale.toFixed(1)} of the frame) · ${this.interleave ? 'interleaved' : 'every pixel'} · ${this.sunMapOn ? 'sun map' : 'no sun map'} · steps ×${this.quality}`;
   }
 
+  private groundShadowPass(enc: GPUCommandEncoder, frameGroup: GPUBindGroup, worldGroup: GPUBindGroup, tw: (label: string) => GPUComputePassTimestampWrites | undefined) {
+    const gp = enc.beginComputePass({ label: 'clouds ground shadow map', timestampWrites: tw('cloud shadow') });
+    gp.setPipeline(this.gsPipe);
+    gp.setBindGroup(0, frameGroup);
+    gp.setBindGroup(1, worldGroup);
+    gp.setBindGroup(2, this.gsGroup);
+    gp.dispatchWorkgroups(GS_N / 8, GS_N / 8);
+    gp.end();
+  }
+
   private sunMapPass(enc: GPUCommandEncoder, frameGroup: GPUBindGroup, worldGroup: GPUBindGroup, tw: (label: string) => GPUComputePassTimestampWrites | undefined) {
     const mp = enc.beginComputePass({ label: 'clouds sun map', timestampWrites: tw('cloud map') });
     mp.setPipeline(this.mapPipe);
@@ -308,6 +350,7 @@ export class VolumetricClouds {
   dispose() {
     for (const t of this.tex) t.destroy();
     this.sunMap.destroy();
+    this.gsMap.destroy();
     this.params.destroy();
   }
 }

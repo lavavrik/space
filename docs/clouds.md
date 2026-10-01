@@ -195,6 +195,25 @@ Where it goes (an Earth-like world, a pair's two suns, measured at 1280 × 577 o
   more); screenshots with it on and off differ no more than two taken with the same setting. `?tdbg=1048576`
   turns it off.
 
+## Shadows
+
+Under the deck, what's behind each march pixel is darkened by the cloud toward the sun from there
+(`vclouds.wgsl` skyDim: a lone cloud's shadow keeps ~45 % of the light, an overcast's a fifth). Done
+in the march alone, at its resolution and from 3 samples through the layer, the shadows on the
+ground were smeared over a few of its pixels and faint (3 samples over a layer kilometres thick
+missed much of a broken cloud). Now:
+
+- **Near you** (`groundShadowMap`): once a frame, a 1024² grid ±30 km round you in the sun map's
+  frame (~60 m a texel), each texel the darkening along the sun's ray up from the layer's base,
+  from 12 samples. The composite applies it per frame pixel, to anything there (ground, sea,
+  ships); how dark by the weather's cover there (a texel has no view ray to judge how overcast it
+  is by, as the march does). ~0.12 ms on an RTX 4090.
+- **Beyond** (18–27 km crossfading) the march keeps doing it, from 8 samples (the light shafts'
+  shade stays at 3: 12 of them a pixel, and soft anyway).
+- **Not for ground at the layer's base or in it** (a mountain's top): a texel's ray starts at the
+  base, under it, and counted the cloud below it too. The march does those.
+- `farlight.scene.vclouds.groundShadow = false` in the console turns the grid off, for A/B shots.
+
 ## Moving through them
 
 The march's result is blended with last frame's, reprojected by one distance per pixel (where its
