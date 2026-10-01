@@ -22,7 +22,8 @@ import { atmoOf } from '../sim/atmosphere';
 import { cloudCoverAt } from '../sim/clouds';
 import { resetFrame } from '../sim/frame';
 import { stationQuat } from '../sim/stationGeom';
-import { surfaceRadius } from '../sim/terrain';
+import { CLEARANCE } from '../sim/flight';
+import { elevationLocal, surfaceRadius, worldQuat } from '../sim/terrain';
 import { wreckBody, wrecksHere } from '../sim/wreck';
 import type { Body, World } from '../types';
 
@@ -91,12 +92,55 @@ function cloudySpot(g: Game, b: World, low: boolean) {
   return best;
 }
 
+/**
+ * Landed on `b`: on dry ground (above its sea, with some margin) that's gently sloping, on the sunlit
+ * side, sitting on the ground as after a touchdown, turning with the world, nose to the horizon.
+ */
+function landOn(g: Game, b: World) {
+  const c = fromSunward(g, b, 0.6); // (mid-morning or afternoon: long shadows, not noon)
+  const u = V(0, 1, 0).cross(c).normalize(),
+    w = V().crossVectors(c, u);
+  const q = worldQuat(b, new THREE.Quaternion()).invert();
+  const elev = (d: THREE.Vector3) => {
+    const l = d.clone().applyQuaternion(q);
+    return elevationLocal(b, l.x, l.y, l.z);
+  };
+  // the driest, flattest spot over the sunlit cap: well above the sea (elevation 0 there), the slope
+  // from samples ~1 km either way
+  const k = 1000 / b.radius;
+  let best = c,
+    score = -Infinity;
+  for (let i = 0; i < 600; i++) {
+    const r = 0.5 * Math.sqrt((i + 0.5) / 600),
+      a = i * 2.39996;
+    const d = c.clone().addScaledVector(u, r * Math.cos(a)).addScaledVector(w, r * Math.sin(a)).normalize();
+    const e = elev(d);
+    if (e < 60) continue; // (sea, or a beach the waves would wash)
+    const slope = (Math.abs(elev(d.clone().addScaledVector(u, k).normalize()) - e) + Math.abs(elev(d.clone().addScaledVector(w, k).normalize()) - e)) / 1000;
+    const s = -slope * 10 + Math.min(e, 400) / 400; // flat first, then a little above the sea
+    if (s > score) {
+      score = s;
+      best = d;
+    }
+  }
+  const pos = b.pos.clone().addScaledVector(best, surfaceRadius(b, b.pos.clone().addScaledVector(best, b.radius)) + CLEARANCE);
+  // turning with the world (the ship's velocity is relative to the frame body, here the world)
+  const spin = V(b.axis.x, b.axis.y, b.axis.z).multiplyScalar(b.spin).cross(pos.clone().sub(b.pos));
+  const toSun = sunOf(g, b).pos.clone().sub(pos);
+  const level = toSun.addScaledVector(best, -toSun.dot(best)).normalize(); // toward the sun, level
+  place(g, b, pos, spin, level, best);
+  g.ship.landed = b;
+}
+
 export function debugSpots(g: Game): Spot[] {
   const out: Spot[] = [];
   const bodies = g.cur.bodies;
   const ringed = bodies.find((b): b is World => b.kind !== 'star' && !!b.ring);
   const clouded = bodies.find((b): b is World => b.kind !== 'star' && !!atmoOf(b) && (b.type === WT.EarthLike || b.type === WT.Ocean));
   const aired = clouded ?? bodies.find((b): b is World => b.kind !== 'star' && !!atmoOf(b));
+  // landed on dry ground: an Earth-like world (an ocean world may have no land), else any with terrain
+  const landable = bodies.find((b): b is World => b.kind === 'planet' && b.type === WT.EarthLike) ?? clouded;
+  if (landable) out.push({ id: 'landed', label: 'Landed', hint: `on dry ground on ${landable.name}, by day (F9)`, go: () => landOn(g, landable) });
   if (ringed?.ring) {
     const b = ringed,
       ring = b.ring!;

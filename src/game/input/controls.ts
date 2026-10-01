@@ -1,3 +1,4 @@
+import { DEBUG } from '../debug/poses';
 import { TANKER_TIME } from '../constants';
 import { dockKey } from '../sim/docking';
 import { catapultLaunch } from '../sim/catapult';
@@ -228,6 +229,10 @@ export function onPress(g: Game, code: string) {
       break;
     case 'KeyY':
       toggleScan(g);
+      break;
+    case 'F9':
+      // debug builds (?debug): landed on the Earth-like world's dry ground (debug/poses.ts)
+      if (DEBUG) g.debugJump('landed');
       break;
     case 'KeyL':
       // Shift+L: headlights; L: the orbit preview ring
