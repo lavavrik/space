@@ -2,10 +2,11 @@
  * HUD tooltips, positioned with Floating UI (@floating-ui/react): they open on hover (after a short
  * delay) or keyboard focus, flip and shift to stay on screen, and render in a portal so a panel's
  * clip-path never cuts them off. Styled like the HUD panels (hud.css, .tip). They only show while
- * the mouse is free: with the pointer captured for steering there's no hover.
+ * the mouse is free: with the pointer captured for steering there's no hover. On a touch screen a
+ * tap opens and closes them (and they take the tap, so it closes them).
  */
 import {
-  FloatingArrow, FloatingPortal, arrow, autoUpdate, flip, offset, shift, useDismiss, useFloating, useFocus, useHover, useInteractions, useRole,
+  FloatingArrow, FloatingPortal, arrow, autoUpdate, flip, offset, shift, useClick, useDismiss, useFloating, useFocus, useHover, useInteractions, useRole,
   type Placement,
 } from '@floating-ui/react';
 import { useCallback, useState, type CSSProperties, type ReactNode } from 'react';
@@ -23,7 +24,9 @@ export function Tip({ content, children, className, style, placement = 'top' }: 
     middleware: [offset(8), flip(), shift({ padding: 8 }), arrow({ element: arrowEl })],
   });
   const { getReferenceProps, getFloatingProps } = useInteractions([
-    useHover(context, { delay: { open: 120, close: 0 }, move: false }),
+    // hover is for a mouse; a finger taps instead (and a tap elsewhere, or on the tip, closes it)
+    useHover(context, { delay: { open: 120, close: 0 }, move: false, mouseOnly: true }),
+    useClick(context, { ignoreMouse: true }),
     useFocus(context),
     useDismiss(context),
     useRole(context, { role: 'tooltip' }),

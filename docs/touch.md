@@ -29,5 +29,14 @@ height instead of its width; the location is two lines, the gauges are slim bars
 target is a name and distance top centre, and the speedometer shows only lit lamps. Tooltips, the
 controls list and the mouse-capture hint are hidden. Portrait shows a "turn your device" banner.
 
-**Not done yet:** tap replacements for hover tooltips, narrowing the big panels (cargo, outfit,
-station) for small screens, and a choice of which thumb gets the stick.
+**Tooltips.** `Tip` (`ui/components/Tooltip.tsx`) hovers for a mouse only; a tap opens and closes it
+(and a tap elsewhere dismisses it). Lamps and gauge badges get a bigger hit area.
+
+**Panels.** The left column is as wide as 40 % of the screen (up to 22 rem), drops the location
+while a panel is open, and stops above the stick; panels scroll inside it. The right-hand panels
+(planner, navigation, autopilot, guide) sit beside the right thumb's buttons, with the gauges
+hidden while one is open. Panel headings are the collapse buttons, with a bigger hit area. The panel
+keys strip sits between the speedometer and the right-hand buttons.
+
+**Not done yet:** a choice of which thumb gets the stick; the station window (docked) wasn't
+checked on a phone-sized screen; the approach strip is hidden in the compact target card.

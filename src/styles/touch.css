@@ -7,13 +7,24 @@ body.touch { touch-action: none; overscroll-behavior: none; -webkit-touch-callou
 :root:has(body.touch) { font-size: clamp(12px, 2.4vh + 3px, 16px); }
 /* things for a mouse */
 body.touch #relock, body.touch #help { display: none; }
-body.touch .tip { display: none; }
+
+/* tooltips open on a tap: they take the tap that closes them, and the lamps and badges are bigger to hit */
+body.touch .tip { pointer-events: auto; font-size: .75rem; max-width: min(18rem, 70vw); }
+body.touch .lamp { padding: .3rem; }
+body.touch .gbadge { padding: .25rem; }
 
 /* --- compact HUD --- */
 body.touch #leftcol {
   top: calc(.5rem + env(safe-area-inset-top, 0px)); left: calc(.6rem + env(safe-area-inset-left, 0px));
-  width: min(22rem, 40vw); max-height: calc(100% - 14rem) !important; gap: .4rem;
+  width: min(22rem, 40vw); max-height: calc(100% - 11rem) !important; gap: .4rem; /* clear of the stick below (the measured --left-max is for the desktop's bottom gauges) */
 }
+/* a panel open under the location: it gets the room, and scrolls inside it */
+body.touch #leftcol:has(> .pan) #loc { display: none; }
+body.touch #leftcol > .pan { padding: .5rem .7rem .6rem; clip-path: none; }
+body.touch .h { font-size: .7rem; margin-bottom: .2rem; }
+body.touch .h.toggle { padding: .3rem 0; margin: -.3rem 0 0; } /* a heading is the collapse button: easier to hit */
+body.touch .row { font-size: .85rem; line-height: 1.4; gap: .6rem; }
+body.touch #leftcol .isec { font-size: .75rem; margin-top: .4rem; }
 body.touch #loc { margin-bottom: 0; gap: 0; max-width: 18rem; }
 body.touch .lsys { font-size: 1.05rem; }
 body.touch .lstar { font-size: .75rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -40,7 +51,8 @@ body.touch #gauges {
   width: 11rem; padding: .35rem .6rem .4rem; gap: .15rem; clip-path: none;
 }
 body.touch #gauges > .h, body.touch #gauges .gsubl, body.touch #gauges .gnote { display: none; }
-body.touch #gauges .gauge { margin-bottom: .15rem; gap: .1rem; }
+body.touch #gauges .gauge { margin-bottom: .1rem; gap: .05rem; }
+body.touch #gauges .gtop { line-height: 1.1; }
 body.touch #gauges .gtop { font-size: .68rem; letter-spacing: .06em; }
 body.touch #gauges .gtop b { font-size: .75rem; }
 body.touch #gauges .bar { height: .3rem; }
@@ -57,11 +69,19 @@ body.touch #target .tdist { margin-top: 0; }
 body.touch #target .tdist b { font-size: 1.05rem; }
 body.touch #target .tdist span { font-size: .75rem; }
 
-/* panels from the right (planner, navigation, autopilot) sit under the gauges */
+/* panels from the right (planner, navigation, autopilot, guide): beside the buttons, with the gauges
+   stepping aside while one is open; they scroll inside the room between the target card and the speedo */
 body.touch #rightcol {
-  top: calc(6.5rem + env(safe-area-inset-top, 0px)); right: calc(.6rem + env(safe-area-inset-right, 0px));
-  width: min(20rem, 38vw); max-height: calc(100% - 17.5rem) !important;
+  top: calc(3.6rem + env(safe-area-inset-top, 0px)); right: calc(9.2rem + env(safe-area-inset-right, 0px));
+  width: min(21rem, 42vw); max-height: calc(100% - 11.5rem) !important; gap: .4rem;
 }
+body.touch:has(#rightcol > .pan) #gauges { display: none; }
+body.touch #rightcol > .pan { padding: .5rem .7rem .6rem; clip-path: none; min-height: 0; overflow-y: auto; pointer-events: auto; scrollbar-width: thin; scrollbar-color: var(--amber-faint) transparent; }
+body.touch #rightcol #gSteps { gap: .4rem; }
+body.touch .otypes { margin: .3rem 0; }
+body.touch .otypes div { font-size: .8rem; padding: .25rem .5rem; }
+body.touch .onote, body.touch .okeys, body.touch .step .t { font-size: .8rem; }
+body.touch #navsearch { font-size: 16px; } /* iOS zooms into smaller inputs */
 
 /* --- on-screen controls --- */
 .tc { position: fixed; inset: 0; z-index: 20; pointer-events: none; }
@@ -105,12 +125,12 @@ body.touch #rightcol {
   position: absolute; top: calc(.5rem + env(safe-area-inset-top, 0px)); right: calc(.6rem + env(safe-area-inset-right, 0px));
   width: 2.4rem; height: 2.4rem; font-size: .7rem;
 }
-/* the keys the open panel wants, above the flight cluster */
+/* the keys the open panel wants: in the gap between the speedo and the right-hand buttons, five to a row */
 .tc-ctx {
-  position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(7.8rem + env(safe-area-inset-bottom, 0px));
-  display: flex; gap: .3rem; flex-wrap: wrap; justify-content: center; max-width: 24rem;
+  position: absolute; right: calc(9.4rem + env(safe-area-inset-right, 0px)); bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  display: flex; gap: .25rem; flex-wrap: wrap; justify-content: flex-end; width: 12rem;
 }
-.tc-key { width: 2.4rem; height: 2.4rem; border-radius: .3rem; font-size: .85rem; }
+.tc-key { width: 2.2rem; height: 2.2rem; border-radius: .3rem; font-size: .85rem; }
 .tc-close {
   position: absolute; top: calc(.5rem + env(safe-area-inset-top, 0px)); right: calc(.6rem + env(safe-area-inset-right, 0px));
   width: auto; padding: 0 1rem; height: 2.4rem; border-radius: .3rem;
