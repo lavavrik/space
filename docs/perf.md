@@ -87,7 +87,7 @@ and the HUD (its own canvas) stays sharp. The perf overlay's size line shows the
   own time was under 70 % of an interval (so the GPU was the one holding it up), a step down, two
   if most were late.
 - **Up:** after 3 s without late frames, a step up to see. If that brings late frames within 3 s,
-  it steps back, and the next try waits twice as long (up to a minute).
+  it steps back, and the next try waits twice as long (up to 15 s: at a minute it stayed at half resolution long after a heavy stretch ended).
 - **Can't keep up even at 50 %:** the frames settle at a slower rate, the refresh estimate follows
   them after ~10 s, and it steps back up to what that rate allows. So on a 120 Hz display it holds
   60 fps rather than sitting at 50 % for nothing.
