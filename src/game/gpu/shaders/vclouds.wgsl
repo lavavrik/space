@@ -390,6 +390,14 @@ fn groundShadowMap(@builtin(global_invocation_id) gid: vec3u) {
   textureStore(gsOut, gid.xy, vec4f(m, T, 0.0, 0.0));
 }
 
+// the scene's depth under a march pixel's centre, clamped to the frame: the last row's and column's
+// centres (×2, or ×3.5, rounded up) can land just past it, where a load reads 0, the sky's depth;
+// marched as sky, those pixels painted the haze of a whole sky's ray over the ground, bluish-white
+// streaks rising from the bottom of the view
+fn sceneDepthAt(p: vec2f) -> f32 {
+  return textureLoad(sceneDepth, min(vec2i(p), vec2i(textureDimensions(sceneDepth)) - 1), 0);
+}
+
 // where a ray from the camera along dir crosses the sphere of radius r round C: (near, far), or (1, 0)
 fn sphereSpan(dir: vec3f, C: vec3f, r: f32) -> vec2f {
   let b = dot(dir, C);
@@ -427,7 +435,7 @@ fn mainFill(@builtin(global_invocation_id) gid: vec3u) {
     let sp = sphereSpan(dir, C, rMid);
     var tm = select(sp.x, sp.y, sp.x <= 0.0);
     if (tm <= 0.0 || sp.y < sp.x) { tm = 15000.0; }
-    let d = textureLoad(sceneDepth, vec2i((vec2f(px) + 0.5) * vp.scale), 0);
+    let d = sceneDepthAt((vec2f(px) + 0.5) * vp.scale);
     if (d > 0.0) { tm = min(tm, vp.near / d / max(dot(dir, -normalize(frame.camRot[2].xyz)), 1e-4)); }
     let q = vp.prevVP * vec4f(dir * tm + vp.moved.xyz, 1.0);
     let qa = vp.prevVP * vec4f(dir * tm * 0.5 + vp.moved.xyz, 1.0);
@@ -476,7 +484,7 @@ fn marchPixel(px: vec2i) {
     t1 = select(top.y, bot.x, bot.y > bot.x && bot.x > 0.0);
   }
   // the scene in front ends it
-  let d = textureLoad(sceneDepth, vec2i(full), 0);
+  let d = sceneDepthAt(full);
   var sceneT = 1e30;
   if (d > 0.0) {
     let fwd = -normalize(frame.camRot[2].xyz);
