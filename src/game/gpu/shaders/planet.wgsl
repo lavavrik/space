@@ -612,6 +612,37 @@ fn fs(in: Out) -> @location(0) vec4f {
       col += mix(vec3f(1.0, 0.62, 0.3), vec3f(1.0, 0.88, 0.7), cityWhite) * lights * night * world.cityK;
     }
   }
+  // valley fog at dawn (docs/terrain.md): on Earth-like and ocean worlds, low fog fills the ground
+  // lying below its region's height (the cloud cube's coarse ground height, ~100 km across) by up to
+  // ~150 m, in patches tens of km across, where the sun's rising (it's in the east, from just under
+  // the horizon to ~17° up, burning off as it climbs). How much hides the ground is its thickness
+  // along the line of sight (from above, its depth over the slant; from inside it, the distance).
+  // Lit by the low sun and the sky. Before the haze, so it's hazed with the ground behind it.
+  if ((ty == 2 || ty == 3) && world.cloudH > 0.0 && spec < 0.5 && !dark) {
+    let upF = normalize(in.wp - world.atC.xyz);
+    let e1 = dot(upF, L);
+    let axisW = transpose(toLocal3()) * vec3f(0.0, 1.0, 0.0);
+    let eastF = normalize(cross(axisW, upF) + vec3f(1e-6, 0.0, 0.0));
+    let dawn = smoothstep(-0.1, 0.02, e1) * (1.0 - smoothstep(0.12, 0.3, e1)) * smoothstep(-0.05, 0.15, dot(L, eastF));
+    if (dawn > 0.0) {
+      let baseH = textureSampleLevel(cloudTex, cloudSamp, p, 0.0).g;
+      let patchF = 0.5 + 0.5 * snoise(p * 90.0 + vec3f(seed * 3.3, 1.0, 7.0));
+      // (and over low ground, under ~50–200 m: the coastal plains' morning fog; by the region's height
+      // alone, ~it, the ground was rarely under it)
+      let fogTop = max(baseH + 250.0 * patchF - 60.0, 50.0 + 150.0 * patchF);
+      let depth = fogTop - elev;
+      if (depth > 0.0) {
+        let cosV = max(dot(V, upF), 0.04);
+        let path = select(min(length(in.wp), 3000.0), depth / cosV, world.camAlt > fogTop);
+        let amt = (1.0 - exp(-path / 150.0)) * dawn * smoothstep(0.0, 60.0, depth) * 0.95;
+        // (its top is in the sun even where the valley floor's in the hills' shadow: the sunlight
+        // through the air there, not the ground's, shadowed, which made the fog dark blue pools)
+        let sunF = atSunlightC(Pc, L) * shade;
+        let fogC = sunF * 0.8 * smoothstep(-0.05, 0.1, e1) + (sky + sky2) * 1.6 + vec3f(0.004);
+        col = mix(col, fogC, amt);
+      }
+    }
+  }
   if (world.atOn > 0.5 && terr) {
     col = col * in.hazeT + in.haze * shade;
   } else if (world.atOn > 0.5) {

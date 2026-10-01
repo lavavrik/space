@@ -84,7 +84,7 @@ hull showed dimly, as if beyond the clouds. Bloom and the lens flare see the clo
     meandered like rivers; the fine ones as ridged lines were scratches too, or less stretched, a
     web of veins.
   - **A soft veil** round the filaments (alone, the lines read as scratches on the view).
-  - Opacity up to ~0.5 (more seen edge-on). It's lit white, brighter toward the sun, with the air in front hazing it. It lies in
+  - Opacity up to ~0.5 (more seen edge-on), thinning to 15 % of that once the sun's gone from it: unlit, over the twilit clouds and ground under it, it drew dark stripes across them. It's lit white, brighter toward the sun, with the air in front hazing it. It lies in
   front of the lower clouds from above and behind them from below.
 - **Stretched along the wind** (`clouds.wgsl windStretch`, SPACE-74): the wind blows along the
   latitude circles, so a point's longitude in the weather's frame is scaled by s (each latitude

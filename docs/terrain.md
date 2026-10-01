@@ -78,6 +78,10 @@ On Earth-like and ocean worlds' land, the cover follows how warm and how wet it 
 - **Lakes:** in low, flat, wet basins, small (tens of km at most), still water in the sea's colour a few tens of metres down, reflecting as the sea does. The geometry is the land's there, so only where it's low and flat. (Darker than the sea, the first ones stood out from orbit as dark blue patches.)
 - Not yet: rivers (a heightfield shader has no flow to follow).
 
+## Valley fog at dawn (`planet.wgsl`)
+
+On Earth-like and ocean worlds, low fog lies over the ground where the sun's rising (it's in the east, from just under the horizon to ~17° up, burning off as it climbs): in valleys, under the region's own height (the cloud cube's coarse ground height, ~100 km across) plus up to 190 m, and over low ground under 50–200 m (the coastal plains' morning fog), in patches tens of km across. How much hides the ground is its thickness along the line of sight (from above, its depth over the slant; from inside it, the distance). Its top is lit by the low sun through the air even where the valley floor's in the hills' shadow (lit as the ground was, it made dark blue pools). Hilltops stand out of it. Applied before the haze.
+
 ## Snow and rain (`planet.wgsl`)
 
 - **Snow in shade** is lit by the blue sky alone: the sky's light on it is bluer (0.72, 0.88, 1.25 × by how much is snow).

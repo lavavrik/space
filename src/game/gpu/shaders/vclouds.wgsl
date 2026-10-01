@@ -567,7 +567,9 @@ fn fsComposite(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let a0 = cirrus(cloudDir(toLocalM() * Q), pm);
     if (a0 > 0.0) {
       // (a thin sheet: seen edge-on, the path through it, and its opacity, grow)
-      let a = (1.0 - pow(1.0 - a0, 1.0 / max(abs(dot(dir, up)), 0.12))) * vp.on;
+      // (thinner once the sun's gone from it: unlit, over the twilit clouds and ground under it, it
+      // drew dark stripes across them; in the night, faint ice is all but invisible)
+      let a = (1.0 - pow(1.0 - a0, 1.0 / max(abs(dot(dir, up)), 0.12))) * vp.on * (0.15 + 0.85 * smoothstep(-0.15, 0.03, dot(up, normalize(world.light.xyz))));
       // lit white, brighter toward the sun (ice scatters forward), dimmed by the air in front, which
       // stays in front of it
       let sunC = atSunlightC(Q, L) * sunShade(Q) * world.atSunI / 45.0;
