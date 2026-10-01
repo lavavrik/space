@@ -365,7 +365,9 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     let t = t0 + span * u * u;
     let dt = span * 2.0 * max(u, 0.5 / f32(steps)) / f32(steps);
     let P = dir * t;
-    let dn = density(P);
+    // (fading out over the last fifth of the march's reach, where the flat deck fades in to carry on:
+    // cut off, the clouds ended in a line across the view that moved with height and pitch)
+    let dn = density(P) * select(1.0 - smoothstep(t0 + 0.8 * MAX_DIST, t0 + MAX_DIST, t), 1.0, inLayer);
     if (dn <= 0.0) { continue; }
     if (tFirst < 0.0) { tFirst = t; }
     // sunlight reaching here through the cloud toward the sun, taken where this step's light comes

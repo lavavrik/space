@@ -536,7 +536,10 @@ fn fs(in: Out) -> @location(0) vec4f {
     let wv = waterWaves(in.wp, fw);
     // the slope, in the surface's plane, turned to world axes: the normal tips against it
     let gw = transpose(toLocal3()) * wv.xyz;
-    let Nw = normalize(N - (gw - N * dot(gw, N)));
+    // (on the sphere's true normal, not the mesh's: a coarse chunk's flat triangles showed in the
+    // glint as straight-edged patches)
+    let Ns = normalize(in.wp - world.atC.xyz);
+    let Nw = normalize(Ns - (gw - Ns * dot(gw, Ns)));
     let F = 0.02 + 0.98 * pow(1.0 - clamp(dot(Nw, V), 0.0, 1.0), 5.0);
     // (a wave's back facing away would mirror the sea itself: kept just above the horizon)
     let up = normalize(Pc);

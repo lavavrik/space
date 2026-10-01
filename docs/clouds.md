@@ -26,6 +26,8 @@ frame. The particles (plasma, exhaust, dust) are drawn after that, over them, de
 against the scene: drawn in the scene, the clouds went over them too, and plasma streaming past the
 hull showed dimly, as if beyond the clouds. Bloom and the lens flare see the clouds.
 
+Past the march's reach (250 km from where the ray enters the layer) the volumetric clouds fade out over its last fifth while the flat deck fades in there to carry on (`cloudLayer.wgsl`, even where the volumetric clouds have it hidden). Cut off, the clouds ended in a line across the view that moved with height and pitch.
+
 - **Cover:** Earth-like and ocean worlds are clouded over most of their face (`clouds.wgsl
   cloudCover`: from a raw −0.2, not 0.02 as the others), with clear stretches between systems;
   `sim/clouds.ts` is the same function on the CPU (the debug jumps use it to land under or over

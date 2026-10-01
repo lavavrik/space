@@ -106,5 +106,12 @@ fn fs(in: Out) -> FragOut {
   // (and cities' light from below, scattered up through it at night: clouds over a city glow)
   let col = vec3f(0.97) * light * select(1.0, 0.3 + 0.55 * (1.0 - cov), below) + flash + cityGlowAt(pw, L, n) * (0.4 + 0.6 * cov);
   let clip = frame.viewProj * vec4f(P, 1.0);
-  return FragOut(vec4f((col * atTrans + haze) * frame.twilight, cov * 0.95 * (1.0 - world.deckHide)), clamp(clip.z / clip.w, 0.0, 1.0));
+  // (where the volumetric clouds are on, the deck still shows past their reach, 250 km from where
+  // the ray enters the layer: vclouds.wgsl fades them out over its last fifth as this fades in)
+  let rTopL = world.radius + world.cloudH * 1.05;
+  let cT = dot(C, C) - rTopL * rTopL;
+  let dT = b * b - cT;
+  let tIn = select(0.0, max(b - sqrt(max(dT, 0.0)), 0.0), cT > 0.0);
+  let beyond = smoothstep(tIn + 200000.0, tIn + 250000.0, t);
+  return FragOut(vec4f((col * atTrans + haze) * frame.twilight, cov * 0.95 * (1.0 - world.deckHide * (1.0 - beyond))), clamp(clip.z / clip.w, 0.0, 1.0));
 }

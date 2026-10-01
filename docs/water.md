@@ -7,7 +7,7 @@ Seas on Earth-like and ocean worlds (`planet.wgsl`, where `spec` marks water). T
 - **Three octaves of moving noise:** 60, 24 and 9.6 m long, ~3 % of their length high.
   - Each drifts with the wind at deep water's phase speed for its length (√(gλ/2π): ~10, 6 and 4 m/s).
   - Each fades out below a few pixels (by the pixel's footprint, `fw`).
-- **Normals:** the slope comes from the noise itself (central differences, 3 more reads per octave). From screen-space derivatives it was as coarse as a pixel quad, and the glints shimmered in moiré.
+- **Normals:** on the sphere's true normal (a coarse chunk's flat triangles showed in the glint as straight-edged patches); the slope comes from the noise itself (central differences, 3 more reads per octave). From screen-space derivatives it was as coarse as a pixel quad, and the glints shimmered in moiré.
 - **Their clock:** `world.waveO.w` is the time wrapped to an hour. The sim's own clock, ~2.4 million s at day 28, has float32 steps of 0.25 s, and the waves moved in jerks.
 - **Coordinates stay small:** the waves are fixed to the world, in its own frame, measured from the camera's place there less a whole number of their common period (3,840 m: 8 × each length, the noise's period). `worlds.ts` writes that origin in doubles (`world.waveO`), so near you the shader adds small numbers to small camera-relative positions. Measured from the world's centre, float32 steps of ~0.5 m would have broken up the 10 m waves.
 
