@@ -897,16 +897,28 @@ fn fsComposite(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         let L2c = normalize(world.light2.xyz);
         ci += atSunlightC(Q, L2c) * world.lightC2.rgb * world.atSunI / 45.0 * (0.8 + 0.15 * hg(dot(dir, L2c), 0.6)) * smoothstep(-0.1, 0.25, dot(up, L2c));
       }
+      // Dimmed by the air in front, which stays in front: as far as the air lets it through, the sheet
+      // covers what's behind it (whose own light already has that air's haze in it). (It covered all
+      // of it and had the haze in front added back, from 4 samples over a path that's hundreds of km
+      // toward the horizon: darker than the sky's own, and with the sheet near opaque edge-on, the
+      // cirrus by the horizon was dark streaks between the low clouds and the ground. Far off, it
+      // fades into the haze, as it does. tdbg bit 4194304: as before.)
+      var aT = a;
       if (world.atOn > 0.5) {
         let sp = atSpan(dir);
-        let hz = atInscatter(dir * sp.x, dir * max(tCi, sp.x), L, 4);
-        ci = ci * atTrans + hz;
+        if ((u32(world._pq) & 4194304u) != 0u) {
+          let hz = atInscatter(dir * sp.x, dir * max(tCi, sp.x), L, 4);
+          ci = ci * atTrans + hz;
+        } else {
+          _ = atInscatter(dir * sp.x, dir * max(tCi, sp.x), L, 4);
+          aT = a * dot(atTrans, vec3f(1.0 / 3.0));
+        }
       }
       ci *= frame.exposure;
       if (camR >= rTop + liftCam) {
-        cl = vec4f(ci * a + (1.0 - a) * cl.rgb, (1.0 - a) * cl.a); // above the lower clouds: in front
+        cl = vec4f(ci * aT + (1.0 - aT) * cl.rgb, (1.0 - aT) * cl.a); // above the lower clouds: in front
       } else {
-        cl = vec4f(cl.rgb + cl.a * ci * a, cl.a * (1.0 - a)); // under or in them: behind
+        cl = vec4f(cl.rgb + cl.a * ci * aT, cl.a * (1.0 - aT)); // under or in them: behind
       }
     }
   }

@@ -93,7 +93,7 @@ Past the march's reach (250 km from where the ray enters the layer) the volumetr
     there, the fine streaks never faded, and the cirrus was jagged, stepping from pixel row to
     row); the 16 km lines fade to their mean too, and the plumes' edges soften to a few pixels.
   - **A soft veil** round the filaments (alone, the lines read as scratches on the view).
-  - Opacity up to ~0.5 (more seen edge-on), thinning to 15 % of that once the sun's gone from it: unlit, over the twilit clouds and ground under it, it drew dark stripes across them. It's lit white, brighter toward the sun, with the air in front hazing it. It lies in
+  - Opacity up to ~0.5 (more seen edge-on), thinning to 15 % of that once the sun's gone from it: unlit, over the twilit clouds and ground under it, it drew dark stripes across them. It's lit white, brighter toward the sun. The air in front stays in front: the sheet covers what's behind it only as far as that air lets it through (whose own light already has that air's haze in it), so far off it fades into the haze. (It covered all of it, with the haze in front added back from 4 samples over a path hundreds of km long toward the horizon: darker than the sky's own, and with the sheet near opaque edge-on, the cirrus by the horizon was dark streaks between the low clouds and the ground. `?tdbg=4194304`: as before.) It lies in
   front of the lower clouds from above and behind them from below.
 - **Stretched along the wind** (`clouds.wgsl windStretch`, SPACE-74): the wind blows along the
   latitude circles, so a point's longitude in the weather's frame is scaled by s (each latitude
