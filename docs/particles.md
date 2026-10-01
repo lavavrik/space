@@ -40,3 +40,10 @@ No buffers: a grain's place is a hash of its index. Up to 8 fields a frame, one 
   parallax. Every grain drifts slowly on its own (0.6 m/s dust, 0.25 m/s pebbles), so the belt
   isn't frozen while you sit still.
 - **Wreck debris:** 2,500 bits in a 90 m ball round each wreck within 40 km, tumbling so they glint.
+
+## Rain (`gpu/effects.ts rain`)
+
+- **When:** under thick cloud on an Earth-like or ocean world, below the cloud base. That's over 85 % of the most cover the world has (0.85 on an Earth-like world, 0.95 on an ocean one), overhead by the cloud map. It's heavier the thicker the cover.
+- **What:** a 40 m box of streaks round you falling at 9 m/s, each drawn 0.08 s long, cool grey.
+- **How it falls:** the fall is in the field's anchor (the camera's place in the box's repeating space, minus the fall so far, in doubles). The shader's own clock is too coarse at large times to move them smoothly.
+- **Grain fields' streak:** fields can draw each grain as a streak back to where it was (`drift.yzw`).

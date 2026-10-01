@@ -15,6 +15,9 @@ import { DUST, DUSTBOX, DUST_FADE_FROM, DUST_FADE_TO, RING_AP, RING_N, RING_PLAN
 import { FtlTrail } from '../render/Trail';
 import { orbitPreview } from '../sim/planner';
 import { atmoOf } from '../sim/atmosphere';
+import { cloudCoverAt } from '../sim/clouds';
+import { WT } from '../constants';
+import { CLOUD_H } from '../render/look';
 import { sunFraction } from '../sim/eclipse';
 import { occluder } from '../sim/sight';
 import { FLASH_S, type Npc } from '../sim/traffic';
@@ -345,6 +348,33 @@ export class EffectsLayer {
    *   - round a wreck, its debris, glinting;
    *   - re-entry: plasma streaming past once the air heats the hull (from ~0.1 MW/m²).
    */
+  /**
+   * Rain (docs/particles.md): under thick cloud (over 85 % of the most cover the world has, overhead by the cloud map, as the
+   * deck and the volumetric clouds draw it) on an Earth-like or ocean world, below the cloud base,
+   * a box of streaks round you falling at 9 m/s, heavier the thicker the cover. The fall is in the
+   * field's anchor (the camera's place in the box's repeating space, minus the fall so far, in
+   * doubles): the shader's clock is too coarse at large times to move them smoothly itself.
+   */
+  private rain(g: Game, px: Particles, pr: number) {
+    const b = g.frameBody;
+    if (b.kind === 'star' || (b.type !== WT.EarthLike && b.type !== WT.Ocean) || g.inStation) return;
+    const air = atmoOf(b);
+    if (!air) return;
+    const up = g.ship.pos.clone().sub(b.pos);
+    const alt = up.length() - b.radius;
+    up.normalize();
+    if (alt > air.H * CLOUD_H * 0.4) return; // above the cloud base (vclouds.wgsl: 0.4 deck heights)
+    // (by the cover against its most, 0.85 on an Earth-like world, 0.95 on an ocean one: sim/clouds.ts)
+    const full = cloudCoverAt(b, up, g.simTime) / (b.type === WT.Ocean ? 0.95 : 0.85);
+    const k = THREE.MathUtils.smoothstep(full, 0.85, 0.98);
+    if (k <= 0.01) return;
+    const fall = 9;
+    const at = g.ship.pos.clone().addScaledVector(up, fall * (g.simTime % 1e5));
+    // (cool grey, lit by the overcast; streaks 0.08 s long)
+    const c = 0.5 * k;
+    px.field({ mode: 'wrap', at, size: 40, count: Math.round(9000 * k), seed: 21, grain: -2 * pr, color: [c, c * 1.05, c * 1.15], streak: up.clone().multiplyScalar(fall * 0.08) });
+  }
+
   private updateGrains(g: Game, px: Particles, pr: number, dt: number) {
     const { ship } = g;
     // (space dust: gone in air, fading out through the upper half of it; on the ground it shimmered)
@@ -355,6 +385,7 @@ export class EffectsLayer {
       const f = 0.55 * fade;
       px.field({ mode: 'wrap', at: ship.pos, size: DUSTBOX, count: DUST, seed: 99, grain: -2.2 * pr, color: [f, f * 0.92, f * 0.85] });
     }
+    this.rain(g, px, pr);
     // the belt's dust, orbiting with the ring
     const b = g.frameBody;
     const sun = sunFraction(g.cur.bodies, this.suns.s1, ship.pos);

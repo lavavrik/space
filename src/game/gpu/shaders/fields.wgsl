@@ -14,7 +14,7 @@ struct Field {
   p: vec4f,       // box size or ball radius (m), grains, seed, size (m; negative: pixels)
   col: vec4f,     // rgb; w: glint strength
   sun: vec4f,     // direction to the star (glints); w: time (s)
-  drift: vec4f,   // x: each grain's own slow drift (m/s, random direction), so a field isn't frozen
+  drift: vec4f,   // x: each grain's own slow drift (m/s, random direction), so a field isn't frozen; yzw: a streak back to where it was a moment ago (rain)
 }
 struct Fields {
   f: array<Field, 8>,
@@ -60,7 +60,7 @@ fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> Sprit
   let fwdK = 1.0 + 5.0 * pow(max(dot(normalize(c), f.sun.xyz), 0.0), 6.0);
   var size = f.p.w;
   if (size < 0.0) { size = -size * length(c) / (frame.proj.y * frame.viewport.y * 0.5); } // pixels → metres there
-  return sprite(vi, c, vec3f(0.0), size, f.col.rgb * fade * glint * fwdK * (0.6 + 0.8 * h.y));
+  return sprite(vi, c, f.drift.yzw, size, f.col.rgb * fade * glint * fwdK * (0.6 + 0.8 * h.y));
 }
 
 @fragment

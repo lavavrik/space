@@ -48,6 +48,8 @@ export interface Field {
   glint?: number;
   /** Each grain's own slow drift (m/s): the field lives even when you sit still. */
   drift?: number;
+  /** Each grain drawn as a streak back to where it was a moment ago (camera-relative m): rain. */
+  streak?: THREE.Vector3;
 }
 
 const blendAdd: GPUBlendState = { color: { srcFactor: 'one', dstFactor: 'one' }, alpha: { srcFactor: 'zero', dstFactor: 'src-alpha' } };
@@ -221,7 +223,7 @@ export class Particles {
       fd.set([...fl.color, fl.glint ?? 0], o + 8);
       const s = g.cur.star.pos.clone().sub(g.ship.pos).normalize();
       fd.set([s.x, s.y, s.z, (performance.now() / 1000) % 1e5], o + 12);
-      fd.set([fl.drift ?? 0, 0, 0, 0], o + 16);
+      fd.set([fl.drift ?? 0, fl.streak?.x ?? 0, fl.streak?.y ?? 0, fl.streak?.z ?? 0], o + 16);
     });
     if (this.fields.length) this.device.queue.writeBuffer(this.fieldBuf, 0, fd);
     this.live = this.live || n > 0;
