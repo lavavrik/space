@@ -84,14 +84,16 @@ fn atInscatterC(C0: vec3f, C1: vec3f, L: vec3f, n: i32) -> vec3f {
   let gM = 0.76;
   let dM = 1.0 + gM * gM - 2.0 * gM * cosT;
   let phaseM = (1.0 - gM * gM) / (dM * sqrt(dM)) / 12.566;
-  let raw = world.atSunI * sum * (beta * phase + vec3f(0.1 * beta.z * phaseM));
+  let raw = world.atSunI * sum * (beta * phase + vec3f(0.07 * beta.z * phaseM));
   // (what's seen through the haze dims through a long path's reddened light: paled as the haze is,
   // or distant clouds by the horizon went yellow under a white haze, SPACE-73)
   // (paled less where the sunlight itself is reddened, at sunset: its colours are real there, and
   // paled, a low sun's sky was a washed-out yellow-white rather than orange)
   let rC0 = length(C0);
   let Ts = exp(-ext * atChapman(rC0, dot(C0 / rC0, L)));
-  let pale = 0.6 * (1.0 - 0.85 * smoothstep(0.15, 0.7, 1.0 - Ts.b / max(Ts.r, 1e-4)));
+  // (by up to half, and only for a deeply reddened sun, right at the horizon: by 85 % from a mildly
+  // reddened one, a sunrise seen from up high was orange from end to end)
+  let pale = 0.6 * (1.0 - 0.5 * smoothstep(0.35, 0.85, 1.0 - Ts.b / max(Ts.r, 1e-4)));
   let l = dot(raw, vec3f(0.2126, 0.7152, 0.0722));
   if (l > ATR_KNEE) {
     let x = l - ATR_KNEE;

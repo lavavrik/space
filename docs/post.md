@@ -28,7 +28,7 @@ the final pass `tonemap.wgsl`:
 3. **FTL zoom blur:** in FTL, 12 samples toward the point you're heading for (away from it when it's
    behind you), stronger toward the edges and with speed (from ~1,000 to ~1,000,000 km/s), kept to a
    tenth of full strength: a hint of speed, not a smear.
-4. The volumetric clouds laid over, then the tone map (linear to 0.8, a soft shoulder toward 1). Up to ~1.5× white the shoulder is taken on the brightest channel and the colour scaled with it, keeping its hue, blending to per channel by ~4× (the sun's disc, blazes go to white). Per channel, bright colours flattened toward yellow: a sunset's orange (red 2 : green 1) came out yellow.
+4. The volumetric clouds laid over, then the tone map (linear to 0.8, a soft shoulder toward 1). Up to ~white the shoulder is taken on the brightest channel and the colour scaled with it, keeping its hue, blending to per channel by ~3× (from 1.5× to 4× a sunrise's haze stayed deep orange) (the sun's disc, blazes go to white). Per channel, bright colours flattened toward yellow: a sunset's orange (red 2 : green 1) came out yellow.
 
 The HUD and the overlay are drawn separately, so they stay sharp.
 

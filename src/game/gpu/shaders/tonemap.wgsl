@@ -294,5 +294,5 @@ fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
   let m = max(c.r, max(c.g, c.b));
   var hc = c;
   if (m > 0.8) { hc = c * ((0.8 + 0.2 * (1.0 - exp(-(m - 0.8) / 0.2))) / m); }
-  return vec4f(mix(hc, pc, smoothstep(1.5, 4.0, m)), 1.0);
+  return vec4f(mix(hc, pc, smoothstep(1.0, 3.0, m)), 1.0);
 }
