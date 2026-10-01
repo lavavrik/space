@@ -53,6 +53,9 @@ struct World {
   // the water's waves (planet.wgsl waterWaves): the camera's place in the world's frame less a whole
   // number of the waves' common period (m), so their coordinates stay small and precise near you
   waveO: vec4f,
+  // moonlight and planetshine (gpu/worlds.ts shineOf): the direction to the neighbour lighting this
+  // world's night (a moon's planet, a planet's largest moon; world axes), w: how bright, squashed
+  shine: vec4f,
 }
 
 @group(1) @binding(0) var<uniform> world: World;

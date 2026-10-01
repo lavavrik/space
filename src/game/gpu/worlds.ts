@@ -27,7 +27,7 @@ import { CHUNK_BYTES, TerrainGpu, TerrainShared } from './terrain';
 import { DEPTH_FORMAT, HDR_FORMAT, SAMPLES } from './formats';
 import { RingFieldGpu } from './rings';
 
-const WORLD_BYTES = 864;
+const WORLD_BYTES = 880;
 const STAR_BYTES = 128;
 /** The water's three wave octaves all repeat over this (m; planet.wgsl WAVE_L × the noise's period of 8). */
 const WAVE_PERIOD = 3840;
@@ -509,6 +509,8 @@ export class WorldsLayer {
       const camL = v.subVectors(ship.pos, b.pos).applyQuaternion(qInv);
       // (and their clock: the time wrapped to an hour, precise in float32)
       f.set([camL.x - Math.round(camL.x / WAVE_PERIOD) * WAVE_PERIOD, camL.y - Math.round(camL.y / WAVE_PERIOD) * WAVE_PERIOD, camL.z - Math.round(camL.z / WAVE_PERIOD) * WAVE_PERIOD, simTime % 3600], 212);
+      // moonlight and planetshine (planet.wgsl): the neighbour lighting this world's night
+      shineOf(b, cur.bodies, s1.pos, f, 216);
       v.subVectors(b.pos, ship.pos); // (rel again: v is reused)
       const occ = occludersOf(b, cur.bodies, s1);
       occ.forEach((o, k) => f.set([o.pos.x - b.pos.x, o.pos.y - b.pos.y, o.pos.z - b.pos.z, o.radius], 176 + k * 4));
@@ -747,3 +749,30 @@ export class WorldsLayer {
     this.dotBuf.destroy();
   }
 }
+
+/**
+ * Moonlight and planetshine (docs/terrain.md): the neighbour that lights a world's night side most,
+ * its parent planet for a moon, its largest moon for a planet, as a light: the direction to it
+ * (world axes, the same as world.light's) and how bright it is against the sun (its albedo, its
+ * size from here squared, and how much of its sunlit side faces this way: a Lambert sphere's phase),
+ * squashed as eyes adapting to the dark see it (³√: a full moon's 2.5e-6 of sunlight → ~0.04,
+ * planetshine on a moon ~0.13; real, both were invisible). Into f at `at` (4 floats; 0 for none).
+ */
+function shineOf(b: Body, bodies: Body[], sun: THREE.Vector3, f: Float32Array, at: number) {
+  f.fill(0, at, at + 4);
+  if (b.kind === 'star') return;
+  let src: Body | null = null;
+  if (b.parent && b.parent.kind !== 'star') src = b.parent;
+  else for (const o of bodies) if (o.kind !== 'star' && o.parent === b && (!src || o.radius > src.radius)) src = o;
+  if (!src) return;
+  const toSrc = new THREE.Vector3().subVectors(src.pos, b.pos);
+  const d = toSrc.length();
+  if (d <= src.radius + b.radius) return;
+  const a = new THREE.Vector3().subVectors(sun, src.pos).angleTo(toSrc.clone().negate()); // (phase angle at the source)
+  const phase = ((Math.PI - a) * Math.cos(a) + Math.sin(a)) / Math.PI;
+  const I = (src.albedo ?? 0.3) * (src.radius / d) ** 2 * Math.max(phase, 0);
+  if (I <= 0) return;
+  toSrc.divideScalar(d);
+  f.set([toSrc.x, toSrc.y, toSrc.z, Math.min(0.3, 3 * Math.cbrt(I))], at);
+}
+

@@ -82,6 +82,10 @@ On Earth-like and ocean worlds' land, the cover follows how warm and how wet it 
 
 On Earth-like and ocean worlds, low fog lies over the ground where the sun's rising (it's in the east, from just under the horizon to ~17° up, burning off as it climbs): in valleys, under the region's own height (the cloud cube's coarse ground height, ~100 km across) plus up to 190 m, and over low ground under 50–200 m (the coastal plains' morning fog), in patches tens of km across. How much hides the ground is its thickness along the line of sight (from above, its depth over the slant; from inside it, the distance). Its top is lit by the low sun through the air even where the valley floor's in the hills' shadow (lit as the ground was, it made dark blue pools). Hilltops stand out of it. Applied before the haze.
 
+## Moonlight and planetshine (`gpu/worlds.ts shineOf`, `planet.wgsl`)
+
+Each world's night has one more light: its parent planet for a moon (planetshine), its largest moon for a planet (moonlight), as a directional light from that body. Its brightness against the sun: the body's albedo × its size from here squared × how much of its sunlit side faces this way (a Lambert sphere's phase), then squashed as eyes adapting to the dark see it (∛ × 3, at most 0.3): a full moon's 2.5e-6 of sunlight comes to ~0.04, a full planet on its moon ~0.13. At their real levels both were invisible.
+
 ## Snow and rain (`planet.wgsl`)
 
 - **Snow in shade** is lit by the blue sky alone: the sky's light on it is bluer (0.72, 0.88, 1.25 × by how much is snow).
