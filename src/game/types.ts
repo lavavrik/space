@@ -244,6 +244,14 @@ export interface Ship {
   /** FTL cruise control (F): the throttle holds. Off, it spools down unless you hold W. */
   cruise: boolean;
   ftlSpeed: number;
+  /**
+   * Just out of FTL: the speed (m/s, along travelDir) the drive's collapsing field still carries
+   * you at on top of `vel`, fading over a couple of seconds (sim/ftl.ts coastFTL). Not thrust: flight
+   * assist doesn't fight it and it costs nothing.
+   */
+  ftlCoast?: number;
+  /** …and the rate it fades at (1/s), set as it starts. */
+  ftlCoastK?: number;
   ftlCharge: number;
   /** Stations the FTL drive started out beside: they don't drop it out until it's left their bubble (sim/ftl.ts). */
   ftlLeaving?: string[];

@@ -5,7 +5,7 @@ import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import { autopilot, ftlTransfer } from './autopilot';
 import { collide, manualFlight, respawn } from './flight';
-import { chargeFTL, ftlCruise } from './ftl';
+import { chargeFTL, coastFTL, ftlCruise } from './ftl';
 import { gravityAt } from './gravity';
 import { updateGuide } from './guide';
 import { arriveAt, galPos } from './navigation';
@@ -264,7 +264,8 @@ export function update(g: Game, dt: number, realDt = dt) {
       // the mining laser's beam (sim/laser.ts; its yield goes in with the scoop's). After the move:
       // mid-step the ship lags the rocks by its orbital motion (~700 m a frame round a giant)
       updateLaser(g);
-      g.curSpeed = relVel(g).length();
+      // just out of FTL: the drive's field still carrying you on, fading (sim/ftl.ts)
+      g.curSpeed = relVel(g).length() + coastFTL(g, dt);
     } else if (apSteering) {
       ftlTransfer(g, dt);
     } else {

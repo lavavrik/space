@@ -174,8 +174,11 @@ export function engageFTL(g: Game) {
   ship.tanker = null;
   const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(ship.q);
   ship.travelDir.copy(fwd); // the drive always spins up along the nose
-  ship.ftlSpeed = Math.max(ship.vel.dot(fwd), 0) + 3e4;
-  ship.throttle = 0.3;
+  // at the speed you were doing, the throttle where it holds it (it used to add 30 km/s and set
+  // the throttle to 30 %: a shove forward the moment the drive engaged)
+  ship.ftlSpeed = ship.vel.length() + (ship.ftlCoast ?? 0);
+  ship.ftlCoast = 0;
+  ship.throttle = Math.min(1, ship.ftlSpeed / ftlSpeedLimit(g));
   ship.vel.set(0, 0, 0);
   ship.landed = null;
   if (ship.ap) {
@@ -189,12 +192,17 @@ export function engageFTL(g: Game) {
 export function dropFTL(g: Game, forced: boolean, body?: Body) {
   const { ship } = g;
   ship.mode = 'normal';
-  // keep moving the way the drive was pushing, which may not be where the nose points
+  // keep moving the way the drive was pushing, which may not be where the nose points; past the
+  // normal-space limit the drive's collapsing field carries you on, fading (coastFTL): the speed
+  // used to fall to 4 km/s the moment you dropped out. (Forced out by a body: no coast, it's close.)
   ship.vel.copy(ship.travelDir).multiplyScalar(forced ? 500 : Math.min(ship.ftlSpeed, NORMAL_MAX));
+  ship.ftlCoast = forced ? 0 : Math.max(0, ship.ftlSpeed - NORMAL_MAX);
+  ship.ftlCoastK = 0;
   ship.ftlSpeed = 0;
   if (ship.ap) {
     ship.ap.phase = 'insert';
     ship.vel.set(0, 0, 0);
+    ship.ftlCoast = 0;
     g.showMsg(`Autopilot · inserting into ${apLabel(ship.ap)}`, 'ftl');
     return;
   }
@@ -204,6 +212,7 @@ export function dropFTL(g: Game, forced: boolean, body?: Body) {
     const st = stationWithin(g, FRAME_ENTER);
     if (st) {
       ship.vel.add(stationVel(g, st));
+      ship.ftlCoast = 0;
       g.refFrame = st;
       g.showMsg(`Dropped to normal space · matched ${st.name}'s orbit`);
     } else g.showMsg('Dropped to normal space');
@@ -301,6 +310,7 @@ export function ftlCruise(g: Game, dt: number) {
     ship.pos.addScaledVector(ship.travelDir, st.s);
     dropFTL(g, false);
     ship.vel.copy(stationVel(g, st.st));
+    ship.ftlCoast = 0;
     g.refFrame = st.st;
     g.showMsg(`Dropped out approaching ${st.st.name} · matched its orbit`);
     return;
@@ -316,4 +326,32 @@ export function ftlCruise(g: Game, dt: number) {
       }
     }
   }
+}
+
+/** The FTL field's coast after dropping out fades at this rate (1/s) in open space: ~2 s to nothing. */
+const COAST_FADE = 2.3;
+
+/**
+ * Just out of FTL, in normal space: carry the ship on along its last FTL course at `ftlCoast`,
+ * fading. Near a body or a station it fades faster, so the coast never covers more than a fifth of
+ * the way to it (you don't sail into a world you dropped out beside). Returns the coast speed left.
+ */
+export function coastFTL(g: Game, dt: number) {
+  const { ship } = g;
+  const v = ship.ftlCoast ?? 0;
+  if (v <= 0) return 0;
+  // its rate, set as it starts (the distance a coast at rate k covers is v / k; set afresh each
+  // frame against the shrinking gap, it crept on toward the world)
+  if (!ship.ftlCoastK) {
+    let clear = Infinity;
+    for (const b of g.cur.bodies) clear = Math.min(clear, b.pos.distanceTo(ship.pos) - b.radius);
+    for (const st of g.cur.stations) clear = Math.min(clear, st.pos.distanceTo(ship.pos));
+    ship.ftlCoastK = Math.max(COAST_FADE, v / Math.max(0.2 * clear, 1));
+  }
+  const k = ship.ftlCoastK;
+  const f = Math.exp(-k * dt);
+  ship.pos.addScaledVector(ship.travelDir, (v * (1 - f)) / k);
+  ship.ftlCoast = v * f < 1 ? 0 : v * f;
+  if (!ship.ftlCoast) ship.ftlCoastK = 0;
+  return ship.ftlCoast;
 }
