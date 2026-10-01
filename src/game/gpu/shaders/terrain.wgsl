@@ -8,7 +8,22 @@ const MTN_GAIN: f32 = 0.55;
 const MTN_K: f32 = 1.3;
 const MTN_MEAN: f32 = 0.3;
 const FINE_FROM: i32 = 8;
-const FINE_GAIN: f32 = 0.68;
+const FINE_GAIN: f32 = 0.6;
+// The ridges' crease, rounded: within ±RIDGE_ROUND of zero |n| is n² / 2r + (r / 2)·smoothstep(0, r, |n|),
+// beyond it |n|: 0 on the crest (the peaks as high as they were: as a plain parabola, n² / 2r + r / 2,
+// every crest was lower and so was the next octave's weight along it, ranges kilometres lower), |n|
+// from r on (the slopes as they were), smooth between. The noise texture is interpolated linearly
+// between its texels, so where it crosses zero is straight within each one, and a sharp |n| made
+// every crest, and the next octave's weight along it, a straight dark crease tens of metres long, in
+// all directions (docs/terrain.md; the noise mostly spans ±0.35). tdbg bit 8388608: the sharp creases
+// and the old gain, for A/B (reload; the CPU's terrain stays the new one).
+const RIDGE_ROUND: f32 = 0.15;
+fn ridgeAbs(n: f32) -> f32 {
+  let a = abs(n);
+  if ((u32(world._pq) & 8388608u) != 0u || a >= RIDGE_ROUND) { return a; }
+  return a * a / (2.0 * RIDGE_ROUND) + 0.5 * RIDGE_ROUND * smoothstep(0.0, RIDGE_ROUND, a);
+}
+fn fineGain() -> f32 { return select(FINE_GAIN, 0.68, (u32(world._pq) & 8388608u) != 0u); }
 const CRATER_FROM: i32 = 3;
 const CRATER_TO: i32 = 13;
 const CRATER_P: f32 = 0.5;
@@ -80,15 +95,15 @@ fn terrH(d: vec3f, oct: i32, split: i32) -> f32 {
     if (i >= 6) { tDet = tDet * 0.8 + n; }
     if (i == 2) { mask = smoothstep(-0.05, 0.45, n); }
     if (i >= MTN_FROM) {
-      var rn = 1.0 - abs(n);
+      var rn = 1.0 - ridgeAbs(n);
       rn *= rn;
       r += am * rn * w;
       w = clamp(rn * 1.4, 0.25, 1.0);
-      am *= select(MTN_GAIN, FINE_GAIN, i >= FINE_FROM);
+      am *= select(MTN_GAIN, fineGain(), i >= FINE_FROM);
     }
     if (world.craters > 0.5 && i >= CRATER_FROM && i <= CRATER_TO && (i & 1) == 1) { cr += craters(terrQC(d, i, k), k); }
     k *= 2.03;
-    a *= select(TERR_GAIN, FINE_GAIN, i >= FINE_FROM);
+    a *= select(TERR_GAIN, fineGain(), i >= FINE_FROM);
   }
   let h = s + mask * (r - MTN_MEAN) * MTN_K + cr;
   if (split >= oct) { tCoarse = h; }
@@ -96,8 +111,8 @@ fn terrH(d: vec3f, oct: i32, split: i32) -> f32 {
   return h;
 }
 
-fn octA(i: i32) -> f32 { return 0.5 * pow(TERR_GAIN, f32(min(i, FINE_FROM))) * pow(FINE_GAIN, f32(max(i - FINE_FROM, 0))); }
-fn octAm(i: i32) -> f32 { return 0.5 * pow(MTN_GAIN, f32(min(i, FINE_FROM) - MTN_FROM)) * pow(FINE_GAIN, f32(max(i - FINE_FROM, 0))); }
+fn octA(i: i32) -> f32 { return 0.5 * pow(TERR_GAIN, f32(min(i, FINE_FROM))) * pow(fineGain(), f32(max(i - FINE_FROM, 0))); }
+fn octAm(i: i32) -> f32 { return 0.5 * pow(MTN_GAIN, f32(min(i, FINE_FROM) - MTN_FROM)) * pow(fineGain(), f32(max(i - FINE_FROM, 0))); }
 
 // The most octaves o0…oct can raise h by (each fBm octave's ±amplitude, a little over for simplex's
 // overshoot, and the ridges' full height): with hc + this under the sea, the point is sea whatever
@@ -134,7 +149,7 @@ fn terrHFrom(d: vec3f, o0: i32, oct: i32, hc: f32, mask0: f32) -> f32 {
     if (i >= 6) { tDet = tDet * 0.8 + n; }
     if (i == 2) { mask = smoothstep(-0.05, 0.45, n); }
     if (i >= MTN_FROM) {
-      var rn = 1.0 - abs(n);
+      var rn = 1.0 - ridgeAbs(n);
       rn *= rn;
       r += octAm(i) * rn * w;
       w = clamp(rn * 1.4, 0.25, 1.0);

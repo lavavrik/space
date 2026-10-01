@@ -39,10 +39,12 @@ const TERR_GAIN = 0.55,
   MTN_K = 1.3,
   MTN_MEAN = 0.3,
   FINE_FROM = 8, // from here both roughen (FINE_GAIN), so detail keeps coming as you descend
-  FINE_GAIN = 0.68,
+  FINE_GAIN = 0.6,
   CRATER_FROM = 3,
   CRATER_TO = 13,
   CRATER_P = 0.5;
+/** The ridges' crease, rounded (terrain.wgsl ridgeAbs). */
+const RIDGE_ROUND = 0.15;
 /** Octaves the height function has at most (the shader's uTOff array size). */
 export const T_OCT_MAX = 17;
 /** Octaves of simplex noise before the texture takes over (noise3d.glsl FBM_EXACT). */
@@ -103,7 +105,8 @@ export function terrainH(seed: number, x: number, y: number, z: number, oct = PH
     s += a * n;
     if (i === 2) mask = smoothstep(-0.05, 0.45, n);
     if (i >= MTN_FROM) {
-      let rn = 1 - Math.abs(n);
+      const an = Math.abs(n);
+      let rn = 1 - (an >= RIDGE_ROUND ? an : (an * an) / (2 * RIDGE_ROUND) + 0.5 * RIDGE_ROUND * smoothstep(0, RIDGE_ROUND, an)); // (terrain.wgsl ridgeAbs)
       rn *= rn;
       r += am * rn * w;
       w = Math.min(1, Math.max(0.25, rn * 1.4));
