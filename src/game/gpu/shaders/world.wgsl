@@ -56,6 +56,9 @@ struct World {
   // moonlight and planetshine (gpu/worlds.ts shineOf): the direction to the neighbour lighting this
   // world's night (a moon's planet, a planet's largest moon; world axes), w: how bright, squashed
   shine: vec4f,
+  // what the clouds are made of (sim/cloudKind.ts): their colour (albedo), w: the kind (clouds.wgsl
+  // cloudKind: 0 water, 1 dust)
+  cloudC: vec4f,
 }
 
 @group(1) @binding(0) var<uniform> world: World;

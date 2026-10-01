@@ -88,7 +88,10 @@ fn fs(in: Out) -> FragOut {
   if (nv > 0.01) { nb = (0.65 * tnoise(kb) + 0.35 * tnoise(kb * 3.1)) * nv; }
   let bite = mix(0.75, 0.45, smoothstep(0.5, 0.9, wc.cov));
   let dens = clamp((wc.cov - (1.0 - wc.cov) * (bite - bite * nb)) * 3.0, 0.0, 1.0);
-  let cov = mix(wc.cov, dens, mix(0.5, 1.0, nv)); // (unresolved: between the eroded and the plain)
+  var cov = mix(wc.cov, dens, mix(0.5, 1.0, nv)); // (unresolved: between the eroded and the plain)
+  // (dust: a veil, soft-edged and thinner: eroded as cloud is, from orbit the storms were crisp pale
+  // patches, like ground of another colour)
+  if (cloudKind() == CK_DUST) { cov = smoothstep(0.0, 0.9, cov0) * 0.75; }
   if (cov < 0.004) { discard; }
   let L = normalize(world.light.xyz);
   let lit = clamp(dot(n, L) * 1.05 + 0.05, 0.0, 1.0) * sunShade(P - C);
@@ -104,7 +107,7 @@ fn fs(in: Out) -> FragOut {
   // (lightning in a storm, clouds.wgsl flashAt: from orbit, on the night side, flickering glows)
   let flash = vec3f(0.75, 0.82, 1.0) * flashAt(p * world.cloudR, world.radius + world.cloudH * 0.7) * cov * (1.0 - 0.75 * smoothstep(-0.15, 0.3, dot(n, L)));
   // (and cities' light from below, scattered up through it at night: clouds over a city glow)
-  let col = vec3f(0.97) * light * select(1.0, 0.3 + 0.55 * (1.0 - cov), below) + flash + cityGlowAt(pw, L, n) * (0.4 + 0.6 * cov);
+  let col = vec3f(0.97) * world.cloudC.rgb * light * select(1.0, 0.3 + 0.55 * (1.0 - cov), below) + flash + cityGlowAt(pw, L, n) * (0.4 + 0.6 * cov);
   let clip = frame.viewProj * vec4f(P, 1.0);
   // (where the volumetric clouds are on, the deck still shows past their reach, 250 km from where
   // the ray enters the layer: vclouds.wgsl fades them out over its last fifth as this fades in)

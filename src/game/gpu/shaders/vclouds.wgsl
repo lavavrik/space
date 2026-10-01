@@ -51,6 +51,8 @@ const BACK: f32 = 0.5;
 const MIE_B: f32 = 6e-6;
 const SIGMA: f32 = 0.004;    // extinction per metre at full density (visibility a few hundred m)
 const MAX_DIST: f32 = 250000.0;
+/** Dust's density at most, of a cloud's (density): ~1 km of visibility in a storm's heart. */
+const DUST_THIN: f32 = 0.3;
 
 var<private> rBot: f32;
 var<private> rTop: f32;
@@ -102,6 +104,18 @@ fn density(P: vec3f) -> f32 {
   let tv = vec3f(0.0, world.time, 0.0);
   let cov = wc.cov;
   if (cov < 0.02) { return 0.0; }
+  // Dust (desert worlds, docs/clouds.md "Kinds"): densest at the ground, thinning upward to a top
+  // that rises with the storm (a few km at its edges, the deck's top in its heart), in big soft
+  // lobes rolling along (a haboob's front), not towers and cauliflower; thin, DUST_THIN of a
+  // cloud's density at most: a km or so of visibility in the thick of it
+  if (cloudKind() == CK_DUST) {
+    let tvD = vec3f(0.0, world.time, 0.0);
+    let topD = mix(0.25, 1.0, cov) * (0.75 + 0.25 * tnoise(kw * 0.12 + 5.0 + tvD * 2.8e-4) * 2.0);
+    let prof = exp(-h / max(topD * 0.4, 0.04)) * (1.0 - smoothstep(topD * 0.55, topD, h));
+    let kd = k * 0.5 + tvD * 2e-4;
+    let nd = 0.6 * tnoise(kd) + 0.4 * tnoise(kd * 2.7);
+    return clamp(cov * prof * (0.75 + nd) * 1.6, 0.0, 1.0) * DUST_THIN;
+  }
   // towers: thicker cover rises higher, and ~8 km cells rise and fall, so the tops aren't one carpet
   let cell = 0.5 + 0.5 * tnoise(kw * 0.27 + 5.0 + tv * 2.8e-4);
   var top = clamp(mix(0.25, 1.0, cov) * (0.45 + 0.75 * cell), 0.15, 1.0);
@@ -224,7 +238,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   let full = (vec2f(px) + 0.5) * vp.scale;
   let dir = viewDir(full);
   let C = world.atC.xyz;
-  rBot = world.radius + world.cloudH * 0.4;
+  rBot = world.radius + world.cloudH * cloudBaseK();
   rTop = world.radius + world.cloudH * 1.05;
   setLifts();
   // the segment of the ray inside the layer (the near one)
@@ -441,7 +455,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
       light += sunCol2 * (sun2 * 0.6 * shadowAtPoint2(P) + 0.12 * (0.4 + 0.6 * h)) * 0.97;
     }
     let tStep = exp(-dn * SIGMA * dt);
-    S += T * light * (1.0 - tStep);
+    S += T * light * world.cloudC.rgb * (1.0 - tStep); // (× what they're made of: dust is the sand's colour)
     tSum += t * T * (1.0 - tStep);
     wSum += T * (1.0 - tStep);
     T *= tStep;
@@ -459,7 +473,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     // sunrise, its colour was a dark band over the lit clouds toward the horizon)
     let deep = smoothstep(0.05, 0.25, hc) * (1.0 - smoothstep(0.6, 0.85, hc)) * smoothstep(0.02, 0.2, density(vec3f(0.0)));
     let fk = (1.0 - exp(-min(tNat - t1, 300000.0) * covC * 2e-5)) * deep;
-    let base = sunCol * (0.45 * sunUp + 0.15 * dayK) + twL;
+    let base = (sunCol * (0.45 * sunUp + 0.15 * dayK) + twL) * world.cloudC.rgb;
     var meanC = base;
     if (T < 0.95) { meanC = max(S / (1.0 - T), base * 0.8); }
     S += T * fk * meanC;
@@ -480,10 +494,15 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   // (Taken from the cover over you; for 85 % of the ground behind at most: the far coast still shows.)
   // (fading out over the layer's lowest 2 km as you rise into it: cut off at the base, the view
   // changed at once there, from a grey murk to the clouds' own)
-  let fogIn = 1.0 - smoothstep(rBot + liftCam - 500.0, rBot + liftCam + 2000.0, camR);
+  // (dust has no base to be under, it rises from the ground: its murk is there up to half its depth,
+  // fading out by two thirds; without it, from in a storm the clear sky past it showed as a bright
+  // line along the horizon)
+  var fogIn = 1.0 - smoothstep(rBot + liftCam - 500.0, rBot + liftCam + 2000.0, camR);
+  if (cloudKind() == CK_DUST) { fogIn = 1.0 - smoothstep(mix(rBot, rTop, 0.45) + liftCam, mix(rBot, rTop, 0.7) + liftCam, camR); }
   if (world.atOn > 0.5 && fogIn > 0.0) {
     let upC = normalize(-C);
-    let k = smoothstep(0.5, 0.8, cloudCover(cloudMap(toLocalM() * upC))) * fogIn;
+    let dust = cloudKind() == CK_DUST; // (its cover tops out at 0.9: thick from 0.3)
+    let k = smoothstep(select(0.5, 0.3, dust), select(0.8, 0.7, dust), cloudCover(cloudMap(toLocalM() * upC))) * fogIn;
     if (k > 0.0) {
       var dF = min(sceneT, 200000.0);
       if (bot.y > 0.0 && camR < rBot) { dF = min(dF, bot.y); }
@@ -492,9 +511,10 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
       let amt = k * mix(0.85, 0.97, smoothstep(30000.0, 120000.0, dF)) * (1.0 - exp(-dF / 12000.0));
       // (its light: the sun's through the air at the cloud base, a fifth through the clouds, grey, by
       // day; twilight's at dusk; the night's faint glow)
-      let sunB = atSunlightC(upC * (world.radius + world.cloudH * 0.4), L) * world.atSunI / 45.0;
+      let sunB = atSunlightC(upC * (world.radius + world.cloudH * cloudBaseK()), L) * world.atSunI / 45.0;
       let lB = dot(sunB, vec3f(0.2126, 0.7152, 0.0722)) * smoothstep(-0.1, 0.2, dot(upC, L));
-      let fogC = vec3f(0.62, 0.66, 0.72) * (0.3 * lB + 0.004) + atTwilight(upC, L, upC);
+      // (in a dust storm, a brown murk: the dust's colour)
+      let fogC = select(vec3f(0.62, 0.66, 0.72), world.cloudC.rgb * 0.72, cloudKind() == CK_DUST) * (0.3 * lB + 0.004) + atTwilight(upC, L, upC);
       res = vec4f(res.rgb * (1.0 - amt) + fogC * amt * frame.exposure, res.a * (1.0 - amt));
     }
   }
@@ -562,7 +582,7 @@ fn fsComposite(@builtin(position) pos: vec4f) -> @location(0) vec4f {
   let dir = viewDir(pos.xy);
   let C = world.atC.xyz;
   let camR = length(C);
-  rBot = world.radius + world.cloudH * 0.4;
+  rBot = world.radius + world.cloudH * cloudBaseK();
   rTop = world.radius + world.cloudH * 1.05;
   setLifts();
   let L = normalize(world.light.xyz);
@@ -573,7 +593,7 @@ fn fsComposite(@builtin(position) pos: vec4f) -> @location(0) vec4f {
   let ciSpan = sphereSpan(dir, C, rCi);
   var tCi = -1.0;
   if (camR < rCi) { tCi = ciSpan.y; } else if (ciSpan.y > ciSpan.x && ciSpan.x > 0.0) { tCi = ciSpan.x; }
-  if (tCi > 0.0 && tCi < sceneT && vp.on > 0.0) {
+  if (tCi > 0.0 && tCi < sceneT && vp.on > 0.0 && cloudKind() == CK_WATER) { // (ice: water worlds only)
     let Q = dir * tCi - C;
     let up = normalize(Q);
     // (a pixel's footprint on the sheet, along the ray's slant through it: the long way, toward

@@ -23,10 +23,9 @@ import type { GameRenderer, ViewInfo } from '../render/api';
 import { sunsAt, type Suns } from '../sim/starlight';
 import { AUTO_EXPOSURE, AutoExposure, FLOOD_K, HEAD_K, INT_K, MAX_EXP, SKY_EXP_P, SKY_K, STAR_EXP_P, WINDOW_K, overcastBoost, twilightBoost } from '../render/exposure';
 import { cloudCoverAt } from '../sim/clouds';
-import { CLOUD_H } from '../render/look';
+import { deckHeight } from '../sim/cloudKind';
 import { atmoOf } from '../sim/atmosphere';
 import { strikeGlow } from '../sim/lightning';
-import { WT } from '../constants';
 import { MAX_RENDER_PIXELS } from '../render/look';
 import { DynamicResolution } from './dynres';
 import { DEFAULT_SETTINGS, type Settings } from '../settings';
@@ -276,8 +275,10 @@ export class GpuRenderer implements GameRenderer {
       twK = twilightBoost(sinEl, alt / air.H);
       // (and to an overcast, under the clouds or in them, up to the layer's top, 1.05 deck heights:
       // vclouds.wgsl; stopping at the base, the inside of a thick cloud was a dark murk)
-      if (fb.kind !== 'star' && (fb.type === WT.EarthLike || fb.type === WT.Ocean)) {
-        twK *= overcastBoost(cloudCoverAt(fb, up, g.simTime), 1 - THREE.MathUtils.smoothstep(alt, air.H * CLOUD_H * 0.9, air.H * CLOUD_H * 1.1));
+      // (dust storms too: sim/cloudKind.ts)
+      const deckH = deckHeight(fb);
+      if (fb.kind !== 'star' && deckH > 0) {
+        twK *= overcastBoost(cloudCoverAt(fb, up, g.simTime), 1 - THREE.MathUtils.smoothstep(alt, deckH * 0.9, deckH * 1.1));
       }
       e *= twK;
     }

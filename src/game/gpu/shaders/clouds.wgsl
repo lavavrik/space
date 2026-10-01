@@ -33,13 +33,27 @@ fn cloudMap(p: vec3f) -> f32 {
 // for the peaks finer than the bake. Without it the plateaus and
 // ranges rose through the clouds and cut them off (up to ~1.3 × the relief: on an Earth-like world
 // a fifth of the ground is over the base): from orbit, gaps with the haze's gradient round them.
+// (Dust rises from the ground: its base follows the coarse ground, a little under it, so it fills
+// the valleys too.)
 const LIFT_CLEAR: f32 = 1200.0;
 fn cloudLiftAt(p: vec3f) -> f32 {
   let g = textureSampleLevel(cloudTex, cloudSamp, p, 0.0).g;
-  return max(g + (LIFT_CLEAR + 0.2 * world.terrA) * smoothstep(0.0, 500.0, g) - world.cloudH * 0.4, 0.0); // (none over the sea)
+  if (cloudKind() == CK_DUST) { return max(g - 0.15 * world.terrA, 0.0); }
+  return max(g + (LIFT_CLEAR + 0.2 * world.terrA) * smoothstep(0.0, 500.0, g) - world.cloudH * cloudBaseK(), 0.0); // (none over the sea)
 }
 // …at most (the ground's at most ~1.3 × the relief)
-fn cloudLiftMax() -> f32 { return max(world.terrA * 1.6 + LIFT_CLEAR - world.cloudH * 0.4, 0.0); }
+fn cloudLiftMax() -> f32 {
+  if (cloudKind() == CK_DUST) { return world.terrA * 1.3; }
+  return max(world.terrA * 1.6 + LIFT_CLEAR - world.cloudH * cloudBaseK(), 0.0);
+}
+
+// What the clouds are made of (sim/cloudKind.ts, docs/clouds.md "Kinds"): water cloud, or dust
+// storms (desert worlds: from the ground up, soft and thin, in the sand's colour)
+const CK_WATER: i32 = 0;
+const CK_DUST: i32 = 1;
+fn cloudKind() -> i32 { return i32(world.cloudC.w + 0.5); }
+// the layer's base, in deck heights (its top is at 1.05)
+fn cloudBaseK() -> f32 { return select(0.4, 0.0, cloudKind() == CK_DUST); }
 
 // Shapes stretched along the wind, which blows along the latitude circles (round the local y axis):
 // a point's longitude in the weather's frame is scaled by `s` (each latitude circle turned by its
@@ -111,7 +125,7 @@ fn weatherCover(lp: vec3f, cov0: f32, res: f32) -> Weather {
 // towers up to the layer's top and spreads into an anvil, and lightning flashes inside it. `lp`: a
 // point in the weather's frame (m); `cov0`: the cube's cover there. 0…1.
 fn stormAt(lp: vec3f, cov0: f32) -> f32 {
-  if (cov0 <= 0.7) { return 0.0; } // (the noise read only where it can matter)
+  if (cov0 <= 0.7 || cloudKind() != CK_WATER) { return 0.0; } // (the noise read only where it can matter)
   return smoothstep(0.7, 0.85, cov0) * smoothstep(0.2, 0.32, tnoise(lp * 5e-6 + 71.0));
 }
 // Lightning: the storms are cut into STORM_CELL cells (a 3D grid through the world), each with a
@@ -176,9 +190,10 @@ fn cloudRaw(p: vec3f, oct: i32) -> f32 {
   return fbmF(cp + fbmF(cp * 2.0, 4) * 0.7, oct);
 }
 // Earth-like and ocean worlds (wtype 2, 3) are clouded over most of their face, with clear
-// stretches between weather systems (at the others' threshold, from 0.02, about half their face was
-// bare, and the volumetric clouds' own gaps, vclouds.wgsl, left most of the rest clear too)
+// stretches between weather systems (from 0.02, about half their face was bare, and the volumetric
+// clouds' own gaps, vclouds.wgsl, left most of the rest clear too). Dust storms: a fifth of the face
+// or so, the rest clear. (sim/clouds.ts cloudCoverOf: the same)
 fn cloudCover(raw: f32) -> f32 {
-  let wet = world.wtype == 2 || world.wtype == 3;
-  return smoothstep(select(0.02, -0.2, wet), select(0.5, 0.25, wet), raw) * select(0.85, 0.95, world.wtype == 3);
+  if (cloudKind() == CK_DUST) { return smoothstep(0.18, 0.45, raw) * 0.9; }
+  return smoothstep(-0.2, 0.25, raw) * select(0.85, 0.95, world.wtype == 3);
 }

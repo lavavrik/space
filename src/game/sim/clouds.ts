@@ -5,6 +5,7 @@
  * break-up (vclouds.wgsl).
  */
 import { WT } from '../constants';
+import { CK, cloudKindOf } from './cloudKind';
 import { THREE } from '../lib/three';
 import type { World } from '../types';
 import { snoise, tnoise, worldQuat } from './terrain';
@@ -39,10 +40,10 @@ const smooth = (a: number, b: number, x: number) => {
   return t * t * (3 - 2 * t);
 };
 
-/** clouds.wgsl cloudCover: 0…1. */
+/** clouds.wgsl cloudCover: 0…1 (dust storms: a fifth of the face or so, sim/cloudKind.ts). */
 export function cloudCoverOf(b: World, raw: number) {
-  const wet = b.type === WT.EarthLike || b.type === WT.Ocean;
-  return smooth(wet ? -0.2 : 0.02, wet ? 0.25 : 0.5, raw) * (b.type === WT.Ocean ? 0.95 : 0.85);
+  if (cloudKindOf(b)?.kind === CK.Dust) return smooth(0.18, 0.45, raw) * 0.9;
+  return smooth(-0.2, 0.25, raw) * (b.type === WT.Ocean ? 0.95 : 0.85);
 }
 
 const q = new THREE.Quaternion(),

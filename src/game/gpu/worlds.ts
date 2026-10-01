@@ -10,12 +10,13 @@
  * each (as three.js sorts them): glow, rings, dots; skies; cloud decks.
  */
 import type { Game } from '../Game';
-import { AU, FOV, WT } from '../constants';
+import { AU, FOV } from '../constants';
 import { THREE } from '../lib/three';
 import { noise3dBytes, NOISE3D_SIZE } from '../lib/noise3d';
-import { airBeta, CLOUD_H, TERRAIN_NEAR, TERRAIN_PX } from '../render/look';
+import { airBeta, TERRAIN_NEAR, TERRAIN_PX } from '../render/look';
 import { CITY_K } from '../render/exposure';
 import { atmoOf } from '../sim/atmosphere';
+import { CK, cloudKindOf, deckHeight } from '../sim/cloudKind';
 import { populated } from '../sim/population';
 import { hasCraters, reliefAmp, surfaceRadius, terrainOffsets, worldQuat } from '../sim/terrain';
 import { occludersOf } from '../sim/eclipse';
@@ -27,7 +28,7 @@ import { CHUNK_BYTES, TerrainGpu, TerrainShared } from './terrain';
 import { DEPTH_FORMAT, HDR_FORMAT, SAMPLES } from './formats';
 import { RingFieldGpu } from './rings';
 
-const WORLD_BYTES = 880;
+const WORLD_BYTES = 896;
 const STAR_BYTES = 128;
 /** The water's three wave octaves all repeat over this (m; planet.wgsl WAVE_L × the noise's period of 8). */
 const WAVE_PERIOD = 3840;
@@ -329,10 +330,10 @@ export class WorldsLayer {
         continue;
       }
       const air = atmoOf(b);
-      const clouded = !!air && (b.type === WT.EarthLike || b.type === WT.Ocean);
+      const clouded = !!cloudKindOf(b);
       const buf = device.createBuffer({ label: b.name, size: WORLD_BYTES, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
       const data = new ArrayBuffer(WORLD_BYTES);
-      this.fillStatic(b, data, clouded ? air!.H * CLOUD_H : 0);
+      this.fillStatic(b, data, deckHeight(b));
       device.queue.writeBuffer(buf, 0, data);
       const cloud = clouded ? device.createTexture({ label: `${b.name} clouds`, size: [CLOUD_CUBE, CLOUD_CUBE, 6], format: 'rg16float', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING }) : null;
       const groupWith = (clouds: GPUTexture) =>
@@ -390,6 +391,9 @@ export class WorldsLayer {
     f[97] = CITY_K;
     f[98] = b.radius + cloudH;
     i[99] = b.type;
+    // what the clouds are made of (sim/cloudKind.ts): their colour, w: the kind
+    const ck = cloudKindOf(b);
+    f.set([ck?.color.r ?? 1, ck?.color.g ?? 1, ck?.color.b ?? 1, ck?.kind ?? 0], 220);
     i[100] = 5;
     const off = terrainOffsets(b.seed); // (qn and qc, per chunk, are in chunk.wgsl)
     for (let k = 0; k < 17; k++) f.set([off[k * 3], off[k * 3 + 1], off[k * 3 + 2], 0], 104 + k * 4);
@@ -526,9 +530,10 @@ export class WorldsLayer {
         this.vcGroup = w.group;
         this.vcRel.copy(rel);
         this.vcQ.copy(wq);
-        // the ground under you, if it's high: the cloud base (0.4 deck heights) kept ~1.2 km over it
+        // the ground under you, if it's high: the cloud base (0.4 deck heights) kept ~1.2 km over it;
+        // dust's base is the ground itself (clouds.wgsl cloudBaseK)
         const ground = surfaceRadius(b, ship.pos) - b.radius;
-        this.vcLift = Math.max(0, ground + 1200 - 0.4 * deckH);
+        this.vcLift = cloudKindOf(b)?.kind === CK.Dust ? Math.max(0, ground) : Math.max(0, ground + 1200 - 0.4 * deckH);
       }
       // up close, LOD terrain replaces the sphere: big on screen and actually close (render/look.ts)
       w.terrOn = !!w.terrain && pxR > TERRAIN_PX && d < b.radius * TERRAIN_NEAR;

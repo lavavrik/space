@@ -1,6 +1,7 @@
 # Clouds
 
-Earth-like and ocean worlds have a cloud deck. Its pattern is one per world, baked once into a
+Earth-like and ocean worlds have a cloud deck of water cloud; desert worlds with air have dust
+storms (see Kinds below). The rest of this page is about water cloud unless it says otherwise. Its pattern is one per world, baked once into a
 cube map in the world's own frame (`cloudBake.wgsl`, from `clouds.wgsl cloudRaw`), and used three
 ways:
 
@@ -158,6 +159,32 @@ Past the march's reach (250 km from where the ray enters the layer) the volumetr
     atRolloff`), left a yellow line along the horizon under overcast.
 - **Cost** (M-series, 2400 × 1500): about 2 ms looking down from above the deck, 3 ms from 50 km,
   1–2 ms from below.
+
+## Kinds
+
+What a world's clouds are made of (`sim/cloudKind.ts`, into `world.cloudC`: their colour, w the
+kind; `clouds.wgsl cloudKind`). The same cube, deck and volumetric march draw them all; the kinds
+differ in where the layer is, how it's shaped, and its colour.
+
+- **Water** (Earth-like and ocean worlds): as above. White; storms and lightning, cirrus over it.
+- **Dust** (desert worlds with air, thin Mars-like air or thicker): dust storms.
+  - **Where:** a fifth of the face or so (`cloudCover` from 0.18 to 0.45 of the raw pattern, at
+    most 0.9), the rest clear. The deck's top at 0.9 scale heights (~10 km on a Mars), its base the
+    ground: the layer's lift follows the coarse ground (a little under it, so the valleys fill),
+    not kept 1.2 km over it.
+  - **Shape** (`vclouds.wgsl density`): densest at the ground, thinning upward to a top that rises
+    with the storm (a few km at its edges, the deck's top in its heart), in big soft lobes rolling
+    along, not towers and cauliflower. Thin: `DUST_THIN` (0.3) of a cloud's density at most, ~1 km
+    of visibility in the thick of it.
+  - **Colour:** the desert's lighter sand (`pal.b`), a little paler. The light the march gathers is
+    × it, so the sun's colour and the sky's still show in it.
+  - **From afar** a soft veil at 75 % at most (eroded as cloud is, the storms were crisp pale
+    patches, like ground of another colour).
+  - **Inside one:** the overcast murk (above) in the dust's colour, from the ground to half the
+    layer's depth, fading out by two thirds (dust has no base to be under; without it, from in a
+    storm the clear sky past it showed as a bright line along the horizon). The exposure opens up
+    under it as under overcast.
+  - No storms, lightning or cirrus.
 
 ## Next
 
