@@ -37,6 +37,7 @@ Open the game with `?tdbg=N` (N the sum of the bits below) and read the panel's 
 | 262144 | the finer octaves' bump on the normal |
 | 524288 | not the terrain's: the air's low haze (atmo.wgsl atBL), for A/B shots of the haze |
 | 1048576 | skipping the ground the clouds hide (planet.wgsl hiddenByClouds): shaded anyway |
+| 2097152 | not a cost: the greyer haze over nearby land (planet.wgsl vsChunk), for A/B shots |
 
 **Shift+`** sweeps them all from where you are (`debug/tdbg.ts`): about 4 s each with the resolution held, then the terrain pass's median and mean per setting in the console (`terrainSweep` holds the rows) and on the panel. Chrome rounds GPU timestamps to ~0.13 ms unless it's started with `--enable-webgpu-developer-features`; without that, the medians all land on the same value.
 

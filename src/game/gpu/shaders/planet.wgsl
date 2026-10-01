@@ -109,6 +109,14 @@ fn vsChunk(@location(0) position: vec3f, @location(1) dir: vec3f, @location(2) g
   let vd = normalize(ground);
   o.haze = atInscatter(vd * atSpan(vd).x, ground, L, 5);
   o.hazeT = atTrans;
+  // (greyer where the air in front still lets most of the ground through, the sky's own colour toward
+  // the horizon so the two still meet: the light the ground sends up and the air scatters again,
+  // which single scattering leaves out, tints the haze over nearby land with the land's colours and
+  // white; as the sky's pure blue, sunlit green fields a few tens of km off went a pale sea-blue.
+  // tdbg bit 2097152 turns it off)
+  if ((u32(world._pq) & 2097152u) == 0u) {
+    o.haze = mix(o.haze, vec3f(dot(o.haze, vec3f(0.2126, 0.7152, 0.0722))), 0.4 * smoothstep(0.1, 0.6, dot(o.hazeT, vec3f(1.0 / 3.0))));
+  }
   o.sun = atSunlight(ground, L);
   o.sun2 = vec3f(0.0);
   if (has2()) {
