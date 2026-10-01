@@ -58,6 +58,11 @@ function outlineText(ctx: CanvasRenderingContext2D, ui: () => number) {
   };
 }
 
+/** Ship labels nearer than this on screen (px × the UI scale) share one (drawTraffic). */
+const CLUMP_PX = 60;
+/** A clump of ships within this of a station (m) is labelled with its name. */
+const CLUMP_STATION = 300e3;
+
 export class Overlay {
   private readonly ctx: CanvasRenderingContext2D;
   private W = 1;
@@ -675,6 +680,7 @@ export class Overlay {
       .slice(0, TRAFFIC_LABELS)
       .map(([n]) => n);
     if (g.target?.kind === 'ship' && !near.includes(g.target as Npc)) near.push(g.target as Npc);
+    const clumps: { x: number; y: number; ships: { npc: Npc; d: number; text: string; ftl: boolean }[] }[] = [];
     for (const npc of near) {
       const isT = npc === g.target;
       if (occluder(g.cur.bodies, g.ship.pos, npc.pos)) continue; // behind a world: not seen at all
@@ -706,9 +712,31 @@ export class Overlay {
         continue;
       }
       if (d > TRAFFIC_LABEL || !g.showNames) continue;
-      ctx.fillStyle = ftl ? 'rgba(127,220,255,0.85)' : 'rgba(255,230,199,0.7)';
-      ctx.textAlign = 'left';
-      ctx.fillText(text, s.x + 8, s.y - 6);
+      // (labelled below, grouped with any that would overlap it)
+      let c = clumps.find((k) => Math.hypot(k.x - s.x, k.y - s.y) < CLUMP_PX * this.ui);
+      if (!c) clumps.push((c = { x: s.x, y: s.y, ships: [] }));
+      c.ships.push({ npc, d, text, ftl });
+    }
+    // Ships close together on screen share one label (a dozen round a station were a heap of
+    // overlapping "Unidentified ship · … km"): one ship as before; several as their count and range,
+    // and the station they're round, if one's near them
+    ctx.textAlign = 'left';
+    for (const c of clumps) {
+      const one = c.ships.length === 1;
+      ctx.fillStyle = c.ships.every((x) => x.ftl) ? 'rgba(127,220,255,0.85)' : 'rgba(255,230,199,0.7)';
+      if (one) {
+        ctx.fillText(c.ships[0].text, c.x + 8, c.y - 6);
+        continue;
+      }
+      const ds = c.ships.map((x) => x.d);
+      const lo = Math.min(...ds),
+        hi = Math.max(...ds);
+      const mid = this.tmp.set(0, 0, 0);
+      for (const x of c.ships) mid.add(x.npc.pos);
+      mid.divideScalar(c.ships.length);
+      const st = g.cur.stations.find((t) => t.pos.distanceTo(mid) < CLUMP_STATION && known(g, t));
+      const range = hi - lo < lo * 0.02 ? fmtDist(lo) : `${fmtDist(lo)}–${fmtDist(hi)}`;
+      ctx.fillText(`${st ? `${contactLabel(g, st)} · ` : ''}${c.ships.length} ships · ${range}`, c.x + 8, c.y - 6);
     }
   }
 
