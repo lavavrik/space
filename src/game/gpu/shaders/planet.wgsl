@@ -510,13 +510,23 @@ fn fs(in: Out) -> @location(0) vec4f {
     waterAdd = (skyR * F + glint) * spec;
     // surf: at the water's edge (under ~2.5 m), a band of white foam, broken up and moving with the waves (it hides
     // the water's mirror where it lies)
-    if (terr && seaDepth < 3.5) {
+    if (terr && seaDepth < 6.0) {
       let q = toLocal3() * in.wp + world.waveO.xyz;
       let t = world.waveO.w;
       let wind = normalize(vec3f(1.0, 0.0, 0.6));
       let fn1 = tnoise(q / 9.6 + wind * 0.3 * t) * 0.6 + tnoise(q / 2.4 - wind * 0.5 * t) * 0.4;
       let shore = 1.0 - smoothstep(0.2, 2.5, seaDepth + fn1 * 0.8);
-      let foam = 0.85 * shore * smoothstep(0.05, 0.45, fn1) * smoothstep(0.5, 3.0, 9.6 / max(fw * world.radius, 1e-3));
+      // breakers (docs/water.md): wave fronts along the depth contours (so parallel to the shore),
+      // one every 0.8 m of depth, rolling in every 6 s; a crest whitens as it breaks, under ~4 m,
+      // leaving foam behind it, its line broken up along the shore. (Spaced by the distance from the
+      // shore, the depth over the bottom's slope by screen derivatives, the slope was constant per
+      // terrain triangle and the water showed the triangles.)
+      let ph = seaDepth / 0.8 + t / 6.0 + fn1 * 0.25;
+      let fr = fract(ph);
+      let brk = smoothstep(4.5, 0.6, seaDepth) * smoothstep(-0.3, 0.1, fn1 + 0.15);
+      let crest = (smoothstep(0.72, 0.95, fr) * (1.0 - smoothstep(0.95, 1.0, fr)) + 0.35 * (1.0 - smoothstep(0.0, 0.4, fr))) * brk;
+      let vis = smoothstep(0.5, 3.0, 9.6 / max(fw * world.radius, 1e-3));
+      let foam = min(0.85 * shore * smoothstep(0.05, 0.45, fn1) + 0.8 * crest, 0.9) * vis;
       col = mix(col, vec3f(0.85, 0.88, 0.9), foam);
       waterF *= 1.0 - foam;
       waterAdd *= 1.0 - foam;

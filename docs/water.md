@@ -20,6 +20,7 @@ Seas on Earth-like and ocean worlds (`planet.wgsl`, where `spec` marks water). T
   - **Its sharpness** is cut where the normal varies across a pixel (Toksvig: a lobe narrower than that aliases), and follows how much of the waves' slope is resolved: up close, sharp glints on each wave (exponent 900); far off, where they're sub-pixel, a broad glitter path (40). From orbit, the glint is a soft spot on the sea.
 - **Clouds in the water:** where the reflected ray crosses the cloud deck, its cover there, lit as the deck is (from below, greyer the thicker), over the sky. It's a mirrored deck, one lookup: the volumetric clouds' shapes aren't marched again.
 - **Shallows:** clear turquoise, fading into the deep's colour by ~25 m, the sandy bottom showing through in the last few metres (by the water's depth in metres, from the terrain under it).
+- **Breakers:** wave fronts along the depth contours (so parallel to the shore), one every 0.8 m of depth, rolling in every 6 s; a crest whitens as it breaks (under ~4.5 m, fully by 0.6 m), leaving fading foam behind it, its line broken up along the shore by the surf's noise. (Spaced by the distance from the shore instead, the depth over the bottom's slope by screen derivatives, the slope was constant per terrain triangle and the water showed the triangles.)
 - **Surf:** at the water's edge, under ~2.5 m, a band of white foam broken up by two octaves of noise moving with the wind. It hides the water's mirror where it lies.
 - **Ship lamps:** the landing lights and headlights light the water like the ground.
 - **Land, ships and stations in the water** (`tonemap.wgsl seaReflect`, screen-space): in the final pass, where a pixel is sea (the water writes alpha 0.5; by the depth's point at the water's radius, the water by a coast missed out, its big far triangles lifted by the land's heights at their corners), the ray mirrored off the flat surface is traced across the screen through the depth buffer: 24 steps growing 1.35× from 1 % of the distance, then halved 5 times onto the surface it went behind. Where it hits, the water mirrors that by Fresnel, smeared up and down as ripples stretch a reflection, fading toward the screen's edges. Where it misses (sky, off screen), or meets the sea itself (a ray skimming the horizon, the world curving down), the water keeps its own sky. Only within 200 km of a sea world. What's off screen can't be mirrored, as with any screen-space reflection.
@@ -27,6 +28,5 @@ Seas on Earth-like and ocean worlds (`planet.wgsl`, where `spec` marks water). T
 
 ## Not yet
 
-- Breaking waves rolling in to the shore.
 - Spray and swell that move the geometry.
 - Night-time city-light reflections.
