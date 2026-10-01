@@ -61,7 +61,7 @@ Most stars have a companion, and so do many of Farlight's systems. The design is
   - A second set of shadow cascades (`gpu/shadowmap.ts`, layers 3–5, `frame.wgsl shadowAt2`) for ships, stations, sky stations, ring rocks and the ground near you. They're drawn only while the second sun's light at the camera is over 1 % of the first's. A wide pair's far companion by day isn't worth the passes; the side lit by it at night is.
 - **Cost.** In a binary, the air's scattering, the clouds' sun march and the extra cascades roughly double. Single-star systems cost what they did.
 - **Also from the second sun:** the volumetric clouds' light shafts (6 samples to the first's 12; it's the dimmer one) and its light on the cirrus.
-- **Not yet from it:** shadows of near objects on the clouds (`shadowAtPoint`). Particles mostly make their own light (exhaust, plasma), so they don't need it.
+- **Shadows of near things on the clouds** from it too (`frame.wgsl shadowAtPoint2`, its cascades): a sky station's on the clouds under it. Particles mostly make their own light (exhaust, plasma), so they don't take its shadows.
 
 ## Heat, power and navigation
 

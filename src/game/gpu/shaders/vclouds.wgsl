@@ -425,7 +425,8 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
         bw2 *= 0.5;
         g2 *= 0.5;
       }
-      light += sunCol2 * (sun2 * 0.6 + 0.12 * (0.4 + 0.6 * h)) * 0.97;
+      // (and the shadows of what's near from it, as the first sun's: a sky station's on the clouds)
+      light += sunCol2 * (sun2 * 0.6 * shadowAtPoint2(P) + 0.12 * (0.4 + 0.6 * h)) * 0.97;
     }
     let tStep = exp(-dn * SIGMA * dt);
     S += T * light * (1.0 - tStep);
