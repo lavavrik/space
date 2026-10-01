@@ -21,10 +21,10 @@ the final pass `tonemap.wgsl`:
   - **Other ships'** sit at their place on screen, 10,000 km across (their real size: a far one's is small), with a burst of light at the heart (half the size of the flash they had before). The nearest 8 are drawn at a time.
   - **Depth.** A warp bends only what's behind it: the final pass reads the scene's depth, kept for it while a warp is on. A rock in front of a ship dropping out stays as it is, and nothing in front is pulled in from beside it.
 2. **Lens flare, from the star only:** four small tinted ghosts along the line from the star through
-   A star's flare shows only while it's on screen, fading out over the last 5 % toward the edges. Off it, the flare read the frame at the nearest edge, which was bright sky, and its ghosts crossed the view from a sun you couldn't see.
    the screen's centre, as bright as the star shows in the frame there, so a rock
    or a world in front of it dims them. From every bright spot (as a pseudo lens flare) the laser's
    hot spot made them too, and a bright limb or sky swept arcs across the view.
+   A star's flare shows only while it's on screen, fading out over the last 5 % toward the edges. Off it, the flare read the frame at the nearest edge, which was bright sky, and its ghosts crossed the view from a sun you couldn't see.
 3. **FTL zoom blur:** in FTL, 12 samples toward the point you're heading for (away from it when it's
    behind you), stronger toward the edges and with speed (from ~1,000 to ~1,000,000 km/s), kept to a
    tenth of full strength: a hint of speed, not a smear.
