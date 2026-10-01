@@ -764,7 +764,11 @@ fn fsComposite(@builtin(position) pos: vec4f) -> @location(0) vec4f {
       let tt = clamp(base + vec2i(x, y), vec2i(0), half - 1);
       let tp = (vec2f(tt) + 0.5) * kk;
       let dt = textureLoad(sceneDepth, vec2i(min(tp, full - 1.0)), 0);
-      let g = (2.0 - f32(abs(x))) * (2.0 - f32(abs(y)));
+      // (a tent 1.5 texels wide from where this pixel really is among them, so the weights slide
+      // smoothly across a texel; fixed by the nearest texel alone, every pixel of a 3.5 × 3.5 block
+      // got the same colour and the clouds were blocky)
+      let d = abs(vec2f(base + vec2i(x, y)) - cc);
+      let g = max(1.5 - d.x, 0.0) * max(1.5 - d.y, 0.0);
       let same = exp(-abs(dt - dc) / (0.03 * max(dt, dc) + 1e-7));
       let w = g * (same + 1e-3);
       sum += textureLoad(history, tt, 0) * w;
