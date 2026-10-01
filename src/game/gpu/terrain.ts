@@ -32,10 +32,14 @@ const N = 32; // quads per chunk edge
  * 15–20 px wherever you looked, and the far ground and its mountains' silhouette against the sky
  * read as low-res. The target is eased up while there are more than CHUNK_BUDGET chunks (and back
  * down when there's room), so a view over a whole mountain range can't run away with the frame.
- * Its cap scales with the periscope's magnification: at a fixed 20 px, 100× split everything in view
- * to the finest level whatever the budget said, ~4,500 chunks (drawn, baked, re-baked as the sun
- * moved), and the frame rate fell by half.
+ * Through the periscope the threshold is scaled by the magnification^ZOOM_EXP at once (only what's
+ * in view is magnified, so the count grows slower than the zoom): at a fixed 20 px cap, 100× split
+ * everything in view to the finest level, ~4,500 chunks, and the frame rate fell by half; with the
+ * cap raised but the threshold eased there by the budget alone, it climbed to ~190 px over a second
+ * or two zooming in (detail popping) and took seconds to come down zooming out, the ground round you
+ * in huge chunks meanwhile (their skirts as ribbons across the view).
  */
+const ZOOM_EXP = 0.65;
 const TARGET_PX = 6,
   TARGET_MAX = 20,
   CHUNK_BUDGET = 900;
@@ -200,6 +204,8 @@ export class TerrainGpu {
   private bakeRate = 0;
   /** This frame's split threshold (px per quad) and the view's resolution (CSS px per radian). */
   private target = TARGET_PX;
+  /** The periscope's share of the threshold: magnification^ZOOM_EXP. */
+  private zoomK = 1;
   private view: TerrainView = { pxPerRad: 1000, basePxPerRad: 1000, fwd: new THREE.Vector3(0, 0, -1), halfFov: 1 };
   /** Chunks split last frame (their keys): they stay split until their quads are well under the threshold. */
   private split = new Set<string>();
@@ -241,11 +247,11 @@ export class TerrainGpu {
   update(cam: THREE.Vector3, sun: THREE.Vector3, rel: THREE.Vector3, q: THREE.Quaternion, view: TerrainView) {
     this.frame++;
     this.view = view;
+    this.zoomK = Math.pow(Math.max(1, view.pxPerRad / view.basePxPerRad), ZOOM_EXP);
     // over budget last frame: coarser; well under: finer again, slowly (quick both ways, it hunted)
     const n = this.shown.length;
-    // (well over: faster, so a zoom doesn't spend seconds at five times the budget)
-    const cap = TARGET_MAX * Math.max(1, view.pxPerRad / view.basePxPerRad);
-    if (n > CHUNK_BUDGET) this.target = Math.min(cap, this.target * (n > 2 * CHUNK_BUDGET ? 1.1 : 1.03));
+    // (well over: faster)
+    if (n > CHUNK_BUDGET) this.target = Math.min(TARGET_MAX, this.target * (n > 2 * CHUNK_BUDGET ? 1.1 : 1.03));
     else if (n < CHUNK_BUDGET * 0.7) this.target = Math.max(TARGET_PX, this.target / 1.01);
     this.buildRate += (this.builds - this.buildRate) * 0.05;
     this.bakeRate += (this.toBake.length - this.bakeRate) * 0.05;
@@ -312,7 +318,7 @@ export class TerrainGpu {
     // built again, the frame's build budget ran out and whole areas fell back to coarse ones)
     const own = this.chunks.get(k);
     if (own) own.used = this.frame;
-    const want = px > this.target * (this.split.has(k) ? 0.7 : 1);
+    const want = px > this.target * this.zoomK * (this.split.has(k) ? 0.7 : 1);
     if (canSplit && want) {
       this.nextSplit.add(k);
       // split, if all four children are ready (or can be built this frame); else draw this one
@@ -489,7 +495,7 @@ export class TerrainGpu {
    * held, built and baked per frame (smoothed), the split threshold, the pool, the slots.
    */
   stats() {
-    return `terrain: ${this.shown.length} drawn · ${this.chunks.size} held · ${this.buildRate.toFixed(1)} built/f · ${this.bakeRate.toFixed(1)} baked/f · ${this.target.toFixed(1)} px · pool ${this.pool.length} · slots ${this.slots}`;
+    return `terrain: ${this.shown.length} drawn · ${this.chunks.size} held · ${this.buildRate.toFixed(1)} built/f · ${this.bakeRate.toFixed(1)} baked/f · ${(this.target * this.zoomK).toFixed(1)} px · pool ${this.pool.length} · slots ${this.slots}`;
   }
 
   /** Free the chunk unused longest (not one in use this frame), its slot going back. */
