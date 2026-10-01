@@ -629,5 +629,12 @@ fn fs(in: Out) -> @location(0) vec4f {
   col += emit;
   // (alpha 0.5 marks the sea for its reflections, tonemap.wgsl seaReflect; the exposure meter takes
   // it as half physical, which hardly matters)
+  // auroras between you and the ground (atmo.wgsl aurora: the sky shell's far side is behind this
+  // surface over the disc). In sky units, so not × exposure
+  if (world.atOn > 0.5) {
+    let auD = normalize(in.wp);
+    let auC = world.atC.xyz;
+    col += aurora(auD, vec2f(0.0, length(in.wp)), auC, dot(auD, auC), dot(auC, auC)) / max(frame.exposure, 1e-4);
+  }
   return vec4f(col * frame.exposure, select(1.0, 0.5, spec > 0.5));
 }

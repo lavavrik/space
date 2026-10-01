@@ -147,3 +147,54 @@ fn atTwilight(up: vec3f, L: vec3f, dir: vec3f) -> vec3f {
   let col = mix(vec3f(0.3, 0.42, 0.85), vec3f(0.95, 0.55, 0.35), toward * toward);
   return col * 0.05 * w * (0.7 + 0.8 * toward * toward) * min(world.atBeta.z / 3.31e-5, 3.0);
 }
+
+// Auroras: on oxygen-rich worlds (world.ozone) green low, red higher up; on gas and ice giants pink
+// and violet (hydrogen). An oval round each pole (~70° of latitude, wandering ±1.5° along it, a
+// couple of degrees wide), in the upper half of the air (55–98 % of the way to its top), where it's
+// night there: curtains of fine vertical rays (noise along the longitude, drifting) that fold and
+// brighten slowly. Integrated along the ray through that shell in 12 steps, so seen edge-on (from
+// orbit, at the limb) a curtain's light adds up, and from under it it's a band across the sky. The
+// sky shell adds it, and the planet's own haze too (over the disc the shell's far side is behind the
+// surface, depth-tested away: from orbit it only showed at the limb). In sky units (not × exposure).
+fn aurora(dir: vec3f, span: vec2f, C: vec3f, b: f32, CC: f32) -> vec3f {
+  let giant = world.wtype >= 6;
+  if (!(world.ozone > 0.0 || giant) || world.atOn < 0.5) { return vec3f(0.0); }
+  let r1 = mix(atR(), world.atTop, 0.55);
+  let r2 = mix(atR(), world.atTop, 0.98);
+  let d2 = b * b - (CC - r2 * r2);
+  if (d2 <= 0.0) { return vec3f(0.0); }
+  let q2 = sqrt(d2);
+  let t0 = max(b - q2, 0.0);
+  let t1 = min(b + q2, span.y);
+  if (t1 <= t0) { return vec3f(0.0); }
+  let L = normalize(world.light.xyz);
+  let toL = mat3x3f(world.toLocal[0].xyz, world.toLocal[1].xyz, world.toLocal[2].xyz);
+  let tt = world.time;
+  let ds = (t1 - t0) / 12.0;
+  var sum = vec3f(0.0);
+  for (var i = 0; i < 12; i++) {
+    let q = dir * (t0 + (f32(i) + 0.5) * ds);
+    let Pc = q - C;
+    let r = length(Pc);
+    if (r < r1 || r > r2) { continue; }
+    let up = Pc / r;
+    let night = smoothstep(0.02, -0.15, dot(up, L));
+    if (night <= 0.0) { continue; }
+    let pl = toL * up;
+    let lat = abs(pl.y);
+    if (abs(lat - 0.94) > 0.05) { continue; } // (far from the oval: no noise read)
+    let lon = atan2(pl.x, pl.z);
+    let latA = 0.94 + 0.015 * sin(lon * 3.0 + tt * 3e-4) + 0.008 * snoise(vec3f(cos(lon) * 4.0, sin(lon) * 4.0, tt * 2e-4));
+    let band = exp(-pow((lat - latA) / 0.012, 2.0));
+    if (band < 0.01) { continue; }
+    let rays = 0.5 + 0.5 * snoise(vec3f(cos(lon) * 60.0, sin(lon) * 60.0, tt * 0.02 + pl.y * 3.0));
+    let folds = 0.5 + 0.5 * snoise(vec3f(cos(lon) * 9.0, sin(lon) * 9.0, tt * 0.004));
+    let hgt = (r - r1) / (r2 - r1);
+    var col = mix(vec3f(0.25, 1.0, 0.45), vec3f(1.0, 0.25, 0.35), smoothstep(0.35, 0.9, hgt));
+    if (giant) { col = mix(vec3f(0.95, 0.35, 0.85), vec3f(0.55, 0.3, 1.0), hgt); }
+    // (brightest at the curtain's foot, fading up it)
+    sum += col * band * (0.25 + 0.75 * rays * rays) * (0.4 + 0.6 * folds) * (1.0 - 0.7 * hgt) * night * ds;
+  }
+  // (by the air's depth against Earth's; on a giant, whose air is deeper still, 5× that)
+  return sum * 1.8e-5 / max(world.atBeta.w / 8000.0, 0.2) * select(1.0, 5.0, giant);
+}

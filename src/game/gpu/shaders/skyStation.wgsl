@@ -6,6 +6,7 @@
 // like the ground: its world's uniforms (the air) are bound at group 1.
 // #include frame
 // #include world
+// #include noise
 // #include atmo
 // #include stationBody
 

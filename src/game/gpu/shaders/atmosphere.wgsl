@@ -79,6 +79,8 @@ fn fs(in: Out) -> @location(0) vec4f {
     let nA = smoothstep(-0.05, -0.2, dot(upA, normalize(world.light.xyz)));
     sky += vec3f(0.35, 1.0, 0.45) * 9e-8 * pIn * nA * min(world.ozone, 1.0);
   }
+  // auroras (docs/atmosphere.md): curtains of light round each pole, high in the air, at night
+  sky += aurora(dir, s, C, b, cg + atR() * atR());
   // (twilight: the eye adapted, GpuRenderer; the sky isn't × exposure otherwise)
   sky *= frame.twilight;
   return vec4f(sky, keep);
