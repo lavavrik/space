@@ -6,6 +6,15 @@ Gas and ice giants can have rings (`universe/system.ts`: an inner and outer radi
 
 Both views read the same density across the radius: bands from two octaves of simplex noise, soft inner and outer edges, and a Cassini-like division 63 % of the way out. The disc's shader (`render/shaders/ring.frag.glsl`) uses it as opacity; the rock field uses it (over its peak) for how full each cell is, so a dark gap in the disc is an empty lane among the rocks.
 
+## The ring disc's light (`gpu/shaders/ring.wgsl ringLight`)
+
+How a ring's particles send a sun's light to you, × their colour:
+
+- **From the lit side**, reflected (by the sun's height over the plane), brighter still with the sun right behind you (the opposition surge: no shadows to see).
+- **From the unlit side**, only what comes through: thin parts glow, thick ones go dark.
+- **Forward scattering:** fine dust scatters forward (Henyey-Greenstein, g 0.75), so looking toward the sun the thin, dusty parts blaze, as Saturn's rings seen from behind it. Both suns of a pair.
+- The world's shadow still falls across it.
+
 ## The rocks (`render/RingField.ts`)
 
 - **All on the GPU.** Each layer (`ROCK_LAYERS`) is a grid of cells centred on you in the ring's co-orbiting frame, a few candidate rocks per cell spread through the belt's thickness (±1.5 km: `RING_HALF_THICK`; real rings are tens of metres thick, this one reads as a belt). The vertex shader works out a rock's cell from its instance (or vertex) index, and from a hash of the cell's global indices its place, size, tint, orientation and whether it's there at all (the ring's density), so the same rocks are there every visit. The CPU only fills a small table per radial bin each frame: its offset from your radius, where you are in its co-orbiting frame (in double precision: rings are ~10⁸ m out), its density.
