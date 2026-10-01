@@ -238,7 +238,7 @@ export function postParams(g: Game, vp: THREE.Matrix4, clouds: boolean, CW: numb
   boltOf(g, vp, out);
   // the sea's reflections (tonemap.wgsl seaReflect): on a sea world, within 200 km of it
   const b = g.frameBody;
-  if (b.kind !== 'star' && (b.type === WT.EarthLike || b.type === WT.Ocean)) {
+  if (set.reflections && b.kind !== 'star' && (b.type === WT.EarthLike || b.type === WT.Ocean)) {
     const r = b.pos.clone().sub(g.ship.pos);
     if (r.length() - b.radius < 200e3) {
       out.set([r.x, r.y, r.z, b.radius], SEA_AT);

@@ -19,6 +19,12 @@ export interface Settings {
   clouds: 'high' | 'low' | 'off';
   bloom: boolean;
   flare: boolean;
+  /** The sea mirroring land, ships and stations (tonemap.wgsl seaReflect; the sky's always in it). */
+  reflections: boolean;
+  /** Near things' shadows (ships, stations, rocks, the ground near you: gpu/shadowmap.ts's cascades). */
+  shadows: boolean;
+  /** The terrain's detail: high, or low (each chunk's quads twice as big on screen: ~a quarter of the chunks). */
+  terrain: 'high' | 'low';
   /** The zoom blur toward where you're heading in FTL. */
   ftlBlur: boolean;
 }
@@ -32,6 +38,9 @@ export const DEFAULT_SETTINGS: Settings = {
   clouds: 'high',
   bloom: true,
   flare: true,
+  reflections: true,
+  shadows: true,
+  terrain: 'high',
   ftlBlur: true,
 };
 

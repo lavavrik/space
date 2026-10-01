@@ -45,6 +45,7 @@ import { VolumetricClouds } from './vclouds';
 import { StationsLayer } from './stations';
 import { GpuTimer } from './timing';
 import { WorldsLayer } from './worlds';
+import { setTerrainDetail } from './terrain';
 
 /** Near plane (m): with reversed-Z and 32-bit float depth, precision barely depends on it. */
 const NEAR = 0.5;
@@ -199,6 +200,7 @@ export class GpuRenderer implements GameRenderer {
     this.dynres.enable(s.dynres);
     this.worlds.cloudsOn = s.clouds !== 'off';
     this.vclouds.quality = s.clouds === 'low' ? 0.5 : 1;
+    setTerrainDetail(s.terrain === 'low');
     this.resize(this.cssW, this.cssH);
   }
 
@@ -317,7 +319,7 @@ export class GpuRenderer implements GameRenderer {
       this.fx.update(g, this.worlds, this.particles, this.PR);
       this.worlds.flushDots();
       // shadows while something near can cast them: rocks, other ships, a station
-      this.shadows.update(g, this.worlds.rocksOut || this.fx.hullCount > 0 || this.stations.near(30e3));
+      this.shadows.update(g, this.settings.shadows && (this.worlds.rocksOut || this.fx.hullCount > 0 || this.stations.near(30e3)));
     }
 
     const enc = device.createCommandEncoder({ label: 'frame' });

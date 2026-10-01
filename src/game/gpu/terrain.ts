@@ -43,6 +43,11 @@ const ZOOM_EXP = 0.65;
 const TARGET_PX = 6,
   TARGET_MAX = 20,
   CHUNK_BUDGET = 900;
+/** The Settings' terrain detail (game/settings.ts): the split threshold × this (2 on low). */
+let detailK = 1;
+export function setTerrainDetail(low: boolean) {
+  detailK = low ? 2 : 1;
+}
 const MIN_SPACING = 8; // m between vertices at the finest level
 const MAX_BUILDS = 24; // chunk meshes built per frame at most (the rest wait a frame)
 const KEEP_FRAMES = 240; // free a chunk unused this long
@@ -318,7 +323,7 @@ export class TerrainGpu {
     // built again, the frame's build budget ran out and whole areas fell back to coarse ones)
     const own = this.chunks.get(k);
     if (own) own.used = this.frame;
-    const want = px > this.target * this.zoomK * (this.split.has(k) ? 0.7 : 1);
+    const want = px > this.target * detailK * this.zoomK * (this.split.has(k) ? 0.7 : 1);
     if (canSplit && want) {
       this.nextSplit.add(k);
       // split, if all four children are ready (or can be built this frame); else draw this one
