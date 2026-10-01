@@ -73,13 +73,17 @@ fn atInscatterC(C0: vec3f, C1: vec3f, L: vec3f, n: i32) -> vec3f {
 // compressed and paled toward white as it is (as the eye sees a bright haze; kept, the long path's
 // hue went yellow), so the horizon stays pale and bright but narrow. Applied to all inscatter
 // (the sky, the ground's and the clouds' haze) so they still meet seamlessly at the horizon.
-const ATR_KNEE = 0.7;
+// (It levels off at ATR_KNEE + 1/ATR_K: at 0.7 + 0.67 the tone map, white from 0.8 up, made the
+// near-horizon sky a flat white, worst filling the periscope's view, and a pair's second sun's haze
+// on top of it went further; now ~0.95, paled less, so it stays a bright pale blue-yellow.)
+const ATR_KNEE = 0.5;
+const ATR_K = 2.2;
 fn atRolloff(c: vec3f) -> vec3f {
   let l = dot(c, vec3f(0.2126, 0.7152, 0.0722));
   if (l <= ATR_KNEE) { return c; }
   let x = l - ATR_KNEE;
-  let lo = ATR_KNEE + x / (1.0 + 1.5 * x);
-  return mix(c * (lo / l), vec3f(lo), 0.6 * x / (1.0 + x));
+  let lo = ATR_KNEE + x / (1.0 + ATR_K * x);
+  return mix(c * (lo / l), vec3f(lo), 0.35 * x / (1.0 + x));
 }
 
 fn atInscatter(P0: vec3f, P1: vec3f, L: vec3f, n: i32) -> vec3f {

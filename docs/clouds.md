@@ -44,7 +44,12 @@ hull showed dimly, as if beyond the clouds. Bloom and the lens flare see the clo
   (`shadow.wgsl sunShade`).
 - **Air:** the haze between the camera and the first cloud, as for the ground. All the air's
   inscatter (`atmo.wgsl atRolloff`) is compressed and paled over a knee: a grazing path low in the
-  air saturates every colour at 3–5× white, and the horizon was a wide flat-white band.
+  air saturates every colour at 3–5× white, and the horizon was a wide flat-white band. It levels
+  off at ~0.95 (knee 0.5, `ATR_K` 2.2), paled only a little. At 1.37 the tone map, white from 0.8
+  up, still made the near-horizon sky flat white, worst filling the periscope's view.
+- **Ground under the clouds:** where the volumetric clouds are on, the ground's own cloud-deck
+  shadow (`planet.wgsl`) gives way to their overcast dimming (`skyDim`). Together they left ~5 % of
+  daylight, the ground near black under cover.
 - **Cirrus:** a thin sheet of ice crystals 1.35 deck heights up (~11 km on Venydes 5), not
   marched: one lookup where the ray crosses it (`vclouds.wgsl cirrus`), drawn at full resolution
   in the pass that lays the clouds over the frame (`fsComposite`). At the march's half resolution,

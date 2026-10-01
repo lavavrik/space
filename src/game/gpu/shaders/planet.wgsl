@@ -314,7 +314,9 @@ fn fs(in: Out) -> @location(0) vec4f {
     if (up > 0.0) {
       let s = max(world.cloudH - elev, 0.0) / max(up, 0.08);
       let cloud = cloudCover(cloudMap(normalize(p * (world.radius + elev) + world.lightL.xyz * s)));
-      diff *= 1.0 - 0.75 * cloud;
+      // (where the volumetric clouds are on, their overcast dims the scene under them already, vclouds.wgsl
+      // skyDim: both left ~5 % of daylight on the ground, near black under cover)
+      diff *= 1.0 - 0.75 * cloud * (1.0 - world.deckHide);
     }
   }
   // sunlight through the air, from the surface point relative to the centre (precise)
