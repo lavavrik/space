@@ -12,7 +12,9 @@
  *   - late frames (over 1.5 intervals), a quarter or more of them over half a second, while the CPU
  *     had room for its part: a step down (two if most were late);
  *   - none late for a while: a step up, to see. If that brings late frames within UP_TEST s, it's
- *     stepped back and the next try waits twice as long (up to a minute).
+ *     stepped back and the next try waits twice as long (up to 15 s: at a minute, after a heavy
+ *     stretch it stayed at half resolution long after the scene got cheap again; frame intervals
+ *     can't say there's room to spare, vsync holds them at the refresh).
  *
  * Each change remakes the render targets (GpuRenderer.setScale), so it doesn't hunt.
  */
@@ -29,7 +31,7 @@ const LATE = 1.5,
 const CPU_ROOM = 0.7;
 /** Waiting to step up (s): at first, and at most after failed tries. A step up that's late within UP_TEST s failed. */
 const UP_WAIT = 3,
-  UP_WAIT_MAX = 60,
+  UP_WAIT_MAX = 15,
   UP_TEST = 3;
 
 export class DynamicResolution {
