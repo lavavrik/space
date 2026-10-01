@@ -240,6 +240,23 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     let gate = smoothstep(0.1, 0.4, sf);
     let sunT = atSunlight(vec3f(0.0), L) * sunShade(-C);
     rays = min(sunT * (world.atSunI * MIE_B * litM * hg(dot(dir, L), 0.7) / 12.566) * gate, vec3f(3.0));
+    // a pair's second sun's shafts too (docs/binaries.md), from 6 samples (it's the dimmer one; the
+    // shafts are soft)
+    if (world.light2.w > 0.5) {
+      let L2r = normalize(world.light2.xyz);
+      var shade2 = 0.0;
+      var wsum2 = 0.0;
+      for (var i = 0; i < 6; i++) {
+        let P = dir * (tEnd * (f32(i) + j) / 6.0);
+        let w = atDens(length(P - C));
+        shade2 += (1.0 - sunThrough(P, L2r)) * w;
+        wsum2 += w;
+      }
+      let lit2 = (wsum2 - shade2) * tEnd / 6.0;
+      let gate2 = smoothstep(0.1, 0.4, shade2 / max(wsum2, 1e-6));
+      let sunT2 = atSunlight(vec3f(0.0), L2r) * world.lightC2.rgb;
+      rays += min(sunT2 * (world.atSunI * MIE_B * lit2 * hg(dot(dir, L2r), 0.7) / 12.566) * gate2, vec3f(3.0));
+    }
     // what's behind (sky or ground) is dimmed by that share as a whole: taking the stretch's haze off
     // instead left a reddish line on the horizon (the haze is compressed over a knee, atmo.wgsl
     // atRolloff), and the ground is dimmed evenly too (its ambient light and the sea's sky
@@ -258,7 +275,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   let sunCol = atSunlightC(normalize(mid) * (world.radius + world.cloudH), L) * sunShade(mid) * world.atSunI / 45.0;
   let dayK = smoothstep(-0.15, 0.3, dot(normalize(mid), L));
   // a pair's second sun (docs/binaries.md): its light through the air in its colour, a cheaper march
-  // toward it (3 steps), the same scattering; no god rays of its own
+  // toward it (3 steps), the same scattering (its god rays above)
   let two = world.light2.w > 0.5;
   let L2 = normalize(world.light2.xyz + vec3f(0.0, 1e-9, 0.0));
   let cosT2 = dot(dir, L2);
@@ -432,6 +449,11 @@ fn fsComposite(@builtin(position) pos: vec4f) -> @location(0) vec4f {
       let sunC = atSunlightC(Q, L) * sunShade(Q) * world.atSunI / 45.0;
       let dayC = smoothstep(-0.1, 0.25, dot(up, L));
       var ci = (sunC * (0.8 + 0.15 * hg(cosT, 0.6)) + vec3f(0.03, 0.04, 0.06)) * dayC;
+      // (and a pair's second sun's light on it, in its colour)
+      if (world.light2.w > 0.5) {
+        let L2c = normalize(world.light2.xyz);
+        ci += atSunlightC(Q, L2c) * world.lightC2.rgb * world.atSunI / 45.0 * (0.8 + 0.15 * hg(dot(dir, L2c), 0.6)) * smoothstep(-0.1, 0.25, dot(up, L2c));
+      }
       if (world.atOn > 0.5) {
         let sp = atSpan(dir);
         let hz = atInscatter(dir * sp.x, dir * max(tCi, sp.x), L, 4);
