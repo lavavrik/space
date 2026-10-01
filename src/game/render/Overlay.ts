@@ -287,10 +287,6 @@ export class Overlay {
     this.drawNavDest(g);
     this.drawNavHover(g);
 
-    if (g.flash > 0) {
-      ctx.fillStyle = `rgba(220,240,255,${g.flash})`;
-      ctx.fillRect(0, 0, W, H);
-    }
   }
 
   /**

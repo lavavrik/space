@@ -129,6 +129,7 @@ function pilotFor(game: Game): Game {
     aero: { ...game.aero },
     warned: {},
     msg: { text: '', kind: '', on: false, t: 0 },
+    warpFx: [], // (its own FTL warps aren't yours: npc.flashAt draws them)
     frameBody: game.cur.anchor,
     refFrame: null,
     _target: null,

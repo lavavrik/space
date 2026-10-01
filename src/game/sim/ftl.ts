@@ -181,6 +181,7 @@ export function engageFTL(g: Game) {
   ship.throttle = Math.min(1, ship.ftlSpeed / ftlSpeedLimit(g));
   ship.vel.set(0, 0, 0);
   ship.landed = null;
+  if (g.ship === ship && g.warpFx) g.warpFx.push({ r: 0.9, age: 0, dur: 1.1 }); // (the field forming round you)
   if (ship.ap) {
     ship.ap.phase = 'transfer';
     g.showMsg(`Autopilot · FTL transfer to ${ship.ap.body.name}`, 'ftl');
@@ -198,6 +199,7 @@ export function dropFTL(g: Game, forced: boolean, body?: Body) {
   ship.vel.copy(ship.travelDir).multiplyScalar(forced ? 500 : Math.min(ship.ftlSpeed, NORMAL_MAX));
   ship.ftlCoast = forced ? 0 : Math.max(0, ship.ftlSpeed - NORMAL_MAX);
   ship.ftlCoastK = 0;
+  if (g.warpFx) g.warpFx.push({ r: 0.9, age: 0, dur: 1.1 }); // (the field collapsing)
   ship.ftlSpeed = 0;
   if (ship.ap) {
     ship.ap.phase = 'insert';

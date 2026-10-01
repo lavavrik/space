@@ -17,7 +17,7 @@ import { orbitPreview } from '../sim/planner';
 import { atmoOf } from '../sim/atmosphere';
 import { sunFraction } from '../sim/eclipse';
 import { occluder } from '../sim/sight';
-import { FLASH_S, type Npc } from '../sim/traffic';
+import type { Npc } from '../sim/traffic';
 import { RING_HALF_THICK, ringDensity } from '../sim/rings';
 import { wrecksHere } from '../sim/wreck';
 import type { Particles } from './particles';
@@ -318,12 +318,7 @@ export class EffectsLayer {
           px.emit({ key: `x${g.traffic.indexOf(npc)}`, pos: at, vel: base, dir: td.clone().negate(), speed: kind === 'lift' ? 150 : 250, spread: kind === 'lift' ? 40 : 30, count: 300 * k * dt, life: 1.0, color: [0.6 * k, 0.35 * k, 0.18 * k], size: 2.5, growth: 2.5, drag: 0.5, streak: 0.02 });
         }
       }
-      // the flash of entering or leaving FTL: a burst that swells and fades
-      const fu = (simTime - npc.flashAt) / FLASH_S;
-      if (fu >= 0 && fu < 1) {
-        const k = (1 - fu) * (1 - fu) * 2.5;
-        worlds.addDot(rel, 0.8 * k, 0.95 * k, 1.2 * k, (14 + 110 * Math.sqrt(fu)) * pr);
-      }
+      // (entering or leaving FTL: space warps round it, in the final pass, gpu/post.ts warpsOf)
     }
     if (this.hulls) this.device.queue.writeBuffer(this.inst, 0, this.instData, 0, this.hulls * 17);
   }

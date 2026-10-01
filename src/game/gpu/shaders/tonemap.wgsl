@@ -8,6 +8,10 @@ struct Post {
   b: vec4f, // the screen point you're heading for (uv), whether it's in front (1) or behind (−1); w: the canvas's width (px)
   c: vec4f, // the star on screen (uv); z: 1 if it's in front; w: the canvas's height (px)
   d: vec4f, // a pair's other star likewise (docs/binaries.md); z: 0 with one star
+  e: vec4f, // x: how many warps are set
+  // FTL entries and exits (gpu/post.ts warpsOf): the warp's centre (uv), its size (screen heights)
+  // and its age (0…1)
+  warps: array<vec4f, 8>,
 }
 @group(0) @binding(0) var hdr: texture_2d<f32>;
 @group(0) @binding(1) var clouds: texture_2d<f32>;
@@ -41,12 +45,56 @@ fn flare(sp: vec2f, uv: vec2f, size: vec2f) -> vec3f {
   return fl * src;
 }
 
+// Space warping where a drive's field forms or collapses (FTL in or out, docs/post.md): the view
+// bent round it as round a lens. A ring of compressed space runs out from the centre and fades, and
+// while the field is strong the middle pinches light in round it (an Einstein-ring-like bend). It
+// returns how far to shift the sample (uv) here, and how strong the ring is (for its faint glow).
+fn warpAt(uv: vec2f, size: vec2f) -> vec3f {
+  let asp = size.x / size.y;
+  var off = vec2f(0.0);
+  var glow = 0.0;
+  let n = i32(post.e.x + 0.5);
+  for (var i = 0; i < 8; i++) {
+    if (i >= n) { break; }
+    let w = post.warps[i];
+    let d = (uv - w.xy) * vec2f(asp, 1.0);
+    let r = length(d);
+    let R = w.z;
+    if (r > R * 1.3) { continue; }
+    let dir = d / max(r, 1e-5);
+    let u = w.w;
+    let A = (1.0 - u) * (1.0 - u);
+    // the ring: out from the centre, wider as it goes
+    let ringR = R * (0.1 + 0.9 * sqrt(u));
+    let wd = R * (0.06 + 0.16 * u);
+    let x = (r - ringR) / wd;
+    let ring = exp(-x * x) * A;
+    // the pinch: strongest at the start, gone by half way
+    // (a bounded profile, ~E²/r outside E and down to nothing at the centre: 1/r there swirled the
+    // middle into a knot)
+    let E = R * 0.12 * max(0.0, 1.0 - 2.0 * u);
+    let q = r / max(E, 1e-5);
+    let lens = E * q / (1.0 + q * q) * (1.0 - smoothstep(R * 0.5, R * 1.2, r));
+    off += dir / vec2f(asp, 1.0) * (ring * R * 0.16 * x - lens * 0.5);
+    glow += ring * 0.5;
+  }
+  return vec3f(off, glow);
+}
+
 @fragment
 fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
   // (the scene may be rendered smaller than the canvas, gpu/dynres.ts: sampled, it's scaled up)
   let size = vec2f(post.b.w, post.c.w);
-  let uv = pos.xy / size;
-  var c = max(textureSampleLevel(hdr, samp, uv, 0.0).rgb, vec3f(0.0));
+  let uv0 = pos.xy / size;
+  // FTL in or out: space bent round it, the colours a little apart at the bend
+  let wp = warpAt(uv0, size);
+  let uv = uv0 + wp.xy;
+  var c: vec3f;
+  if (post.e.x > 0.5 && dot(wp.xy, wp.xy) > 1e-10) {
+    c = max(vec3f(textureSampleLevel(hdr, samp, uv0 + wp.xy * 0.94, 0.0).r, textureSampleLevel(hdr, samp, uv, 0.0).g, textureSampleLevel(hdr, samp, uv0 + wp.xy * 1.06, 0.0).b), vec3f(0.0));
+  } else {
+    c = max(textureSampleLevel(hdr, samp, uv, 0.0).rgb, vec3f(0.0));
+  }
   // FTL: a zoom blur toward (or away from) the point you're heading for, stronger toward the edges
   if (post.a.w > 0.0) {
     let toF = (post.b.xy - uv) * post.b.z;
@@ -72,6 +120,8 @@ fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
   // centre, as bright as the star shows in the frame right now (so a rock or a world in front dims them)
   if (post.a.z > 0.0 && post.c.z > 0.5) { c += flare(post.c.xy, uv, size) * post.a.z; }
   if (post.a.z > 0.0 && post.d.z > 0.5) { c += flare(post.d.xy, uv, size) * post.a.z; }
+  // the warp's ring: a faint cold shimmer where space is squeezed
+  c += vec3f(0.55, 0.75, 1.0) * wp.z * 0.06;
   let s = 0.8 + 0.2 * (1.0 - exp(-(c - 0.8) / 0.2));
   return vec4f(select(c, s, c >= vec3f(0.8)), 1.0);
 }

@@ -6,7 +6,11 @@ import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import type { Settings } from '../settings';
 import { occluder } from '../sim/sight';
+import { FLASH_S } from '../sim/traffic';
 import { BLOOM_WGSL } from './shaders';
+
+/** Warps (FTL in and out) drawn at once (tonemap.wgsl). */
+const MAX_WARPS = 8;
 
 const LEVELS = 6;
 /** Light over this (display units) blooms. */
@@ -120,8 +124,37 @@ export class Bloom {
  * as strong as your speed (from ~1,000 to ~1,000,000 km/s), the bloom and flare strengths, and
  * the canvas's size (CW × CH px).
  */
+/** Floats in tonemap.wgsl Post: 5 vec4, then the warps. */
+export const POST_FLOATS = 20 + 4 * MAX_WARPS;
+
+/**
+ * The space warps on screen this frame (tonemap.wgsl warpAt; docs/post.md), in place of the white
+ * flashes FTL entries and exits used to be: yours, centred on the view (g.warpFx: engaging,
+ * dropping out, arriving from hyperspace), and other ships' (npc.flashAt), sized by how far off
+ * they are (a bubble ~25 km across, at least a few % of the screen), the nearest first.
+ */
+function warpsOf(g: Game, vp: THREE.Matrix4, out: Float32Array) {
+  const list: [number, number, number, number, number][] = []; // x, y, size, age, distance
+  for (const w of g.warpFx) list.push([0.5, 0.5, w.r, w.age / w.dur, 0]);
+  const pxPerRad = g.view.pxPerRad;
+  for (const npc of g.traffic) {
+    const u = (g.simTime - npc.flashAt) / FLASH_S;
+    if (!(u >= 0 && u < 1)) continue;
+    const r = npc.pos.clone().sub(g.ship.pos);
+    const d = r.length();
+    const q = new THREE.Vector4(r.x, r.y, r.z, 0).applyMatrix4(vp);
+    if (q.w <= 0 || occluder(g.cur.bodies, g.ship.pos, npc.pos)) continue;
+    const size = Math.min(0.8, Math.max(0.05, ((25e3 / d) * pxPerRad) / g.view.H));
+    list.push([(q.x / q.w) * 0.5 + 0.5, 0.5 - (q.y / q.w) * 0.5, size, u, d]);
+  }
+  list.sort((a, b) => a[4] - b[4]);
+  const n = Math.min(MAX_WARPS, list.length);
+  out[16] = n;
+  for (let k = 0; k < n; k++) out.set(list[k].slice(0, 4), 20 + 4 * k);
+}
+
 export function postParams(g: Game, vp: THREE.Matrix4, clouds: boolean, CW: number, CH: number, set: Settings) {
-  const out = new Float32Array(16);
+  const out = new Float32Array(POST_FLOATS);
   let blur = 0;
   let fx = 0.5,
     fy = 0.5,
@@ -145,5 +178,6 @@ export function postParams(g: Game, vp: THREE.Matrix4, clouds: boolean, CW: numb
     // landing lights at night, flared)
     if (q.w > 0 && !occluder(g.cur.bodies, g.ship.pos, s.pos)) out.set([(q.x / q.w) * 0.5 + 0.5, 0.5 - (q.y / q.w) * 0.5, 1], 8 + 4 * k);
   });
+  warpsOf(g, vp, out);
   return out;
 }

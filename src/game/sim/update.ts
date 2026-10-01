@@ -332,7 +332,7 @@ export function update(g: Game, dt: number, realDt = dt) {
     g.msg.t -= realDt;
     if (g.msg.t <= 0) g.msg.on = false;
   }
-  if (g.flash > 0) g.flash = Math.max(0, g.flash - realDt * 1.4);
+  if (g.warpFx.length) g.warpFx = g.warpFx.filter((w) => (w.age += realDt) < w.dur);
 }
 
 function updateJump(g: Game, dt: number) {
@@ -372,7 +372,7 @@ function updateJump(g: Game, dt: number) {
   } else if (jump.phase === 'tunnel') {
     if (jump.t <= 0) {
       arriveAt(g, jump.dest, jump.dest.pos.clone().sub(jump.from));
-      g.flash = 1;
+      g.warpFx.push({ r: 1.4, age: 0, dur: 1.6 }); // (out of hyperspace: space unbends round you)
       const s = g.cur.sys.star;
       g.showMsg(`Arrived at ${g.cur.sys.name} · ${s.spec} · throttle up with W`, 'ftl');
       g.jump = null;

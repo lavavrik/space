@@ -15,6 +15,10 @@ the final pass `tonemap.wgsl`:
    Any tap that isn't a finite, non-negative number is taken as black. One NaN pixel, from any
    shader, was spread by the low mips into a black block a fifth of the screen across. On NVIDIA
    (D3D), the rocky moons' `pow` of a slightly negative value (planet.wgsl) blinked them.
+- **Space warps (FTL in and out)** replace the white flashes they used to be (`tonemap.wgsl warpAt`, `gpu/post.ts warpsOf`).
+  - **The effect.** The view bends round the drive's field as it forms or collapses, like a lens. A ring of squeezed space runs out from the centre and fades, with the colours slightly split at the bend and a faint cold shimmer. While the field is strong, the middle pinches light in, a bounded Einstein-ring-like bend (a plain 1/r knotted the centre).
+  - **Your own** come centred on the view: engaging, dropping out, and arriving from hyperspace (stronger and longer: that one was the full-screen white flash).
+  - **Other ships'** sit at their place on screen, ~25 km across, the nearest 8 at a time.
 2. **Lens flare, from the star only:** four small tinted ghosts along the line from the star through
    the screen's centre, as bright as the star shows in the frame there, so a rock
    or a world in front of it dims them. From every bright spot (as a pseudo lens flare) the laser's

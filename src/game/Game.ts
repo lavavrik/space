@@ -185,7 +185,8 @@ export class Game {
   curSpeed = 0;
   nearest: Body | null = null;
   nearestAlt = Infinity;
-  flash = 0;
+  /** Your own space warps (FTL in or out, arriving from hyperspace; gpu/post.ts warpsOf): size (screen heights), age and length (s, real time). */
+  warpFx: { r: number; age: number; dur: number }[] = [];
   warned: Record<string, boolean> = {};
   msg: Message = { text: '', kind: '', on: false, t: 0 };
 

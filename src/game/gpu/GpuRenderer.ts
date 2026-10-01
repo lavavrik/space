@@ -31,7 +31,7 @@ import { EffectsLayer } from './effects';
 import { DEPTH_FORMAT, HDR_FORMAT, SAMPLES } from './formats';
 import { HyperspaceLayer } from './hyperspace';
 import { Particles } from './particles';
-import { Bloom, postParams } from './post';
+import { Bloom, POST_FLOATS, postParams } from './post';
 import { Meter } from './meter';
 import { TONEMAP_WGSL } from './shaders';
 import { ShadowMap } from './shadowmap';
@@ -144,7 +144,7 @@ export class GpuRenderer implements GameRenderer {
     this.stations = new StationsLayer(device, this.frameLayout, this.worlds.worldLayout, this.shadows.casterLayout);
     this.fx = new EffectsLayer(device, this.frameLayout, this.shadows.casterLayout);
     this.vclouds = new VolumetricClouds(device, this.frameLayout, this.worlds.worldLayout, NEAR);
-    this.toneBuf = device.createBuffer({ label: 'post', size: 64, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    this.toneBuf = device.createBuffer({ label: 'post', size: POST_FLOATS * 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     this.bloom = new Bloom(device);
     this.toneSamp = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
     this.hyper = new HyperspaceLayer(device, this.frameLayout);
