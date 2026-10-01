@@ -50,10 +50,14 @@ fn cloudLiftMax() -> f32 { return max(world.terrA * 1.6 + LIFT_CLEAR - world.clo
 // takes over within ~45° of it (windBlend). Each layout's value only changes where its weight is 0
 // as you move, so nothing visibly jumps. `p`: a point in the weather's frame (m).
 const TAU: f32 = 6.2831853;
+var<private> wSeam: f32 = 1e9; // (worked out once per pixel: the density's called hundreds of times)
 fn windSeam() -> f32 {
-  let toL = mat3x3f(world.toLocal[0].xyz, world.toLocal[1].xyz, world.toLocal[2].xyz);
-  let c = cloudDir(toL * -world.atC.xyz);
-  return atan2(c.x, c.z) + 0.5 * TAU;
+  if (wSeam > 100.0) {
+    let toL = mat3x3f(world.toLocal[0].xyz, world.toLocal[1].xyz, world.toLocal[2].xyz);
+    let c = cloudDir(toL * -world.atC.xyz);
+    wSeam = atan2(c.x, c.z) + 0.5 * TAU;
+  }
+  return wSeam;
 }
 fn windStretch(p: vec3f, s: f32, seam: f32) -> vec3f {
   let lon = atan2(p.x, p.z);
@@ -107,6 +111,7 @@ fn weatherCover(lp: vec3f, cov0: f32, res: f32) -> Weather {
 // towers up to the layer's top and spreads into an anvil, and lightning flashes inside it. `lp`: a
 // point in the weather's frame (m); `cov0`: the cube's cover there. 0…1.
 fn stormAt(lp: vec3f, cov0: f32) -> f32 {
+  if (cov0 <= 0.7) { return 0.0; } // (the noise read only where it can matter)
   return smoothstep(0.7, 0.85, cov0) * smoothstep(0.2, 0.32, tnoise(lp * 5e-6 + 71.0));
 }
 // Lightning: the storms are cut into STORM_CELL cells (a 3D grid through the world), each with a

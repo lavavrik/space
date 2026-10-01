@@ -59,12 +59,12 @@ fn ssrHit(P: vec3f, R: vec3f, t: f32) -> vec4f {
   let sd = depthAt(s);
   return vec4f(s, select(-1e9, q.w - SSR_NEAR / max(sd, 1e-9), sd > 0.0), 1.0);
 }
-fn seaReflect(uv: vec2f, c: vec3f) -> vec3f {
+fn seaReflect(uv: vec2f, c: vec3f, a: f32) -> vec3f {
   if (post.sea.w <= 0.0) { return c; }
   // (the sea marks itself, alpha 0.5, planet.wgsl: by the depth's point at the water's radius, the
   // water near a coast missed out, its big far triangles lifted by the land's heights at their
   // corners; a blend of it with land or sky at an edge reads as neither)
-  if (abs(textureSampleLevel(hdr, samp, uv, 0.0).a - 0.5) > 0.06) { return c; }
+  if (abs(a - 0.5) > 0.06) { return c; }
   let d0 = depthAt(uv);
   if (d0 <= 0.0) { return c; }
   let h = post.ivp * vec4f(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, d0, 1.0);
@@ -190,8 +190,8 @@ fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
   if (post.e.x > 0.5 && dot(wp.xy, wp.xy) > 1e-10) {
     c = max(vec3f(textureSampleLevel(hdr, samp, uv0 + wp.xy * 0.94, 0.0).r, textureSampleLevel(hdr, samp, uv, 0.0).g, textureSampleLevel(hdr, samp, uv0 + wp.xy * 1.06, 0.0).b), vec3f(0.0));
   } else {
-    c = max(textureSampleLevel(hdr, samp, uv, 0.0).rgb, vec3f(0.0));
-    c = seaReflect(uv, c);
+    let h0 = textureSampleLevel(hdr, samp, uv, 0.0);
+    c = seaReflect(uv, max(h0.rgb, vec3f(0.0)), h0.a);
   }
   // FTL: a zoom blur toward (or away from) the point you're heading for, stronger toward the edges
   if (post.a.w > 0.0) {
