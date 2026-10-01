@@ -32,6 +32,9 @@ const N = 32; // quads per chunk edge
  * 15–20 px wherever you looked, and the far ground and its mountains' silhouette against the sky
  * read as low-res. The target is eased up while there are more than CHUNK_BUDGET chunks (and back
  * down when there's room), so a view over a whole mountain range can't run away with the frame.
+ * Its cap scales with the periscope's magnification: at a fixed 20 px, 100× split everything in view
+ * to the finest level whatever the budget said, ~4,500 chunks (drawn, baked, re-baked as the sun
+ * moved), and the frame rate fell by half.
  */
 const TARGET_PX = 6,
   TARGET_MAX = 20,
@@ -192,6 +195,9 @@ export class TerrainGpu {
   private readonly elev = new Map<string, number>();
   private frame = 0;
   private builds = 0;
+  /** Smoothed per frame (the perf overlay, stats()): chunks built and (re)baked. */
+  private buildRate = 0;
+  private bakeRate = 0;
   /** This frame's split threshold (px per quad) and the view's resolution (CSS px per radian). */
   private target = TARGET_PX;
   private view: TerrainView = { pxPerRad: 1000, basePxPerRad: 1000, fwd: new THREE.Vector3(0, 0, -1), halfFov: 1 };
@@ -237,8 +243,12 @@ export class TerrainGpu {
     this.view = view;
     // over budget last frame: coarser; well under: finer again, slowly (quick both ways, it hunted)
     const n = this.shown.length;
-    if (n > CHUNK_BUDGET) this.target = Math.min(TARGET_MAX, this.target * 1.03);
+    // (well over: faster, so a zoom doesn't spend seconds at five times the budget)
+    const cap = TARGET_MAX * Math.max(1, view.pxPerRad / view.basePxPerRad);
+    if (n > CHUNK_BUDGET) this.target = Math.min(cap, this.target * (n > 2 * CHUNK_BUDGET ? 1.1 : 1.03));
     else if (n < CHUNK_BUDGET * 0.7) this.target = Math.max(TARGET_PX, this.target / 1.01);
+    this.buildRate += (this.builds - this.buildRate) * 0.05;
+    this.bakeRate += (this.toBake.length - this.bakeRate) * 0.05;
     this.builds = 0;
     this.rebakes = 0;
     this.shown = [];
@@ -472,6 +482,14 @@ export class TerrainGpu {
       ],
     });
     return { f, L, i, j, cen: new THREE.Vector3(cx, cy, cz), pos: posB, dir: dirB, uni, bake, draw, compute, slot, used: 0, sun: new THREE.Vector3() };
+  }
+
+  /**
+   * For the perf overlay (and the console: farlight.scene.worlds.terrainStats()): chunks drawn and
+   * held, built and baked per frame (smoothed), the split threshold, the pool, the slots.
+   */
+  stats() {
+    return `terrain: ${this.shown.length} drawn · ${this.chunks.size} held · ${this.buildRate.toFixed(1)} built/f · ${this.bakeRate.toFixed(1)} baked/f · ${this.target.toFixed(1)} px · pool ${this.pool.length} · slots ${this.slots}`;
   }
 
   /** Free the chunk unused longest (not one in use this frame), its slot going back. */

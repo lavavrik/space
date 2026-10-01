@@ -152,6 +152,7 @@ export class GpuRenderer implements GameRenderer {
     this.meter = new Meter(device);
     this.timer = gpu.timestamps ? new GpuTimer(device, (slot, parts) => perf.gpuResult(slot, parts)) : null;
     perf.gpuTimed = !!this.timer;
+    perf.info2 = () => this.worlds.terrainStats();
     perf.info = () => `WebGPU ${this.W}×${this.H} @${this.PR.toFixed(2)}${this.dynres.scale < 1 ? ` (${Math.round(this.dynres.scale * 100)} %)` : ''}`;
   }
 

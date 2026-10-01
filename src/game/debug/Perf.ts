@@ -34,6 +34,8 @@ export class PerfMonitor {
   gpuTimed = false;
   /** The renderer's line for the panel (resolution, draws…). */
   info: () => string = () => '';
+  /** A second line of state worth watching (the terrain's chunks, gpu/terrain.ts stats). */
+  info2: () => string = () => '';
 
   constructor(
     host: HTMLElement,
@@ -157,6 +159,7 @@ export class PerfMonitor {
     ctx.fillText(Number.isNaN(gpu) ? 'gpu n/a' : `gpu ${gpu.toFixed(1)}`, x, 21);
     ctx.fillStyle = 'rgba(255,230,199,.7)';
     ctx.fillText(`${this.info()}  2D ${this.overlayCanvas.width}×${this.overlayCanvas.height}`, 8, 36);
+    ctx.fillText(this.info2(), 8, 51);
     // GPU time by category, most first
     const parts = [...this.split].map(([k, a]): [string, number] => [k, mean(a)]).filter(([, v]) => v >= 0.05).sort((a, b) => b[1] - a[1]);
     ctx.fillStyle = '#7fdcff';

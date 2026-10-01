@@ -559,6 +559,11 @@ export class WorldsLayer {
     }
   }
 
+  /** The terrain's state, for the perf overlay (the first world with its chunks up). */
+  terrainStats() {
+    return this.worlds.find((w) => w.terrOn)?.terrain!.stats() ?? '';
+  }
+
   /** The world whose clouds are marched as volumes this frame (its bind group), and how far faded in. */
   vcGroup: GPUBindGroup | null = null;
   vcOn = 0;
