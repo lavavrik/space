@@ -319,6 +319,10 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     let gate = smoothstep(0.1, 0.4, sf);
     let sunT = atSunlight(vec3f(0.0), L) * sunShade(-C);
     rays = min(sunT * (world.atSunI * MIE_B * litM * hg(dot(dir, L), 0.7) / 12.566) * gate, vec3f(3.0));
+    // (none in a giant: its layer has no clear air under it, only the gap between its decks, and the
+    // shade toward the sun, taken over a few km, missed the deck above: deep in it, looking up toward
+    // the sun was a blinding white patch)
+    if (cloudKind() == CK_GIANT) { rays = vec3f(0.0); }
     // a pair's second sun's shafts too (docs/binaries.md), from 6 samples (it's the dimmer one; the
     // shafts are soft)
     if (world.light2.w > 0.5) {

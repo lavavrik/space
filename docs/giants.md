@@ -40,6 +40,7 @@ run out.
   under the face, its floor and ceiling rolling. One 45 km sheet was fog all the way down. The
   lower deck gets a tenth of the light, diffused through the upper (the short march toward the sun
   doesn't reach through it: lit as if it weren't there, it was a bright flat floor).
+- **No light shafts** in a giant (`vclouds.wgsl rays`): they're for clear air under a deck, and their shade toward the sun, taken over a few km, missed the deck above: deep in it, looking up toward the sun was a blinding white patch.
 - **No flat deck** over the face (`gpu/worlds.ts`): it is the cloud tops.
 - **Crush depth:** 3 scale heights under the face (~20 bar, `sim/atmosphere.ts crushDepth`), where
   `sim/flight.ts collide` destroys the ship. The air's density and pressure keep rising under the
