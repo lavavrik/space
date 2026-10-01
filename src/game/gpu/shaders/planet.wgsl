@@ -471,8 +471,13 @@ fn fs(in: Out) -> @location(0) vec4f {
   }
   if (terr) { sunC *= shadowAt(in.wp, N); } // up close: sky stations', ships' and rocks' shadows on the ground
   if (terr && two) { sunC2 *= shadowAt2(in.wp, N); }
-  let sky = select(0.0, 0.07 * smoothstep(-0.12, 0.35, ndl0), world.atOn > 0.5);
-  let sky2 = select(vec3f(0.0), 0.07 * smoothstep(-0.12, 0.35, ndl20) * world.lightC2.rgb, world.atOn > 0.5 && two);
+  // the sky's own light on the ground: by how high the sun is over the horizon here (the whole lit
+  // sky, not the sun's angle to each slope), bluish, and holding up while it's low (at 0.07 by
+  // N·L, the ground at dawn and dusk sat dark under a bright sky)
+  let upP = normalize(Pc);
+  let skyC = vec3f(0.78, 0.88, 1.0);
+  let sky = select(vec3f(0.0), 0.15 * smoothstep(-0.15, 0.25, dot(upP, L)) * skyC, world.atOn > 0.5);
+  let sky2 = select(vec3f(0.0), 0.15 * smoothstep(-0.15, 0.25, dot(upP, L2)) * skyC * world.lightC2.rgb, world.atOn > 0.5 && two);
   // Water (spec: its share here; docs/water.md): it shows the sky by Fresnel (dark looking down
   // into it, a mirror toward the horizon) over its own colour, and the suns' glitter, the sharper the
   // more of the waves are resolved here: glints on each wave up close, a broad glitter path far off.

@@ -24,7 +24,7 @@ the final pass `tonemap.wgsl`:
    the screen's centre, as bright as the star shows in the frame there, so a rock
    or a world in front of it dims them. From every bright spot (as a pseudo lens flare) the laser's
    hot spot made them too, and a bright limb or sky swept arcs across the view.
-   A star's flare shows only while it's on screen, fading out over the last 5 % toward the edges. Off it, the flare read the frame at the nearest edge, which was bright sky, and its ghosts crossed the view from a sun you couldn't see.
+   A star's flare shows only while it's on screen, fading out over the last 5 % toward the edges. Off it, the flare read the frame at the nearest edge, which was bright sky, and its ghosts crossed the view from a sun you couldn't see. Its strength is capped at what the star's disc gives against black space: seen through the air the sky draws the disc brighter (below), and the ghosts blazed.
 3. **FTL zoom blur:** in FTL, 12 samples toward the point you're heading for (away from it when it's
    behind you), stronger toward the edges and with speed (from ~1,000 to ~1,000,000 km/s), kept to a
    tenth of full strength: a hint of speed, not a smear.

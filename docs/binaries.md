@@ -42,6 +42,7 @@ Most stars have a companion, and so do many of Farlight's systems. The design is
 
 - **The sky and the jump transit** draw a pair as one point: both stars' light, its colour weighted by each star's share (`pairLight`).
 - **Up close, each star has its own disc and glow** (`gpu/worlds.ts`), and its own lens flare (`tonemap.wgsl flare`).
+- **From under the air,** the sky hides what's behind it once it's bright (the stars by day), and the discs with it. So the sky shell draws each sun's disc itself (`atmosphere.wgsl sunDiscAt`), reddened and dimmed by the air along the ray, brighter the brighter the sky round it.
 
 ## Two suns' light (`sim/starlight.ts sunsAt`)
 

@@ -269,7 +269,9 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     // shade along the line of sight, shadow columns crossing it painted the ground and the sea in dark
     // streaks running to the point opposite the sun. The sky keeps the air's.)
     var dimShare = shade / max(wsum, 1e-6);
-    if (sceneT < 1e29) { dimShare = 1.0 - sunThrough(dir * sceneT, L); }
+    // (fading out 20–60 km away, where what you see is mostly the air's haze over it: there it dimmed
+    // the haze too, dark dashes along the horizon)
+    if (sceneT < 1e29) { dimShare = (1.0 - sunThrough(dir * sceneT, L)) * (1.0 - smoothstep(20000.0, 60000.0, sceneT)); }
     skyDim = 1.0 - 0.8 * camDay * dimShare;
     let fade = smoothstep(mix(rBot, rTop, 0.6) + liftCam, rTop + liftCam, camR);
     skyDim = mix(skyDim, 1.0, fade);

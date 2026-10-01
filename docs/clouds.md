@@ -50,7 +50,7 @@ hull showed dimly, as if beyond the clouds. Bloom and the lens flare see the clo
 - **Ground under the clouds:** where the volumetric clouds are on, the ground's own cloud-deck
   shadow (`planet.wgsl`) gives way to their overcast dimming (`skyDim`). Together they left ~5 % of
   daylight, the ground near black under cover.
-  The dimming of a surface (ground, sea) is its own cloud shadow: where the sun's ray from it crosses the clouds. By the air's shade along the line of sight, shadow columns crossing it painted the ground and the sea in dark streaks running to the point opposite the sun. The sky keeps the air's.
+  The dimming of a surface (ground, sea) is its own cloud shadow: where the sun's ray from it crosses the clouds. By the air's shade along the line of sight, shadow columns crossing it painted the ground and the sea in dark streaks running to the point opposite the sun. The sky keeps the air's. It fades out 20–60 km away, where what you see is mostly the air's haze over the surface: it dimmed the haze too, in dark dashes along the horizon.
 - **Cirrus:** a thin sheet of ice crystals 1.35 deck heights up (~11 km on Venydes 5), not
   marched: one lookup where the ray crosses it (`vclouds.wgsl cirrus`), drawn at full resolution
   in the pass that lays the clouds over the frame (`fsComposite`). At the march's half resolution,

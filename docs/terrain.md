@@ -107,6 +107,7 @@ ground, and are drawn by the planet shader on both the far sphere and the terrai
 
 ## At night, and your lamps
 
+- **The sky's light by day:** the ground gets the sky's own light, 15 % of albedo at full, by the sun's height over it (rising from 9° below the horizon to 14° above: dawn and dusk aren't dark), bluish, and as much again from a pair's second sun in its colour (`planet.wgsl`). At 7 % by the lit side of the ground alone, the land under a low sun stayed dark.
 - **The night's own light:** where the sun's gone, the ground gets a faint bluish ambient
   (starlight, airglow; `planet.wgsl NIGHT_AMB`, 15 % of albedo). The sky glows faintly with as much
   air as the ray crosses (`atmosphere.wgsl`), and the clouds are lit dimly (`vclouds.wgsl`). The

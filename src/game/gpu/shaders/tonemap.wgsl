@@ -39,7 +39,9 @@ fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
 fn flare(sp: vec2f, uv: vec2f, size: vec2f) -> vec3f {
   // (behind clouds: as much of it as they let through)
   let through = select(1.0, textureSampleLevel(clouds, samp, sp, 0.0).a, post.a.x > 0.5);
-  let src = max(textureSampleLevel(hdr, samp, sp, 0.0).rgb - vec3f(0.8), vec3f(0.0)) * 0.6 * through;
+  // (capped at what the star's disc gives against black space, star.wgsl's 1.2: seen through the
+  // air the sky draws it brighter, atmosphere.wgsl, and the ghosts blazed)
+  let src = clamp(textureSampleLevel(hdr, samp, sp, 0.0).rgb - vec3f(0.8), vec3f(0.0), vec3f(0.4)) * 0.6 * through;
   if (max(src.r, max(src.g, src.b)) <= 0.0) { return vec3f(0.0); }
   let aspect = size.x / size.y;
   let axis = vec2f(0.5) - sp;
