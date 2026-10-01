@@ -185,7 +185,12 @@ export function postParams(g: Game, vp: THREE.Matrix4, clouds: boolean, CW: numb
     const q = new THREE.Vector4(r.x, r.y, r.z, 0).applyMatrix4(vp);
     // (not behind a world: the flare reads the frame at the star, and the ground there, lit by your
     // landing lights at night, flared)
-    if (q.w > 0 && !occluder(g.cur.bodies, g.ship.pos, s.pos)) out.set([(q.x / q.w) * 0.5 + 0.5, 0.5 - (q.y / q.w) * 0.5, 1], 8 + 4 * k);
+    // (on screen only, fading out over the last 5 % to its edges: off it, the flare read the frame
+    // at the nearest edge, bright sky, and ghosts crossed the view from a sun you couldn't see)
+    const u = (q.x / q.w) * 0.5 + 0.5,
+      v = 0.5 - (q.y / q.w) * 0.5;
+    const edge = Math.min(u, 1 - u, v, 1 - v);
+    if (q.w > 0 && edge > 0 && !occluder(g.cur.bodies, g.ship.pos, s.pos)) out.set([u, v, Math.min(1, edge / 0.05)], 8 + 4 * k);
   });
   warpsOf(g, vp, out);
   return out;

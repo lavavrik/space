@@ -6,7 +6,7 @@
 struct Post {
   a: vec4f, // clouds on, bloom strength, flare strength, blur strength
   b: vec4f, // the screen point you're heading for (uv), whether it's in front (1) or behind (−1); w: the canvas's width (px)
-  c: vec4f, // the star on screen (uv); z: 1 if it's in front; w: the canvas's height (px)
+  c: vec4f, // the star on screen (uv); z: its flare's strength (0 off screen, fading in from the edges); w: the canvas's height (px)
   d: vec4f, // a pair's other star likewise (docs/binaries.md); z: 0 with one star
   e: vec4f, // x: how many warps are set
   // FTL entries and exits (gpu/post.ts warpsOf): the warp's centre (uv), its size (screen heights)
@@ -141,8 +141,9 @@ fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
   c += textureSampleLevel(bloom, samp, uv, 0.0).rgb * post.a.y * seen;
   // lens flare, from the stars only (a pair's each): ghosts along the line from it through the
   // centre, as bright as the star shows in the frame right now (so a rock or a world in front dims them)
-  if (post.a.z > 0.0 && post.c.z > 0.5) { c += flare(post.c.xy, uv, size) * post.a.z; }
-  if (post.a.z > 0.0 && post.d.z > 0.5) { c += flare(post.d.xy, uv, size) * post.a.z; }
+  // (z: 0 off screen, fading in from its edges)
+  if (post.a.z > 0.0 && post.c.z > 0.0) { c += flare(post.c.xy, uv, size) * post.a.z * post.c.z; }
+  if (post.a.z > 0.0 && post.d.z > 0.0) { c += flare(post.d.xy, uv, size) * post.a.z * post.d.z; }
   // the warp's ring: a faint cold shimmer where space is squeezed
   c += vec3f(0.55, 0.75, 1.0) * wp.z * 0.06;
   let s = 0.8 + 0.2 * (1.0 - exp(-(c - 0.8) / 0.2));
