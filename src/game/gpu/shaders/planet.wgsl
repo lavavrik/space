@@ -293,6 +293,21 @@ fn waterSky(Pc: vec3f, R: vec3f, L: vec3f, two: bool, L2: vec3f, shade: f32) -> 
   let t = -b + sqrt(max(b * b - (dot(Pc, Pc) - world.atTop * world.atTop), 0.0));
   var c = atInscatterC(Pc, Pc + R * t, L, 4) * shade;
   if (two) { c += atInscatterC(Pc, Pc + R * t, L2, 4) * world.lightC2.rgb; }
+  // the clouds in it: where the ray crosses the cloud deck, its cover there, lit as the deck is
+  // (cloudLayer.wgsl), over the sky (a mirrored deck, one lookup: the volumetric clouds' shapes
+  // aren't marched again)
+  if (world.cloudH > 0.0 && length(Pc) < world.cloudR) {
+    let tc = -b + sqrt(max(b * b - (dot(Pc, Pc) - world.cloudR * world.cloudR), 0.0));
+    let Pk = Pc + R * tc;
+    let nk = normalize(Pk);
+    let cov = cloudCover(cloudMap(toLocal3() * nk));
+    if (cov > 0.004) {
+      var lit = clamp(dot(nk, L) * 1.05 + 0.05, 0.0, 1.0) * atSunlightC(Pk, L) * shade;
+      if (two) { lit += clamp(dot(nk, L2) * 1.05 + 0.05, 0.0, 1.0) * atSunlightC(Pk, L2) * world.lightC2.rgb; }
+      // (seen from under it: its underside, greyer the thicker it is)
+      c = mix(c, vec3f(0.9) * lit * (0.35 + 0.5 * (1.0 - cov)) + c * 0.3, cov * 0.9);
+    }
+  }
   return c;
 }
 
@@ -344,6 +359,7 @@ fn fs(in: Out) -> @location(0) vec4f {
   var det = 1.0;
   var elev = 0.0;
   var pop = 0.0;
+  var seaDepth = 1e9; // (m: the water's depth here, for the surf)
   let A = world.pa.rgb;
   let B = world.pb.rgb;
   let C = world.pc.rgb;
@@ -388,6 +404,11 @@ fn fs(in: Out) -> @location(0) vec4f {
         let dep = clamp((world.sea - h) * 4.0, 0.0, 1.0);
         col = mix(B, A, dep);
         spec = 1.0;
+        seaDepth = world.terrA * (world.sea - h);
+        // shallows: clear turquoise, fading into the deep's colour by ~25 m, the sandy bottom showing
+        // through in the last few metres
+        let shallow = 1.0 - smoothstep(0.0, 25.0, seaDepth);
+        col = mix(col, mix(vec3f(0.1, 0.42, 0.45), vec3f(0.5, 0.5, 0.4), 1.0 - smoothstep(0.5, 3.0, seaDepth)), shallow);
       } else {
         let e = h - world.sea;
         if (world.city > 0.5) { pop = cityPop(p, e, lat); }
@@ -477,6 +498,19 @@ fn fs(in: Out) -> @location(0) vec4f {
     if (two) { glint += waterGlint(Nw, N, V, L2, n) * sunC2; }
     waterF = F * spec;
     waterAdd = (skyR * F + glint) * spec;
+    // surf: at the water's edge (under ~2.5 m), a band of white foam, broken up and moving with the waves (it hides
+    // the water's mirror where it lies)
+    if (terr && seaDepth < 3.5) {
+      let q = toLocal3() * in.wp + world.waveO.xyz;
+      let t = world.waveO.w;
+      let wind = normalize(vec3f(1.0, 0.0, 0.6));
+      let fn1 = tnoise(q / 9.6 + wind * 0.3 * t) * 0.6 + tnoise(q / 2.4 - wind * 0.5 * t) * 0.4;
+      let shore = 1.0 - smoothstep(0.2, 2.5, seaDepth + fn1 * 0.8);
+      let foam = 0.85 * shore * smoothstep(0.05, 0.45, fn1) * smoothstep(0.5, 3.0, 9.6 / max(fw * world.radius, 1e-3));
+      col = mix(col, vec3f(0.85, 0.88, 0.9), foam);
+      waterF *= 1.0 - foam;
+      waterAdd *= 1.0 - foam;
+    }
   }
   // (the ship's lamps, near: headlights and landing lights; world.wgsl lights up close only matter
   // for the ground under you)

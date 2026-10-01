@@ -18,11 +18,14 @@ Seas on Earth-like and ocean worlds (`planet.wgsl`, where `spec` marks water). T
 - **The suns' glitter** (`waterGlint`):
   - **The lobe:** a normalised Blinn-Phong lobe on the wave normal, × Fresnel at its half vector, × `GLINT_K` (8). The sun's disc is thousands of times brighter than what it lights, so the glints blaze and bloom; at 1 they were pale flecks.
   - **Its sharpness** is cut where the normal varies across a pixel (Toksvig: a lobe narrower than that aliases), and follows how much of the waves' slope is resolved: up close, sharp glints on each wave (exponent 900); far off, where they're sub-pixel, a broad glitter path (40). From orbit, the glint is a soft spot on the sea.
+- **Clouds in the water:** where the reflected ray crosses the cloud deck, its cover there, lit as the deck is (from below, greyer the thicker), over the sky. It's a mirrored deck, one lookup: the volumetric clouds' shapes aren't marched again.
+- **Shallows:** clear turquoise, fading into the deep's colour by ~25 m, the sandy bottom showing through in the last few metres (by the water's depth in metres, from the terrain under it).
+- **Surf:** at the water's edge, under ~2.5 m, a band of white foam broken up by two octaves of noise moving with the wind. It hides the water's mirror where it lies.
 - **Ship lamps:** the landing lights and headlights light the water like the ground.
 
 ## Not yet
 
-- Reflections of clouds, the land and ships.
-- Foam, shore waves, depth by the coast.
+- Reflections of the land and ships (a screen-space reflection pass).
+- Breaking waves rolling in to the shore.
 - Spray and swell that move the geometry.
 - Night-time city-light reflections.
