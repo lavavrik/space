@@ -40,9 +40,11 @@ const smooth = (a: number, b: number, x: number) => {
   return t * t * (3 - 2 * t);
 };
 
-/** clouds.wgsl cloudCover: 0…1 (dust storms: a fifth of the face or so, sim/cloudKind.ts). */
+/** clouds.wgsl cloudCover: 0…1 (dust storms: a fifth of the face or so; acid: all of it; sim/cloudKind.ts). */
 export function cloudCoverOf(b: World, raw: number) {
-  if (cloudKindOf(b)?.kind === CK.Dust) return smooth(0.18, 0.45, raw) * 0.9;
+  const k = cloudKindOf(b)?.kind;
+  if (k === CK.Dust) return smooth(0.18, 0.45, raw) * 0.9;
+  if (k === CK.Acid) return 0.9 + 0.1 * smooth(-0.3, 0.3, raw);
   return smooth(-0.2, 0.25, raw) * (b.type === WT.Ocean ? 0.95 : 0.85);
 }
 

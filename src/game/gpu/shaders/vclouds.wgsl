@@ -53,6 +53,8 @@ const SIGMA: f32 = 0.004;    // extinction per metre at full density (visibility
 const MAX_DIST: f32 = 250000.0;
 /** Dust's density at most, of a cloud's (density): ~1 km of visibility in a storm's heart. */
 const DUST_THIN: f32 = 0.3;
+/** …and an acid deck's (Venus's: visibility of a few km in it). */
+const ACID_THIN: f32 = 0.4;
 
 var<private> rBot: f32;
 var<private> rTop: f32;
@@ -119,6 +121,9 @@ fn density(P: vec3f) -> f32 {
   // towers: thicker cover rises higher, and ~8 km cells rise and fall, so the tops aren't one carpet
   let cell = 0.5 + 0.5 * tnoise(kw * 0.27 + 5.0 + tv * 2.8e-4);
   var top = clamp(mix(0.25, 1.0, cov) * (0.45 + 0.75 * cell), 0.15, 1.0);
+  // (an acid deck: one sheet, its top rolling a little, not towers)
+  let acid = cloudKind() == CK_ACID;
+  if (acid) { top = 0.85 + 0.15 * cell; }
   // storms (clouds.wgsl stormAt): towers up to the layer's top, under an anvil, a flat sheet spread
   // over the storm near the top (12–14 km on an Earth)
   let st = stormAt(lp, cov0);
@@ -142,8 +147,9 @@ fn density(P: vec3f) -> f32 {
   // (and they boil: the finest detail changes over a few minutes)
   let kb = k + vec3f(0.0, world.time * 3e-4, 0.0);
   let n = 0.55 * tnoise(kb) + 0.3 * tnoise(kb * 3.1) + 0.15 * tnoise(kb * 9.3);
-  let bite = mix(0.75, 0.45, smoothstep(0.5, 0.9, cov));
-  return clamp((base - (1.0 - base) * (bite - bite * n)) * 3.0, 0.0, 1.0);
+  let bite = select(mix(0.75, 0.45, smoothstep(0.5, 0.9, cov)), 0.3, acid);
+  // (an acid haze, not cloud: a few km of visibility in it, ACID_THIN of a cloud's density)
+  return clamp((base - (1.0 - base) * (bite - bite * n)) * 3.0, 0.0, 1.0) * select(1.0, ACID_THIN, acid);
 }
 
 fn hg(c: f32, g: f32) -> f32 {
@@ -513,8 +519,11 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
       // day; twilight's at dusk; the night's faint glow)
       let sunB = atSunlightC(upC * (world.radius + world.cloudH * cloudBaseK()), L) * world.atSunI / 45.0;
       let lB = dot(sunB, vec3f(0.2126, 0.7152, 0.0722)) * smoothstep(-0.1, 0.2, dot(upC, L));
-      // (in a dust storm, a brown murk: the dust's colour)
-      let fogC = select(vec3f(0.62, 0.66, 0.72), world.cloudC.rgb * 0.72, cloudKind() == CK_DUST) * (0.3 * lB + 0.004) + atTwilight(upC, L, upC);
+      // (in a dust storm, a brown murk: the dust's colour; under an acid deck, orange: the light's
+      // reddened on its way down through tens of km of it, Venus's day. In the deck's own pale
+      // yellow, over the dim ground, the murk was olive)
+      let murk = select(world.cloudC.rgb * 0.72, vec3f(0.62, 0.66, 0.72), cloudKind() == CK_WATER) * select(vec3f(1.0), vec3f(1.0, 0.72, 0.42) * 1.3, cloudKind() == CK_ACID);
+      let fogC = murk * (0.3 * lB + 0.004) + atTwilight(upC, L, upC);
       res = vec4f(res.rgb * (1.0 - amt) + fogC * amt * frame.exposure, res.a * (1.0 - amt));
     }
   }

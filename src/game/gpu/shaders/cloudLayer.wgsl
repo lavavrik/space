@@ -92,6 +92,7 @@ fn fs(in: Out) -> FragOut {
   // (dust: a veil, soft-edged and thinner: eroded as cloud is, from orbit the storms were crisp pale
   // patches, like ground of another colour)
   if (cloudKind() == CK_DUST) { cov = smoothstep(0.0, 0.9, cov0) * 0.75; }
+  // (an acid deck hides the ground entirely: at 95 %, the lava's glow showed through it in veins)
   if (cov < 0.004) { discard; }
   let L = normalize(world.light.xyz);
   let lit = clamp(dot(n, L) * 1.05 + 0.05, 0.0, 1.0) * sunShade(P - C);
@@ -116,5 +117,5 @@ fn fs(in: Out) -> FragOut {
   let dT = b * b - cT;
   let tIn = select(0.0, max(b - sqrt(max(dT, 0.0)), 0.0), cT > 0.0);
   let beyond = smoothstep(tIn + 200000.0, tIn + 250000.0, t);
-  return FragOut(vec4f((col * atTrans + haze) * frame.twilight, cov * 0.95 * (1.0 - world.deckHide * (1.0 - beyond))), clamp(clip.z / clip.w, 0.0, 1.0));
+  return FragOut(vec4f((col * atTrans + haze) * frame.twilight, cov * select(0.95, 1.0, cloudKind() == CK_ACID) * (1.0 - world.deckHide * (1.0 - beyond))), clamp(clip.z / clip.w, 0.0, 1.0));
 }

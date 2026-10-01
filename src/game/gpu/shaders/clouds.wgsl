@@ -47,13 +47,18 @@ fn cloudLiftMax() -> f32 {
   return max(world.terrA * 1.6 + LIFT_CLEAR - world.cloudH * cloudBaseK(), 0.0);
 }
 
-// What the clouds are made of (sim/cloudKind.ts, docs/clouds.md "Kinds"): water cloud, or dust
-// storms (desert worlds: from the ground up, soft and thin, in the sand's colour)
+// What the clouds are made of (sim/cloudKind.ts, docs/clouds.md "Kinds"): water cloud, dust storms
+// (desert worlds: from the ground up, soft and thin, in the sand's colour), or an acid deck
+// (volcanic worlds with thick air, Venus: high up, unbroken, pale yellow)
 const CK_WATER: i32 = 0;
 const CK_DUST: i32 = 1;
+const CK_ACID: i32 = 2;
 fn cloudKind() -> i32 { return i32(world.cloudC.w + 0.5); }
-// the layer's base, in deck heights (its top is at 1.05)
-fn cloudBaseK() -> f32 { return select(0.4, 0.0, cloudKind() == CK_DUST); }
+// the layer's base, in deck heights (its top is at 1.05): an acid deck 45–70 km up on a Venus
+fn cloudBaseK() -> f32 {
+  let k = cloudKind();
+  return select(select(0.4, 0.65, k == CK_ACID), 0.0, k == CK_DUST);
+}
 
 // Shapes stretched along the wind, which blows along the latitude circles (round the local y axis):
 // a point's longitude in the weather's frame is scaled by `s` (each latitude circle turned by its
@@ -195,5 +200,6 @@ fn cloudRaw(p: vec3f, oct: i32) -> f32 {
 // or so, the rest clear. (sim/clouds.ts cloudCoverOf: the same)
 fn cloudCover(raw: f32) -> f32 {
   if (cloudKind() == CK_DUST) { return smoothstep(0.18, 0.45, raw) * 0.9; }
+  if (cloudKind() == CK_ACID) { return 0.9 + 0.1 * smoothstep(-0.3, 0.3, raw); }
   return smoothstep(-0.2, 0.25, raw) * select(0.85, 0.95, world.wtype == 3);
 }

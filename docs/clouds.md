@@ -1,7 +1,7 @@
 # Clouds
 
 Earth-like and ocean worlds have a cloud deck of water cloud; desert worlds with air have dust
-storms (see Kinds below). The rest of this page is about water cloud unless it says otherwise. Its pattern is one per world, baked once into a
+storms, and volcanic worlds with thick air an acid deck (see Kinds below). The rest of this page is about water cloud unless it says otherwise. Its pattern is one per world, baked once into a
 cube map in the world's own frame (`cloudBake.wgsl`, from `clouds.wgsl cloudRaw`), and used three
 ways:
 
@@ -185,6 +185,18 @@ differ in where the layer is, how it's shaped, and its colour.
     storm the clear sky past it showed as a bright line along the horizon). The exposure opens up
     under it as under overcast.
   - No storms, lightning or cirrus.
+- **Acid** (volcanic worlds with thick air, over 5 bar: Venus): sulphuric-acid cloud.
+  - **Where:** the whole world (cover 0.9–1), high up: the layer from 0.65 to 1.05 deck heights,
+    the deck at 4.2 scale heights (45–70 km on Venus).
+  - **Shape:** one sheet, its top rolling a little (no towers), lightly eroded; a haze more than a
+    cloud, `ACID_THIN` (0.4) of a cloud's density (a few km of visibility in it).
+  - **Colour:** pale yellow. From afar fully opaque (at 95 %, the lava's glow showed through in
+    veins).
+  - **Under it:** the overcast murk, orange (the light reddened on its way down; in the deck's own
+    yellow over the dim ground, it was olive): Venus's dim orange day.
+  - The cold, thin-aired volcanic moons (an Io's sulphur-dioxide haze) have none.
+- **Every deck** is at most 1.5 % of the world's radius up (`deckHeight`; Venus's is 1.2 %): small
+  hot worlds' air has scale heights of 100+ km, and their acid deck was hundreds of km up.
 
 ## Next
 
