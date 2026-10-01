@@ -46,7 +46,7 @@ describe('giants', () => {
   it('can be flown down into, the air thickening under the face, to the crush depth', () => {
     const b = worlds.find((w) => w.type === WT.GasGiant)!;
     const a = atmoOf(b)!;
-    expect(crushDepth(a)).toBeCloseTo(3 * a.H);
+    expect(crushDepth(a)).toBeCloseTo(Math.log(100) * a.H); // (100 bar under a 1-bar face)
     expect(density(a, -a.H)).toBeCloseTo(density(a, 0) * Math.E, 6);
     expect(density(a, -10 * a.H)).toBeCloseTo(density(a, -crushDepth(a)), 6);
   });

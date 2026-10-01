@@ -1,6 +1,6 @@
 /* Turns game state into the display strings and flags the HUD shows. */
 import { pairSpec } from '../universe/binary';
-import { AU, FTL_CHARGE_TIME, JUMP_CHARGE_TIME, LY, JUMP_DEPART_TIME, NORMAL_ACC, NORMAL_BOOST, NORMAL_MAX, SHIP, ftlBurn, jumpCost } from '../constants';
+import { AU, FTL_CHARGE_TIME, HULL_P_MAX, JUMP_CHARGE_TIME, LY, JUMP_DEPART_TIME, NORMAL_ACC, NORMAL_BOOST, NORMAL_MAX, SHIP, ftlBurn, jumpCost } from '../constants';
 import { DEBUG, debugSpots } from '../debug/poses';
 import { fmtArea, fmtBar, fmtClock, fmtEnergy, fmtDist, fmtFlow, fmtMass, fmtPower, fmtSpeed, fmtSpeedText, fmtTime } from '../format';
 import type { Game } from '../Game';
@@ -264,7 +264,10 @@ function flight(g: Game): FlightView {
     const ha = oe.r - b.radius;
     if (a && ha < a.top) {
       const as = g.aero.body === b && g.aero.speed > 1 && !ship.landed ? ` · AIRSPEED ${fmtSpeedText(g.aero.speed)}` : '';
-      air = { text: `AIR ${fmtBar(pressure(a, ha) / 1e5)} · ${Math.round(airTemp(a, ha) - 273.15)} °C${as}`, warn: g.aero.heatW > 1e6 };
+      // (and how near the hull's pressure limit it is, from half of it; amber from 80 %)
+      const P = pressure(a, ha);
+      const lim = P > HULL_P_MAX * 0.5 ? ` · HULL LIMIT ${Math.round((P / HULL_P_MAX) * 100)} %` : '';
+      air = { text: `AIR ${fmtBar(P / 1e5)} · ${Math.round(airTemp(a, ha) - 273.15)} °C${as}${lim}`, warn: g.aero.heatW > 1e6 || P > HULL_P_MAX * 0.8 };
     }
     if (ship.landed) orbit = { text: `LANDED ON ${b.name.toUpperCase()}` };
     else if (ap && ap.type === 'hold' && ap.settled) orbit = { text: 'HOVERING ON THRUSTERS' };

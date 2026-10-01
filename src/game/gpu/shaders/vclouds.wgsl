@@ -122,25 +122,26 @@ fn density(P: vec3f) -> f32 {
   // towers: thicker cover rises higher, and ~8 km cells rise and fall, so the tops aren't one carpet
   let cell = 0.5 + 0.5 * tnoise(kw * 0.27 + 5.0 + tv * 2.8e-4);
   var top = clamp(mix(0.25, 1.0, cov) * (0.45 + 0.75 * cell), 0.15, 1.0);
-  // (an acid deck: one sheet, its top rolling a little, not towers; a giant's too, its tops at its
-  // face, 0.9 of the layer's depth, up to a quarter of a scale height over it)
+  // (an acid deck: one sheet, its top rolling a little, not towers)
   let acid = cloudKind() == CK_ACID;
   let giant = cloudKind() == CK_GIANT;
   if (acid) { top = 0.85 + 0.15 * cell; }
-  if (giant) { top = 0.86 + 0.14 * cell; }
   // storms (clouds.wgsl stormAt): towers up to the layer's top, under an anvil, a flat sheet spread
   // over the storm near the top (12–14 km on an Earth)
   let st = stormAt(lp, cov0);
   top = mix(top, 1.0, st * smoothstep(0.35, 0.6, cell));
-  // (a giant's tops crisp, over a couple of km: fading over the layer's upper half, 20 km on a
-  // giant, they were a featureless glow from above)
-  var profile = smoothstep(0.0, 0.08, h) * (1.0 - smoothstep(select(top * 0.5, top - 0.06, giant), top, h));
-  // (and two decks, as a Jupiter's are (ammonia over ammonium hydrosulphide), clear air between,
-  // ~11–16 km under the face, its floor and ceiling rolling: one 45 km sheet was a featureless fog
-  // all the way down)
+  var profile = smoothstep(0.0, 0.08, h) * (1.0 - smoothstep(top * 0.5, top, h));
+  // A giant's (docs/giants.md "Clouds"), in scale heights from its face (z; its deck is a quarter of
+  // one): its tops at the face, rolling from 0.13 under it to 0.26 over it, crisp (over 0.17: fading
+  // over the layer's upper half they were a featureless glow from above); and two decks, as a
+  // Jupiter's are (ammonia over ammonium hydrosulphide), clear air between, 0.57–0.84 under the face,
+  // its floor and ceiling rolling (one deck all the way down was a featureless fog)
   if (giant) {
-    let gw = 0.03 * tnoise(kw * 0.05 + 43.0);
-    profile *= 1.0 - smoothstep(0.56 + gw, 0.6 + gw, h) * (1.0 - smoothstep(0.7 - gw, 0.74 - gw, h));
+    let z = (length(Pc) - world.radius) / (world.cloudH * 4.0);
+    let topZ = -0.13 + 0.39 * cell;
+    let gw = 0.08 * tnoise(kw * 0.05 + 43.0);
+    profile = smoothstep(0.0, 0.08, h) * (1.0 - smoothstep(topZ - 0.17, topZ, z));
+    profile *= 1.0 - smoothstep(-0.95 + gw, -0.84 + gw, z) * (1.0 - smoothstep(-0.57 - gw, -0.46 - gw, z));
   }
   var base = cov * profile;
   // (its underside rising and falling, ~±1 km over tens of km, and its thickness patchy, so the
@@ -484,7 +485,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     // (a giant's lower deck is under the upper one, 7 km of cloud the short march toward the sun
     // doesn't reach through: lit as if it weren't there, it was a bright flat floor. A tenth gets
     // down, diffused)
-    if (cloudKind() == CK_GIANT) { light *= mix(0.1, 1.0, smoothstep(0.62, 0.72, h)); }
+    if (cloudKind() == CK_GIANT) { light *= mix(0.1, 1.0, smoothstep(-0.79, -0.51, (length(P - C) - world.radius) / (world.cloudH * 4.0))); }
     let tStep = exp(-dn * SIGMA * dt);
     S += T * light * cloudCol * (1.0 - tStep); // (× what they're made of: dust is the sand's colour)
     tSum += t * T * (1.0 - tStep);

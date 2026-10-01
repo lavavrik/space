@@ -22,6 +22,7 @@
  * surface it lasts minutes, not hours.
  */
 import type { Game } from '../Game';
+import { HULL_P_MAX } from '../constants';
 import { lr, mulberry32, rr } from '../lib/rng';
 import { THREE } from '../lib/three';
 import type { Body, World } from '../types';
@@ -140,10 +141,12 @@ export function atmoOf(b: Body): Atmo | null {
 }
 
 /**
- * How far under a giant's face (its cloud tops, 1 bar) you can go before you're crushed (m): 3 scale
- * heights, ~20 bar (sim/flight.ts collide). Its clouds go down to 2.5 (sim/cloudKind.ts).
+ * How far under the mean radius (a giant's face, its cloud tops) the air reaches the hull's limit,
+ * HULL_P_MAX (m): ln(100 bar / P0) scale heights, 4.6 under a giant's 1 bar (sim/flight.ts collide).
+ * A giant's clouds go down to 4.3 (sim/cloudKind.ts). 0 where it's past the limit at the mean radius
+ * already (none here: a Venus is 95 bar at most, and a valley a few km deep there is near the limit).
  */
-export const crushDepth = (a: Atmo) => 3 * a.H;
+export const crushDepth = (a: Atmo) => Math.max(0, a.H * Math.log(HULL_P_MAX / a.P0));
 
 /** Air pressure (Pa) at a height above the mean radius (under it too, down to a giant's crush depth). */
 export const pressure = (a: Atmo, h: number) => (h > a.top ? 0 : a.P0 * Math.exp(-Math.max(h, -crushDepth(a)) / a.H));

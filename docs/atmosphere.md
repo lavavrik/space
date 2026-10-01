@@ -28,6 +28,13 @@ Every world with air gets its own, generated from its seed (`makeAir`): a surfac
 
 Venydes 2 (a hot desert, 566 K, 0.45 g) used to get a fixed desert air of 0.25 kg/m³ with a 24 km scale height at 566 K, which is why it looked thick and heated the hull on the way down. Now it's a thin 13 mbar of CO₂: still hot and tall, but ~20× thinner.
 
+## Pressure
+
+The hull is rated to 100 bar (`HULL_P_MAX`). Past it, it's crushed (`sim/flight.ts collide`, at
+`crushDepth` under the mean radius: ln(100 bar / P0) scale heights). That's 4.6 scale heights into a
+giant (~75 km), and on the thickest Venus-like worlds (95 bar) the deepest valleys. The flight
+panel's AIR line shows how near it you are from half of it, amber from 80 %.
+
 ## Heat from the air
 
 - **Convection:** the hull trades heat with the air, ~15 W/m²K in still sea-level air, more in denser or faster air (`thermal.ts`). It works on the ground too (and under time warp there).

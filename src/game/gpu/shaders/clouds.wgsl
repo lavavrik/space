@@ -60,10 +60,11 @@ const CK_METHANE: i32 = 3;
 const CK_GIANT: i32 = 4; // (gas and ice giants: under their face, in the bands' colours, giant.wgsl)
 fn cloudKind() -> i32 { return i32(world.cloudC.w + 0.5); }
 // the layer's base, in deck heights (its top is at 1.05): an acid deck 45–70 km up on a Venus; a
-// giant's under its face, 2.5 scale heights down (its deck is 0.25 of one)
+// giant's under its face, 4.3 scale heights down (its deck is 0.25 of one), just over where the hull
+// gives (sim/atmosphere.ts crushDepth: 4.6)
 fn cloudBaseK() -> f32 {
   let k = cloudKind();
-  if (k == CK_GIANT) { return -10.0; }
+  if (k == CK_GIANT) { return -17.2; }
   return select(select(0.4, 0.65, k == CK_ACID), 0.0, k == CK_DUST);
 }
 

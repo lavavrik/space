@@ -1,5 +1,5 @@
 import { impact } from './damage';
-import { ARRIVE_FLUX, CRASH_SPEED, NORMAL_ACC, NORMAL_BOOST, NORMAL_MAX, RESPAWN_TIME, WT, fluxDist } from '../constants';
+import { ARRIVE_FLUX, CRASH_SPEED, HULL_P_MAX, NORMAL_ACC, NORMAL_BOOST, NORMAL_MAX, RESPAWN_TIME, WT, fluxDist } from '../constants';
 import { fmtDist } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
@@ -152,9 +152,15 @@ export function collide(g: Game, dt: number) {
     const d = rel.length();
     // cheap reject before sampling the terrain: above the highest peaks
     if (d > b.radius * 1.01 + 200 && ship.landed !== b) continue;
-    // (a giant has no surface: under its face, its clouds, you're crushed at crushDepth)
-    const air = b.kind !== 'star' && b.type >= WT.GasGiant ? atmoOf(b) : null;
-    const min = air ? b.radius - crushDepth(air) : surfaceRadius(b, ship.pos) + CLEARANCE;
+    // the hull's pressure limit (HULL_P_MAX, 100 bar): past it, it's crushed, in a giant's depths
+    // (no surface: its clouds go on down) or a Venus's deepest valleys
+    const giant = b.kind !== 'star' && b.type >= WT.GasGiant;
+    const air = b.kind !== 'star' ? atmoOf(b) : null;
+    if (air && d - b.radius <= -crushDepth(air)) {
+      destroyShip(g, `Crushed at ${Math.round(HULL_P_MAX / 1e5)} bar in ${giant ? 'the depths' : 'the air'} of ${b.name}${giant ? ' · gas giants have no surface' : ''}`, b);
+      return;
+    }
+    const min = giant ? -Infinity : surfaceRadius(b, ship.pos) + CLEARANCE;
     if (d >= min) {
       if (ship.landed === b && d > min + 20) ship.landed = null;
       continue;
@@ -168,11 +174,6 @@ export function collide(g: Game, dt: number) {
     if (b.kind === 'star') {
       ship.vel.add(bv);
       destroyShip(g, `Burned up in the photosphere of ${b.name}`, b);
-      return;
-    }
-    if (b.type >= WT.GasGiant) {
-      ship.vel.add(bv);
-      destroyShip(g, `Crushed in the depths of ${b.name} · gas giants have no surface`, b);
       return;
     }
     // a hard landing damages the hull, the harder the worse: a whole hull's worth at CRASH_SPEED

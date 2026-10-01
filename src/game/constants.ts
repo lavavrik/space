@@ -21,6 +21,8 @@ export const NORMAL_BOOST = 15000;
 
 /* Gravity and autopilot */
 export const CRASH_SPEED = 150; // m/s: faster than this into the ground destroys the ship
+/** The hull's pressure limit (Pa): 100 bar. Past it, it's crushed (sim/flight.ts collide). */
+export const HULL_P_MAX = 100e5;
 export const AP_ACC = NORMAL_ACC * 3; // autopilot may use full boost thrust
 export const AP_TAU = 1.2;
 /** The orbit autopilot takes an FTL leg when the orbit's entry point is farther than this (m). */
