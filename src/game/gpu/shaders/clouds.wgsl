@@ -158,6 +158,18 @@ fn flashAt(lp: vec3f, flashR: f32) -> f32 {
   return env * st * exp(-d * d / (10000.0 * 10000.0)) * STORM_FLASH;
 }
 
+// The glow of cities under the clouds at night (docs/clouds.md): their light scattered up through
+// the cloud, warm, by how populated the ground is below (city.wgsl cityPop, from the cube's coarse
+// ground height), where both suns are down. `pw`: a unit direction in the world's own frame. In
+// scene light (× exposure).
+fn cityGlowAt(pw: vec3f, L: vec3f, up: vec3f) -> vec3f {
+  if (world.city < 0.5 || world.terrA <= 0.0) { return vec3f(0.0); }
+  let night = smoothstep(0.05, -0.12, dot(up, L)) * select(1.0, 1.0 - smoothstep(-0.12, 0.05, dot(up, normalize(world.light2.xyz + vec3f(0.0, 1e-9, 0.0)))) * min(1.0, 4.0 * max(world.lightC2.r, max(world.lightC2.g, world.lightC2.b))), world.light2.w > 0.5);
+  if (night <= 0.0) { return vec3f(0.0); }
+  let g = textureSampleLevel(cloudTex, cloudSamp, pw, 0.0).g;
+  return vec3f(1.0, 0.72, 0.42) * 0.14 * cityPop(pw, g / world.terrA, abs(pw.y)) * night;
+}
+
 fn cloudRaw(p: vec3f, oct: i32) -> f32 {
   let s = world.seed;
   let cp = (p * 1.6 + vec3f(s * 1.7, s * 2.3, s * 0.9)) * 1.25;

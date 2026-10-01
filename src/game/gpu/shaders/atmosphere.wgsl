@@ -68,9 +68,29 @@ fn fs(in: Out) -> @location(0) vec4f {
   }
   sky += (vec3f(d1) + col2 * d2) * k * atTrans;
   keep *= 1.0 - max(step(1e-4, d1), step(1e-4, d2));
+  // airglow: a thin shell of faint green light high in the air (oxygen, ~95 km on Earth: here at
+  // 85 % of the way to the air's top), at night: seen edge-on its path through the shell is ~80×
+  // its thickness, so the limb of the night side carries a faint green line, as from orbit
+  if (world.ozone > 0.0) {
+    let rA = mix(atR(), world.atTop, 0.85);
+    let th = (world.atTop - atR()) * 0.04;
+    let pIn = shellPath(b, cg + atR() * atR(), rA + th, s.y) - shellPath(b, cg + atR() * atR(), rA - th, s.y);
+    let upA = normalize(dir * clamp(b, s.x, s.y) - C);
+    let nA = smoothstep(-0.05, -0.2, dot(upA, normalize(world.light.xyz)));
+    sky += vec3f(0.35, 1.0, 0.45) * 9e-8 * pIn * nA * min(world.ozone, 1.0);
+  }
   // (twilight: the eye adapted, GpuRenderer; the sky isn't × exposure otherwise)
   sky *= frame.twilight;
   return vec4f(sky, keep);
+}
+
+// how far the ray (b = dir·C, CC = |C|², the camera inside nothing in particular) runs inside the
+// sphere of radius r, up to tMax
+fn shellPath(b: f32, CC: f32, r: f32, tMax: f32) -> f32 {
+  let disc = b * b - (CC - r * r);
+  if (disc <= 0.0) { return 0.0; }
+  let q = sqrt(disc);
+  return max(min(b + q, tMax) - max(b - q, 0.0), 0.0);
 }
 
 // A sun's disc at `dir` (its centre P, camera-relative, radius r): 0 off it, limb-darkened as

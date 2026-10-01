@@ -9,6 +9,7 @@
 // #include noise
 // #include noise3d
 // #include terrain
+// #include city
 // #include clouds
 
 struct Bake {

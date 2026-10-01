@@ -64,6 +64,7 @@ Venydes 2 (a hot desert, 566 K, 0.45 g) used to get a fixed desert air of 0.25 k
   - **The eye adapts** (`render/exposure.ts twilightBoost`, with auto-exposure off): up to 4× exposure while the higher sun is between ~4° above and ~8° below the horizon, back to 1 by ~12° below, in the air only (gone by 5 scale heights up). Also `frame.twilight`, for the sky and the flat cloud deck, which aren't × exposure.
   - **Clouds** at sunset are lit by the sun as long as it reaches them (reddened by the air): an extra dimming by the sun's height made them dull grey (`vclouds.wgsl` sunUp; the sky's light on them keeps it).
   - The tone map keeps hue up to ~3× white (docs/post.md), or a sunset's orange went yellow.
+- **Airglow** (`atmosphere.wgsl`, on worlds with oxygen): a thin shell of faint green light high in the air (85 % of the way to its top: ~95 km on Earth, 4 % of the air's depth thick), at night. Seen edge-on, a ray's path through it is ~80× its thickness (`shellPath`), so the limb of the night side carries a faint green line, as from orbit.
 - **Ground:** the planet shader applies the same model to the air between the camera and the ground (haze; per vertex on terrain chunks, per pixel on the far sphere). It also reddens and dims sunlight through the air, and adds a little skylight in shadows by day.
 
 ## Clouds (`cloudLayer.frag.glsl`, `clouds.glsl`)

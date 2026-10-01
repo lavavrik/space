@@ -8,6 +8,7 @@ diagnostic(off, derivative_uniformity);
 // #include world
 // #include noise
 // #include noise3d
+// #include city
 // #include clouds
 // #include ringband
 // #include shadow
@@ -102,7 +103,8 @@ fn fs(in: Out) -> FragOut {
   }
   // (lightning in a storm, clouds.wgsl flashAt: from orbit, on the night side, flickering glows)
   let flash = vec3f(0.75, 0.82, 1.0) * flashAt(p * world.cloudR, world.radius + world.cloudH * 0.7) * cov * (1.0 - 0.75 * smoothstep(-0.15, 0.3, dot(n, L)));
-  let col = vec3f(0.97) * light * select(1.0, 0.3 + 0.55 * (1.0 - cov), below) + flash;
+  // (and cities' light from below, scattered up through it at night: clouds over a city glow)
+  let col = vec3f(0.97) * light * select(1.0, 0.3 + 0.55 * (1.0 - cov), below) + flash + cityGlowAt(pw, L, n) * (0.4 + 0.6 * cov);
   let clip = frame.viewProj * vec4f(P, 1.0);
   return FragOut(vec4f((col * atTrans + haze) * frame.twilight, cov * 0.95 * (1.0 - world.deckHide)), clamp(clip.z / clip.w, 0.0, 1.0));
 }

@@ -15,6 +15,7 @@
 // #include world
 // #include noise
 // #include noise3d
+// #include city
 // #include clouds
 // #include atmo
 // #include ringband
@@ -333,6 +334,9 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   let sunUp = smoothstep(-0.15, 0.0, dot(normalize(mid), L));
   // (twilight's light from the sky over them, atmo.wgsl atTwilight: blue-hour clouds aren't black)
   let twL = atTwilight(normalize(mid), L, normalize(mid)) * 2.0;
+  // (cities' light from below at night, clouds.wgsl cityGlowAt: taken once, at the ray's middle,
+  // stronger low in the cloud)
+  let cityL = cityGlowAt(toLocalM() * normalize(mid), L, normalize(mid)) * 2.0;
   // a pair's second sun (docs/binaries.md): its light through the air in its colour, a cheaper march
   // toward it (3 steps), the same scattering (its god rays above)
   let two = world.light2.w > 0.5;
@@ -401,7 +405,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     // dimmed twice, clouds at sunset were dull grey instead of glowing; only the sky's light is)
     // (the light diffused through the cloud, which is all its underside gets: 0.2 at the base. At
     // 0.05 an overcast's base was near black from under it, where it's a mid grey)
-    var light = sunCol * (sun * 0.6 * sunUp + 0.2 * (0.55 + 0.45 * h) * dayK) * 0.97 + twL * (0.6 + 0.4 * h) + lamp + flash + vec3f(0.55, 0.7, 1.0) * 0.05 * (1.0 - dayK);
+    var light = sunCol * (sun * 0.6 * sunUp + 0.2 * (0.55 + 0.45 * h) * dayK) * 0.97 + twL * (0.6 + 0.4 * h) + cityL * (1.0 - 0.7 * h) + lamp + flash + vec3f(0.55, 0.7, 1.0) * 0.05 * (1.0 - dayK);
     if (two) {
       var od2 = 0.0;
       var ls2 = 240.0;
