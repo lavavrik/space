@@ -43,6 +43,8 @@ No buffers: a grain's place is a hash of its index. Up to 8 fields a frame, one 
 
 ## Rain (`gpu/effects.ts rain`)
 
+Snow where the ground is snow (by latitude, from ~0.78 of the way to the pole, as planet.wgsl's polar ice): slow white flakes (1.2 m/s), bigger, brighter, each drifting on its own, with a short smear.
+
 - **When:** under thick cloud on an Earth-like or ocean world, below the cloud base. That's over 85 % of the most cover the world has (0.85 on an Earth-like world, 0.95 on an ocean one), overhead by the cloud map. It's heavier the thicker the cover.
 - **What:** a 40 m box of streaks round you falling at 9 m/s, each drawn 0.08 s long, cool grey.
 - **How it falls:** the fall is in the field's anchor (the camera's place in the box's repeating space, minus the fall so far, in doubles). The shader's own clock is too coarse at large times to move them smoothly.

@@ -368,11 +368,26 @@ export class EffectsLayer {
     const full = cloudCoverAt(b, up, g.simTime) / (b.type === WT.Ocean ? 0.95 : 0.85);
     const k = THREE.MathUtils.smoothstep(full, 0.85, 0.98);
     if (k <= 0.01) return;
-    const fall = 9;
+    // snow where the ground is snow (planet.wgsl: the polar ice from ~0.8 of the way to the pole,
+    // by latitude here): slow white flakes drifting about, not rain
+    const lat = Math.abs(up.dot(new THREE.Vector3(b.axis.x, b.axis.y, b.axis.z).normalize()));
+    const snowing = lat > 0.78;
+    const fall = snowing ? 1.2 : 9;
     const at = g.ship.pos.clone().addScaledVector(up, fall * (g.simTime % 1e5));
-    // (cool grey, lit by the overcast; streaks 0.08 s long)
-    const c = 0.5 * k;
-    px.field({ mode: 'wrap', at, size: 40, count: Math.round(9000 * k), seed: 21, grain: -2 * pr, color: [c, c * 1.05, c * 1.15], streak: up.clone().multiplyScalar(fall * 0.08) });
+    // (rain: cool grey, lit by the overcast, streaks 0.08 s long; snow: brighter, bigger, a short
+    // smear, each flake drifting on its own)
+    const c = (snowing ? 0.8 : 0.5) * k;
+    px.field({
+      mode: 'wrap',
+      at,
+      size: snowing ? 30 : 40,
+      count: Math.round((snowing ? 6000 : 9000) * k),
+      seed: 21,
+      grain: (snowing ? -3 : -2) * pr,
+      color: [c, c * 1.03, c * 1.08],
+      streak: up.clone().multiplyScalar(fall * (snowing ? 0.05 : 0.08)),
+      drift: snowing ? 0.6 : 0,
+    });
   }
 
   private updateGrains(g: Game, px: Particles, pr: number, dt: number) {

@@ -360,6 +360,7 @@ fn fs(in: Out) -> @location(0) vec4f {
   var elev = 0.0;
   var pop = 0.0;
   var seaDepth = 1e9; // (m: the water's depth here, for the surf)
+  var snow = 0.0; // (its share here: blue in shade, sparkling in the sun)
   let A = world.pa.rgb;
   let B = world.pb.rgb;
   let C = world.pc.rgb;
@@ -398,7 +399,8 @@ fn fs(in: Out) -> @location(0) vec4f {
       let d = sin((p.x + p.z) * 90.0 + h * 14.0) * 0.5 + 0.5;
       col = mix(A, B, sm(-0.4, 0.5, h));
       col = mix(col, C, d * 0.12 + sm(0.35, 0.8, h2) * 0.4);
-      col = mix(col, vec3f(0.92), sm(0.9, 0.96, lat + h * 0.05));
+      snow = sm(0.9, 0.96, lat + h * 0.05);
+      col = mix(col, vec3f(0.92), snow);
     } else if (seaOn) {
       if (h < world.sea) {
         let dep = clamp((world.sea - h) * 4.0, 0.0, 1.0);
@@ -414,9 +416,11 @@ fn fs(in: Out) -> @location(0) vec4f {
         if (world.city > 0.5) { pop = cityPop(p, e, lat); }
         col = mix(C, D, sm(0.12, 0.55, e + h2 * 0.12));
         col = mix(col, C * 0.7 + vec3f(0.18, 0.15, 0.08), sm(0.2, 0.6, h2) * 0.3);
-        col = mix(col, vec3f(0.9), sm(0.62, 0.75, e));
+        snow = sm(0.62, 0.75, e);
+        col = mix(col, vec3f(0.9), snow);
       }
       let ice = sm(0.8, 0.86, lat + h * 0.1);
+      snow = max(snow, ice);
       col = mix(col, vec3f(0.93, 0.95, 1.0), ice);
       spec *= 1.0 - ice;
     } else if (ty == 4) {
@@ -436,7 +440,8 @@ fn fs(in: Out) -> @location(0) vec4f {
   // the ground up close: patches, rock on steep ground, stones, grain and small bumps
   if (terr && spec <= 0.0 && ty < 6 && !dark) {
     let gd = groundDetail(col, N, normalize(in.wp - world.atC.xyz), in.wp, fw, ty == 2 || ty == 3);
-    col = gd.col;
+    // (mostly not on snow: its stones and soil patches read as dark spots scattered over it)
+    col = mix(gd.col, col, snow * 0.85);
     N = gd.N;
   }
   ndl = dot(N, L);
@@ -524,7 +529,28 @@ fn fs(in: Out) -> @location(0) vec4f {
   // overcast night isn't pitch black (it was 0.0002)
   let night2 = 1.0 - smoothstep(-0.2, 0.05, ndl20) * up2;
   let nightAmb = NIGHT_AMB * vec3f(0.55, 0.7, 1.0) * (1.0 - smoothstep(-0.2, 0.05, ndl0)) * night2;
-  col = col * (diff * sunC + diff2 * sunC2 + sky + sky2 + 0.0002 + nightAmb) * (1.0 - waterF) + waterAdd + lamps;
+  // Snow and rain (docs/terrain.md):
+  //   - snow in shade is lit by the blue sky alone: bluer;
+  //   - wet ground where it's raining (the cover overhead near its most, as gpu/effects.ts rain):
+  //     darker, as soaked soil and rock are;
+  //   - snow sparkles: tiny ice facets catching the sun, ~25 cm apart in the near-camera frame
+  //     (world.waveO, precise), shifting as you move (the noise read moves with the view), only
+  //     where they're over a pixel.
+  let skyT = mix(vec3f(1.0), vec3f(0.72, 0.88, 1.25), snow);
+  if (terr && ty < 6 && spec <= 0.0 && !dark && (ty == 2 || ty == 3)) {
+    let covUp = cloudCover(cloudMap(p)) / select(0.85, 0.95, ty == 3);
+    col *= 1.0 - 0.35 * smoothstep(0.8, 0.98, covUp) * (1.0 - snow);
+  }
+  col = col * (diff * sunC + diff2 * sunC2 + (sky + sky2) * skyT + 0.0002 + nightAmb) * (1.0 - waterF) + waterAdd + lamps;
+  if (terr && snow > 0.01 && !dark) {
+    let vis = 1.0 - smoothstep(0.06, 0.25, fw * world.radius);
+    if (vis > 0.0) {
+      let q = toLocal3() * in.wp + world.waveO.xyz;
+      let nS = tnoise(q * 4.0 + toLocal3() * V * 5.0);
+      let Hs = normalize(L + V);
+      col += sunC * (smoothstep(0.29, 0.33, nS) * pow(max(dot(N, Hs), 0.0), 4.0) * snow * vis * 6.0);
+    }
+  }
   if (pop > 0.0) {
     let night = sm(0.1, -0.08, ndl0) * (1.0 - sm(-0.08, 0.1, ndl20) * up2);
     if (night > 0.0) {

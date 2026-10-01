@@ -68,6 +68,13 @@ The old shader chain `sp = 1.6·dir + seedOffset`, multiplied by 2.03 per octave
 - **Shadows:** each terrain vertex marches 12 steps toward the sun over the height field, using up to 9 octaves (mountains and big craters). The steps grow from 2 vertex spacings to 60 relief amplitudes (a 12 km peak's shadow at a 3° sun). The result is a soft shadow term (`vShadow`, the ray's closest clearance against the distance travelled). It's per vertex, so shadows are as sharp as the chunk is detailed, about the same on screen near and far. The far sphere has none.
 - **Clouds** are painted on the surface, so they fade out below 25 km (`uCamAlt`) instead of lying on the mountains.
 
+## Snow and rain (`planet.wgsl`)
+
+- **Snow in shade** is lit by the blue sky alone: the sky's light on it is bluer (0.72, 0.88, 1.25 × by how much is snow).
+- **Snow sparkles:** tiny ice facets catching the sun, ~25 cm apart in the near-camera frame (`world.waveO`, precise), the noise read shifting with the view so they twinkle as you move, only where they're over a pixel.
+- **Ground detail on snow:** mostly not (its stones and soil patches read as dark spots scattered over it).
+- **Wet ground** where it's raining (the cover overhead near its most, as the rain itself): darker by up to 35 %, as soaked soil and rock are. Not on snow.
+
 ## Physics
 
 - **Collisions:** `flight.ts collide` uses `surfaceRadius` under the ship (+30 m clearance). The contact normal is still radial.
