@@ -131,7 +131,8 @@ export const POST_FLOATS = 20 + 4 * MAX_WARPS;
  * The space warps on screen this frame (tonemap.wgsl warpAt; docs/post.md), in place of the white
  * flashes FTL entries and exits used to be: yours, centred on the view (g.warpFx: engaging,
  * dropping out, arriving from hyperspace), and other ships' (npc.flashAt), sized by how far off
- * they are (a bubble ~25 km across, at least a few % of the screen), the nearest first.
+ * they are (a bubble ~25 km across, at least a seventh of the screen's height, so even a far one
+ * reads), the nearest first.
  */
 function warpsOf(g: Game, vp: THREE.Matrix4, out: Float32Array) {
   const list: [number, number, number, number, number][] = []; // x, y, size, age, distance
@@ -144,7 +145,7 @@ function warpsOf(g: Game, vp: THREE.Matrix4, out: Float32Array) {
     const d = r.length();
     const q = new THREE.Vector4(r.x, r.y, r.z, 0).applyMatrix4(vp);
     if (q.w <= 0 || occluder(g.cur.bodies, g.ship.pos, npc.pos)) continue;
-    const size = Math.min(0.8, Math.max(0.05, ((25e3 / d) * pxPerRad) / g.view.H));
+    const size = Math.min(0.8, Math.max(0.14, ((25e3 / d) * pxPerRad) / g.view.H));
     list.push([(q.x / q.w) * 0.5 + 0.5, 0.5 - (q.y / q.w) * 0.5, size, u, d]);
   }
   list.sort((a, b) => a[4] - b[4]);
