@@ -100,7 +100,9 @@ fn fs(in: Out) -> FragOut {
     light += clamp(dot(n, L2) * 1.05 + 0.05, 0.0, 1.0) * atSunlight(P, L2) * world.lightC2.rgb;
     haze += atInscatter(dir * atSpan(dir).x, P, L2, 5) * world.lightC2.rgb;
   }
-  let col = vec3f(0.97) * light * select(1.0, 0.3 + 0.55 * (1.0 - cov), below);
+  // (lightning in a storm, clouds.wgsl flashAt: from orbit, on the night side, flickering glows)
+  let flash = vec3f(0.75, 0.82, 1.0) * flashAt(p * world.cloudR, world.radius + world.cloudH * 0.7) * cov * (1.0 - 0.75 * smoothstep(-0.15, 0.3, dot(n, L)));
+  let col = vec3f(0.97) * light * select(1.0, 0.3 + 0.55 * (1.0 - cov), below) + flash;
   let clip = frame.viewProj * vec4f(P, 1.0);
   return FragOut(vec4f((col * atTrans + haze) * frame.twilight, cov * 0.95 * (1.0 - world.deckHide)), clamp(clip.z / clip.w, 0.0, 1.0));
 }

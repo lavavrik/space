@@ -103,9 +103,14 @@ fn density(P: vec3f) -> f32 {
   if (cov < 0.02) { return 0.0; }
   // towers: thicker cover rises higher, and ~8 km cells rise and fall, so the tops aren't one carpet
   let cell = 0.5 + 0.5 * tnoise(kw * 0.27 + 5.0 + tv * 2.8e-4);
-  let top = clamp(mix(0.25, 1.0, cov) * (0.45 + 0.75 * cell), 0.15, 1.0);
+  var top = clamp(mix(0.25, 1.0, cov) * (0.45 + 0.75 * cell), 0.15, 1.0);
+  // storms (clouds.wgsl stormAt): towers up to the layer's top, under an anvil, a flat sheet spread
+  // over the storm near the top (12–14 km on an Earth)
+  let st = stormAt(lp, cov0);
+  top = mix(top, 1.0, st * smoothstep(0.35, 0.6, cell));
   let profile = smoothstep(0.0, 0.08, h) * (1.0 - smoothstep(top * 0.5, top, h));
-  let base = cov * profile;
+  var base = cov * profile;
+  if (st > 0.0) { base = max(base, st * 0.85 * smoothstep(0.74, 0.84, h) * (1.0 - smoothstep(0.94, 1.0, h))); }
   if (base < 0.01) { return 0.0; }
   // erosion: billows a couple of km across and finer wisps (drifting with the wind), strongest at
   // the edges, so what's left is lumpy cauliflower rather than fog
@@ -378,13 +383,16 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     // plus, near you, your own lamps scattered in the cloud (the path from them is the path from the
     // camera: × T again), and at night the night's own faint light
     let lamp = vec3f(1.0, 0.97, 0.92) * shipLightAt(P) * T * 0.08;
+    // (lightning, inside a storm: clouds.wgsl flashAt, in the weather's frame)
+    // (by day a quarter as bright against the sunlit cloud: from orbit, blazing white blobs on it)
+    let flash = vec3f(0.75, 0.82, 1.0) * flashAt(cloudDir(toLocalM() * (P - C)), world.radius + world.cloudH * 0.7) * (1.0 - 0.75 * dayK);
     // (the sunlight's share in the shadows of what's near: a sky station's on the clouds under it)
     sun *= shadowAtPoint(P);
     // (the sun's own light isn't dimmed by dayK: sunCol already fades and reddens as it sets, and
     // dimmed twice, clouds at sunset were dull grey instead of glowing; only the sky's light is)
     // (the light diffused through the cloud, which is all its underside gets: 0.2 at the base. At
     // 0.05 an overcast's base was near black from under it, where it's a mid grey)
-    var light = sunCol * (sun * 0.6 * sunUp + 0.2 * (0.55 + 0.45 * h) * dayK) * 0.97 + twL * (0.6 + 0.4 * h) + lamp + vec3f(0.55, 0.7, 1.0) * 0.05 * (1.0 - dayK);
+    var light = sunCol * (sun * 0.6 * sunUp + 0.2 * (0.55 + 0.45 * h) * dayK) * 0.97 + twL * (0.6 + 0.4 * h) + lamp + flash + vec3f(0.55, 0.7, 1.0) * 0.05 * (1.0 - dayK);
     if (two) {
       var od2 = 0.0;
       var ls2 = 240.0;

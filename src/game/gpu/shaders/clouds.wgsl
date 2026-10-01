@@ -103,6 +103,56 @@ fn weatherCover(lp: vec3f, cov0: f32, res: f32) -> Weather {
   return Weather(mix(w.cov, w2.cov, b), select(w.kw, w2.kw, b > 0.5));
 }
 
+// Storms (docs/clouds.md): in the thickest weather, areas a few hundred km across where the cloud
+// towers up to the layer's top and spreads into an anvil, and lightning flashes inside it. `lp`: a
+// point in the weather's frame (m); `cov0`: the cube's cover there. 0…1.
+fn stormAt(lp: vec3f, cov0: f32) -> f32 {
+  return smoothstep(0.7, 0.85, cov0) * smoothstep(0.2, 0.32, tnoise(lp * 5e-6 + 71.0));
+}
+// Lightning: the storms are cut into STORM_CELL cells (a 3D grid through the world), each with a
+// flash point at mid-cloud height (FLASH_R from the centre); every 0.8 s a cell flashes with a 1 in
+// 7 chance (if it's in a storm), flickering for a quarter of that, lighting the cloud round its
+// point (a Gaussian, 10 km; from orbit, at 3 and 7 km, they were too small and faint to see). Only a point's own cell counts (its glow is gone by the cell's edge).
+// Its clock is world.waveO.w: the time wrapped to an hour, precise (the sim's own is in steps of
+// 0.25 s). Returns the flash's light at lp (×, with STORM_FLASH, the sun's at full).
+const STORM_CELL: f32 = 60000.0;
+const STORM_FLASH: f32 = 8.0;
+// (an integer hash, PCG-style: sin of large arguments, the usual shader hash, is too imprecise on
+// GPUs and came out nearly constant, so no cell ever flashed)
+fn cloudHashU(c: vec3i, s: u32) -> f32 {
+  var v = bitcast<vec3u>(c) * 1664525u + vec3u(1013904223u, 2654435769u, s * 747796405u + 1u);
+  v.x += v.y * v.z;
+  v.y += v.z * v.x;
+  v.z += v.x * v.y;
+  v ^= v >> vec3u(16u);
+  v.x += v.y * v.z;
+  v.y += v.z * v.x;
+  v.z += v.x * v.y;
+  return f32(v.x & 0xffffffu) / 16777216.0;
+}
+fn flashAt(lp: vec3f, flashR: f32) -> f32 {
+  let cell = floor(lp / STORM_CELL);
+  let ci = vec3i(cell);
+  let h0 = cloudHashU(ci, 0u);
+  let tt = world.waveO.w / 0.8 + h0 * 97.0;
+  let slot = floor(tt);
+  if (cloudHashU(ci, 7u + u32(slot)) < 0.85) { return 0.0; }
+  let ph = tt - slot;
+  let env = select(0.0, (0.55 + 0.45 * sin(ph * 90.0 + h0 * 6.0)) * (1.0 - ph * 3.0), ph < 0.33);
+  if (env <= 0.0) { return 0.0; }
+  // (its point within the middle tenth of the cell: ≥ 27 km from its edges, where its glow is gone)
+  let c = normalize((cell + 0.45 + 0.1 * vec3f(h0, cloudHashU(ci, 1u), cloudHashU(ci, 2u))) * STORM_CELL) * flashR;
+  // (cloudMap takes the world's own frame and turns it to the weather's: back from it, the angle's
+  // inverse)
+  let a = world.time * CLOUD_WIND;
+  let cw = normalize(c);
+  let cov0 = cloudCover(cloudMap(vec3f(cos(a) * cw.x + sin(a) * cw.z, cw.y, -sin(a) * cw.x + cos(a) * cw.z)));
+  let st = stormAt(c, cov0);
+  if (st <= 0.0) { return 0.0; }
+  let d = length(lp - c);
+  return env * st * exp(-d * d / (10000.0 * 10000.0)) * STORM_FLASH;
+}
+
 fn cloudRaw(p: vec3f, oct: i32) -> f32 {
   let s = world.seed;
   let cp = (p * 1.6 + vec3f(s * 1.7, s * 2.3, s * 0.9)) * 1.25;
