@@ -230,6 +230,35 @@ fn waterWaves(wp: vec3f, fw: f32) -> vec4f {
   return vec4f(g, seen);
 }
 
+// Climate on Earth-like and ocean worlds' land (docs/terrain.md). `e`: height over the sea (terrain
+// units, ~0.6 at the snow line); `lat`: |sine of latitude|.
+//   - warmth: falling with latitude and height;
+//   - wetness: a continent-scale pattern, less in dry belts ~25–35° from the equator (where the
+//     world's air sinks: its deserts), more near the coasts;
+//   - the cover: desert / steppe / grassland where it's dry, savanna / forest / jungle where wet,
+//     tundra and taiga where cold.
+fn landTemp(e: f32, lat: f32) -> f32 { return 1.0 - smoothstep(0.1, 0.9, lat) - e * 0.9; }
+fn landMoist(p: vec3f, e: f32, lat: f32, seed: f32) -> f32 {
+  // (continents' climates ~2,500 km across, regions ~500 km, and patches ~100 km: by the first alone
+  // a view from the ground was one cover to the horizon)
+  let m = 0.5 + 0.35 * snoise(p * 2.6 + vec3f(seed * 1.9, 7.0, seed)) + 0.2 * snoise(p * 11.0 + vec3f(2.0, seed, 5.0)) + 0.12 * snoise(p * 48.0 + vec3f(seed, 3.0, 1.0));
+  let belt = exp(-pow((lat - 0.5) / 0.13, 2.0));
+  return m - 0.4 * belt + 0.25 * (1.0 - smoothstep(0.0, 0.1, e));
+}
+fn landClimate(p: vec3f, e: f32, lat: f32, seed: f32) -> vec3f {
+  let t = landTemp(e, lat);
+  let m = landMoist(p, e, lat, seed);
+  let cool = smoothstep(0.75, 0.35, t); // (0 hot … 1 temperate)
+  let dry = mix(vec3f(0.78, 0.64, 0.43), vec3f(0.56, 0.53, 0.34), cool); // desert … steppe
+  let mid = mix(vec3f(0.55, 0.5, 0.27), vec3f(0.33, 0.42, 0.2), cool); // savanna … grassland
+  let wet = mix(vec3f(0.1, 0.25, 0.08), vec3f(0.15, 0.27, 0.14), cool); // jungle … forest
+  var c = mix(dry, mid, smoothstep(0.15, 0.4, m));
+  c = mix(c, wet, smoothstep(0.45, 0.7, m));
+  // cold: taiga where it's wet, tundra where not
+  let taiga = mix(vec3f(0.45, 0.43, 0.37), vec3f(0.17, 0.24, 0.17), smoothstep(0.3, 0.6, m));
+  return mix(c, taiga, smoothstep(0.3, 0.05, t));
+}
+
 // The ground up close (docs/terrain.md): what the terrain's octaves can't give a metre-scale view.
 // In the near-camera frame the waves use (world.waveO: small, precise numbers), so every length's
 // noise period (8 ×) divides worlds.ts WAVE_PERIOD. Each layer fades in only where it's over a few
@@ -416,8 +445,23 @@ fn fs(in: Out) -> @location(0) vec4f {
         if (world.city > 0.5) { pop = cityPop(p, e, lat); }
         col = mix(C, D, sm(0.12, 0.55, e + h2 * 0.12));
         col = mix(col, C * 0.7 + vec3f(0.18, 0.15, 0.08), sm(0.2, 0.6, h2) * 0.3);
-        snow = sm(0.62, 0.75, e);
+        // climate (docs/terrain.md): the land's cover by how warm and how wet it is, blended over the
+        // world's palette (two thirds), so its own character stays
+        let cl = landClimate(p, e, lat, seed);
+        col = mix(col, cl, 0.65 * (1.0 - sm(0.35, 0.6, e)));
+        snow = max(sm(0.62, 0.75, e), sm(0.05, -0.12, landTemp(e, lat)) * 0.85);
         col = mix(col, vec3f(0.9), snow);
+        // lakes: in low, flat basins where the land's wettest, still water (as the sea's, a few metres
+        // deep; the geometry's the land's there, so only small and flat)
+        let lake = sm(0.38, 0.41, snoise(p * 60.0 + vec3f(seed * 2.7, 4.0, 9.0)) + 0.2 * snoise(p * 220.0 + 3.0)) * sm(0.03, 0.01, e) * sm(0.15, 0.35, landMoist(p, e, lat, seed) - 0.4);
+        if (lake > 0.5) {
+          // (the sea's colour a few tens of metres down: darker than the sea, they stood out from
+          // orbit as dark blue patches on the land)
+          col = mix(B, A, 0.5);
+          spec = 1.0;
+          seaDepth = 14.0;
+          col = mix(col, vec3f(0.1, 0.42, 0.45), 1.0 - smoothstep(0.0, 25.0, seaDepth));
+        }
       }
       let ice = sm(0.8, 0.86, lat + h * 0.1);
       snow = max(snow, ice);

@@ -68,6 +68,16 @@ The old shader chain `sp = 1.6·dir + seedOffset`, multiplied by 2.03 per octave
 - **Shadows:** each terrain vertex marches 12 steps toward the sun over the height field, using up to 9 octaves (mountains and big craters). The steps grow from 2 vertex spacings to 60 relief amplitudes (a 12 km peak's shadow at a 3° sun). The result is a soft shadow term (`vShadow`, the ray's closest clearance against the distance travelled). It's per vertex, so shadows are as sharp as the chunk is detailed, about the same on screen near and far. The far sphere has none.
 - **Clouds** are painted on the surface, so they fade out below 25 km (`uCamAlt`) instead of lying on the mountains.
 
+## Climate (`planet.wgsl landClimate`)
+
+On Earth-like and ocean worlds' land, the cover follows how warm and how wet it is, blended over the world's palette (two thirds, less on the highest ground), so each world keeps its own character:
+
+- **Warmth** falls with latitude and height (`landTemp`).
+- **Wetness** (`landMoist`): continents' climates ~2,500 km across, regions ~500 km, patches ~100 km (by the first alone a view from the ground was one cover to the horizon); less in dry belts ~25–35° from the equator (where the air sinks: the deserts); more near the coasts.
+- **The cover:** desert, steppe, grassland where it's dry; savanna, forest, jungle where it's wet; tundra and taiga where it's cold. Snow where it's cold enough as well as high enough.
+- **Lakes:** in low, flat, wet basins, small (tens of km at most), still water in the sea's colour a few tens of metres down, reflecting as the sea does. The geometry is the land's there, so only where it's low and flat. (Darker than the sea, the first ones stood out from orbit as dark blue patches.)
+- Not yet: rivers (a heightfield shader has no flow to follow).
+
 ## Snow and rain (`planet.wgsl`)
 
 - **Snow in shade** is lit by the blue sky alone: the sky's light on it is bluer (0.72, 0.88, 1.25 × by how much is snow).
