@@ -2,7 +2,7 @@
 import { pairSpec } from '../universe/binary';
 import { AU, FTL_CHARGE_TIME, JUMP_CHARGE_TIME, LY, JUMP_DEPART_TIME, NORMAL_ACC, NORMAL_BOOST, NORMAL_MAX, SHIP, ftlBurn, jumpCost } from '../constants';
 import { DEBUG, debugSpots } from '../debug/poses';
-import { fmtArea, fmtClock, fmtEnergy, fmtDist, fmtFlow, fmtMass, fmtPower, fmtSpeed, fmtSpeedText, fmtTime } from '../format';
+import { fmtArea, fmtBar, fmtClock, fmtEnergy, fmtDist, fmtFlow, fmtMass, fmtPower, fmtSpeed, fmtSpeedText, fmtTime } from '../format';
 import type { Game } from '../Game';
 import type { Station } from '../types';
 import { THREE } from '../lib/three';
@@ -21,6 +21,7 @@ import { MASS_LOCK_K, dropAlt, massLock } from '../sim/ftl';
 import { ringFrameOf } from '../sim/frame';
 import { AUTOSAVE_S, ago } from '../save';
 import { surfaceDist, surfaceRadius } from '../sim/terrain';
+import { airTemp, atmoOf, pressure } from '../sim/atmosphere';
 import { beltLimit, surfaceLimit } from '../sim/flight';
 import { TEMP, nextLimit } from '../sim/thermal';
 import { BATTERIES, MODULES, PUMP_ON_ABOVE, type BatteryModule, RADIATOR_MAX_ACC, moduleLabel, outfitMass, pumpFitted, radiatorsFitted, type Module } from '../outfit/catalog';
@@ -196,11 +197,11 @@ function flight(g: Game): FlightView {
   // in hyperspace: just the transit, none of the local flight readouts
   if (jump && jump.phase === 'tunnel') {
     const st = transitState(jump);
-    return { mode, modeClass, speed, unit, barFrac: st.u, barFtl: true, barLabel: 'TRANSIT', barValue: `${st.left.toFixed(1)} ly to go`, alt: null, orbit: null, pills: [] };
+    return { mode, modeClass, speed, unit, barFrac: st.u, barFtl: true, barLabel: 'TRANSIT', barValue: `${st.left.toFixed(1)} ly to go`, alt: null, orbit: null, air: null, pills: [] };
   }
   // accelerating out of the system: the speed readout climbs through the units, km/s to c
   if (jump && jump.phase === 'depart') {
-    return { mode, modeClass, speed, unit, barFrac: 1 - jump.t / JUMP_DEPART_TIME, barFtl: true, barLabel: 'DEPARTURE', barValue: `hyperspace in ${Math.max(0, jump.t).toFixed(1)} s`, alt: null, orbit: null, pills: [] };
+    return { mode, modeClass, speed, unit, barFrac: 1 - jump.t / JUMP_DEPART_TIME, barFtl: true, barLabel: 'DEPARTURE', barValue: `hyperspace in ${Math.max(0, jump.t).toFixed(1)} s`, alt: null, orbit: null, air: null, pills: [] };
   }
   let barFrac: number, barLabel: string, barValue: string;
   let barMark: number | undefined, barHi: FlightView['barHi'];
@@ -246,7 +247,8 @@ function flight(g: Game): FlightView {
   const gr = ship.grav,
     ap = ship.ap;
   let alt: Readout | null = null,
-    orbit: Readout | null = null;
+    orbit: Readout | null = null,
+    air: Readout | null = null;
   if (gr && ship.mode === 'normal' && !ship.dead && (gr.body.kind !== 'star' || gr.g >= 0.02)) {
     const b = gr.body;
     const oe = orbitElements(ship, b);
@@ -255,6 +257,15 @@ function flight(g: Game): FlightView {
     let impact = '';
     if (oe.vr < -1 && oe.pe < b.radius && !ship.landed && !ap) impact = ` · impact ${fmtTime((oe.vr + Math.sqrt(oe.vr * oe.vr + 2 * gr.g * h)) / gr.g)}`;
     alt = { text: `ALT ${fmtDist(h)} · ${up ? '▲' : '▼'} ${fmtSpeedText(Math.abs(oe.vr))}${impact}`, warn: !!impact };
+    // the air outside: its pressure and temperature here (from the mean radius, as the sim takes
+    // them), and your speed through it while flying (the air turns with its world: a giant's at km/s).
+    // Amber while it's heating the hull.
+    const a = b.kind !== 'star' ? atmoOf(b) : null;
+    const ha = oe.r - b.radius;
+    if (a && ha < a.top) {
+      const as = g.aero.body === b && g.aero.speed > 1 && !ship.landed ? ` · AIRSPEED ${fmtSpeedText(g.aero.speed)}` : '';
+      air = { text: `AIR ${fmtBar(pressure(a, ha) / 1e5)} · ${Math.round(airTemp(a, ha) - 273.15)} °C${as}`, warn: g.aero.heatW > 1e6 };
+    }
     if (ship.landed) orbit = { text: `LANDED ON ${b.name.toUpperCase()}` };
     else if (ap && ap.type === 'hold' && ap.settled) orbit = { text: 'HOVERING ON THRUSTERS' };
     else if (gr.g < 0.02 && !ap) orbit = null;
@@ -280,7 +291,7 @@ function flight(g: Game): FlightView {
     const gs = gr.g / 9.80665;
     pills.push({ text: `${gs < 0.01 ? gs.toExponential(1) : gs.toFixed(gs < 1 ? 2 : 1)} g`, kind: gr.g > NORMAL_ACC ? 'warn' : '' });
   }
-  return { mode, modeClass, speed, unit, barFrac, barFtl, barLabel, barValue, barMark, barHi, alt, orbit, pills };
+  return { mode, modeClass, speed, unit, barFrac, barFtl, barLabel, barValue, barMark, barHi, alt, orbit, air, pills };
 }
 
 function target(g: Game): TargetView {

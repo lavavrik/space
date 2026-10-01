@@ -24,7 +24,7 @@ Every world with air gets its own, generated from its seed (`makeAir`): a surfac
 - **Air temperature:** Ts at the ground, cooling with height toward the world's skin temperature (0.84 T) over ~1.5 H (`airTemp`).
 - **Moving air:** the air turns with its world, so speed through it is measured against that motion.
 - **Lowest safe orbit:** above the air (`orbits.ts minOrbitAlt`), since drag would bring a lower orbit down. Station orbits follow.
-- **In the info panel (I)**, once scanned: CLIMATE (surface temperature and the greenhouse warming), ATMOSPHERE (pressure, density against Earth's), COMPOSITION (the three main gases), AIR COLUMN (scale height and where it ends), and on hot worlds ON THE GROUND: where the hull heads, or how soon it fails. The influences panel (B) shows the air around the ship (pressure, density, temperature).
+- **In the info panel (I)**, once scanned: CLIMATE (surface temperature and the greenhouse warming), ATMOSPHERE (pressure, density against Earth's), COMPOSITION (the three main gases), AIR COLUMN (scale height and where it ends), and on hot worlds ON THE GROUND: where the hull heads, or how soon it fails. The influences panel (B) shows the air around the ship (pressure, density, temperature). The flight panel shows it too, under ALT, whenever you're in a world's air: `AIR` pressure · temperature, and your airspeed while flying (the air turns with its world, so holding still over a giant is a km/s wind), amber while it's heating the hull (`hud/snapshot.ts`).
 
 Venydes 2 (a hot desert, 566 K, 0.45 g) used to get a fixed desert air of 0.25 kg/m³ with a 24 km scale height at 566 K, which is why it looked thick and heated the hull on the way down. Now it's a thin 13 mbar of CO₂: still hot and tall, but ~20× thinner.
 

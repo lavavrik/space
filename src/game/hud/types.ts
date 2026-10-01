@@ -38,6 +38,7 @@ export interface FlightView {
   barHi?: 'left' | 'right';
   alt: Readout | null; // altitude and vertical speed near a body
   orbit: Readout | null; // orbit status around the body pulling on you
+  air: Readout | null; // the air outside: pressure, temperature, airspeed (in air only)
   pills: Pill[];
 }
 

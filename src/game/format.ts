@@ -83,3 +83,6 @@ export function fmtClock(seconds: number) {
 
 /** An area in m², e.g. "2,400 m²". */
 export const fmtArea = (m2: number) => `${nf0.format(Math.round(m2))} m²`;
+
+/** A pressure in bar, e.g. "0.682 bar", "12.4 mbar", "84 bar". */
+export const fmtBar = (bar: number) => (bar < 0.01 ? `${(bar * 1000).toFixed(bar < 0.001 ? 3 : 1)} mbar` : bar < 10 ? `${bar.toFixed(bar < 1 ? 3 : 2)} bar` : `${Math.round(bar)} bar`);

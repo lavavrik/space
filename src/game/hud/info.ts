@@ -1,7 +1,7 @@
 /* Body info panel (I): everything about the current target, and where the ship stands relative to it. */
 import { surfaceDist } from '../sim/terrain';
 import { AU, MSUN, REARTH } from '../constants';
-import { fmtDist, fmtSpeedText, fmtTime, fmtMass } from '../format';
+import { fmtBar, fmtDist, fmtSpeedText, fmtTime, fmtMass } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import { velRel } from '../sim/frame';
@@ -158,7 +158,6 @@ function airRows(g: Game, b: World, a: Atmo | null): [string, string][] {
   return rows;
 }
 
-const fmtBar = (bar: number) => (bar < 0.01 ? `${(bar * 1000).toFixed(1)} mbar` : bar < 10 ? `${bar.toFixed(bar < 1 ? 3 : 2)} bar` : `${Math.round(bar)} bar`);
 const fmtRho = (r: number) => `${r < 0.1 ? r.toFixed(3) : r < 10 ? r.toFixed(2) : Math.round(r)} kg/m³`;
 const fmtX = (x: number) => (x < 0.1 ? `${Math.round(x * 100)} % of` : `${x < 10 ? x.toFixed(1) : Math.round(x)}×`);
 const fmtPct = (x: number) => `${x < 0.001 ? '<0.1' : x < 0.1 ? (x * 100).toFixed(1) : Math.round(x * 100)} %`;

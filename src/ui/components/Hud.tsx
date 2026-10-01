@@ -127,6 +127,7 @@ export function FlightCluster({ f, lamps }: { f: FlightView; lamps: Lamp[] }) {
       </div>
       {f.alt && <div className={cx('fline', f.alt.warn && 'warnc')}>{f.alt.text}</div>}
       {f.orbit && <div className={cx('fline', f.orbit.warn && 'warnc')}>{f.orbit.text}</div>}
+      {f.air && <div className={cx('fline', f.air.warn && 'warnc')}>{f.air.text}</div>}
       <div className="pills">
         {f.pills.map((p) => (
           <span key={p.text} className={cx('pill', p.kind)}>
