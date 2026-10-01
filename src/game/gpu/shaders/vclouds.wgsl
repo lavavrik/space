@@ -265,7 +265,12 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     // (a fifth left: an overcast day, not night; and only by day: at night there's no sunlight for
     // the clouds to take away, and it darkened the night's own glow to nothing)
     let camDay = smoothstep(-0.1, 0.1, dot(normalize(-C), L));
-    skyDim = 1.0 - 0.8 * camDay * shade / max(wsum, 1e-6);
+    // (a surface: its own cloud shadow, where the sun's ray from it crosses the clouds; by the air's
+    // shade along the line of sight, shadow columns crossing it painted the ground and the sea in dark
+    // streaks running to the point opposite the sun. The sky keeps the air's.)
+    var dimShare = shade / max(wsum, 1e-6);
+    if (sceneT < 1e29) { dimShare = 1.0 - sunThrough(dir * sceneT, L); }
+    skyDim = 1.0 - 0.8 * camDay * dimShare;
     let fade = smoothstep(mix(rBot, rTop, 0.6) + liftCam, rTop + liftCam, camR);
     skyDim = mix(skyDim, 1.0, fade);
     rays *= 1.0 - fade;
