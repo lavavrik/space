@@ -102,5 +102,5 @@ fn fs(in: Out) -> FragOut {
   }
   let col = vec3f(0.97) * light * select(1.0, 0.3 + 0.55 * (1.0 - cov), below);
   let clip = frame.viewProj * vec4f(P, 1.0);
-  return FragOut(vec4f(col * atTrans + haze, cov * 0.95 * (1.0 - world.deckHide)), clamp(clip.z / clip.w, 0.0, 1.0));
+  return FragOut(vec4f((col * atTrans + haze) * frame.twilight, cov * 0.95 * (1.0 - world.deckHide)), clamp(clip.z / clip.w, 0.0, 1.0));
 }

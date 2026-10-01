@@ -49,6 +49,24 @@ export const CITY_K = AUTO_EXPOSURE ? 0.1 : 0.9;
 /** The sky (Milky Way, stars, distant worlds as dots) against sunlit surfaces. */
 export const SKY_K = AUTO_EXPOSURE ? 0.025 : 1;
 
+/**
+ * Twilight (with auto-exposure off): the eye adapts as the sun sets, so the blue hour isn't the
+ * near-black its true level (~1/50 of day at −4°) would show at a fixed exposure. Up to TWILIGHT_K×
+ * while the higher sun is between ~4° above and ~8° below the horizon, back to 1 by ~12° below (the
+ * night keeps its look), in the air only (fading out from 2 to 5 scale heights up: from orbit
+ * there's daylight in view). `sinEl`: the sun's height (sine of it) at the camera; `altH`: the
+ * camera's height in scale heights.
+ */
+export const TWILIGHT_K = 4;
+export function twilightBoost(sinEl: number, altH: number): number {
+  const ss = (a: number, b: number, x: number) => {
+    const t = Math.min(Math.max((x - a) / (b - a), 0), 1);
+    return t * t * (3 - 2 * t);
+  };
+  const w = ss(0.07, -0.07, sinEl) * (1 - ss(-0.14, -0.21, sinEl)) * (1 - ss(2, 5, altH));
+  return 1 + (TWILIGHT_K - 1) * w;
+}
+
 /** Exposure limits: fully dark-adapted shows the sky as it used to be. */
 const MIN_EXP = 0.25;
 export const MAX_EXP = 40; // 1 / SKY_K with auto-exposure on

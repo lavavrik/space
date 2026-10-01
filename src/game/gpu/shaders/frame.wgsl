@@ -20,7 +20,7 @@ struct Frame {
   intK: f32,
   winK: f32,
   skyK: f32,
-  _pad0: f32,
+  twilight: f32,   // the eye's twilight adaptation (render/exposure.ts twilightBoost), in exposure too: for what isn't × exposure (the sky, the flat cloud deck)
   landDir: vec4f,   // the landing lights' axis (world axes); w: on (0 or 1)
 }
 

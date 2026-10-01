@@ -47,6 +47,11 @@ fn fs(in: Out) -> @location(0) vec4f {
   let up2 = select(0.0, min(1.0, 4.0 * max(world.lightC2.r, max(world.lightC2.g, world.lightC2.b))), two);
   let night = (1.0 - smoothstep(-0.15, 0.1, dot(normalize(-C), normalize(world.light.xyz)))) * (1.0 - smoothstep(-0.15, 0.1, dot(normalize(-C), L2)) * up2);
   sky += vec3f(0.03, 0.045, 0.09) * (1.0 - dot(atTrans, vec3f(0.333))) * night;
+  // twilight's glow (atmo.wgsl atTwilight), as much as there's air along the ray
+  let upC = normalize(-C);
+  var tw = atTwilight(upC, normalize(world.light.xyz), dir);
+  if (two) { tw += atTwilight(upC, L2, dir) * world.lightC2.rgb; }
+  sky += tw * (1.0 - dot(atTrans, vec3f(0.333)));
   let lum = dot(sky, vec3f(0.2126, 0.7152, 0.0722));
   var keep = clamp(1.0 - lum * 5.0, 0.0, 1.0) * dot(atTrans, vec3f(0.333));
   // the suns' discs, seen through the air: the sky hides what's behind it once it's bright (the stars
@@ -63,6 +68,8 @@ fn fs(in: Out) -> @location(0) vec4f {
   }
   sky += (vec3f(d1) + col2 * d2) * k * atTrans;
   keep *= 1.0 - max(step(1e-4, d1), step(1e-4, d2));
+  // (twilight: the eye adapted, GpuRenderer; the sky isn't × exposure otherwise)
+  sky *= frame.twilight;
   return vec4f(sky, keep);
 }
 

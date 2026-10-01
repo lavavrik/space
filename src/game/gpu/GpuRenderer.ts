@@ -21,7 +21,8 @@ import { THREE } from '../lib/three';
 import type { PerfMonitor } from '../debug/Perf';
 import type { GameRenderer, ViewInfo } from '../render/api';
 import { sunsAt, type Suns } from '../sim/starlight';
-import { AUTO_EXPOSURE, AutoExposure, FLOOD_K, HEAD_K, INT_K, MAX_EXP, SKY_EXP_P, SKY_K, STAR_EXP_P, WINDOW_K } from '../render/exposure';
+import { AUTO_EXPOSURE, AutoExposure, FLOOD_K, HEAD_K, INT_K, MAX_EXP, SKY_EXP_P, SKY_K, STAR_EXP_P, WINDOW_K, twilightBoost } from '../render/exposure';
+import { atmoOf } from '../sim/atmosphere';
 import { MAX_RENDER_PIXELS } from '../render/look';
 import { DynamicResolution } from './dynres';
 import { DEFAULT_SETTINGS, type Settings } from '../settings';
@@ -68,6 +69,8 @@ export class GpuRenderer implements GameRenderer {
   private readonly particles: Particles;
   private lastSim = 0;
   private readonly exposure = new AutoExposure();
+  private readonly tw = new THREE.Vector3();
+  private readonly tw2 = new THREE.Vector3();
   private readonly suns: Suns = { s1: null as unknown as Suns['s1'], s2: null, c2: new THREE.Color() };
   private readonly meter: Meter;
   private readonly timer: GpuTimer | null;
@@ -252,7 +255,20 @@ export class GpuRenderer implements GameRenderer {
     // (a pair's second sun adds its light to the first's, docs/binaries.md: the eye takes both as one
     // day's light, as a lone star of the same total would give, so the scene isn't brighter for it)
     const suns = sunsAt(g.cur.stars, ship.pos, this.suns);
-    const e = this.exposure.value / (1 + (suns.s2 ? Math.max(suns.c2.r, suns.c2.g, suns.c2.b) : 0));
+    let twK = 1;
+    let e = this.exposure.value / (1 + (suns.s2 ? Math.max(suns.c2.r, suns.c2.g, suns.c2.b) : 0));
+    // (and the eye adapting to twilight, in the air: render/exposure.ts twilightBoost)
+    const fb = g.frameBody;
+    const air = !AUTO_EXPOSURE && fb.kind !== 'star' ? atmoOf(fb) : null;
+    if (air) {
+      const up = this.tw.subVectors(ship.pos, fb.pos);
+      const alt = up.length() - fb.radius;
+      up.normalize();
+      let sinEl = -1;
+      for (const st of g.cur.stars) sinEl = Math.max(sinEl, this.tw2.subVectors(st.pos, ship.pos).normalize().dot(up));
+      twK = twilightBoost(sinEl, alt / air.H);
+      e *= twK;
+    }
     const skyExp = AUTO_EXPOSURE ? (e / MAX_EXP) ** SKY_EXP_P : 1,
       starExp = AUTO_EXPOSURE ? (e / MAX_EXP) ** STAR_EXP_P : 1;
     this.worlds.starExp = starExp;
@@ -266,7 +282,7 @@ export class GpuRenderer implements GameRenderer {
     f.set(this.rot.elements, 16);
     f.set([this.W, this.H, P.elements[0], P.elements[5], this.PR, g.simTime, e, skyExp, starExp, HEAD_K, FLOOD_K, HEAD_K / INT_K], 32);
     this.head.set(0, 0, -1).applyQuaternion(ship.q);
-    f.set([this.head.x, this.head.y, this.head.z, g.lights ? 1 : 0, INT_K, WINDOW_K, SKY_K], 44);
+    f.set([this.head.x, this.head.y, this.head.z, g.lights ? 1 : 0, INT_K, WINDOW_K, SKY_K, twK], 44);
     // the landing lights: down from under the hull, a little forward (sim/landingLights.ts)
     this.land.set(0, -1, -0.35).normalize().applyQuaternion(ship.q);
     f.set([this.land.x, this.land.y, this.land.z, g.landingLights ? 1 : 0], 52);

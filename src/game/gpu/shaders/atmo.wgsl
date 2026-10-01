@@ -9,6 +9,17 @@ fn atH() -> f32 { return world.atBeta.w; }
 
 fn atDens(r: f32) -> f32 { return exp(-max(r - atR(), 0.0) / atH()); }
 
+// Extinction: the air's scattering plus ozone's absorption, which takes out green and orange
+// (Chappuis band; Earth's at sea-level density (0.65, 1.88, 0.085) × 1e-6 /m beside Rayleigh's
+// blue 33.1e-6, so scaled to the air's blue). It hardly shows by day; along twilight's long paths
+// it keeps the sky blue overhead and the far side pink over the world's shadow, where reddened
+// sunlight plus the scattered blue went green. (Taken with the air's own profile: the real layer
+// peaks at ~25 km.)
+fn atExt() -> vec3f {
+  let beta = world.atBeta.xyz;
+  return beta + beta.z * world.ozone * vec3f(0.0196, 0.0568, 0.0026);
+}
+
 fn atChapman(r: f32, mu: f32) -> f32 {
   let R = atR();
   let H = atH();
@@ -45,6 +56,7 @@ fn atInscatterC(C0: vec3f, C1: vec3f, L: vec3f, n: i32) -> vec3f {
   let dir = d / len;
   let startLow = length(C0) < length(C1);
   let beta = world.atBeta.xyz;
+  let ext = atExt();
   var sum = vec3f(0.0);
   var od = 0.0;
   var prev = 0.0;
@@ -59,21 +71,33 @@ fn atInscatterC(C0: vec3f, C1: vec3f, L: vec3f, n: i32) -> vec3f {
     let r = length(q);
     let rho = atDens(r);
     od += rho * ds;
-    let T = exp(-beta * (od + atChapman(r, dot(q / r, L))));
+    let T = exp(-ext * (od + atChapman(r, dot(q / r, L))));
     sum += T * rho * ds;
   }
-  atTrans = exp(-beta * od);
+  atTrans = exp(-ext * od);
   let cosT = dot(dir, L);
-  let phase = 0.0597 * (1.0 + cosT * cosT) + 0.04 * pow(max(cosT, 0.0), 12.0);
-  let raw = world.atSunI * beta * sum * phase;
+  let phase = 0.0597 * (1.0 + cosT * cosT);
+  // plus haze (dust, droplets): grey, scattering strongly forward (Henyey-Greenstein, g 0.76), so
+  // the sun has a bright aureole that a low sun turns orange (its light along the path is reddened
+  // in `sum`). A tenth of the air's blue: Earth's Mie at the ground is ~0.6 of it, but in a layer a
+  // seventh as thick. (A tinted 0.04 × cos¹² lobe before: the sunset sky had no glow round the sun.)
+  let gM = 0.76;
+  let dM = 1.0 + gM * gM - 2.0 * gM * cosT;
+  let phaseM = (1.0 - gM * gM) / (dM * sqrt(dM)) / 12.566;
+  let raw = world.atSunI * sum * (beta * phase + vec3f(0.1 * beta.z * phaseM));
   // (what's seen through the haze dims through a long path's reddened light: paled as the haze is,
   // or distant clouds by the horizon went yellow under a white haze, SPACE-73)
+  // (paled less where the sunlight itself is reddened, at sunset: its colours are real there, and
+  // paled, a low sun's sky was a washed-out yellow-white rather than orange)
+  let rC0 = length(C0);
+  let Ts = exp(-ext * atChapman(rC0, dot(C0 / rC0, L)));
+  let pale = 0.6 * (1.0 - 0.85 * smoothstep(0.15, 0.7, 1.0 - Ts.b / max(Ts.r, 1e-4)));
   let l = dot(raw, vec3f(0.2126, 0.7152, 0.0722));
   if (l > ATR_KNEE) {
     let x = l - ATR_KNEE;
-    atTrans = mix(atTrans, vec3f(dot(atTrans, vec3f(0.2126, 0.7152, 0.0722))), 0.6 * x / (1.0 + x));
+    atTrans = mix(atTrans, vec3f(dot(atTrans, vec3f(0.2126, 0.7152, 0.0722))), pale * x / (1.0 + x));
   }
-  return atRolloff(raw);
+  return atRolloffP(raw, pale);
 }
 
 // Long grazing paths low in the air (the horizon from near the ground) saturate every colour at ~3–5×
@@ -86,12 +110,13 @@ fn atInscatterC(C0: vec3f, C1: vec3f, L: vec3f, n: i32) -> vec3f {
 // on top of it went further; now ~0.95, still paled toward white.)
 const ATR_KNEE = 0.5;
 const ATR_K = 2.2;
-fn atRolloff(c: vec3f) -> vec3f {
+fn atRolloff(c: vec3f) -> vec3f { return atRolloffP(c, 0.6); }
+fn atRolloffP(c: vec3f, pale: f32) -> vec3f {
   let l = dot(c, vec3f(0.2126, 0.7152, 0.0722));
   if (l <= ATR_KNEE) { return c; }
   let x = l - ATR_KNEE;
   let lo = ATR_KNEE + x / (1.0 + ATR_K * x);
-  return mix(c * (lo / l), vec3f(lo), 0.6 * x / (1.0 + x)); // (paled less, 0.35, distant clouds by the horizon went yellow)
+  return mix(c * (lo / l), vec3f(lo), pale * x / (1.0 + x)); // (paled less, 0.35, distant clouds by the horizon went yellow)
 }
 
 fn atInscatter(P0: vec3f, P1: vec3f, L: vec3f, n: i32) -> vec3f {
@@ -101,6 +126,24 @@ fn atInscatter(P0: vec3f, P1: vec3f, L: vec3f, n: i32) -> vec3f {
 fn atSunlightC(q: vec3f, L: vec3f) -> vec3f {
   if (world.atOn < 0.5) { return vec3f(1.0); }
   let r = length(q);
-  return exp(-world.atBeta.xyz * atChapman(r, dot(q / r, L)));
+  return exp(-atExt() * atChapman(r, dot(q / r, L)));
 }
 fn atSunlight(P: vec3f, L: vec3f) -> vec3f { return atSunlightC(P - world.atC.xyz, L); }
+
+// Twilight's light: once the sun is down, the sky's light is mostly sunlight scattered more than
+// once from the still-lit air high up, which single scattering (above) leaves out: the sky went
+// black at −2°, the blue hour never came. An approximation: a glow peaking with the sun just below
+// the horizon, gone by ~12° below and by ~8° above (where single scattering has it), bluish, warmer
+// toward the sun. `up`: the local vertical where it's seen or received; `dir`: the view direction
+// (for the warmth toward the sun; the up vector for light received). Scaled by the air's blue,
+// against Earth's.
+fn atTwilight(up: vec3f, L: vec3f, dir: vec3f) -> vec3f {
+  if (world.atOn < 0.5) { return vec3f(0.0); }
+  let e = dot(up, L);
+  let w = smoothstep(-0.21, -0.03, e) * (1.0 - smoothstep(0.03, 0.14, e));
+  if (w <= 0.0) { return vec3f(0.0); }
+  let Lh = normalize(L - up * e + vec3f(0.0, 1e-7, 0.0));
+  let toward = max(dot(normalize(dir - up * dot(dir, up) + vec3f(1e-7, 0.0, 0.0)), Lh), 0.0);
+  let col = mix(vec3f(0.3, 0.42, 0.85), vec3f(0.95, 0.55, 0.35), toward * toward);
+  return col * 0.05 * w * (0.7 + 0.8 * toward * toward) * min(world.atBeta.z / 3.31e-5, 3.0);
+}

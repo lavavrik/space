@@ -34,7 +34,7 @@ struct World {
   wtype: i32,         // world type (uType)
   oct: i32,           // octaves for this size on screen (uOct)
   deckHide: f32,      // 0…1: the flat cloud deck fades out as the volumetric clouds take over (vclouds.wgsl)
-  _p1: f32,
+  ozone: f32,         // ozone in the air, from its oxygen: 1 for Earth's (atmo.wgsl)
   _p2: f32,
   tOff: array<vec4f, 17>, // per-octave noise offsets (terrain.wgsl)
   // shadows (shadow.wgsl): the star relative to the world's centre (world axes; w: its radius), the

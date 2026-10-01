@@ -376,6 +376,8 @@ export class WorldsLayer {
     f[84] = b.radius + (air?.top ?? 0); // atTop
     f[85] = 45; // atSunI
     f[86] = air ? 1 : 0;
+    // ozone, by the air's oxygen (Earth's 21 %: 1): atmo.wgsl's twilight colours
+    f[102] = Math.min((air?.gases.find(([gas]) => gas === 'O₂')?.[1] ?? 0) / 0.21, 2);
     f[87] = b.pal.sea;
     f[88] = b.seed;
     f[91] = cloudH;

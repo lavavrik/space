@@ -316,6 +316,9 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   let mid = dir * (0.5 * (t0 + t1)) - C;
   let sunCol = atSunlightC(normalize(mid) * (world.radius + world.cloudH), L) * sunShade(mid) * world.atSunI / 45.0;
   let dayK = smoothstep(-0.15, 0.3, dot(normalize(mid), L));
+  let sunUp = smoothstep(-0.15, 0.0, dot(normalize(mid), L));
+  // (twilight's light from the sky over them, atmo.wgsl atTwilight: blue-hour clouds aren't black)
+  let twL = atTwilight(normalize(mid), L, normalize(mid)) * 2.0;
   // a pair's second sun (docs/binaries.md): its light through the air in its colour, a cheaper march
   // toward it (3 steps), the same scattering (its god rays above)
   let two = world.light2.w > 0.5;
@@ -377,7 +380,9 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     let lamp = vec3f(1.0, 0.97, 0.92) * shipLightAt(P) * T * 0.08;
     // (the sunlight's share in the shadows of what's near: a sky station's on the clouds under it)
     sun *= shadowAtPoint(P);
-    var light = sunCol * (sun * 0.6 + 0.12 * (0.4 + 0.6 * h)) * dayK * 0.97 + lamp + vec3f(0.55, 0.7, 1.0) * 0.05 * (1.0 - dayK);
+    // (the sun's own light isn't dimmed by dayK: sunCol already fades and reddens as it sets, and
+    // dimmed twice, clouds at sunset were dull grey instead of glowing; only the sky's light is)
+    var light = sunCol * (sun * 0.6 * sunUp + 0.12 * (0.4 + 0.6 * h) * dayK) * 0.97 + twL * (0.6 + 0.4 * h) + lamp + vec3f(0.55, 0.7, 1.0) * 0.05 * (1.0 - dayK);
     if (two) {
       var od2 = 0.0;
       var ls2 = 240.0;
@@ -494,8 +499,10 @@ fn fsComposite(@builtin(position) pos: vec4f) -> @location(0) vec4f {
       // lit white, brighter toward the sun (ice scatters forward), dimmed by the air in front, which
       // stays in front of it
       let sunC = atSunlightC(Q, L) * sunShade(Q) * world.atSunI / 45.0;
+      // (lit by the sun as long as it reaches it, reddened by the air: at sunset the brightest thing
+      // in the sky, as cirrus is; dimmed by the sun's height too, it was dark grey)
       let dayC = smoothstep(-0.1, 0.25, dot(up, L));
-      var ci = (sunC * (0.8 + 0.15 * hg(cosT, 0.6)) + vec3f(0.03, 0.04, 0.06)) * dayC;
+      var ci = sunC * (0.8 + 0.15 * hg(cosT, 0.6)) * smoothstep(-0.12, 0.0, dot(up, L)) + vec3f(0.03, 0.04, 0.06) * dayC + atTwilight(up, L, up) * 2.0;
       // (and a pair's second sun's light on it, in its colour)
       if (world.light2.w > 0.5) {
         let L2c = normalize(world.light2.xyz);

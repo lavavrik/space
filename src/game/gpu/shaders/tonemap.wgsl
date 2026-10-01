@@ -148,6 +148,14 @@ fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
   if (post.a.z > 0.0 && post.d.z > 0.0) { c += flare(post.d.xy, uv, size) * post.a.z * post.d.z; }
   // the warp's ring: a faint cold shimmer where space is squeezed
   c += vec3f(0.55, 0.75, 1.0) * wp.z * 0.06;
+  // the shoulder (white from 0.8 up): per channel it flattened bright colours toward yellow and
+  // white (a sunset's orange, red 2 : green 1, came out yellow), so up to ~3× white it's taken on
+  // the brightest channel and the colour scaled with it, keeping its hue; brighter than that (the
+  // sun's disc, a blaze) it goes per channel, to white
   let s = 0.8 + 0.2 * (1.0 - exp(-(c - 0.8) / 0.2));
-  return vec4f(select(c, s, c >= vec3f(0.8)), 1.0);
+  let pc = select(c, s, c >= vec3f(0.8));
+  let m = max(c.r, max(c.g, c.b));
+  var hc = c;
+  if (m > 0.8) { hc = c * ((0.8 + 0.2 * (1.0 - exp(-(m - 0.8) / 0.2))) / m); }
+  return vec4f(mix(hc, pc, smoothstep(1.5, 4.0, m)), 1.0);
 }
