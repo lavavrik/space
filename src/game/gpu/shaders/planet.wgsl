@@ -546,15 +546,20 @@ fn fs(in: Out) -> @location(0) vec4f {
     // glint as straight-edged patches)
     let Ns = normalize(in.wp - world.atC.xyz);
     let Nw = normalize(Ns - (gw - Ns * dot(gw, Ns)));
-    let F = 0.02 + 0.98 * pow(1.0 - clamp(dot(Nw, V), 0.0, 1.0), 5.0);
-    // (a wave's back facing away would mirror the sea itself: kept just above the horizon)
-    let up = normalize(Pc);
-    var Rv = reflect(-V, Nw);
-    if (dot(Rv, up) < 0.01) { Rv = normalize(Rv + up * (0.01 - dot(Rv, up))); }
-    let skyR = waterSky(Pc, Rv, L, two, L2, shade);
     // (sharp only as far as the normal holds still across the pixel, Toksvig: a lobe narrower than
     // that aliased into moiré)
     let dn = fwidth(Nw);
+    // the mirror's normal: the waves' only as far as they're resolved and hold still across the pixel;
+    // far off, where many are under a pixel, they average out to the flat sea's (each pixel taking
+    // one wave's tilt, the far sea near the horizon mirrored bright sky and darker sky by turns, in
+    // high-contrast streaks)
+    let Nr = normalize(mix(Ns, Nw, clamp(wv.w, 0.0, 1.0) / (1.0 + 60.0 * dot(dn, dn))));
+    let F = 0.02 + 0.98 * pow(1.0 - clamp(dot(Nr, V), 0.0, 1.0), 5.0);
+    // (a wave's back facing away would mirror the sea itself: kept just above the horizon)
+    let up = normalize(Pc);
+    var Rv = reflect(-V, Nr);
+    if (dot(Rv, up) < 0.01) { Rv = normalize(Rv + up * (0.01 - dot(Rv, up))); }
+    let skyR = waterSky(Pc, Rv, L, two, L2, shade);
     let n0 = mix(40.0, 900.0, wv.w);
     let n = n0 / (1.0 + n0 * dot(dn, dn) * 0.5);
     var glint = vec3f(1.0, 0.97, 0.9) * waterGlint(Nw, N, V, L, n) * sunC;
