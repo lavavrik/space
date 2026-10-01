@@ -202,24 +202,32 @@ const NIGHT_AMB: f32 = 0.15; // (the ground's dark: 0.02 of it was lost in black
 
 // Water (docs/water.md). Waves: three octaves of moving noise, 60, 24 and 9.6 m long (their noise
 // periods, 8 × each, all divide worlds.ts WAVE_PERIOD), drifting at deep water's speed for their
-// length, each fading out below a few pixels. Returns the height (m) and the share of the waves'
-// slope resolved here (1 up close, 0 where they're all sub-pixel).
+// length, each fading out below a few pixels. Returns the waves' slope (the height's gradient, the
+// world's frame) and the share of it resolved here (1 up close, 0 where they're all sub-pixel).
+// The slope is from the noise itself (central differences): from screen-space derivatives it was
+// as coarse as a pixel quad, and the glints shimmered in moiré. Their clock is world.waveO.w, the
+// time wrapped to an hour: the sim's own, ~2.4 million s at day 28, has float32 steps of 0.25 s, and
+// the waves moved in jerks.
 const WAVE_L = array<f32, 3>(60.0, 24.0, 9.6);
-fn waterWaves(wp: vec3f, fw: f32) -> vec2f {
+fn waterWaves(wp: vec3f, fw: f32) -> vec4f {
   let q = toLocal3() * wp + world.waveO.xyz; // (m, the world's frame, small near you)
   let pm = max(fw * world.radius, 1e-3);      // m a pixel
   let wind = normalize(vec3f(1.0, 0.0, 0.6));
-  var h = 0.0;
+  let t = world.waveO.w;
+  var g = vec3f(0.0);
   var seen = 0.0;
   for (var i = 0; i < 3; i++) {
     let l = WAVE_L[i];
-    let vis = smoothstep(2.0, 6.0, l / pm);
+    let vis = smoothstep(3.0, 8.0, l / pm);
     seen += vis / 3.0;
     if (vis < 0.01) { continue; }
     let c = sqrt(9.81 * l / 6.2832); // deep water's phase speed
-    h += 0.03 * l * vis * tnoise(q / l + wind * (c / l) * world.time + vec3f(f32(i) * 3.7));
+    let u = q / l + wind * (c / l) * t + vec3f(f32(i) * 3.7);
+    let e = 0.06; // (of a wavelength: the noise's texels are 1/8)
+    let d = vec3f(tnoise(u + vec3f(e, 0.0, 0.0)) - tnoise(u - vec3f(e, 0.0, 0.0)), tnoise(u + vec3f(0.0, e, 0.0)) - tnoise(u - vec3f(0.0, e, 0.0)), tnoise(u + vec3f(0.0, 0.0, e)) - tnoise(u - vec3f(0.0, 0.0, e))) / (2.0 * e);
+    g += 0.03 * vis * d; // (height 0.03 l × noise(q / l): its gradient is 0.03 × the noise's)
   }
-  return vec2f(h, seen);
+  return vec4f(g, seen);
 }
 
 // the sky seen in the water, along `R` from `Pc` (relative to the world's centre): the air's own
@@ -390,14 +398,20 @@ fn fs(in: Out) -> @location(0) vec4f {
   var waterAdd = vec3f(0.0);
   if (spec > 0.0) {
     let wv = waterWaves(in.wp, fw);
-    let Nw = bumpN(N, wv.x, in.obj, in.wp, terr);
+    // the slope, in the surface's plane, turned to world axes: the normal tips against it
+    let gw = transpose(toLocal3()) * wv.xyz;
+    let Nw = normalize(N - (gw - N * dot(gw, N)));
     let F = 0.02 + 0.98 * pow(1.0 - clamp(dot(Nw, V), 0.0, 1.0), 5.0);
     // (a wave's back facing away would mirror the sea itself: kept just above the horizon)
     let up = normalize(Pc);
     var Rv = reflect(-V, Nw);
     if (dot(Rv, up) < 0.01) { Rv = normalize(Rv + up * (0.01 - dot(Rv, up))); }
     let skyR = waterSky(Pc, Rv, L, two, L2, shade);
-    let n = mix(40.0, 900.0, wv.y);
+    // (sharp only as far as the normal holds still across the pixel, Toksvig: a lobe narrower than
+    // that aliased into moiré)
+    let dn = fwidth(Nw);
+    let n0 = mix(40.0, 900.0, wv.w);
+    let n = n0 / (1.0 + n0 * dot(dn, dn) * 0.5);
     var glint = vec3f(1.0, 0.97, 0.9) * waterGlint(Nw, N, V, L, n) * sunC;
     if (two) { glint += waterGlint(Nw, N, V, L2, n) * sunC2; }
     waterF = F * spec;

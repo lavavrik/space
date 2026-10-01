@@ -488,7 +488,8 @@ export class WorldsLayer {
       // whole number of WAVE_PERIOD (in doubles here, so what the shader adds to its small
       // camera-relative positions is small too)
       const camL = v.subVectors(ship.pos, b.pos).applyQuaternion(qInv);
-      f.set([camL.x - Math.round(camL.x / WAVE_PERIOD) * WAVE_PERIOD, camL.y - Math.round(camL.y / WAVE_PERIOD) * WAVE_PERIOD, camL.z - Math.round(camL.z / WAVE_PERIOD) * WAVE_PERIOD, 0], 212);
+      // (and their clock: the time wrapped to an hour, precise in float32)
+      f.set([camL.x - Math.round(camL.x / WAVE_PERIOD) * WAVE_PERIOD, camL.y - Math.round(camL.y / WAVE_PERIOD) * WAVE_PERIOD, camL.z - Math.round(camL.z / WAVE_PERIOD) * WAVE_PERIOD, simTime % 3600], 212);
       v.subVectors(b.pos, ship.pos); // (rel again: v is reused)
       const occ = occludersOf(b, cur.bodies, s1);
       occ.forEach((o, k) => f.set([o.pos.x - b.pos.x, o.pos.y - b.pos.y, o.pos.z - b.pos.z, o.radius], 176 + k * 4));
