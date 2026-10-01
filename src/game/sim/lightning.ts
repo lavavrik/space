@@ -11,6 +11,7 @@
  */
 import { THREE } from '../lib/three';
 import type { Game } from '../Game';
+import type { Body } from '../types';
 import { WT } from '../constants';
 import { atmoOf } from './atmosphere';
 import { cloudCoverAt } from './clouds';
@@ -19,7 +20,13 @@ import { CLOUD_H } from '../render/look';
 import { mulberry32 } from '../lib/rng';
 
 export interface Strike {
-  /** Where it hits the ground, and where it leaves the cloud base (world, m). */
+  /** The world it strikes, and where it hits the ground and leaves the cloud base relative to its
+   *  centre (m): the world moves on along its orbit (tens of km/s), and in system coordinates the
+   *  bolt slid across the view as it flashed. Its spin in 0.6 s is a few hundred metres: ignored. */
+  body: Body;
+  groundRel: THREE.Vector3;
+  topRel: THREE.Vector3;
+  /** Where they are now (system frame, m): see strikeAt. */
   ground: THREE.Vector3;
   top: THREE.Vector3;
   /** When it struck (sim time, s). */
@@ -53,6 +60,11 @@ export class Lightning {
   update(g: Game) {
     const now = g.simTime;
     this.strikes = this.strikes.filter((s) => now - s.t0 < LIFE);
+    // (riding with their world)
+    for (const s of this.strikes) {
+      s.ground.addVectors(s.body.pos, s.groundRel);
+      s.top.addVectors(s.body.pos, s.topRel);
+    }
     const b = g.frameBody;
     if (b.kind === 'star' || (b.type !== WT.EarthLike && b.type !== WT.Ocean) || g.inStation) return;
     const air = atmoOf(b);
@@ -81,9 +93,9 @@ export class Lightning {
         .addScaledVector(north, (Math.sin(a) * d) / b.radius)
         .normalize();
       if (cloudCoverAt(b, dir, now) / most < 0.85) continue;
-      const ground = b.pos.clone().addScaledVector(dir, surfaceRadius(b, b.pos.clone().addScaledVector(dir, b.radius)));
-      const top = b.pos.clone().addScaledVector(dir, b.radius + deckH * 0.45);
-      this.strikes.push({ ground, top, t0: now, seed: Math.random() * 1000 });
+      const groundRel = dir.clone().multiplyScalar(surfaceRadius(b, b.pos.clone().addScaledVector(dir, b.radius)));
+      const topRel = dir.clone().multiplyScalar(b.radius + deckH * 0.45);
+      this.strikes.push({ body: b, groundRel, topRel, ground: b.pos.clone().add(groundRel), top: b.pos.clone().add(topRel), t0: now, seed: Math.random() * 1000 });
       return;
     }
   }

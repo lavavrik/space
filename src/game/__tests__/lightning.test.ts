@@ -11,7 +11,7 @@ describe('lightning', () => {
     expect(strikeGlow(-0.01)).toBe(0);
   });
   it('runs from the cloud base to the ground, with branches, within the point budget', () => {
-    const s = { ground: new THREE.Vector3(0, 0, 0), top: new THREE.Vector3(0, 5000, 0), t0: 0, seed: 12.5 };
+    const s = { body: {} as never, groundRel: new THREE.Vector3(), topRel: new THREE.Vector3(), ground: new THREE.Vector3(0, 0, 0), top: new THREE.Vector3(0, 5000, 0), t0: 0, seed: 12.5 };
     const p = boltPath(s);
     expect(p.length).toBeLessThanOrEqual(BOLT_POINTS);
     expect(p[0].p.distanceTo(s.top)).toBeLessThan(1);

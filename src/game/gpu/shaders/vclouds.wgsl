@@ -447,9 +447,14 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   // Cut off there, the view cleared abruptly, a band along the horizon from inside the clouds
   if (inLayer && tNat > t1 + 1.0 && T > 0.01) {
     let covC = cloudCover(cloudMap(toLocalM() * normalize(-C)));
-    let fk = 1.0 - exp(-min(tNat - t1, 300000.0) * covC * 2e-5);
-    var meanC = sunCol * (0.45 * sunUp + 0.15 * dayK) + twL;
-    if (T < 0.95) { meanC = S / (1.0 - T); }
+    // (only well inside it: near its top or base the rays skimming along it cross thin, shadowed
+    // edges, and taken as the layer's colour they drew a dark band along the horizon)
+    let hc = (camR - liftCam - rBot) / (rTop - rBot);
+    let deep = smoothstep(0.05, 0.25, hc) * (1.0 - smoothstep(0.6, 0.85, hc));
+    let fk = (1.0 - exp(-min(tNat - t1, 300000.0) * covC * 2e-5)) * deep;
+    let base = sunCol * (0.45 * sunUp + 0.15 * dayK) + twL;
+    var meanC = base;
+    if (T < 0.95) { meanC = max(S / (1.0 - T), base * 0.8); }
     S += T * fk * meanC;
     T *= 1.0 - fk;
   }
