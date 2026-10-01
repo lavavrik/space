@@ -11,7 +11,8 @@ import { VCLOUDS_WGSL } from './shaders';
 
 /** vclouds.wgsl VParams: a mat4, a vec4, 12 floats. */
 const PARAM_BYTES = 64 + 16 + 48;
-/** The march's resolution: half the frame's, but at most this many pixels (~4 ms at 1200 × 750 on an M-series GPU was too much). */
+/** The march's resolution: half the frame's, but at most this many pixels (`maxPixels`: Settings sets 1.3 MP for High, half
+ *  resolution at the scene's 5 MP budget, and this for Low; ~4 ms at 1200 × 750 on an M-series GPU, before interleaving, was too much). */
 const MAX_PIXELS = 400e3;
 /** The sun's shadow map's size (texels a side; vclouds.wgsl SM_N). */
 const SM_N = 384;
@@ -60,6 +61,8 @@ export class VolumetricClouds {
   /** Settings ('ultra'): march every frame pixel, no cap (at half resolution, capped at MAX_PIXELS,
    *  the march's noise and its temporal blend can shimmer at cloud edges). Takes effect on resize. */
   full = false;
+  /** The march's cap below Ultra (pixels; Settings: High's, Low's). */
+  maxPixels = MAX_PIXELS;
 
   constructor(
     private readonly device: GPUDevice,
@@ -127,7 +130,7 @@ export class VolumetricClouds {
   /** A new frame size: `depth` is the scene's (multisampled) depth. */
   resize(depth: GPUTexture, W: number, H: number) {
     for (const t of this.tex) t.destroy();
-    const k = this.full ? 1 : Math.min(0.5, Math.sqrt(MAX_PIXELS / Math.max(1, W * H)));
+    const k = this.full ? 1 : Math.min(0.5, Math.sqrt(this.maxPixels / Math.max(1, W * H)));
     this.w = Math.max(1, Math.ceil(W * k));
     this.h = Math.max(1, Math.ceil(H * k));
     this.scale = 1 / k;

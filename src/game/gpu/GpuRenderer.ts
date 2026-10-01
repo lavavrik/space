@@ -209,6 +209,8 @@ export class GpuRenderer implements GameRenderer {
     this.worlds.cloudsOn = s.clouds !== 'off';
     this.vclouds.quality = s.clouds === 'low' ? 0.5 : 1;
     this.vclouds.full = s.clouds === 'ultra';
+    // (High at half resolution up to the scene's 5 MP budget; Low capped lower, for weaker GPUs)
+    this.vclouds.maxPixels = s.clouds === 'low' ? 400e3 : 1.3e6;
     // (the sun's shadow map costs the same at any size: worth it only marching every frame pixel)
     this.vclouds.interleave = s.cloudSpeedups;
     this.vclouds.sunMapOn = s.clouds === 'ultra' && s.cloudSpeedups;
