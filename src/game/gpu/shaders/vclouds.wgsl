@@ -164,13 +164,16 @@ fn cirrusPat(lq: vec3f, seam: f32, pm: f32) -> f32 {
   // at 25× they were scratches)
   let kf2 = windStretch(lq, 0.14, seam) * 0.00012 + vec3f(sw, 0.6 * sw, -0.4 * sw) * 3.0;
   let streak = tnoise(kf2 * 0.5 + 13.0);
-  let area = smoothstep(0.04, 0.12, tnoise(kf * 0.025 + 41.0) + 0.3 * streak);
+  // (the band's edge softened to a few pixels' footprint: near the horizon, a pixel spans tens of
+  // km of the sheet, and the edge stepped from pixel row to row)
+  let ew = min(pm / 150000.0, 0.3);
+  let area = smoothstep(0.04 - ew, 0.12 + ew, tnoise(kf * 0.025 + 41.0) + 0.3 * streak);
   if (area <= 0.0) { return 0.0; }
   // filaments: ridged noise (thin lines where it crosses zero) along the wind; a noise unit of kf2
   // is ~8 km across it, so lines every ~16, 4, 1.4 and 0.5 km. Under a pixel each fades to its
-  // mean (0.25)
+  // mean (0.25); the widest ones' lines are a few km across, and toward the horizon those go too
   let v = 1.0 - smoothstep(vec3f(0.5), vec3f(1.5), pm / vec3f(4000.0, 1400.0, 500.0));
-  let f1 = cirrusRidge(streak);
+  let f1 = mix(0.25, cirrusRidge(streak), 1.0 - smoothstep(0.5, 1.5, pm / 12000.0));
   let f2 = mix(0.25, cirrusRidge(tnoise(kf2 * 2.0 + 3.0)), v.x);
   // (the finer ones soft streaky texture, not lines: as ridged lines along the streaks they were
   // scratches, and less stretched, a web of veins)
@@ -573,8 +576,10 @@ fn fsComposite(@builtin(position) pos: vec4f) -> @location(0) vec4f {
   if (tCi > 0.0 && tCi < sceneT && vp.on > 0.0) {
     let Q = dir * tCi - C;
     let up = normalize(Q);
-    // (a pixel's footprint on the sheet, along the ray's slant through it)
-    let pm = tCi * 2.0 / (frame.proj.y * frame.viewport.y) / max(abs(dot(dir, up)), 0.1);
+    // (a pixel's footprint on the sheet, along the ray's slant through it: the long way, toward
+    // the horizon. Its slant capped at 0.1, there the footprint was under a fifth of what it is, the
+    // fine streaks never faded, and the cirrus was jagged, stepping from pixel row to row)
+    let pm = tCi * 2.0 / (frame.proj.y * frame.viewport.y) / max(abs(dot(dir, up)), 0.01);
     let a0 = cirrus(cloudDir(toLocalM() * Q), pm);
     if (a0 > 0.0) {
       // (a thin sheet: seen edge-on, the path through it, and its opacity, grow)

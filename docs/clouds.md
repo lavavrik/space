@@ -86,6 +86,10 @@ Past the march's reach (250 km from where the ray enters the layer) the volumetr
     16 km ones hold from orbit. At 25× they were scratches; swirled as much as the plumes, they
     meandered like rivers; the fine ones as ridged lines were scratches too, or less stretched, a
     web of veins.
+  - **Toward the horizon** a pixel spans tens of km of the sheet, the long way: its footprint is
+    taken along the ray's slant down to 1 % (capped at 10 %, it was under a fifth of the real one
+    there, the fine streaks never faded, and the cirrus was jagged, stepping from pixel row to
+    row); the 16 km lines fade to their mean too, and the plumes' edges soften to a few pixels.
   - **A soft veil** round the filaments (alone, the lines read as scratches on the view).
   - Opacity up to ~0.5 (more seen edge-on), thinning to 15 % of that once the sun's gone from it: unlit, over the twilit clouds and ground under it, it drew dark stripes across them. It's lit white, brighter toward the sun, with the air in front hazing it. It lies in
   front of the lower clouds from above and behind them from below.
