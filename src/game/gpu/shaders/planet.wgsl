@@ -253,7 +253,9 @@ fn fs(in: Out) -> @location(0) vec4f {
     // (open sea whatever the finer octaves add: they're skipped, flat water)
     var h = hc;
     tDet = 0.0;
+    tFw = fw;
     if (!(terr && seaOn && hc + terrRise(o0, oct) < world.sea)) { h = terrHFrom(p, o0, oct, hc, in.mask); }
+    tFw = 0.0;
     tUseOff = false;
     elev = terrElev(h, world.sea, seaOn);
     N = bumpN(N, elev - terrElev(hc, world.sea, seaOn), in.obj, in.wp, terr);

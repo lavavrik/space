@@ -18,6 +18,11 @@ var<private> tMask: f32;      // the mountain-range mask terrH found
 var<private> tCoarse: f32;    // terrH's h with only the first `split` octaves
 var<private> tOffDir: vec3f;  // the point's direction minus the chunk centre's (terrain chunks)
 var<private> tUseOff: bool = false;
+// a pixel's footprint (unit-direction units; terrHFrom): the noise's own 8-tap filter only where a
+// texel spans a few pixels (where the GPU's 8-bit filter weights would show as blocks), the GPU's
+// one-tap filter below that. All 8 taps on every octave: ~80 texture reads a pixel zoomed in, the
+// terrain's whole cost at 100×. 0: always the 8-tap one.
+var<private> tFw: f32 = 0.0;
 
 fn terrQ(d: vec3f, i: i32, k: f32) -> vec3f {
   if (tUseOff) { return chunk.qn[i].xyz + tOffDir * k; }
@@ -123,7 +128,8 @@ fn terrHFrom(d: vec3f, o0: i32, oct: i32, hc: f32, mask0: f32) -> f32 {
     if (i >= oct) { break; }
     let q = terrQ(d, i, k);
     var n: f32;
-    if (i < FBM_EXACT) { n = snoise(q); } else { n = tnoiseHQ(q); }
+    // (a noise texel here: 1 / (8k) in direction units; magnified past ~3 px, the precise filter)
+    if (i < FBM_EXACT) { n = snoise(q); } else if (tFw <= 0.0 || 1.0 / (8.0 * k * tFw) > 3.0) { n = tnoiseHQ(q); } else { n = tnoise(q); }
     s += octA(i) * n;
     if (i >= 6) { tDet = tDet * 0.8 + n; }
     if (i == 2) { mask = smoothstep(-0.05, 0.45, n); }
