@@ -3,6 +3,7 @@ import { AP_ACC, AU, SHIP, WT } from '../constants';
 import { fmtFlow, fmtSpeedText, fmtTime } from '../format';
 import { THREE } from '../lib/three';
 import type { Autopilot, Body, OrbitType, Planner, Ship } from '../types';
+import { TIDE_FROM } from './gravity';
 import { driftTime, lagrangePoints } from './lagrange';
 import { phasingEstimate } from './phasing';
 import { deltaVLeft, shipMass } from './resources';
@@ -18,7 +19,11 @@ export function minOrbitAlt(b: Body) {
 }
 
 export function maxOrbitR(b: Body) {
-  return b.kind === 'star' ? Math.min(150 * AU, b.soi * 0.8) : b.soi * 0.8; // (a wide pair's star: within its Roche lobe)
+  // (a wide pair's star: within its Roche lobe.) A world: below where its parent's tide starts
+  // (sim/gravity.ts TIDE_FROM), so an orbit stays an exact Kepler orbit, the settled autopilot can
+  // coast and time warp's rails hold it. At the old 0.8 SOI the tide pulled a settled orbit out of
+  // the autopilot's band in 3 days and out of the SOI within 3 orbits: seconds under time warp.
+  return b.kind === 'star' ? Math.min(150 * AU, b.soi * 0.8) : b.soi * TIDE_FROM;
 }
 
 export function defaultOrbitAlt(b: Body) {

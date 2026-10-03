@@ -51,18 +51,19 @@ function setup(k: 1 | 2 | 3 | 4 | 5, circular = true) {
  * at a few seconds a step it limit-cycles), stepping the planet along. Returns where it ends and
  * what it burned over the last hour, once it has long settled, in m/s a year.
  */
-function fly(k: 1 | 2 | 3 | 4 | 5, secs: number, dt = 0.05) {
-  const { bodies, w, cur, ship, ap, g } = setup(k);
+function fly(k: 1 | 2 | 3 | 4 | 5, secs: number, dt = 0.05, circular = true) {
+  const { bodies, w, cur, ship, ap, g } = setup(k, circular);
   spent = 0;
   let settledAt = -1,
     spentBefore = 0;
   for (let t = 0; t < secs; t += dt) {
     if (t >= secs - 3600 && spentBefore === 0) spentBefore = spent;
-    const grav = gravityAt(cur, ship.pos);
-    g.simTime = t;
-    autopilot(g, dt, grav); // (adds gravity and thrust to ship.vel)
-    ship.pos.addScaledVector(ship.vel, dt);
+    // the game's order (sim/update.ts): the clock and the bodies go to the step's end first, then
+    // the ship is flown and moved there
+    g.simTime = t + dt;
     updateBodies(bodies, t + dt);
+    autopilot(g, dt, gravityAt(cur, ship.pos)); // (adds gravity and thrust to ship.vel)
+    ship.pos.addScaledVector(ship.vel, dt);
     if (settledAt < 0 && ap.settled) settledAt = t;
   }
   const lp = lagrangePoints(w)[k - 1];
@@ -83,6 +84,15 @@ describe('holding at a Lagrange point (autopilot)', () => {
     expect(r.settledAt).toBeGreaterThan(0);
     expect(r.off).toBeLessThan(500);
     expect(r.perYear).toBeLessThan(50);
+  });
+
+  it('settles on L1 and L2 of the planet\'s real, eccentric orbit too (the points breathe with it, exactly)', () => {
+    for (const k of [1, 2] as const) {
+      const r = fly(k, 7200, 0.05, false);
+      expect(r.settledAt).toBeGreaterThan(0);
+      expect(r.off).toBeLessThan(500);
+      expect(r.perYear).toBeLessThan(50);
+    }
   });
 });
 
@@ -116,12 +126,12 @@ describe('phasing transfer (autopilot)', () => {
         autopilot(g, 0, gravityAt(cur, ship.pos));
       } else {
         const dt = 0.05;
-        g.simTime = t;
+        t += dt;
+        g.simTime = t; // (the game's order, as in fly())
+        updateBodies(bodies, t);
         autopilot(g, dt, gravityAt(cur, ship.pos));
         if (!ship.ap) break;
         ship.pos.addScaledVector(ship.vel, dt);
-        t += dt;
-        updateBodies(bodies, t);
       }
       stages.add(ap.ph!.stage);
       if (ap.settled && tHold < 0) tHold = t;

@@ -340,7 +340,11 @@ export function autopilot(g: Game, dt: number, grav: Gravity) {
     // gravity already supplies, which near L1 and L2 is nearly all of it, so holding costs next to
     // nothing and the thrust is the real drift (sim/lagrange.ts, docs/lagrange.md)
     const lp = apPoint(ap);
-    const e = lp.pos.clone().sub(ship.pos),
+    // (the bodies, and so the point, are already at the end of this step and the ship isn't: it
+    // moves after this (sim/update.ts). So it's compared where it will be then. Against where it is
+    // now, it held a step's motion ahead of the point, which moves at the planet's orbital speed in
+    // the star's frame: ~0.9 km at 60 fps, 0.45 km at 120, and the guide never saw it arrive.)
+    const e = lp.pos.clone().sub(ship.pos).addScaledVector(ship.vel, -dt),
       dist = e.length();
     const vPt = lp.vel.clone().sub(b.vel); // relative to the autopilot body, like vRel
     const hp = ap.ph?.stage === 'arrive' ? ARRIVE_PROFILE : prof;
@@ -507,6 +511,15 @@ export function autopilot(g: Game, dt: number, grav: Gravity) {
   ship.vel.addScaledVector(grav.vec, dt).add(T);
 }
 
+/**
+ * How the autopilot's destination moves, relative to the frame body: a Lagrange point (or the
+ * phasing gate on the way to one), a station, or otherwise the body itself.
+ */
+export function destVel(g: Game, ap: Autopilot, out = new THREE.Vector3()) {
+  const v = ap.type === 'lagrange' ? apPoint(ap).vel : ap.type === 'rendezvous' ? ap.station!.vel : ap.body.vel;
+  return out.subVectors(v, g.frameBody.vel);
+}
+
 /** Autopilot FTL leg: turn toward the insertion point and fly there, then drop. */
 export function ftlTransfer(g: Game, dt: number) {
   const { ship } = g;
@@ -537,6 +550,13 @@ export function ftlTransfer(g: Game, dt: number) {
   if (ship.ftlSpeed < tgt) ship.ftlSpeed = Math.min(tgt, ship.ftlSpeed * Math.exp(1.5 * dt) + 20000 * dt);
   else ship.ftlSpeed = Math.max(tgt, ship.ftlSpeed * Math.exp(-3 * dt));
   ship.pos.addScaledVector(g.fwd, ship.ftlSpeed * dt);
+  // The leg flies in the destination's frame: the drive's speed above (0.8 × the distance, closing
+  // in) is relative to where it's going, and the ship is carried along with that. A Lagrange point
+  // or a phasing gate moves at its planet's orbital speed (30–45 km/s) in the star's frame, which is
+  // the frame out there; chased at 0.8 × the distance in that frame, the ship hung ~40–55 km behind
+  // it for good, short of the 30 km drop-out (ftlLeg.test.ts). It also makes the drop-out continuous:
+  // dropFTL leaves the ship moving with the destination.
+  ship.pos.addScaledVector(destVel(g, ap), dt);
   g.curSpeed = ship.ftlSpeed;
   if (!ftlUpkeep(g, dt, align)) return;
   if (!waypoint && dist < Math.max(30e3, rT * 0.01)) {

@@ -2,7 +2,7 @@ import { WT } from '../constants';
 import { spinRateFor } from '../sim/stationGeom';
 import { lr, mulberry32, rr, type Rng } from '../lib/rng';
 import { THREE } from '../lib/three';
-import { maxOrbitR, minOrbitAlt, syncRadius } from '../sim/orbits';
+import { minOrbitAlt, syncRadius } from '../sim/orbits';
 import { stationState } from '../sim/stations';
 import { atmoOf } from '../sim/atmosphere';
 import { elevationLocal, hasSea } from '../sim/terrain';
@@ -171,7 +171,7 @@ function pickOrbitRadius(b: World, g: Rng, rMin: number, rMax: number) {
 function makeStation(b: World, moons: World[], g: Rng, used: Set<string>): Station | null {
   const rMin = b.radius + minOrbitAlt(b) * 1.2;
   // the innermost moon of this world caps the station's orbit
-  let rMax = maxOrbitR(b) * 0.6;
+  let rMax = b.soi * 0.48; // (0.6 × the planner's old 0.8 SOI ceiling, kept so the generated stations stay where they were)
   for (const m of moons) rMax = Math.min(rMax, m.orbit * 0.5);
   const a = pickOrbitRadius(b, g, rMin, rMax);
   if (a === null) return null;

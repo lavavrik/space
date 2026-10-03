@@ -7,8 +7,9 @@
  *   L4  60° ahead                                                     free orbit, stable
  *   L5  60° behind                                                    free orbit, stable
  *
- * L1 and L2 sit still in the frame turning with the planet at its instantaneous angular rate
- * (ω = r × v / r²): velocity ω × position, acceleration −ω² × position. They are solved against the
+ * L1 and L2 sit on the line from the parent through the planet, at a fixed share x of its distance,
+ * so they move at x × its velocity: on a circular orbit that's turning with it, on an eccentric one
+ * the whole line also breathes in and out (the homographic solution: exact). They are solved against the
  * same force the ship feels (sim/gravity.ts): the parent's pull plus the planet's, with the
  * planet's tapered away past HILL_FULL Hill radii. A ship put there at the point's velocity needs no
  * thrust, and the instability (a drift of e-fold 1 / (2.53 n): 23 days at Earth) is real: left alone
@@ -97,15 +98,26 @@ export function lagrangePoints(planet: World): LPoint[] {
       dvYear: ok || n === 0 ? 0 : (dvOrbit * YEAR * n) / (2 * Math.PI),
     };
   };
-  const place = (k: LKind, rel: THREE.Vector3, dvOrbit: number, ok: boolean): LPoint => {
-    const vel = new THREE.Vector3().crossVectors(w, rel).add(par.vel);
+  // L1 and L2: a fixed share x of the planet's position relative to the parent, so moving at x × its
+  // velocity and accelerating at x × its (Kepler) acceleration. Every pull there goes as 1 / r², so
+  // if x balances on the mean orbit it balances at every r: the elliptic problem's collinear points
+  // are this homographic solution, exact for any eccentricity, and a ship on it needs no thrust.
+  // (They used to be re-solved each step from the instantaneous r and ω, with velocity ω × position:
+  // on an eccentric orbit the point slid along the line, ~40 m/s at e = 0.026, and left out the
+  // planet's radial motion, so its stated velocity wasn't how it moved. The hold, steering for the
+  // point's place and its velocity at once, hung for good ~100–800 m off where its 0.3/s approach
+  // tail balanced the mismatch, and never settled; the tests had made the orbit circular.)
+  const o = planet.orb;
+  const muOrb = o.n * o.n * o.a ** 3;
+  const place = (k: LKind, x: number, dvOrbit: number, ok: boolean): LPoint => {
+    const rel = r.clone().multiplyScalar(x);
     return {
       k,
       name: `${planet.name} L${k}`,
       planet,
       pos: rel.clone().add(par.pos),
-      vel,
-      acc: rel.clone().multiplyScalar(-n * n),
+      vel: v.clone().multiplyScalar(x).add(par.vel),
+      acc: rel.clone().multiplyScalar(-muOrb / (rd * rd * rd)),
       stable: ok,
       dvYear: ok || n === 0 ? 0 : (dvOrbit * YEAR * n) / (2 * Math.PI),
     };
@@ -121,10 +133,10 @@ export function lagrangePoints(planet: World): LPoint[] {
     trojanRel(planet, k, meanAnomalyOf(planet.orb, r), rel, vel);
     return { rel, vel };
   };
-  const [x1, x2] = [collinear(par.mu, planet.mu, rd, n, hill, 1 - rho), collinear(par.mu, planet.mu, rd, n, hill, 1 + rho)];
+  const [x1, x2] = [collinear(par.mu, planet.mu, o.a, o.n, hill, 1 - rho), collinear(par.mu, planet.mu, o.a, o.n, hill, 1 + rho)];
   return [
-    place(1, r.clone().multiplyScalar(x1), KEEP * n * dHill, false),
-    place(2, r.clone().multiplyScalar(x2), KEEP * n * dHill, false),
+    place(1, x1, KEEP * n * dHill, false),
+    place(2, x2, KEEP * n * dHill, false),
     free(3, tro(3), KEEP * n * dL3, false),
     free(4, tro(4), 0, stable),
     free(5, tro(5), 0, stable),

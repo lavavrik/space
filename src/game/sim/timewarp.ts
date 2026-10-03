@@ -142,15 +142,17 @@ export function railsStep(g: Game, dt: number) {
     }
   }
   const h = dt / n;
-  const accel = () => {
+  // (the frame body's own pull is centred on it, so its motion doesn't matter; the other bodies'
+  // pulls are taken where they were at each substep's time, `at` seconds before the frame's end,
+  // where advanceBodies has already put them)
+  const accel = (at: number) => {
     const r = rel.length();
-    // (the bodies hold still for the frame's step; fine, they move far less than their reach)
-    return acc.copy(rel).multiplyScalar(-b.mu / (r * r * r)).add(perturbation(g.cur, b, pAt.addVectors(b.pos, rel), pert));
+    return acc.copy(rel).multiplyScalar(-b.mu / (r * r * r)).add(perturbation(g.cur, b, pAt.addVectors(b.pos, rel), pert, at));
   };
   for (let k = 0; k < n; k++) {
-    ship.vel.addScaledVector(accel(), h / 2);
+    ship.vel.addScaledVector(accel(-dt + k * h), h / 2);
     rel.addScaledVector(ship.vel, h);
-    ship.vel.addScaledVector(accel(), h / 2);
+    ship.vel.addScaledVector(accel(-dt + (k + 1) * h), h / 2);
   }
   ship.pos.addVectors(b.pos, rel);
   const next = dominantBody(g.cur, ship.pos);

@@ -39,7 +39,9 @@ export const planetPullWeight = (d: number, hill: number) => 1 - smooth01((d / h
 const tmpD = new THREE.Vector3(),
   tmpA = new THREE.Vector3(),
   tmpB = new THREE.Vector3(),
-  tmpPert = new THREE.Vector3();
+  tmpPert = new THREE.Vector3(),
+  tmpC = new THREE.Vector3(),
+  tmpD2 = new THREE.Vector3();
 
 /** Acceleration toward `b` at `x` (a close pair's barycentre: both stars' pulls summed). */
 function pullOf(cur: CurrentSystem, b: Body, x: THREE.Vector3, out: THREE.Vector3) {
@@ -59,13 +61,17 @@ function pullOf(cur: CurrentSystem, b: Body, x: THREE.Vector3, out: THREE.Vector
 
 /**
  * The third-body acceleration on a ship at `pos` in `body`'s frame, on top of body's own pull (see
- * above). `out` is returned.
+ * above). `out` is returned. `at` (s, ≤ 0) evaluates it with the other bodies where they were that
+ * long ago relative to `body` (moved back along their velocities): time warp's rails integrate a
+ * whole frame, up to ~1,600 s at ×100,000, with the bodies already at its end, and with them frozen
+ * there a ship drifting near L1 ended up ~600 km off after ten days instead of under one.
  */
-export function perturbation(cur: CurrentSystem, body: Body, pos: THREE.Vector3, out: THREE.Vector3) {
+export function perturbation(cur: CurrentSystem, body: Body, pos: THREE.Vector3, out: THREE.Vector3, at = 0) {
   out.set(0, 0, 0);
   for (const w of cur.bodies) {
     if (w.kind !== 'planet' || w.parent !== body) continue;
     const d = tmpA.subVectors(w.pos, pos);
+    if (at) d.addScaledVector(w.vel, at).addScaledVector(body.vel, -at);
     const dist = d.length();
     const k = planetPullWeight(dist, hillRadius(w));
     if (k > 0) out.addScaledVector(d, (k * w.mu) / (dist * dist * dist));
@@ -73,8 +79,11 @@ export function perturbation(cur: CurrentSystem, body: Body, pos: THREE.Vector3,
   if (body.kind !== 'star') {
     const f = smooth01((pos.distanceTo(body.pos) / body.soi - TIDE_FROM) / (1 - TIDE_FROM));
     if (f > 0) {
+      // (back in time the parent was elsewhere relative to the body: the same as shifting the ship
+      // and the body the other way, which is what pullOf can take)
       const par = body.parent;
-      out.addScaledVector(pullOf(cur, par, pos, tmpA), f).addScaledVector(pullOf(cur, par, body.pos, tmpB), -f);
+      const back = tmpC.copy(body.vel).sub(par.vel).multiplyScalar(at);
+      out.addScaledVector(pullOf(cur, par, tmpD2.addVectors(pos, back), tmpA), f).addScaledVector(pullOf(cur, par, tmpD2.addVectors(body.pos, back), tmpB), -f);
     }
   }
   return out;
