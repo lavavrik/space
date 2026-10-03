@@ -73,6 +73,12 @@ function milestones(g: Game, t: Target): Raw[] {
   add(dropAlt(b), 'FTL DROP', 'FTL drops out here', 'ftl');
   if (b.kind === 'star') {
     add(fluxDist(b.L, ARRIVE_FLUX, b.radius) - b.radius, 'ARRIVAL', 'Where hyperjumps arrive (20× Earth’s sunlight)', 'info');
+    if (b.hole) {
+      // (no corona: the accretion disk's edges instead, docs/blackhole.md)
+      add(b.hole.diskOut - b.radius, 'DISK', "The accretion disk's outer edge: its X-rays get strong inside it (docs/radiation.md)", 'info');
+      add(b.hole.diskIn - b.radius, 'DISK IN', "The disk's inner edge, the innermost stable orbit (3 Rs)", 'info');
+      return out;
+    }
     add(fluxDist(b.L, SCOOP_FLUX_MIN, b.radius) - b.radius, 'SCOOP', 'Corona scoop starts working (25× Earth’s sunlight)', 'on');
     add(fluxDist(b.L, SCOOP_FLUX_FULL, b.radius) - b.radius, 'SCOOP MAX', 'Corona scoop at its full rate (100×)', 'on');
     return out;

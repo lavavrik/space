@@ -7,6 +7,7 @@
  * Positions are in light-years, scaled up (SCALE) before drawing: only directions matter to the
  * projection, but the near plane would clip anything within half a unit of the camera.
  */
+import { CORE_ID, coreSystem } from '../universe/core';
 import { SKY_RADIUS } from '../constants';
 import { THREE } from '../lib/three';
 import { skyColor, skyLook, transitState, type TransitState } from '../sim/hyperspace';
@@ -70,6 +71,7 @@ export class HyperspaceLayer {
     const mid = j.from.clone().add(j.dest.pos).multiplyScalar(0.5);
     const half = j.from.distanceTo(j.dest.pos) / 2;
     this.stars = systemsNear(mid, SKY_RADIUS + half);
+    if (!this.stars.some((s) => s.id === CORE_ID)) this.stars.push(coreSystem()); // (in sight from anywhere)
     const N = Math.max(1, this.stars.length);
     this.headData = new Float32Array(N * 7);
     this.lineData = new Float32Array(N * 14);
@@ -90,7 +92,7 @@ export class HyperspaceLayer {
       const d = Math.max(rel.length(), 1e-4);
       // same look as the normal sky, so nothing pops at the start or the end
       const pl = pairLight(s); // (a pair: one point, both stars' light)
-      const { size, k } = skyLook(pl.L, d);
+      const { size, k } = skyLook(pl.L, d, !!s.star.hole);
       const c = skyColor(pl.color, k, this.c);
       const hk = 1 - 0.45 * blur;
       hd.set([rel.x / d, rel.y / d, rel.z / d, c.r * hk, c.g * hk, c.b * hk, size], i * 7);

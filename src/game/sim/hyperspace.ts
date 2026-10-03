@@ -31,15 +31,19 @@ export const transitTime = (ly: number) => JUMP_TUNNEL_BASE + JUMP_TUNNEL_PER_LY
  * the star's colour by (see skyColor). The system sky and the hyperspace
  * view both use this, so the sky doesn't change when hyperspace begins or ends.
  */
-export function skyLook(L: number, ly: number) {
+export function skyLook(L: number, ly: number, beacon = false) {
   const d = Math.max(ly, 1e-4);
   const lf = Math.log10(L / (d * d));
   // a dim red dwarf at 100 ly (L/ly² ≈ 1e-6) is barely visible, a Sun at a few ly (≈ 0.1) is bright
   const a = Math.max(0, Math.min(1, (lf + 6) / 5.5));
   // the brightest in the normal sky reach 1.5 + 4.1 = 5.6 px (was 8, which looked bloated)
   const size = Math.min(56, 1.5 + 4.1 * a * a + 5 * Math.max(0, lf + 0.5));
-  const fade = 1 - Math.max(0, Math.min(1, (d - SKY_RADIUS * 0.85) / (SKY_RADIUS * 0.15)));
-  return { a, size, fade, k: (0.14 + 1.2 * a ** 1.4) * fade };
+  // (the galactic core shows from anywhere, docs/blackhole.md: no fade past SKY_RADIUS)
+  const fade = beacon ? 1 : 1 - Math.max(0, Math.min(1, (d - SKY_RADIUS * 0.85) / (SKY_RADIUS * 0.15)));
+  const k = (0.14 + 1.2 * a ** 1.4) * fade;
+  // (the core: a landmark, as big and bright as the brightest near star at least)
+  if (beacon) return { a, size: Math.max(size, 9), fade, k: Math.max(k, 2.4) };
+  return { a, size, fade, k };
 }
 
 /**

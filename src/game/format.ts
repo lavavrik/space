@@ -86,3 +86,10 @@ export const fmtArea = (m2: number) => `${nf0.format(Math.round(m2))} m²`;
 
 /** A pressure in bar, e.g. "0.682 bar", "12.4 mbar", "84 bar". */
 export const fmtBar = (bar: number) => (bar < 0.01 ? `${(bar * 1000).toFixed(bar < 0.001 ? 3 : 1)} mbar` : bar < 10 ? `${bar.toFixed(bar < 1 ? 3 : 2)} bar` : `${Math.round(bar)} bar`);
+
+/** A radiation dose rate, given in mSv/h: µSv/h, mSv/h or Sv/h. */
+export function fmtDoseRate(mSvH: number) {
+  if (mSvH < 0.1) return `${(mSvH * 1000).toFixed(mSvH < 0.01 ? 1 : 0)} µSv/h`;
+  if (mSvH < 1000) return `${mSvH.toFixed(mSvH < 10 ? 2 : mSvH < 100 ? 1 : 0)} mSv/h`;
+  return `${(mSvH / 1000).toFixed(mSvH < 1e4 ? 2 : 1)} Sv/h`;
+}

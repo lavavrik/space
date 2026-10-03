@@ -13,6 +13,7 @@ interface Actions extends ContractActions, OutfitActions {
   tab: (t: Tab) => void;
   buyFuel: (f: 'prop' | 'exotic' | 'o2', toKg: number) => void;
   repair: () => void;
+  medbay: () => void;
   sell: (c: Docked['trade'][number]['id']) => void;
   sellAll: () => void;
   cargo: () => void;
@@ -167,6 +168,20 @@ export function StationPanel({ d, act }: { d: Docked; act: Actions }) {
             <div className="obtns">
               <button type="button" className="obtn" onClick={act.repair} disabled={d.hullFull}>
                 {d.hullFull ? 'hull sound' : `repair · ${d.repair}`}
+              </button>
+            </div>
+          </Group>
+          <Group icon="medbay" title="Medbay">
+            <div className="svline">
+              <span>Crew dose</span>
+              <b>{d.dose.text}</b>
+            </div>
+            <div className="bar rad">
+              <i style={{ width: `${d.dose.frac * 100}%` }} />
+            </div>
+            <div className="obtns">
+              <button type="button" className="obtn" onClick={act.medbay} disabled={d.dose.clear}>
+                {d.dose.clear ? 'crew healthy' : `treat · ${d.dose.price}`}
               </button>
             </div>
           </Group>

@@ -3,6 +3,7 @@ import { mulberry32 } from '../lib/rng';
 import { THREE } from '../lib/three';
 import type { StarSystem } from '../types';
 import { homeCompanion, makeCompanion } from './binary';
+import { CORE_SECTOR, coreSystem } from './core';
 import { makeName, starName } from './names';
 import { makeStar } from './stars';
 import { buildSystem, findHome } from './system';
@@ -71,6 +72,10 @@ export function generateSector(ix: number, iy: number, iz: number): StarSystem[]
     const pos = new THREE.Vector3((ix - 0.5 + g()) * S, (iy - 0.5 + g()) * S, (iz - 0.5 + g()) * S);
     if (k === 0 && ix === 0 && iy === 0 && iz === 0) {
       out.push(homeSystem());
+      continue;
+    }
+    if (k === 0 && ix === CORE_SECTOR[0] && iy === CORE_SECTOR[1] && iz === CORE_SECTOR[2]) {
+      out.push(coreSystem()); // (docs/blackhole.md)
       continue;
     }
     const seed = hash32(ix, iy, iz, k + 1);

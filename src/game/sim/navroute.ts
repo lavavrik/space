@@ -164,7 +164,8 @@ export function planRoute(g: Game, mode: NavMode): Route | string {
         cost = jumpCost(ly);
       exoticNeeded += cost;
       if (ex < cost + EXOTIC_MARGIN) {
-        if (nav.caps.refuelStops && scoopFitted(g.ship.outfit)?.caps.exotic) {
+        if (nav.caps.refuelStops && scoopFitted(g.ship.outfit)?.caps.exotic && !at.star.hole) {
+          // (no corona to skim at a black hole)
           legs.push({ kind: 'refuel', at, time: REFUEL_TIME });
           ex = SHIP.exoticCap;
         } else if (!warning)

@@ -37,6 +37,7 @@ export const PRICE = {
   exotic: 60, // Cr/kg: a full 100 kg ~6,000
   o2: 0.3, // Cr/kg of liquid oxygen: a full 2 t tank ~600
   repair: 120, // Cr per percent of hull
+  medbay: 8000, // Cr per sievert of crew dose treated (sim/radiation.ts)
   tankerCall: 2500, // the tanker's call-out fee, on top of its fuel
   tankerMarkup: 1.5, // × station prices for what it delivers
   buyBack: 0.5, // share of a module's list price the yard pays for it
@@ -133,6 +134,21 @@ export function buyRepair(g: Game) {
   g.credits -= mend * per;
   g.ship.hull += mend;
   g.showMsg(g.ship.hull < 0.999 ? `${st.name} · repaired to ${Math.round(g.ship.hull * 100)} % · out of credits` : `${st.name} · hull repaired · ${fmtCr(mend * per)}`);
+}
+
+/** What treating the crew's whole radiation dose costs here (priced like repairs, by the station). */
+export const medbayQuote = (g: Game, st: Station | null) => g.ship.dose * PRICE.medbay * stationFactor(st, 'repair');
+
+/** The medbay: treat the crew's dose as far as your credits go. */
+export function buyMedbay(g: Game) {
+  if (!g.dock?.docked) return;
+  const st = g.dock.station;
+  if (medbayQuote(g, st) < 0.5) return;
+  const per = PRICE.medbay * stationFactor(st, 'repair'); // per Sv
+  const treat = Math.min(g.ship.dose, g.credits / per);
+  g.credits -= treat * per;
+  g.ship.dose -= treat;
+  g.showMsg(g.ship.dose > 0.001 ? `${st.name} medbay · crew dose down to ${g.ship.dose.toFixed(2)} Sv · out of credits` : `${st.name} medbay · crew treated · ${fmtCr(treat * per)}`);
 }
 
 /** A commodity's price at a station (Cr/kg). */

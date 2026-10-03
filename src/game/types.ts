@@ -62,6 +62,15 @@ export interface Star extends BodyBase {
   parent?: Star;
   /** The barycentre of a pair: a star-kind point (radius 0, no light) that's never in `bodies`. */
   bary?: true;
+  /** A black hole (docs/blackhole.md): `radius` is its horizon; it shines by its accretion disk. */
+  hole?: BlackHole;
+}
+
+export interface BlackHole {
+  rs: number; // Schwarzschild radius, m
+  diskIn: number; // m
+  diskOut: number; // m
+  diskAxis: Vec3; // unit normal of the accretion disk
 }
 
 export interface World extends BodyBase {
@@ -194,6 +203,8 @@ export interface StarInfo {
   R: number; // solar radii
   L: number; // solar luminosities
   color: Color;
+  /** The galactic core's black hole (universe/core.ts): R is its horizon, L and colour its disk's. */
+  hole?: true;
 }
 
 /** A system's second star (universe/binary.ts, docs/binaries.md). */
@@ -347,6 +358,7 @@ export interface Ship {
   avionics: Avionics; // fitted computers (see avionics/catalog.ts)
   temp: number; // K, hull temperature (see sim/thermal.ts)
   hull: number; // structural integrity, 0–1 (0: lost; sim/damage.ts)
+  dose: number; // Sv, the crew's accumulated radiation dose (sim/radiation.ts)
   cargo: Partial<Record<'nife' | 'cobalt' | 'pgm', number>>; // kg in the hold (sim/economy.ts)
   /** Contract crates in the hold: job id → kg (sim/contracts.ts). They count in its mass and room. */
   crates: Record<string, number>;

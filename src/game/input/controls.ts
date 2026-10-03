@@ -241,6 +241,10 @@ export function onPress(g: Game, code: string) {
     case 'KeyY':
       toggleScan(g);
       break;
+    case 'F8':
+      // debug builds: the galactic core's black hole; Shift+F8: home (debug/poses.ts)
+      if (DEBUG) g.debugJump(keys.ShiftLeft || keys.ShiftRight ? 'home' : 'core');
+      break;
     case 'F9':
       // debug builds (?debug): landed on the Earth-like world's dry ground (debug/poses.ts)
       if (DEBUG) g.debugJump('landed');

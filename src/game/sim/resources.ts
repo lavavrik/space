@@ -113,6 +113,7 @@ export function scoop(g: Game, dt: number) {
   const unit = scoopFitted(ship.outfit);
   const k = unit?.caps.rate ?? 0;
   for (const b of cur.bodies) {
+    if (b.kind === 'star' && b.hole) continue; // (no corona: its disk is far too hot to skim)
     const alt = b.pos.distanceTo(ship.pos) - b.radius;
     const inZone = b.kind === 'star' ? b.L * (AU / (alt + b.radius)) ** 2 >= SCOOP_FLUX_MIN : b.type >= WT.GasGiant && alt < b.radius * 0.05;
     if (inZone && (!unit || ship.mode !== 'normal')) {
@@ -141,7 +142,7 @@ export function scoop(g: Game, dt: number) {
   if (!ship.scoop) {
     const anyZone = cur.bodies.some((b) => {
       const alt = b.pos.distanceTo(ship.pos) - b.radius;
-      return b.kind === 'star' ? b.L * (AU / (alt + b.radius)) ** 2 >= SCOOP_FLUX_MIN : b.type >= WT.GasGiant && alt < b.radius * 0.05;
+      return b.kind === 'star' ? !b.hole && b.L * (AU / (alt + b.radius)) ** 2 >= SCOOP_FLUX_MIN : b.type >= WT.GasGiant && alt < b.radius * 0.05;
     });
     if (!anyZone) g.warned.noScoop = g.warned.ftlScoop = false;
   }

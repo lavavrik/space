@@ -174,7 +174,7 @@ export function collide(g: Game, dt: number) {
     const vin = -ship.vel.dot(rel);
     if (b.kind === 'star') {
       ship.vel.add(bv);
-      destroyShip(g, `Burned up in the photosphere of ${b.name}`, b);
+      destroyShip(g, b.hole ? `Crossed the event horizon of ${b.name}` : `Burned up in the photosphere of ${b.name}`, b);
       return;
     }
     // a hard landing damages the hull, the harder the worse: a whole hull's worth at CRASH_SPEED
@@ -243,6 +243,7 @@ export function respawn(g: Game) {
   refillShip(g);
   ship.temp = TEMP.start;
   ship.hull = 1;
+  ship.dose = 0;
   const lost = Object.values(ship.cargo).some((kg) => (kg ?? 0) > 1);
   shipLost(g); // contract crates went down with it: those hauls fail (sim/contracts.ts)
   ship.cargo = {}; // (the hold went down with the ship)
