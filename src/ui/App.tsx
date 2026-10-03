@@ -97,7 +97,7 @@ export function App() {
                 }}
               />
             )}
-            {hud.autopilot && <AutopilotPanel a={hud.autopilot} onDisengage={() => game!.requestDisengage()} onChange={() => game!.changeOrbit()} />}
+            {hud.autopilot && <AutopilotPanel a={hud.autopilot} onDisengage={() => game!.requestDisengage()} onChange={() => game!.changeOrbit()} onRelease={(b) => game!.releaseLpoint(b)} />}
             {hud.guide && <ManeuverGuide guide={hud.guide} />}
             {hud.planner && <OrbitPlanner p={hud.planner} />}
           </div>

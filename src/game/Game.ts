@@ -38,6 +38,7 @@ import { TEMP, toggleRadiators, type HeatBudget } from './sim/thermal';
 import { BATTERIES, bestOutfit } from './outfit/catalog';
 import { ZOOM_START, updatePeriscope } from './sim/periscope';
 import { startPivot } from './sim/pivot';
+import { releaseFromPoint, type Branch } from './sim/release';
 import { contactLabel, radarContacts, radarSweep } from './sim/radar';
 import { toggleScan } from './sim/scanner';
 import { dockKey, launch, type Dock } from './sim/docking';
@@ -375,6 +376,11 @@ export class Game {
     this.ship.ap = null;
     this.ship.landed = null;
     closePlanner(this);
+  }
+
+  /** Autopilot panel (a hold at L1 or L2): let go with a push onto the branch toward the planet or away from it. */
+  releaseLpoint(branch: Branch) {
+    releaseFromPoint(this, branch);
   }
 
   /** Autopilot panel button: first click arms, second disengages (see requestDisengage). */

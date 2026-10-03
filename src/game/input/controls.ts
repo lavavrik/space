@@ -150,6 +150,10 @@ export function onPress(g: Game, code: string) {
       requestDisengage(g);
       return;
     }
+    if (code === 'BracketLeft' || code === 'BracketRight') {
+      g.releaseLpoint(code === 'BracketLeft' ? 'planet' : 'away');
+      return;
+    }
     if (code === 'Enter' || code === 'NumpadEnter') {
       g.apPanel = false;
       openPlanner(g);

@@ -10,6 +10,7 @@ import { holdPoint, orbitVelErr } from '../sim/autopilot';
 import { velRel } from '../sim/frame';
 import { orbitElements, orbitElementsRel } from '../sim/gravity';
 import { apPoint, driftTime } from '../sim/lagrange';
+import { canRelease, releaseNote } from '../sim/release';
 import { guideEta, type Guide } from '../sim/guide';
 import { transitState } from '../sim/hyperspace';
 import { NAV_MODES, searchNav } from '../sim/navroute';
@@ -610,6 +611,10 @@ function autopilotView(g: Game): AutopilotView {
     state: { text: mode.replace('AUTOPILOT · ', ''), warn: false },
     rows,
     confirm: g.apConfirm > 0,
+    release: (() => {
+      const c = canRelease(g);
+      return c.ok ? releaseNote(c.planet, c.k) : null;
+    })(),
   };
 }
 

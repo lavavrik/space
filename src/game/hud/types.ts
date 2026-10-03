@@ -115,6 +115,8 @@ export interface AutopilotView {
   state: Readout;
   rows: [string, string | Readout][];
   confirm: boolean; // disengage armed, waiting for the second press
+  /** A settled hold at L1 or L2: the release buttons' note, else null. */
+  release: string | null;
 }
 
 /** Influences panel (B): what's acting on the ship (see hud/influences.ts). */
