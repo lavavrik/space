@@ -646,8 +646,8 @@ function radarView(g: Game): RadarView {
       const p = scanProgress(g, c.target);
       return {
         key: c.key,
-        label: contactLabel(g, c.target),
-        cls: radarClass(c.target),
+        label: c.swarm ? `Trojan swarm · ${c.target.name}` : contactLabel(g, c.target),
+        cls: c.swarm ? 'trojan swarm' : radarClass(c.target),
         dist: fmtDist(c.dist),
         x: v.x * k,
         y: v.z * k, // forward (−z) is up on the scope

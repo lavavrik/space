@@ -152,7 +152,7 @@ export class GpuRenderer implements GameRenderer {
     this.sky = new SkyLayer(device, this.frameLayout);
     this.worlds = new WorldsLayer(device, this.frameLayout, this.shadows.casterLayout);
     this.stations = new StationsLayer(device, this.frameLayout, this.worlds.worldLayout, this.shadows.casterLayout);
-    this.swarm = new SwarmLayer(device, this.frameLayout);
+    this.swarm = new SwarmLayer(device, this.frameLayout, this.shadows.casterLayout);
     this.fx = new EffectsLayer(device, this.frameLayout, this.shadows.casterLayout);
     this.vclouds = new VolumetricClouds(device, this.frameLayout, this.worlds.worldLayout, this.worlds.coverLayout, NEAR);
     this.toneBuf = device.createBuffer({ label: 'post', size: POST_FLOATS * 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
@@ -339,7 +339,7 @@ export class GpuRenderer implements GameRenderer {
       this.fx.update(g, this.worlds, this.particles, this.PR);
       this.worlds.flushDots();
       // shadows while something near can cast them: rocks, other ships, a station
-      this.shadows.update(g, this.settings.shadows && (this.worlds.rocksOut || this.fx.hullCount > 0 || this.stations.near(30e3)));
+      this.shadows.update(g, this.settings.shadows && (this.worlds.rocksOut || this.fx.hullCount > 0 || this.stations.near(30e3) || this.swarm.casting));
     }
 
     const enc = device.createCommandEncoder({ label: 'frame' });
@@ -359,6 +359,7 @@ export class GpuRenderer implements GameRenderer {
           this.worlds.drawShadow(pass, R, (2 * R) / 2048);
           this.stations.drawShadow(pass, R);
           this.fx.drawShadow(pass);
+          this.swarm.drawShadow(pass);
         },
         tw,
       );

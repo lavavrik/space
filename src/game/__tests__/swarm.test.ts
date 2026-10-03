@@ -4,6 +4,9 @@ import { THREE } from '../lib/three';
 import { updateBodies } from '../sim/kepler';
 import { lagrangePoints } from '../sim/lagrange';
 import { METAL_CATCH, TROJAN_METAL_RICH, rockMake } from '../sim/laser';
+import { radarContacts, swarmContactKey } from '../sim/radar';
+import { lpointFor } from '../sim/lpoints';
+import type { Game } from '../Game';
 import { minedRocks } from '../sim/ringRocks';
 import { SWARM_CELL, SWARM_MAX_R, SWARM_MIN_R, swarmCentre, swarmDensity, swarmHere, swarmRay, swarmRocks, swarmShapeR, vnoise, type SwarmRock } from '../sim/swarm';
 import type { CurrentSystem, Ship, Star, TrojanField, World } from '../types';
@@ -186,3 +189,23 @@ describe('what the rocks are made of', () => {
 void homeSystem;
 void ({} as World);
 void ({} as TrojanField);
+
+describe('radar and swarms', () => {
+  it('a sweep finds a swarm as a contact whose target is its point, at its near edge', () => {
+    const c = swarmCentre(field);
+    const ship = V().copy(c.pos).addScaledVector(c.out, 50 * Math.max(field.sigA * c.rel.length(), field.sigR));
+    const g = {
+      cur,
+      ship: { pos: ship, breakers: { radar: true } },
+      radar: { sweep: 0, seen: new Set<string>(), rocks: [] },
+      traffic: [],
+      power: { radarKW: 0 },
+    } as unknown as Game;
+    expect(radarContacts(g).some((x) => x.swarm)).toBe(false);
+    g.radar.seen.add(swarmContactKey(g, field)); // (what a finished sweep does, here a hand-made one)
+    const hit = radarContacts(g).find((x) => x.swarm === field)!;
+    expect(hit.target).toBe(lpointFor(g, field.planet, field.k));
+    expect(hit.dist).toBeGreaterThan(0);
+    expect(hit.dist).toBeLessThan(ship.distanceTo(c.pos));
+  });
+});

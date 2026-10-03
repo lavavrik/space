@@ -10,6 +10,7 @@ import { THREE } from '../lib/three';
 import { SWARM_INSTANCE_FLOATS, packSwarmRock, swarmSphere } from '../render/swarmMesh';
 import { minedRocks } from '../sim/ringRocks';
 import { SWARM_REACH, swarmCentre, swarmExponent, swarmRocks, type SwarmRock } from '../sim/swarm';
+import { ShadowMap } from './shadowmap';
 import { DEPTH_FORMAT, HDR_FORMAT, SAMPLES } from './formats';
 import { SWARM_ROCK_WGSL } from './shaders';
 
@@ -20,6 +21,7 @@ const DRAW_EXPONENT = 5;
 
 export class SwarmLayer {
   private readonly pipe: GPURenderPipeline;
+  private readonly shadowPipe: GPURenderPipeline;
   private readonly mesh: GPUBuffer;
   private readonly meshCount: number;
   private readonly inst: GPUBuffer;
@@ -33,6 +35,7 @@ export class SwarmLayer {
   constructor(
     private readonly device: GPUDevice,
     frameLayout: GPUBindGroupLayout,
+    casterLayout: GPUBindGroupLayout,
   ) {
     const sphere = swarmSphere();
     this.meshCount = sphere.length / 3;
@@ -44,31 +47,41 @@ export class SwarmLayer {
     this.group = device.createBindGroup({ layout, entries: [{ binding: 0, resource: { buffer: this.uni } }] });
     const module = device.createShaderModule({ label: 'swarm rock', code: SWARM_ROCK_WGSL });
     const F = SWARM_INSTANCE_FLOATS * 4;
+    const buffers: GPUVertexBufferLayout[] = [
+      { arrayStride: 12, attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x3' }] },
+      {
+        arrayStride: F,
+        stepMode: 'instance',
+        attributes: [
+          { shaderLocation: 1, offset: 0, format: 'float32x4' },
+          { shaderLocation: 2, offset: 16, format: 'float32x4' },
+          { shaderLocation: 3, offset: 32, format: 'float32x4' },
+          { shaderLocation: 4, offset: 48, format: 'float32x4' },
+        ],
+      },
+    ];
     this.pipe = device.createRenderPipeline({
       label: 'swarm rock',
       layout: device.createPipelineLayout({ bindGroupLayouts: [frameLayout, layout] }),
-      vertex: {
-        module,
-        entryPoint: 'vs',
-        buffers: [
-          { arrayStride: 12, attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x3' }] },
-          {
-            arrayStride: F,
-            stepMode: 'instance',
-            attributes: [
-              { shaderLocation: 1, offset: 0, format: 'float32x4' },
-              { shaderLocation: 2, offset: 16, format: 'float32x4' },
-              { shaderLocation: 3, offset: 32, format: 'float32x4' },
-              { shaderLocation: 4, offset: 48, format: 'float32x4' },
-            ],
-          },
-        ],
-      },
+      vertex: { module, entryPoint: 'vs', buffers },
       fragment: { module, entryPoint: 'fs', targets: [{ format: HDR_FORMAT }] },
       primitive: { cullMode: 'none' },
       depthStencil: { format: DEPTH_FORMAT, depthWriteEnabled: true, depthCompare: 'greater' },
       multisample: { count: SAMPLES },
     });
+    // into the shadow map: the same rocks, positions only
+    this.shadowPipe = device.createRenderPipeline({
+      label: 'swarm rock shadow',
+      layout: device.createPipelineLayout({ bindGroupLayouts: [casterLayout, layout] }),
+      vertex: { module, entryPoint: 'vsShadow', buffers },
+      primitive: { cullMode: 'none' },
+      depthStencil: ShadowMap.depth,
+    });
+  }
+
+  /** Whether there are rocks to cast shadows this frame. */
+  get casting() {
+    return this.count > 0;
   }
 
   /** Per frame: the rocks near the ship, if it is in a swarm. */
@@ -108,6 +121,16 @@ export class SwarmLayer {
   drawOpaque(pass: GPURenderPassEncoder) {
     if (!this.count) return;
     pass.setPipeline(this.pipe);
+    pass.setBindGroup(1, this.group);
+    pass.setVertexBuffer(0, this.mesh);
+    pass.setVertexBuffer(1, this.inst);
+    pass.draw(this.meshCount, this.count);
+  }
+
+  /** Into a shadow cascade (its group 0 set). */
+  drawShadow(pass: GPURenderPassEncoder) {
+    if (!this.count) return;
+    pass.setPipeline(this.shadowPipe);
     pass.setBindGroup(1, this.group);
     pass.setVertexBuffer(0, this.mesh);
     pass.setVertexBuffer(1, this.inst);

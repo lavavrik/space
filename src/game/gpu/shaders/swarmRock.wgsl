@@ -60,6 +60,13 @@ fn vs(in: VIn) -> VOut {
   return o;
 }
 
+// into the shadow map (gpu/shadowmap.ts): the same shape, its position only
+@vertex
+fn vsShadow(in: VIn) -> @builtin(position) vec4f {
+  let local = in.d * shapeR(in.d, in.o.xyz) * in.sc.xyz;
+  return caster.vp * vec4f(in.p.xyz + qrot(in.q, local), 1.0);
+}
+
 fn hash1(x: f32) -> f32 { return fract(sin(x * 127.1) * 43758.5453); }
 
 @fragment
@@ -78,10 +85,10 @@ fn fs(in: VOut) -> @location(0) vec4f {
   // Lommel–Seeliger (bright at the limb, flat in the middle) mixed with Lambert
   let ls = ndl / (ndl + ndv);
   let lit = mix(ndl, ls * 2.0, 0.5);
-  var col = base * sw.col.rgb * lit;
+  var col = base * sw.col.rgb * lit * shadowAt(in.wp, N); // other rocks' shadows
   if (metal) {
     let H = normalize(L + V);
-    col += sw.col.rgb * pow(max(dot(N, H), 0.0), 40.0) * 0.5 * ndl;
+    col += sw.col.rgb * pow(max(dot(N, H), 0.0), 40.0) * 0.5 * ndl * shadowAt(in.wp, N);
   }
   col += headlight(N, in.wp, base, frame.headK);
   col *= frame.exposure;

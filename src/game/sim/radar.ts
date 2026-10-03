@@ -12,12 +12,14 @@
  */
 import { AU, WT } from '../constants';
 import type { Game } from '../Game';
-import type { Target } from '../types';
+import type { Target, TrojanField } from '../types';
 import { grant } from './power';
 import { SCAN_STAGE, scanKey, scanProgress } from './scanner';
 import { prospect } from './prospect';
 import { fmtCr } from './economy';
 import { rockLabel } from './ringRocks';
+import { swarmCentre } from './swarm';
+import { lpointFor } from './lpoints';
 
 export const RADAR_RANGE = 10 * AU;
 export const RADAR_KW = 400;
@@ -28,6 +30,17 @@ export interface Contact {
   target: Target;
   key: string;
   dist: number; // m to its surface (or a station's hull)
+  /** Set for a trojan swarm: the target is then its L4 or L5 point, and `dist` is to the swarm's near edge. */
+  swarm?: TrojanField;
+}
+
+/** The scan key of a trojan swarm (the radar finds it as a whole: a diffuse return over thousands of km). */
+export const swarmContactKey = (g: Game, f: TrojanField) => `${g.cur.sys.id}/swarm:${f.id}`;
+
+/** How far (m) from `pos` the radar reckons the swarm `f` begins: its core less ~2σ along the orbit. */
+function swarmEdge(g: Game, f: TrojanField, c: ReturnType<typeof swarmCentre>) {
+  const sig = Math.max(f.sigA * c.rel.length(), f.sigR, f.sigZ);
+  return Math.max(0, c.pos.distanceTo(g.ship.pos) - 2 * sig);
 }
 
 /** The broad class the radar can tell from a return: size and whether it shines. */
@@ -68,6 +81,11 @@ export function radarContacts(g: Game): Contact[] {
     const d = t.pos.distanceTo(g.ship.pos) - (t.kind === 'station' ? t.size / 2 : t.radius);
     out.push({ target: t, key, dist: Math.max(0, d) });
   }
+  for (const f of g.cur.trojans ?? []) {
+    const key = swarmContactKey(g, f);
+    if (!g.radar.seen.has(key)) continue;
+    out.push({ target: lpointFor(g, f.planet, f.k), key, dist: swarmEdge(g, f, swarmCentre(f)), swarm: f });
+  }
   return out.sort((a, b) => a.dist - b.dist);
 }
 
@@ -89,11 +107,19 @@ export function updateRadar(g: Game, dt: number) {
     if (!r.seen.has(key)) n++;
     r.seen.add(key);
   }
+  let swarms = 0;
+  for (const f of g.cur.trojans ?? []) {
+    if (swarmEdge(g, f, swarmCentre(f)) > RADAR_RANGE) continue;
+    const key = swarmContactKey(g, f);
+    if (!r.seen.has(key)) swarms++;
+    r.seen.add(key);
+  }
   // in a belt, it prospects too: the best metal-rich rocks around (sim/prospect.ts)
   r.rocks = prospect(g);
   const best = r.rocks[0];
   const rocks = best ? ` · ${r.rocks.length} metal-rich rock${r.rocks.length > 1 ? 's' : ''} marked, best a ${rockLabel(best.size)} ${best.kind} (~${fmtCr(best.perHour)}/h)` : '';
-  g.showMsg(`Radar sweep complete · ${n ? `${n} new contact${n > 1 ? 's' : ''}` : 'nothing new'} within ${RADAR_RANGE / AU} AU${rocks}`);
+  n += swarms;
+  g.showMsg(`Radar sweep complete · ${n ? `${n} new contact${n > 1 ? 's' : ''}${swarms ? ` (${swarms} trojan swarm${swarms > 1 ? 's' : ''})` : ''}` : 'nothing new'} within ${RADAR_RANGE / AU} AU${rocks}`);
   g.invalidateHud();
 }
 
