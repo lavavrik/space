@@ -13,7 +13,7 @@ import { fmtDist } from './format';
 import { Overlay } from './render/Overlay';
 import { defaultAvionics, type ComputerKind } from './avionics/catalog';
 import { PerfMonitor } from './debug/Perf';
-import { addNavFinal, addNavResult, engageRoute, removeNavPoint, replan, requestCancelRoute, type NavFinal, type NavMode, type Route } from './sim/navroute';
+import { addNavFinal, addNavResult, adjustNavRevs, engageRoute, removeNavPoint, replan, requestCancelRoute, type NavFinal, type NavMode, type Route } from './sim/navroute';
 import { GpuRenderer } from './gpu/GpuRenderer';
 import type { Gpu } from './gpu/device';
 import type { GameRenderer } from './render/api';
@@ -227,6 +227,8 @@ export class Game {
   /** Every system in the sky (within SKY_RADIUS), refreshed on arrival: for search, hover and clicks. */
   sky: StarSystem[] = [];
   navMode: NavMode = 'exotic';
+  /** Orbits of a route's phasing transfer to L3–L5 (the nav panel's stepper; sim/navroute.ts). */
+  navRevs = 3;
   navError: string | null = null;
   navConfirm = 0; // seconds left to confirm cancelling a running route
   readonly scans = new Map<string, number>();
@@ -683,6 +685,9 @@ export class Game {
     this.invalidateHud();
   }
 
+  adjustNavRevs(step: number) {
+    adjustNavRevs(this, step);
+  }
   removeNavPoint() {
     removeNavPoint(this);
     this.invalidateHud();

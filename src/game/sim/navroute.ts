@@ -46,7 +46,7 @@ export type Leg =
   | { kind: 'refuel'; at: StarSystem; time: number }
   | { kind: 'orbit'; body: string; time: number }
   | { kind: 'rendezvous'; station: string; time: number }
-  | { kind: 'lpoint'; planet: string; k: 1 | 2 | 3 | 4 | 5; sysId: string; time: number };
+  | { kind: 'lpoint'; planet: string; k: 1 | 2 | 3 | 4 | 5; sysId: string; time: number; revs: number; dv: number | null };
 
 export interface Route {
   destName: string;
@@ -218,24 +218,37 @@ export function parseLPoint(name: string): { planet: string; k: 1 | 2 | 3 | 4 | 
   return m ? { planet: m[1], k: Number(m[2]) as 1 | 2 | 3 | 4 | 5 } : null;
 }
 
-/** Orbits a route's phasing transfer to L3–L5 takes (the planner's default; L1 and L2 are flown to straight). */
+/** Orbits a route's phasing transfer to L3–L5 takes unless the nav panel sets it (the planner's default; L1 and L2 are flown to straight). 0 is straight there. */
 export const ROUTE_REVS = 3;
+export const ROUTE_REVS_MAX = 40;
+
+/** Step the orbits of the route's phasing transfer (the nav panel's stepper, [ and ]; `step` is ±1, ±5 with Shift), and re-plot. */
+export function adjustNavRevs(g: Game, step: number) {
+  if (g.route?.running) return;
+  g.navRevs = Math.min(ROUTE_REVS_MAX, Math.max(0, g.navRevs + step));
+  replan(g);
+}
 
 /**
  * The leg to a Lagrange point: how long it takes is the FTL leg and the match (~10 minutes) plus, for
- * L3–L5, the phasing transfer's flight (sim/phasing.ts), worked out from the planet where it's in
- * this system or can be built.
+ * L3–L5, the phasing transfer's flight (sim/phasing.ts) for the orbits the panel has set
+ * (`Game.navRevs`), worked out from the planet where it's in this system or can be built, and its Δv.
  */
 function lpointLeg(g: Game, sysId: string, name: string): Leg {
   const p = parseLPoint(name)!;
   let time = 600;
+  const revs = p.k >= 3 ? g.navRevs : 0;
+  let dv: number | null = null;
   if (p.k >= 3) {
     const sys = g.cur.sys.id === sysId ? g.cur.sys : g.sky.find((s) => s.id === sysId);
     const w = g.cur.sys.id === sysId ? (g.cur.bodies.find((b) => b.name === p.planet && b.kind === 'planet') as World | undefined) : sys ? (buildSystem(sys).find((b) => b.name === p.planet && b.kind === 'planet') as World | undefined) : undefined;
-    if (w) time += phasingEstimate(w, p.k as 3 | 4 | 5, ROUTE_REVS).T;
-    else time += ROUTE_REVS * 3.2e7;
+    if (w && revs > 0) {
+      const est = phasingEstimate(w, p.k as 3 | 4 | 5, revs);
+      time += est.T;
+      dv = est.dv;
+    } else if (!w) time += revs * 3.2e7;
   }
-  return { kind: 'lpoint', planet: p.planet, k: p.k, sysId, time };
+  return { kind: 'lpoint', planet: p.planet, k: p.k, sysId, time, revs, dv };
 }
 
 const finalLeg = (g: Game, f: NavFinal): Leg => (f.kind === 'station' ? { kind: 'rendezvous', station: f.name, time: 150 } : f.kind === 'lpoint' ? lpointLeg(g, f.sysId, f.name) : { kind: 'orbit', body: f.name, time: 180 });
@@ -544,7 +557,7 @@ export function updateNav(g: Game, dt: number) {
         // hold at the point: straight there for L1 and L2, a phasing transfer for L3–L5 (sim/phasing.ts)
         const oc = ship.avionics.orbit;
         if (!oc?.caps.types.includes('lagrange')) return endRoute(g, 'Route needs an orbit computer that holds at Lagrange points (HX-8200 or better)', 'warn');
-        const revs = leg.k >= 3 ? ROUTE_REVS : 0;
+        const revs = leg.revs;
         const plan: Planner = { body: w, type: 'lagrange', alt: 0, dir: 1, curAlt: 0, lk: leg.k, revs };
         const ev = evalPlan(plan, ship);
         if (!ev.ok) return endRoute(g, `Route cancelled · ${ev.note}`, 'warn');

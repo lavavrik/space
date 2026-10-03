@@ -223,6 +223,8 @@ export interface NavView {
   confirm: boolean;
   hint: string;
   points: string[]; // waypoints, in order
+  /** The orbits of a phasing transfer to L3–L5, when the route ends at one: the stepper's value and what it costs (null: no such leg). */
+  revs: { n: number; note: string } | null;
   query: string;
   sortFrom: 'ship' | 'last';
   results: { key: string; kind: 'star' | 'sun' | 'planet' | 'moon' | 'station' | 'lpoint'; name: string; detail: string }[];

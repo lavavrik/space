@@ -9,6 +9,7 @@ export interface NavActions {
   onSort: (from: 'ship' | 'last') => void;
   onAdd: (key: string) => void;
   onRemoveLast: () => void;
+  onRevs: (step: number) => void;
 }
 
 /**
@@ -46,6 +47,22 @@ export function NavPanel({ n, a }: { n: NavView; a: NavActions }) {
               {m.label}
             </div>
           ))}
+        </div>
+      )}
+      {n.revs && !n.running && (
+        <div className="navrevs">
+          <span className="t">ORBITS</span>
+          <button type="button" className="apbtn small" onClick={() => a.onRevs(-1)} disabled={n.revs.n <= 0} title="fewer orbits: quicker, dearer ([)">
+            −
+          </button>
+          <b>{n.revs.n}</b>
+          <button type="button" className="apbtn small" onClick={() => a.onRevs(1)} title="more orbits: slower, cheaper (])">
+            +
+          </button>
+          <span className="d">
+            <kbd>[</kbd> <kbd>]</kbd> · Shift: five
+          </span>
+          <p className="onote">{n.revs.note}</p>
         </div>
       )}
       <ol className="navlegs">

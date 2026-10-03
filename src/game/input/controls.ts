@@ -12,7 +12,7 @@ import { toggleRadiators, toggleVent } from '../sim/thermal';
 import type { Game } from '../Game';
 import { toggleCruise, toggleDecoupled, toggleFTL } from '../sim/ftl';
 import { toggleScan } from '../sim/scanner';
-import { engageRoute, NAV_MODES, removeNavPoint, replan, requestCancelRoute } from '../sim/navroute';
+import { adjustNavRevs, engageRoute, NAV_MODES, removeNavPoint, replan, requestCancelRoute } from '../sim/navroute';
 import { startTankerGuide } from '../sim/guide';
 import { pickDest, cycleTarget, startJump, targetAhead } from '../sim/navigation';
 import { ORBIT_TYPES } from '../sim/orbits';
@@ -124,6 +124,11 @@ export function onPress(g: Game, code: string) {
     if (code === 'Enter' || code === 'NumpadEnter') {
       if (r && !r.running) engageRoute(g);
       else if (!r) g.showMsg(g.navError ?? 'No route', 'warn');
+      return;
+    }
+    if ((code === 'BracketLeft' || code === 'BracketRight') && !r?.running) {
+      // the orbits of a phasing transfer to L3–L5 (more: cheaper and slower; Shift: five at a time)
+      adjustNavRevs(g, (code === 'BracketRight' ? 1 : -1) * (keys.ShiftLeft || keys.ShiftRight ? 5 : 1));
       return;
     }
     if (code === 'Slash' && !r?.running) {

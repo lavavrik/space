@@ -126,6 +126,8 @@ export interface SaveData extends FlightSave {
   navPoints: string[];
   navFinal: Game['navFinal'];
   navMode: NavMode;
+  /** Orbits of a route's phasing transfer (absent in older saves: 3). */
+  navRevs?: number;
   /** laser: firing (absent in older saves: off); shed: loads load shedding switched off (sim/power.ts). */
   settings: { lights: boolean; orbitPreview: boolean; radarVisible: boolean; laser?: boolean; shed?: Switchable[] | null };
   /** The other ships in the system (absent in older saves: they're spawned afresh). */
@@ -241,6 +243,7 @@ export function snapshotGame(g: Game): SaveData | null {
     navPoints: g.navPoints.map((s) => s.id),
     navFinal: g.navFinal,
     navMode: g.navMode,
+    navRevs: g.navRevs,
     settings: { lights: g.lights, orbitPreview: g.orbitPreview, radarVisible: g.radarVisible, laser: g.laser.on, shed: g.shed },
     traffic: g.traffic.map(snapshotNpc).filter((n): n is NpcSave => !!n),
     mined: [...minedRocks],
@@ -445,6 +448,7 @@ function restore(g: Game, d: SaveData, sys: NonNullable<ReturnType<typeof system
   g.navPoints = d.navPoints.map(systemById).filter((x): x is NonNullable<typeof x> => !!x);
   g.navFinal = d.navFinal;
   g.navMode = d.navMode;
+  g.navRevs = d.navRevs ?? 3;
   g.lights = d.settings.lights;
   g.orbitPreview = d.settings.orbitPreview;
   g.radarVisible = d.settings.radarVisible;

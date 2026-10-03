@@ -93,6 +93,7 @@ export function App() {
                   onSort: (f) => game!.setNavSort(f),
                   onAdd: (key) => game!.addNavResult(key),
                   onRemoveLast: () => game!.removeNavPoint(),
+                  onRevs: (s) => game!.adjustNavRevs(s),
                 }}
               />
             )}

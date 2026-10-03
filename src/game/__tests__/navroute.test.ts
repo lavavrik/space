@@ -48,7 +48,7 @@ describe('navigation route search', () => {
 /* ---------- routes to Lagrange points ---------- */
 import { newShip, type Game } from '../Game';
 import { updateBodies } from '../sim/kepler';
-import { addNavResult, parseLPoint, planRoute, searchNav, updateNav, type Route } from '../sim/navroute';
+import { addNavResult, adjustNavRevs, parseLPoint, planRoute, searchNav, updateNav, type Route } from '../sim/navroute';
 import { scanKey } from '../sim/scanner';
 import type { CurrentSystem, Star, World } from '../types';
 import { WT } from '../constants';
@@ -83,6 +83,7 @@ function lgame() {
     navPoints: [] as StarSystem[],
     navFinal: null as null | { kind: 'body' | 'station' | 'lpoint'; name: string; sysId: string },
     navQuery: '',
+    navRevs: 3,
     navSortFrom: 'ship' as const,
     navMode: 'jumps' as const,
     navError: null as string | null,
@@ -162,6 +163,31 @@ describe('routes to Lagrange points', () => {
     expect(ship.ap?.ph?.stage).toBe('depart');
     expect(r.status).toMatch(/L4/);
     expect(r.i).toBe(0); // (still on the leg: it ends when the hold is made)
+  });
+
+  it('take the orbit count from the nav panel: clamped, replanned, handed to the autopilot, locked while flying', () => {
+    const { g, cur, ship } = lgame();
+    const w = findHome(cur.bodies) as World;
+    (g as unknown as { target: unknown }).target = lpointFor(g, w, 4);
+    g.route = planRoute(g, 'jumps') as Route;
+    const leg = () => g.route!.legs[g.route!.legs.length - 1] as { revs: number; time: number; dv: number | null };
+    expect(leg().revs).toBe(3);
+    const t3 = leg().time;
+    adjustNavRevs(g, 2);
+    expect(g.navRevs).toBe(5);
+    expect(leg().revs).toBe(5);
+    expect(leg().time).toBeGreaterThan(t3);
+    adjustNavRevs(g, 1000);
+    expect(g.navRevs).toBe(40);
+    adjustNavRevs(g, -1000);
+    expect(g.navRevs).toBe(0);
+    expect(leg().revs).toBe(0);
+    adjustNavRevs(g, 4);
+    g.route!.running = true;
+    adjustNavRevs(g, 3);
+    expect(g.navRevs).toBe(4); // locked while the route is flying
+    updateNav(g, 0.016);
+    expect(ship.ap?.revs).toBe(4);
   });
 
   it('end the route cleanly where the unit can\'t hold at a point', () => {

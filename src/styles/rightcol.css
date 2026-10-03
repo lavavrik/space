@@ -117,4 +117,8 @@
 .navres .ico.star { color: #ffe08a; }
 .navres .ico.station { color: #73ffb2; }
 .navres .ico.lpoint { color: #7fdcff; }
+.navrevs { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin: 0.4rem 0; }
+.navrevs b { min-width: 1.6rem; text-align: center; font-size: 1.1rem; color: var(--amber); }
+.navrevs .d { margin-left: auto; opacity: 0.7; font-size: 0.8rem; }
+.navrevs .onote { flex-basis: 100%; margin: 0.2rem 0 0; }
 .navres .d { grid-column: 2; font-family: var(--ui-font); font-size: .78rem; color: var(--amber-dim); }
