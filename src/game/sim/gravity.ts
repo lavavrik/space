@@ -10,13 +10,16 @@ import type { Body, CurrentSystem, Gravity, Ship, World } from '../types';
 
    On top of that central pull sit the third-body perturbations (docs/lagrange.md), which are what
    make Lagrange points real instead of painted on:
-     - in a star's frame, each planet's own pull, in full out to HILL_FULL Hill radii and fading to
-       nothing by HILL_NONE (a radial taper, so the force stays conservative);
+     - in a star's frame, each planet's own pull, and in a planet's frame each of its moons', in
+       full out to HILL_FULL Hill radii and fading to nothing by HILL_NONE (a radial taper, so the
+       force stays conservative; a moon's is cut short of its planet's SOI edge: `pullReach`);
      - in a planet's (or moon's) frame, its parent's tidal pull (the parent's pull on the ship less
        its pull on the frame body, which is what the carried frame already supplies), fading in from
        TIDE_FROM of the way to the sphere of influence's edge.
-   At the SOI boundary the two are the same acceleration, so crossing it no longer jolts the ship.
-   Deep inside an SOI the tidal term is zero, so orbits there stay exact Kepler orbits. */
+   At an SOI boundary (a planet's or a moon's) the two are the same acceleration, so crossing it no
+   longer jolts the ship. Deep inside an SOI the tidal term is zero, so orbits there stay exact
+   Kepler orbits, except near a moon, whose pull is real there. (Moons used to pull only inside
+   their own SOI: crossing its edge jumped by the moon's whole pull.) */
 
 /** A planet's direct pull on a ship in its parent's frame: full within this many Hill radii… */
 export const HILL_FULL = 3;
@@ -30,11 +33,40 @@ const smooth01 = (x: number) => {
   return t * t * (3 - 2 * t);
 };
 
+/** How much of its parent's tide a ship `d` m from a world (in its frame) feels: none deep inside its SOI, all at the edge. */
+export const tideShare = (d: number, soi: number) => smooth01((d / soi - TIDE_FROM) / (1 - TIDE_FROM));
+
 /** A world's Hill radius round its parent, m: the reach of its own gravity against the parent's tide. */
 export const hillRadius = (w: World) => w.orb.a * Math.cbrt(w.mu / (3 * w.parent.mu));
 
-/** How much of a planet's pull a ship `d` m from it feels: 1 close in, fading to 0 (see HILL_FULL). */
-export const planetPullWeight = (d: number, hill: number) => 1 - smooth01((d / hill - HILL_FULL) / (HILL_NONE - HILL_FULL));
+/** Where a world's pull on a ship in its parent's frame is full, and where it has faded to nothing (m). */
+export interface PullReach {
+  full: number;
+  none: number;
+}
+
+/**
+ * A world's reach (see above): HILL_FULL and HILL_NONE Hill radii. A moon's ends short of its
+ * planet's SOI edge: past it the ship is in the star's frame, where moons don't pull, so any pull left
+ * there would be a jump on crossing (a few moons' six Hill radii reach that far). Its full pull still
+ * reaches past its own SOI (at most ~1.2 Hill radii), so crossing that is smooth.
+ */
+export function pullReach(w: World): PullReach {
+  const h = hillRadius(w);
+  let full = HILL_FULL * h,
+    none = HILL_NONE * h;
+  if (w.kind === 'moon') {
+    const room = w.parent.soi - w.orb.a * (1 + w.orb.e);
+    if (none > room) {
+      none = room;
+      full = Math.max(w.soi, Math.min(full, room / 2));
+    }
+  }
+  return { full, none };
+}
+
+/** How much of a world's pull a ship `d` m from it feels: 1 close in, fading to 0 (see `pullReach`). */
+export const pullWeight = (d: number, r: PullReach) => 1 - smooth01((d - r.full) / (r.none - r.full));
 
 const tmpD = new THREE.Vector3(),
   tmpA = new THREE.Vector3(),
@@ -60,6 +92,22 @@ function pullOf(cur: CurrentSystem, b: Body, x: THREE.Vector3, out: THREE.Vector
 }
 
 /**
+ * Add the tapered pulls (`pullReach`) of `parent`'s children other than `skip`, × `scale`, on a ship
+ * at `pos`. `frame` is the ship's frame body: `at` (s, ≤ 0) moves each child back along its velocity
+ * relative to it (see perturbation).
+ */
+function addPulls(cur: CurrentSystem, parent: Body, pos: THREE.Vector3, out: THREE.Vector3, at: number, skip: Body | null, scale: number, frame: Body = skip ?? parent) {
+  for (const w of cur.bodies) {
+    if ((w.kind !== 'planet' && w.kind !== 'moon') || w.parent !== parent || w === skip) continue;
+    const d = tmpA.subVectors(w.pos, pos);
+    if (at) d.addScaledVector(w.vel, at).addScaledVector(frame.vel, -at);
+    const dist = d.length();
+    const k = pullWeight(dist, pullReach(w));
+    if (k > 0) out.addScaledVector(d, (scale * k * w.mu) / (dist * dist * dist));
+  }
+}
+
+/**
  * The third-body acceleration on a ship at `pos` in `body`'s frame, on top of body's own pull (see
  * above). `out` is returned. `at` (s, ≤ 0) evaluates it with the other bodies where they were that
  * long ago relative to `body` (moved back along their velocities): time warp's rails integrate a
@@ -68,22 +116,19 @@ function pullOf(cur: CurrentSystem, b: Body, x: THREE.Vector3, out: THREE.Vector
  */
 export function perturbation(cur: CurrentSystem, body: Body, pos: THREE.Vector3, out: THREE.Vector3, at = 0) {
   out.set(0, 0, 0);
-  for (const w of cur.bodies) {
-    if (w.kind !== 'planet' || w.parent !== body) continue;
-    const d = tmpA.subVectors(w.pos, pos);
-    if (at) d.addScaledVector(w.vel, at).addScaledVector(body.vel, -at);
-    const dist = d.length();
-    const k = planetPullWeight(dist, hillRadius(w));
-    if (k > 0) out.addScaledVector(d, (k * w.mu) / (dist * dist * dist));
-  }
+  addPulls(cur, body, pos, out, at, null, 1); // (a star's planets, a planet's moons)
   if (body.kind !== 'star') {
-    const f = smooth01((pos.distanceTo(body.pos) / body.soi - TIDE_FROM) / (1 - TIDE_FROM));
+    const f = tideShare(pos.distanceTo(body.pos), body.soi);
     if (f > 0) {
       // (back in time the parent was elsewhere relative to the body: the same as shifting the ship
       // and the body the other way, which is what pullOf can take)
       const par = body.parent;
       const back = tmpC.copy(body.vel).sub(par.vel).multiplyScalar(at);
       out.addScaledVector(pullOf(cur, par, tmpD2.addVectors(pos, back), tmpA), f).addScaledVector(pullOf(cur, par, tmpD2.addVectors(body.pos, back), tmpB), -f);
+      // and what pulls in the parent's frame besides the parent: the body's siblings (a moon's fellow
+      // moons), faded in the same way, so the edge matches the parent's frame there too. Only on the
+      // ship: the body's rails are a plain Kepler orbit, which they don't move
+      addPulls(cur, par, pos, out, at, body, f);
     }
   }
   return out;

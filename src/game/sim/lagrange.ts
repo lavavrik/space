@@ -25,8 +25,8 @@
  */
 import { THREE } from '../lib/three';
 import type { Autopilot, Body, World } from '../types';
-import { hillRadius, planetPullWeight } from './gravity';
-import { keplerAt, meanAnomalyOf } from './kepler';
+import { hillRadius, pullReach, pullWeight, tideShare, type PullReach } from './gravity';
+import { keplerAt, meanAnomalyOf, railAcc } from './kepler';
 import { saddleModes } from './manifold';
 
 export type LKind = 1 | 2 | 3 | 4 | 5;
@@ -83,6 +83,9 @@ export function lagrangePoints(planet: World): LPoint[] {
   const rho = hillRatio(q);
   const rd = Math.sqrt(r2);
   const stable = trojansStable(q);
+  // (the parent's own acceleration, which every point shares: zero for a star, a planet's fall round
+  // its star for a moon's points. The accelerations here are absolute, like the frame's (railAcc))
+  const parAcc = railAcc(par);
 
   // L3–L5: a free orbit, the planet's own with the mean anomaly shifted (sim: nothing but the parent's pull acts there)
   const free = (k: LKind, s: { rel: THREE.Vector3; vel: THREE.Vector3 }, dvOrbit: number, ok: boolean): LPoint => {
@@ -93,7 +96,7 @@ export function lagrangePoints(planet: World): LPoint[] {
       planet,
       pos: s.rel.clone().add(par.pos),
       vel: s.vel.clone().add(par.vel),
-      acc: s.rel.clone().multiplyScalar(-par.mu / (d * d * d)),
+      acc: s.rel.clone().multiplyScalar(-par.mu / (d * d * d)).add(parAcc),
       stable: ok,
       dvYear: ok || n === 0 ? 0 : (dvOrbit * YEAR * n) / (2 * Math.PI),
     };
@@ -117,7 +120,7 @@ export function lagrangePoints(planet: World): LPoint[] {
       planet,
       pos: rel.clone().add(par.pos),
       vel: v.clone().multiplyScalar(x).add(par.vel),
-      acc: rel.clone().multiplyScalar(-muOrb / (rd * rd * rd)),
+      acc: rel.clone().multiplyScalar(-muOrb / (rd * rd * rd)).add(parAcc),
       stable: ok,
       dvYear: ok || n === 0 ? 0 : (dvOrbit * YEAR * n) / (2 * Math.PI),
     };
@@ -126,14 +129,15 @@ export function lagrangePoints(planet: World): LPoint[] {
   // L3, whose growth is slower by √q, d is √q × the planet's orbit
   const dHill = rho * rd;
   const dL3 = Math.sqrt(q) * rd;
-  const hill = hillRadius(planet);
+  const hill = hillRadius(planet),
+    reach = pullReach(planet);
   const tro = (k: 3 | 4 | 5) => {
     const rel = new THREE.Vector3(),
       vel = new THREE.Vector3();
     trojanRel(planet, k, meanAnomalyOf(planet.orb, r), rel, vel);
     return { rel, vel };
   };
-  const [x1, x2] = [collinear(par.mu, planet.mu, o.a, o.n, hill, 1 - rho), collinear(par.mu, planet.mu, o.a, o.n, hill, 1 + rho)];
+  const [x1, x2] = [collinear(par.mu, planet.mu, o.a, o.n, hill, reach, planet.soi, 1 - rho), collinear(par.mu, planet.mu, o.a, o.n, hill, reach, planet.soi, 1 + rho)];
   return [
     place(1, x1, KEEP * n * dHill, false),
     place(2, x2, KEEP * n * dHill, false),
@@ -141,6 +145,12 @@ export function lagrangePoints(planet: World): LPoint[] {
     free(4, tro(4), 0, stable),
     free(5, tro(5), 0, stable),
   ]; // index k − 1
+}
+
+/** Where point `k` of world `w` lies, in words ("between it and its star"; a moon's points are round its planet). */
+export function lpointWhere(w: World, k: LKind) {
+  const p = w.kind === 'moon' ? 'planet' : 'star';
+  return { 1: `between it and its ${p}`, 2: `beyond it, away from its ${p}`, 3: `opposite it across its ${p}`, 4: 'leading it by 60°', 5: 'trailing it by 60°' }[k];
 }
 
 /** How far round its orbit, in mean anomaly, each of L3, L4 and L5 sits from the planet. */
@@ -156,6 +166,16 @@ export function trojanRel(planet: World, k: 3 | 4 | 5, M: number, rel: THREE.Vec
   keplerAt(planet.orb, M + TROJAN_SHIFT[k], rel, vel);
 }
 
+/** How far ahead of the world (rad of its orbit) the phasing gate sits: past its pull's reach, and at least 0.15 rad. */
+export const gateLead = (w: World) => Math.max(0.15, 7 * hillRatio(w.mu / w.parent.mu));
+
+/**
+ * Whether a phasing transfer can reach point `k`: its gate has to lie short of L4 or L5 (60° off). A
+ * heavy moon's pull reaches past that (about one moon in twelve: a mass ratio over ~0.006), and
+ * its L4 and L5 are flown to straight, as L1 and L2 are. L3 is always far enough round.
+ */
+export const phasingReaches = (w: World, k: LKind) => k === 3 || (k >= 4 && gateLead(w) < SIXTY - 0.15);
+
 /**
  * The departure gate for a phasing transfer to L3, L4 or L5 (sim/phasing.ts): a free co-orbital
  * point on the planet's own orbit, ahead of it (behind it for L5) by enough that its pull is gone
@@ -166,8 +186,7 @@ export function trojanRel(planet: World, k: 3 | 4 | 5, M: number, rel: THREE.Vec
 export function gatePoint(planet: World, k: 3 | 4 | 5): LPoint {
   const par = planet.parent;
   const rel0 = new THREE.Vector3().subVectors(planet.pos, par.pos);
-  const q = planet.mu / par.mu;
-  const ang = Math.max(0.15, 7 * hillRatio(q)) * (k === 5 ? -1 : 1);
+  const ang = gateLead(planet) * (k === 5 ? -1 : 1);
   const rel = new THREE.Vector3(),
     vel = new THREE.Vector3();
   keplerAt(planet.orb, meanAnomalyOf(planet.orb, rel0) + ang, rel, vel);
@@ -178,7 +197,7 @@ export function gatePoint(planet: World, k: 3 | 4 | 5): LPoint {
     planet,
     pos: rel.clone().add(par.pos),
     vel: vel.add(par.vel),
-    acc: rel.clone().multiplyScalar(-par.mu / (d * d * d)),
+    acc: rel.clone().multiplyScalar(-par.mu / (d * d * d)).add(railAcc(par)),
     stable: true,
     dvYear: 0,
   };
@@ -189,12 +208,18 @@ export function gatePoint(planet: World, k: 3 | 4 | 5): LPoint {
  * `r`) a ship at rest in the turning frame feels no net force: the parent's pull, the planet's
  * (tapered like the sim's) and the centripetal term balance. Newton from the Hill-radius estimate
  * `guess`; keeps the estimate if it doesn't settle.
+ *
+ * Inside the world's SOI (`soi`; a heavy moon's L1 and L2 can lie there) the ship is in the world's
+ * frame, where the parent's pull comes as a tide fading in toward the edge (sim/gravity.ts): the
+ * frame carries the parent's pull on the world, and the ship feels that share (`tideShare`) of the
+ * difference. A planet's points always lie outside its SOI.
  */
-function collinear(muP: number, muC: number, r: number, n: number, hill: number, guess: number) {
+function collinear(muP: number, muC: number, r: number, n: number, hill: number, reach: PullReach, soi: number, guess: number) {
   const f = (x: number) => {
     const d = r - x; // toward the planet
     const ad = Math.abs(d);
-    return -muP / (x * x) + Math.sign(d) * muC * planetPullWeight(ad, hill) / (d * d) + n * n * x;
+    const t = ad < soi ? tideShare(ad, soi) : 1;
+    return -muP * (t / (x * x) + (1 - t) / (r * r)) + Math.sign(d) * muC * pullWeight(ad, reach) / (d * d) + n * n * x;
   };
   let x = guess * r;
   for (let i = 0; i < 60; i++) {

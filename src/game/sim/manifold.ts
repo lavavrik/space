@@ -14,7 +14,7 @@
  */
 import { THREE } from '../lib/three';
 import type { World } from '../types';
-import { hillRadius, planetPullWeight } from './gravity';
+import { hillRadius, pullReach, pullWeight } from './gravity';
 import { lagrangePoints } from './lagrange';
 
 export interface SaddleModes {
@@ -43,7 +43,8 @@ export function saddleModes(planet: World, k: 1 | 2): SaddleModes {
   const ex = pRel.clone().normalize(), // toward the planet (outward from the parent)
     ez = h.clone().normalize(),
     ey = new THREE.Vector3().crossVectors(ez, ex);
-  const hill = hillRadius(planet);
+  const hill = hillRadius(planet),
+    reach = pullReach(planet);
   const muP = par.mu,
     muC = planet.mu;
   // the force (system axes) at parent-relative position s, planet at pRel, less the centripetal term: zero at the point
@@ -51,7 +52,7 @@ export function saddleModes(planet: World, k: 1 | 2): SaddleModes {
     const a = s.clone().multiplyScalar(-muP / s.length() ** 3);
     const dp = pRel.clone().sub(s);
     const dd = dp.length();
-    a.addScaledVector(dp, (muC * planetPullWeight(dd, hill)) / (dd * dd * dd));
+    a.addScaledVector(dp, (muC * pullWeight(dd, reach)) / (dd * dd * dd));
     return a.addScaledVector(s, w * w); // (−ω × ω × s = ω² s for s in the plane)
   };
   // the gradient K by central differences along ex, ey (in-plane is all the modes need)

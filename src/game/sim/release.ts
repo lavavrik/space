@@ -10,7 +10,7 @@ import { THREE } from '../lib/three';
 import type { CurrentSystem, World } from '../types';
 import { fmtDist, fmtTime } from '../format';
 import { gravityAt, hillRadius } from './gravity';
-import { updateBodies } from './kepler';
+import { railAcc, updateBodies } from './kepler';
 import { minOrbitAlt } from './orbits';
 import { lagrangePoints } from './lagrange';
 import { saddleModes } from './manifold';
@@ -46,16 +46,22 @@ export function closestApproach(cur: CurrentSystem, planet: World, k: 1 | 2, pus
   const pos = lp.pos.clone(),
     v = lp.vel.clone().add(push);
   const rel = new THREE.Vector3();
+  // (absolute acceleration: the pull felt in the frame plus the frame body's own fall, which for a
+  // moon's points, flown in its planet's frame, is the planet's round its star)
+  const accAt = (p: THREE.Vector3) => {
+    const gr = gravityAt(cur, p);
+    return gr.vec.add(railAcc(gr.body));
+  };
   let t = 0,
     min = pos.distanceTo(planet.pos);
   while (t < horizon) {
     // steps that stay fine near the planet (a fraction of the time to cross the gap) and coarse far from it
     const dt = Math.min(3600, Math.max(30, (0.02 * rel.subVectors(pos, planet.pos).length()) / Math.max(1, v.distanceTo(planet.vel))));
-    v.addScaledVector(gravityAt(cur, pos).vec, dt / 2);
+    v.addScaledVector(accAt(pos), dt / 2);
     pos.addScaledVector(v, dt);
     t += dt;
     updateBodies(cur.bodies, t0 + t);
-    v.addScaledVector(gravityAt(cur, pos).vec, dt / 2);
+    v.addScaledVector(accAt(pos), dt / 2);
     min = Math.min(min, pos.distanceTo(planet.pos));
   }
   updateBodies(cur.bodies, t0);

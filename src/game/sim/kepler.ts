@@ -12,6 +12,22 @@ export function keplerState(o: KeplerOrbit, t: number, parentPos: THREE.Vector3,
   vel.add(parentVel);
 }
 
+/**
+ * A body's acceleration on its rails (system frame, m/s²; `out` is returned): its Kepler orbit's
+ * pull toward its parent plus the parent's own, down to the system's anchor (a moon falls with its
+ * planet). This is what a frame body carries a ship along with. Call after the bodies have moved.
+ */
+export function railAcc(b: Body, out = new THREE.Vector3()): THREE.Vector3 {
+  out.set(0, 0, 0);
+  for (let x: Body = b; x.orb && x.parent; x = x.parent) {
+    const o = x.orb;
+    const r = tmpRail.subVectors(x.pos, x.parent.pos);
+    out.addScaledVector(r, (-o.n * o.n * o.a ** 3) / r.length() ** 3);
+  }
+  return out;
+}
+const tmpRail = new THREE.Vector3();
+
 /** Position and velocity relative to the parent at mean anomaly `M` (rad) on the orbit. */
 export function keplerAt(o: KeplerOrbit, M: number, pos: THREE.Vector3, vel: THREE.Vector3) {
   const { a, e, n, P, Q } = o;

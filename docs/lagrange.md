@@ -1,15 +1,15 @@
 # Lagrange points and third-body gravity
 
-Each planet has five Lagrange points on its orbit round its parent (`sim/lagrange.ts`). They show on the system map (Shift+O) as diamonds labelled "Planet L1"…"L5" (hollow where unstable, filled where stable) for planets you've identified, and the orbit planner (O, then 6) can hold the ship at one.
+Each planet has five Lagrange points on its orbit round its star, and each moon five on its orbit round its planet (`sim/lagrange.ts`; see "Moons' points" below). A planet's show on the system map (Shift+O) as diamonds labelled "Planet L1"…"L5" (hollow where unstable, filled where stable) for planets you've identified; any world's show on the HUD while it's targeted, and the orbit planner (O, then 6) can hold the ship at one.
 
 ## Gravity: patched conics plus third bodies
 
 Gravity is still patched conics (`sim/gravity.ts`): the pull is the innermost sphere of influence's body's, and the ship's velocity is kept relative to it. A balance of two pulls can't come out of that alone, so it now has two corrections on top, which are what make the points real:
 
-- **In a star's frame, each planet's own pull**, in full out to 3 Hill radii and tapering to nothing by 6. The taper is radial, so the force stays conservative (no energy gained or lost by flying round).
-- **In a planet's (or moon's) frame, its parent's tide**: the parent's pull on the ship less its pull on the frame body (which the carried frame already supplies), fading in over the outer 30 % of the SOI. Deep inside an SOI it's zero, so orbits there stay exact Kepler orbits and time warp's rails stay valid.
+- **In a star's frame, each planet's own pull, and in a planet's frame each of its moons'**, in full out to 3 Hill radii and tapering to nothing by 6 (`pullReach`). The taper is radial, so the force stays conservative (no energy gained or lost by flying round). A moon's reach is cut short of its planet's SOI edge (a few moons' six Hill radii would reach past it, into the star's frame where moons don't pull).
+- **In a planet's (or moon's) frame, its parent's tide**: the parent's pull on the ship less its pull on the frame body (which the carried frame already supplies), plus the pulls of the frame body's siblings (a moon's fellow moons) on the ship, all fading in over the outer 30 % of the SOI. Deep inside an SOI it's zero, so orbits there stay exact Kepler orbits and time warp's rails stay valid, except near a moon, whose pull is real there: an orbit round a planet close to one of its moons drifts, and the settled autopilot re-trims it when it leaves its band.
 
-At the SOI's edge the two are the same acceleration, so crossing the boundary no longer jolts the ship (the old switch jumped by about the planet's whole pull). `Gravity.vec` includes the corrections; `Gravity.g` is the body's own pull. Time warp's rails (`sim/timewarp.ts`) include them too, with the other bodies taken where they were at each substep (`perturbation(…, at)`): a frame at ×100,000 is ~1,600 s, and with the planets left where the frame ends a ship drifting at L1 was ~600 km off after ten days instead of 0.3 km (`rails.test.ts`).
+At an SOI's edge, a planet's or a moon's, the two are the same acceleration, so crossing the boundary no longer jolts the ship (the old switch jumped by about the planet's whole pull; at a moon's edge, until SPACE-90, by the moon's, since moons pulled only inside their SOI). `moonGravity.test.ts` checks every moon's edge, and that the planet's stays smooth. `Gravity.vec` includes the corrections; `Gravity.g` is the body's own pull. Time warp's rails (`sim/timewarp.ts`) include them too, with the other bodies taken where they were at each substep (`perturbation(…, at)`): a frame at ×100,000 is ~1,600 s, and with the planets left where the frame ends a ship drifting at L1 was ~600 km off after ten days instead of 0.3 km (`rails.test.ts`).
 
 The orbit planner's highest orbit round a world is 0.7 of its SOI, where the tide starts (`maxOrbitR`), so every orbit it offers is an exact Kepler orbit that the settled autopilot can coast and warp can hold. The old ceiling, 0.8 SOI, was inside the tide: a settled orbit there left the autopilot's band in 3 days and the SOI within 3 orbits (`tideOrbit.test.ts`). Stations are still placed below 0.48 SOI, as before.
 
@@ -60,6 +60,18 @@ against ~40 km/s going straight there. `[ ]` in the planner sets N from 1 to 40 
 Holding costs, once settled: L4 a few m/s a year (the step size's own error), L1 well under 50 m/s a year; with the planet's pull left out of the force it would be thousands. `LPoint.dvYear` is a separate planning estimate of real station-keeping (`0.01 · n · d` per orbit, calibrated on JWST at Sun–Earth L2, ~3 m/s a year); the sim charges whatever the autopilot actually burns.
 
 Time warp is refused while the autopilot holds (it works on thrust), like any hold, and during a phasing burn, but not during its coast.
+
+## Moons' points
+
+A moon's five points are its orbit's round its planet, worked out by the same code as a planet's (`lagrangePoints(moon)`), and they're real in the sim because moons pull in their planet's frame (the gravity section above):
+
+- **L1 and L2** balance the planet's pull, the moon's and the centripetal term, as a planet's do. A heavy moon's (mass ratio over ~0.004, like the home world's Venydes 3 a at 0.018) can lie inside the moon's own SOI, where the ship is in the moon's frame and the planet's pull comes as a tide fading in toward the edge; the solve (`collinear`) takes that share of it, so they balance there too.
+- **L3, L4 and L5** are free Kepler orbits round the planet with the moon's period, as a planet's are round its star. A heavy moon's tapered pull still reaches its L4 and L5 a little (its six Hill radii pass 60°), which the hold pays for.
+- **Accelerations are absolute** (`railAcc`): a point's includes its parent's own fall (a moon's: the planet's round its star), and the hold subtracts its frame body's the same way, so a hold in the planet's (or the moon's) frame needs no thrust at a balance point, as one in the star's frame doesn't. The release planner's drift (`closestApproach`) flies with the same absolute acceleration.
+- **Getting there:** the planner (O, then 6, with a moon targeted or chosen) and the nav computer (search a moon's name and L, `Venydes 3 a L4`) take a moon like a planet: straight there for L1 and L2; a phasing transfer round the planet for L3–L5 (a moon's period is days, so three orbits are days of coasting, minutes under warp). **A heavy moon's L4 and L5 are flown to straight** (`phasingReaches`): its pull reaches past 60°, so the departure gate (7 Hill radii ahead, clear of its pull) would lie beyond the point. About one moon in twelve (mass ratio over ~0.006); straight there costs about the moon's orbital speed (median 8 km/s).
+- **Targets:** target a moon and its five show and can be picked, as a planet's do; the info panel and the planner say "between it and its planet".
+
+Tested in `moonLagrange.test.ts`: a ship left at a light and a heavy moon's L1, L2 and L4 keeps pace with no thrust; the autopilot settles on each flown in the planet's (or moon's) frame the way the game steps it, and holds on nothing; a phasing transfer reaches a light moon's L4 in three orbits. Checked in the game (headless): from 2·10⁹ m out, Venydes 3 a's L1 (inside its SOI) and L4 both settle and hold at 0.0 m and 0.00 m/s.
 
 ## Targeting the points (`sim/lpoints.ts`)
 
@@ -115,7 +127,7 @@ The depot's shader and the swarm's were compiled and test-rendered offscreen (Da
 ## Not done yet
 
 - **Manifold transfers** *through* L1 and L2: **analysed, and not built, because they don't pay here.** A ship leaving L1 or L2 along the unstable manifold costs nothing and drifts away at e^{λt}, but onto a heliocentric orbit that is not the planet's: the point sits ~1 Hill radius off the planet's orbit and moves at the point's rate, so its speed differs from the circular speed there by ~n·d (385 m/s at Venydes 2's L1, ~1 % of the orbital speed), and that eccentric orbit never reaches the radius of L4 or L5. The planner (`planPhasing` from the L1 state) finds no solution near the point's velocity for 3 to 12 orbits, only far branches at tens of km/s; the capture would cost that same few hundred m/s, which long phasing from the gate already beats (about 300 m/s over a dozen orbits at Earth). With FTL to drop out matched at L1 or L2 in the first place, the stable manifold has nothing to save either. The saddle (`sim/manifold.ts`) still drives the drift times and the hold's behaviour.
-- **Moons.** `lagrangePoints` works for any world, but only planets are drawn, held and swarmed.
+- **Moons' points on the system map.** A moon's five would sit in a cluster round its planet at the map's scale; only planets' are drawn there. Swarms and depots are planets' only.
 - **Close pairs.** Round a close binary's barycentre the parent's pull is taken as one point mass, in the plan and in the points.
 - **The trip from low orbit.** The first leg (out of the planet's mass lock and to the gate) is the usual thruster-then-FTL flight; there's no planned escape burn.
 - **L1 and L2 are still direct.** Their match costs a few hundred m/s, so they have no phasing.
@@ -139,7 +151,7 @@ From a settled hold at L1 or L2 the autopilot panel (O) offers **[ Release towar
 Not built; roughly by value.
 
 1. **The trip from low orbit** to the gate or an L-point: a planned escape burn instead of "thrusters until FTL works".
-2. **Lagrange points of moons.** `lagrangePoints` works for any world, but only planets get holds, swarms and targets. Earth–Moon L1 and L2 are the classic gateways.
+2. ~~Lagrange points of moons~~: built (see "Moons' points"). Left: their points on the system map when zoomed in on a planet, and swarms or depots at a giant moon's L4 and L5.
 3. **Halo and Lissajous orbits** round L1 and L2: the saddle's centre mode (ν) is already computed, so a ship could fly a bounded orbit about the point, as real missions do, for less station-keeping.
 4. **Station-keeping Δv against the estimate:** show what the hold has actually burned beside the planning figure (`dvYear`).
 5. **Swarm hazards:** dust and micro-impacts at speed, as in a ring's belt.

@@ -14,7 +14,7 @@ import { HULL, SIGMA, TEMP, heatCap } from '../sim/thermal';
 import type { InfoView, Readout } from './types';
 import { orbitBody, padCount } from '../sim/stationGeom';
 import { SALVAGE_R, SALVAGE_V, wreckMetal } from '../sim/wreck';
-import { driftTime, lagrangePoints } from '../sim/lagrange';
+import { driftTime, lagrangePoints, lpointWhere } from '../sim/lagrange';
 import type { LTarget, Wreck } from '../types';
 
 const MEARTH = 5.972e24;
@@ -256,7 +256,7 @@ function youRows(g: Game, t: Body | Station): [string, string | Readout][] {
 function lpointInfo(g: Game, t: LTarget): InfoView {
   const w = t.planet;
   const lp = lagrangePoints(w)[t.k - 1];
-  const wh = { 1: 'between it and its star', 2: 'beyond it, away from its star', 3: 'opposite it across its star', 4: 'leading it by 60°', 5: 'trailing it by 60°' }[t.k];
+  const wh = lpointWhere(w, t.k);
   const physical: [string, string][] = [
     ['WHERE', `${wh}${t.k <= 2 ? ` · ${fmtDist(lp.pos.distanceTo(w.pos))} from ${w.name}` : ''}`],
     ['A SHIP LEFT HERE', lp.stable ? 'stays: stable, no thrust needed' : `drifts away in ${fmtTime(driftTime(lp))}; real missions burn ~${lp.dvYear.toFixed(1)} m/s a year to keep it`],

@@ -13,6 +13,7 @@ import { beltLock, dropAlt, dropFTL, ftlSpeedLimit, ftlUpkeep, massLock } from '
 import { apPoint, trojanRel } from './lagrange';
 import { correction, planPhasing } from './phasing';
 import { minOrbitAlt } from './orbits';
+import { railAcc } from './kepler';
 import { applyThrust, deltaVLeft } from './resources';
 
 /** Ship position relative to the autopilot body, and "up" projected into the orbit plane. */
@@ -298,15 +299,12 @@ function phasingFlight(g: Game, dt: number, grav: Gravity) {
   }
 }
 
-/** The frame body's own acceleration (m/s²), which the ship's frame-relative motion leaves out: a world falls toward its parent. */
-function frameAcc(g: Game) {
-  const fb = g.frameBody;
-  const out = new THREE.Vector3();
-  if (fb.kind === 'star') return out;
-  const d = out.subVectors(fb.parent.pos, fb.pos);
-  const r = d.length();
-  return d.multiplyScalar(fb.parent.mu / (r * r * r));
-}
+/**
+ * The frame body's own acceleration (m/s²), which the ship's frame-relative motion leaves out: a
+ * world falls toward its parent, and a moon with its planet too (a moon's L-points are held in the
+ * planet's frame, or the moon's). The same rails acceleration the points' own `acc` is built on.
+ */
+const frameAcc = (g: Game) => railAcc(g.frameBody);
 
 /** Orbit / station-keeping autopilot: steer velocity toward a desired velocity field
  *  with limited thrust, plus a feed-forward term for gravity and centripetal force. */

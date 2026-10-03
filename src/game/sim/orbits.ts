@@ -4,7 +4,7 @@ import { fmtFlow, fmtSpeedText, fmtTime } from '../format';
 import { THREE } from '../lib/three';
 import type { Autopilot, Body, OrbitType, Planner, Ship } from '../types';
 import { TIDE_FROM } from './gravity';
-import { driftTime, lagrangePoints } from './lagrange';
+import { driftTime, lagrangePoints, lpointWhere, phasingReaches } from './lagrange';
 import { phasingEstimate } from './phasing';
 import { deltaVLeft, shipMass } from './resources';
 import { ringDensity } from './rings';
@@ -105,28 +105,30 @@ export function evalPlan(p: Planner, ship: Ship): PlanEval {
  */
 function evalLagrange(p: Planner, ship: Ship): PlanEval {
   const b = p.body;
-  if (b.kind !== 'planet') return { r0: 0, ok: false, note: `L-points are held for planets: ${b.name} has none`, period: NaN, speed: 0 };
+  if (b.kind === 'star') return { r0: 0, ok: false, note: `L-points are held for planets and moons: ${b.name} has none`, period: NaN, speed: 0 };
   const k = p.lk ?? 1;
   const lp = lagrangePoints(b)[k - 1];
   const r0 = lp.pos.distanceTo(b.pos);
-  const where = { 1: 'between it and its star', 2: 'beyond it, away from its star', 3: 'opposite it across its star', 4: 'leading it by 60°', 5: 'trailing it by 60°' }[k];
+  const where = lpointWhere(b, k);
+  const kind = b.kind === 'moon' ? 'moon' : 'planet';
   const days = driftTime(lp) / 86400;
   let note = lp.stable
-    ? `${lp.name}: ${where}. Stable: a ship left here stays with the planet, no thrust needed.`
+    ? `${lp.name}: ${where}. Stable: a ship left here stays with the ${kind}, no thrust needed.`
     : `${lp.name}: ${where}. Unstable: a ship left here drifts away over ~${days < 400 ? Math.round(days) + ' days' : (days / 365.25).toFixed(0) + ' years'}; the autopilot flies it back (real missions burn ~${lp.dvYear.toFixed(1)} m/s a year).`;
   let transfer = 'direct';
   let ok = true,
     warn = false;
   const left = deltaVLeft(ship);
   if (k >= 3) {
-    const N = p.revs ?? 3;
+    const reaches = phasingReaches(b, k);
+    const N = reaches ? (p.revs ?? 3) : 0;
     if (N > 0) {
       const est = phasingEstimate(b, k as 3 | 4 | 5, N);
       transfer = `${N} orbit${N > 1 ? 's' : ''} · ${fmtTime(est.T)}${est.dv < 300 ? ' · low-energy' : ''}`;
-      note += ` Phasing: FTL to a point on the planet's own orbit, then a ${fmtSpeedText(est.dv / 2)} burn onto a slightly different orbit and ${fmtTime(est.T)} of coasting (time warp works) round to it; ${fmtSpeedText(est.dv)} of Δv in all. More orbits cost less.`;
+      note += ` Phasing: FTL to a point on the ${kind}'s own orbit, then a ${fmtSpeedText(est.dv / 2)} burn onto a slightly different orbit and ${fmtTime(est.T)} of coasting (time warp works) round to it; ${fmtSpeedText(est.dv)} of Δv in all. More orbits cost less.`;
       if (!est.ok) {
         ok = false;
-        note = 'The transfer cannot be planned for this planet.';
+        note = `The transfer cannot be planned for this ${kind}.`;
       } else if (left < est.dv * 1.1 + 50) {
         ok = false;
         warn = true;
@@ -135,7 +137,7 @@ function evalLagrange(p: Planner, ship: Ship): PlanEval {
     } else {
       const dv = lp.vel.distanceTo(b.vel);
       transfer = 'straight there';
-      note += ` Straight there: FTL, then ${fmtSpeedText(dv)} of Δv to match its orbit. ([ ] sets orbits for a phasing transfer, which costs far less.)`;
+      note += ` Straight there: FTL, then ${fmtSpeedText(dv)} of Δv to match its orbit. ${reaches ? '([ ] sets orbits for a phasing transfer, which costs far less.)' : `(No phasing: ${b.name}'s pull reaches past the point, so a transfer can't start clear of it.)`}`;
       if (left < dv * 1.1 + 50) {
         ok = false;
         warn = true;

@@ -48,18 +48,18 @@ export function lpointTargets(w: World, t: number): LTarget[] {
 /** Every Lagrange point of the planets the ship's instruments know, as targets (nearest first is the caller's business). */
 export function lpointsHere(g: Game): LTarget[] {
   const out: LTarget[] = [];
-  for (const b of g.cur.bodies) if (b.kind === 'planet' && known(g, b)) out.push(...lpointTargets(b, g.simTime));
+  for (const b of g.cur.bodies) if ((b.kind === 'planet' || b.kind === 'moon') && known(g, b)) out.push(...lpointTargets(b, g.simTime));
   return out;
 }
 
 /**
- * The points the HUD shows and T, G and clicks can pick: the five of the targeted planet, or of the
- * targeted point's planet (so you can hop between them). None otherwise: every known planet's five
+ * The points the HUD shows and T, G and clicks can pick: the five of the targeted planet or moon (a
+ * moon's are round its planet), or of the targeted point's world (so you can hop between them). None otherwise: every known planet's five
  * at once cluttered the view.
  */
 export function lpointsShown(g: Game): LTarget[] {
   const t = g.target;
-  const w = t?.kind === 'planet' ? t : t?.kind === 'lpoint' ? t.planet : null;
+  const w = t?.kind === 'planet' || t?.kind === 'moon' ? t : t?.kind === 'lpoint' ? t.planet : null;
   return w && known(g, w) ? lpointTargets(w, g.simTime) : [];
 }
 

@@ -4,7 +4,7 @@ import { AP_FTL_MIN, FTL_CHARGE_TIME } from '../constants';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import type { Autopilot, Body, OrbitType, Planner, Station, World } from '../types';
-import { lagrangePoints } from './lagrange';
+import { lagrangePoints, phasingReaches } from './lagrange';
 import { lpointFor } from './lpoints';
 import { orbitBody } from './stationGeom';
 import { ringDensity } from './rings';
@@ -104,10 +104,9 @@ export function selectOrbitType(g: Game, t: OrbitType) {
     return;
   }
   if (t === 'lagrange') {
-    // a planet's points; a moon plans its planet's, and a star has none
-    if (p.body.kind === 'moon') p.body = p.body.parent as World;
-    else if (p.body.kind === 'star') {
-      g.showMsg(`${p.body.name} has no Lagrange points: pick a planet`, 'warn');
+    // a planet's points or a moon's (round its planet); a star has none
+    if (p.body.kind === 'star') {
+      g.showMsg(`${p.body.name} has no Lagrange points: pick a planet or a moon`, 'warn');
       return;
     }
     p.lk = p.lk ?? 1;
@@ -168,10 +167,12 @@ export function engageAutopilot(g: Game, spec: ApSpec, quiet = false) {
   const b = spec.body;
   const ap: Autopilot = { ...spec, phase: 'insert', settled: false, t0: g.simTime, prop0: ship.prop };
   // a phasing transfer to L3–L5 starts by flying to its departure gate (sim/phasing.ts)
-  if (ap.type === 'lagrange' && (ap.lk ?? 0) >= 3 && (ap.revs ?? 0) > 0) ap.ph = { stage: 'depart', tArr: 0, checks: [], dvLeft: null, resume: 1, spent: 0, stall: 0 };
+  // (not where the gate would lie past the point: a heavy moon's L4 and L5 are flown to straight)
+  if (ap.type === 'lagrange' && (ap.lk ?? 0) >= 3 && (ap.revs ?? 0) > 0 && phasingReaches(b as World, ap.lk!)) ap.ph = { stage: 'depart', tArr: 0, checks: [], dvLeft: null, resume: 1, spent: 0, stall: 0 };
+  else if (ap.type === 'lagrange') ap.revs = 0;
   // a hold at a Lagrange point targets the point (not its planet), so the HUD, the approach strip and
   // the pivot (Shift+T) are all about where the ship is going
-  if (ap.type === 'lagrange' && b.kind === 'planet') g.target = lpointFor(g, b, ap.lk ?? 1);
+  if (ap.type === 'lagrange' && (b.kind === 'planet' || b.kind === 'moon')) g.target = lpointFor(g, b, ap.lk ?? 1);
   ship.ap = ap;
   g.apPanel = false;
   g.apConfirm = 0;
@@ -274,7 +275,7 @@ export function orbitPreview(g: Game): OrbitPreview | null {
   const b = p.body;
   const r = evalPlan(p, ship).r0;
   const u = new THREE.Vector3().subVectors(ship.pos, b.pos).normalize();
-  if (p.type === 'lagrange') return b.kind === 'planet' ? { body: b, r, n: null, point: lagrangePoints(b)[(p.lk ?? 1) - 1].pos, engaged: false } : null;
+  if (p.type === 'lagrange') return b.kind !== 'star' ? { body: b, r, n: null, point: lagrangePoints(b)[(p.lk ?? 1) - 1].pos, engaged: false } : null;
   if (p.type === 'hold') return { body: b, r, n: null, point: b.pos.clone().addScaledVector(u, r), engaged: false };
   return { body: b, r, n: orbitNormal(b, p.type, p.dir, u), point: null, engaged: false };
 }

@@ -32,6 +32,7 @@ import { galPos, jumpBlocker, startJump } from './navigation';
 import { defaultOrbitAlt, evalPlan } from './orbits';
 import { lpointsHere } from './lpoints';
 import { phasingEstimate } from './phasing';
+import { phasingReaches } from './lagrange';
 import { disengageAP, engageAutopilot, engageRendezvous } from './planner';
 
 export type NavMode = 'jumps' | 'exotic' | 'fastest';
@@ -237,11 +238,14 @@ export function adjustNavRevs(g: Game, step: number) {
 function lpointLeg(g: Game, sysId: string, name: string): Leg {
   const p = parseLPoint(name)!;
   let time = 600;
-  const revs = p.k >= 3 ? g.navRevs : 0;
+  let revs = p.k >= 3 ? g.navRevs : 0;
   let dv: number | null = null;
   if (p.k >= 3) {
+    // (the point's world: a planet, or a moon, whose points are round its planet)
     const sys = g.cur.sys.id === sysId ? g.cur.sys : g.sky.find((s) => s.id === sysId);
-    const w = g.cur.sys.id === sysId ? (g.cur.bodies.find((b) => b.name === p.planet && b.kind === 'planet') as World | undefined) : sys ? (buildSystem(sys).find((b) => b.name === p.planet && b.kind === 'planet') as World | undefined) : undefined;
+    const isWorld = (b: { name: string; kind: string }) => b.name === p.planet && (b.kind === 'planet' || b.kind === 'moon');
+    const w = g.cur.sys.id === sysId ? (g.cur.bodies.find(isWorld) as World | undefined) : sys ? (buildSystem(sys).find(isWorld) as World | undefined) : undefined;
+    if (w && !phasingReaches(w, p.k)) revs = 0; // (a heavy moon's L4 and L5: straight there)
     if (w && revs > 0) {
       const est = phasingEstimate(w, p.k as 3 | 4 | 5, revs);
       time += est.T;
@@ -388,7 +392,7 @@ export function searchNav(g: Game, query: string, from: 'ship' | 'last', limit =
       for (const b of c.bodies) if (match(b.name)) out.push({ key: `${b.kind}:${s.id}:${b.name}`, kind: b.kind, name: b.name, detail: `${b.type} · ${where}`, sys: s, dist: ly(s) });
       for (const n of c.stations) if (match(n)) out.push({ key: `station:${s.id}:${n}`, kind: 'station', name: n, detail: `station · ${where}`, sys: s, dist: ly(s) });
       // a planet's five Lagrange points (the planet's name and L1…L5), once the query names one
-      for (const b of c.bodies) if (b.kind === 'planet') for (const k of [1, 2, 3, 4, 5]) if (match(`${b.name} L${k}`)) out.push({ key: `lpoint:${s.id}:${b.name} L${k}`, kind: 'lpoint', name: `${b.name} L${k}`, detail: `${k >= 4 ? 'stable' : 'unstable'} Lagrange point · ${where}`, sys: s, dist: ly(s) });
+      for (const b of c.bodies) if (b.kind === 'planet' || b.kind === 'moon') for (const k of [1, 2, 3, 4, 5]) if (match(`${b.name} L${k}`)) out.push({ key: `lpoint:${s.id}:${b.name} L${k}`, kind: 'lpoint', name: `${b.name} L${k}`, detail: `${k >= 4 ? 'stable' : 'unstable'} Lagrange point · ${where}`, sys: s, dist: ly(s) });
     }
   }
   return out.sort((a, b) => a.dist - b.dist || a.name.localeCompare(b.name)).slice(0, limit);
@@ -549,7 +553,7 @@ export function updateNav(g: Game, dt: number) {
       return;
     }
     case 'lpoint': {
-      const w = g.cur.bodies.find((x): x is World => x.kind === 'planet' && x.name === leg.planet);
+      const w = g.cur.bodies.find((x): x is World => (x.kind === 'planet' || x.kind === 'moon') && x.name === leg.planet);
       const name = `${leg.planet} L${leg.k}`;
       if (!w) return endRoute(g, `Route cancelled · ${leg.planet} not found`, 'warn');
       if (!r.legStarted && waitForBattery(g)) return;
