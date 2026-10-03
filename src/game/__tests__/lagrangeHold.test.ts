@@ -16,10 +16,13 @@ import { systemsNear } from '../universe/galaxy';
 
 // the thruster model needs a power bus and tanks; here thrust is just applied and its Δv summed
 let spent = 0;
+/** The most acceleration (m/s²) the mocked bus can feed the thrusters, like a power-limited ship's (Infinity: no limit). */
+let thrustMax = Infinity;
 vi.mock('../sim/resources', async (orig) => ({
   ...(await orig<typeof import('../sim/resources')>()),
   deltaVLeft: () => 1e6,
-  applyThrust: (_g: unknown, T: THREE.Vector3) => {
+  applyThrust: (_g: unknown, T: THREE.Vector3, dt: number) => {
+    if (T.length() > thrustMax * dt) T.setLength(thrustMax * dt);
     spent += T.length();
   },
 }));
@@ -94,6 +97,38 @@ describe('holding at a Lagrange point (autopilot)', () => {
       expect(r.perYear).toBeLessThan(50);
     }
   });
+});
+
+describe('holding with weak thrust (autopilot)', () => {
+  /** Fly in as an FTL drop leaves the ship (30 km out, moving with the planet) and report where it is at the end. */
+  function arrive(k: 1 | 2, accMax: number, secs: number) {
+    thrustMax = accMax;
+    try {
+      const { bodies, w, cur, ship, ap, g } = setup(k);
+      ship.pos.copy(lagrangePoints(w)[k - 1].pos).add(new THREE.Vector3(3e4, 0, 0));
+      const dt = 0.016;
+      let late = 0;
+      for (let t = 0; t < secs; t += dt) {
+        g.simTime = t + dt; // (the game's order, as in fly())
+        updateBodies(bodies, t + dt);
+        autopilot(g, dt, gravityAt(cur, ship.pos));
+        ship.pos.addScaledVector(ship.vel, dt);
+        if (t > secs - 600) late = Math.max(late, ship.pos.distanceTo(lagrangePoints(w)[k - 1].pos));
+      }
+      return { settled: ap.settled, late };
+    } finally {
+      thrustMax = Infinity;
+    }
+  }
+
+  // (a bus that gives a few m/s², not the 1,200 the autopilot may ask for: the approach once swung round the point for ever)
+  for (const [k, accMax, secs] of [[2, 3.6, 3600], [1, 3.6, 3600], [2, 1.2, 7200]] as const) {
+    it(`settles at L${k} on ${accMax} m/s² of thrust`, () => {
+      const r = arrive(k, accMax, secs);
+      expect(r.settled).toBe(true);
+      expect(r.late).toBeLessThan(500);
+    });
+  }
 });
 
 describe('phasing transfer (autopilot)', () => {

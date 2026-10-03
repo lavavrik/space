@@ -1,6 +1,6 @@
 /* Turns game state into the display strings and flags the HUD shows. */
 import { pairSpec } from '../universe/binary';
-import { AU, FTL_CHARGE_TIME, HULL_P_MAX, JUMP_CHARGE_TIME, LY, JUMP_DEPART_TIME, NORMAL_ACC, NORMAL_BOOST, NORMAL_MAX, SHIP, ftlBurn, jumpCost } from '../constants';
+import { AU, FTL_CHARGE_TIME, HULL_P_MAX, JUMP_CHARGE_TIME, LY, JUMP_DEPART_TIME, AP_ACC, NORMAL_ACC, NORMAL_BOOST, NORMAL_MAX, SHIP, ftlBurn, jumpCost } from '../constants';
 import { DEBUG, debugSpots } from '../debug/poses';
 import { fmtArea, fmtBar, fmtClock, fmtEnergy, fmtDist, fmtFlow, fmtMass, fmtPower, fmtSpeed, fmtSpeedText, fmtTime } from '../format';
 import type { Game } from '../Game';
@@ -575,6 +575,7 @@ function autopilotView(g: Game): AutopilotView {
       if (ph.stage === 'coast' || ph.stage === 'burn') rows.push(['ARRIVES IN', fmtTime(Math.max(0, ph.tArr - g.simTime))]);
       if (ph.stage !== 'depart') rows.push(['Δv BURNED', fmtSpeedText(ph.spent)]);
     }
+    if (ap.accCap !== undefined && ap.accCap < 0.5 * AP_ACC) rows.push(['THRUST', { text: `${ap.accCap.toFixed(ap.accCap < 10 ? 1 : 0)} m/s² deliverable · the bus is limiting it`, warn: true }]);
     rows.push(['TARGET', `${apPoint({ ...ap, ph: undefined }).name} · ${fmtDist(ap.r0)} from ${b.name}`]);
     if (!ph || ph.stage === 'depart' || ph.stage === 'arrive') {
       rows.push(['OFF THE POINT', { text: fmtDist(off), warn: ap.settled && off > 1000 }]);

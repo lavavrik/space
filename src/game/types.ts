@@ -276,6 +276,8 @@ export interface Autopilot {
   point: Vec3 | null; // hold point, as an offset from the body (only when holding position)
   phase: 'charge' | 'transfer' | 'insert';
   settled: boolean;
+  /** The acceleration (m/s²) the thrusters have turned out able to deliver (the bus may not feed the full AP_ACC): the approach brakes within it. */
+  accCap?: number;
   t0: number; // sim time when engaged
   prop0: number; // propellant (kg) when engaged, for the Δv-used readout
 }

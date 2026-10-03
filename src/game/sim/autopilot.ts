@@ -318,7 +318,11 @@ export function autopilot(g: Game, dt: number, grav: Gravity) {
     phasingFlight(g, dt, grav);
     return;
   }
-  const prof = profileOf(ship);
+  // the braking the approach plans on is what the thrusters can really deliver, not what the orbit
+  // computer is rated for: on a weak bus (a flat battery after the FTL leg, dim starlight) the plan
+  // asked for more than came out, overshot, and swung round the point without ever settling
+  const base = profileOf(ship);
+  const prof = ap.accCap === undefined ? base : { ...base, acc: Math.min(base.acc, Math.max(0.05, ap.accCap * 0.6)) };
   const rv = ship.pos.clone().sub(b.pos),
     r = rv.length(),
     u = rv.clone().divideScalar(r);
@@ -507,8 +511,23 @@ export function autopilot(g: Game, dt: number, grav: Gravity) {
   const a = err.clone().divideScalar(AP_TAU).add(aFF);
   if (a.length() > AP_ACC) a.setLength(AP_ACC);
   const T = a.multiplyScalar(dt);
+  const asked = T.length();
   applyThrust(g, T, dt);
+  learnThrust(ap, asked / dt, T.length() / dt, dt);
   ship.vel.addScaledVector(grav.vec, dt).add(T);
+}
+
+/**
+ * Keep an estimate of the acceleration the thrusters can deliver (`Autopilot.accCap`): when what
+ * came out is under what was asked, that is the limit (smoothed over about a second); when the
+ * autopilot is asking for about all of it and gets it, the limit creeps back up toward AP_ACC.
+ */
+function learnThrust(ap: Autopilot, asked: number, got: number, dt: number) {
+  if (asked < 1e-6) return;
+  const cap = ap.accCap ?? AP_ACC;
+  if (got < 0.98 * asked) ap.accCap = Math.max(0.05, cap + (got - cap) * Math.min(1, dt));
+  else if (asked >= 0.9 * cap) ap.accCap = Math.min(AP_ACC, cap * (1 + 0.5 * dt));
+  else ap.accCap = cap;
 }
 
 /**
