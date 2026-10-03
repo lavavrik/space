@@ -4,12 +4,12 @@ import { AU, FTL_CHARGE_TIME, HULL_P_MAX, JUMP_CHARGE_TIME, LY, JUMP_DEPART_TIME
 import { DEBUG, debugSpots } from '../debug/poses';
 import { fmtArea, fmtBar, fmtClock, fmtEnergy, fmtDist, fmtFlow, fmtMass, fmtPower, fmtSpeed, fmtSpeedText, fmtTime } from '../format';
 import type { Game } from '../Game';
-import type { Station, World } from '../types';
+import type { Station } from '../types';
 import { THREE } from '../lib/three';
 import { holdPoint, orbitVelErr } from '../sim/autopilot';
 import { velRel } from '../sim/frame';
 import { orbitElements, orbitElementsRel } from '../sim/gravity';
-import { driftTime, lagrangePoints } from '../sim/lagrange';
+import { apPoint, driftTime } from '../sim/lagrange';
 import { guideEta, type Guide } from '../sim/guide';
 import { transitState } from '../sim/hyperspace';
 import { NAV_MODES, searchNav } from '../sim/navroute';
@@ -123,6 +123,9 @@ function flightMode(g: Game): [string, FlightView['modeClass']] {
   if (ap && ap.phase === 'transfer') return ['AUTOPILOT · FTL TRANSFER', 'ftl'];
   if (ap && ap.phase === 'insert') {
     const hold = ap.type === 'hold' || ap.type === 'lagrange';
+    if (ap.ph?.stage === 'coast') return ['AUTOPILOT · PHASING · COASTING', 'ftl'];
+    if (ap.ph?.stage === 'burn') return ['AUTOPILOT · PHASING BURN', 'ftl'];
+    if (ap.ph?.stage === 'depart' && !ap.settled) return ['AUTOPILOT · TO DEPARTURE POINT', 'ftl'];
     if (ap.type === 'rendezvous') return [ap.settled ? 'AUTOPILOT · ALONGSIDE' : 'AUTOPILOT · RENDEZVOUS', 'ftl'];
     if (ap.settled) return [hold ? 'AUTOPILOT · HOLDING' : 'AUTOPILOT · IN ORBIT', 'ftl'];
     return [hold ? 'AUTOPILOT · MOVING TO HOLD' : 'AUTOPILOT · ORBIT INSERTION', 'ftl'];
@@ -560,12 +563,21 @@ function autopilotView(g: Game): AutopilotView {
     rows.push(['DISTANCE', fmtDist(st.pos.distanceTo(ship.pos))]);
     rows.push(['RELATIVE SPEED', fmtSpeedText(v.distanceTo(st.vel.clone().sub(b.vel)))]);
   } else if (ap.type === 'lagrange') {
-    const lp = lagrangePoints(b as World)[ap.lk! - 1];
+    const lp = apPoint(ap);
     const off = lp.pos.distanceTo(ship.pos);
-    rows.push(['TARGET', `${lp.name} · ${fmtDist(ap.r0)} from ${b.name}`]);
-    rows.push(['OFF THE POINT', { text: fmtDist(off), warn: ap.settled && off > 1000 }]);
-    rows.push(['DRIFT', fmtSpeedText(velRel(g, b).distanceTo(lp.vel.clone().sub(b.vel)))]);
-    rows.push(['STATION-KEEPING', `${fmtFlow(ship.burnRate)} · ${lp.stable ? 'stable point' : 'unstable: drifts in ' + fmtTime(driftTime(lp))}`]);
+    const ph = ap.ph;
+    if (ph) {
+      const stage = { depart: 'flying to the departure point', burn: 'burning', coast: 'coasting', arrive: 'matching the point' }[ph.stage];
+      rows.push(['PHASING', `${ap.revs} orbit${ap.revs === 1 ? '' : 's'} · ${stage}`]);
+      if (ph.stage === 'coast' || ph.stage === 'burn') rows.push(['ARRIVES IN', fmtTime(Math.max(0, ph.tArr - g.simTime))]);
+      if (ph.stage !== 'depart') rows.push(['Δv BURNED', fmtSpeedText(ph.spent)]);
+    }
+    rows.push(['TARGET', `${apPoint({ ...ap, ph: undefined }).name} · ${fmtDist(ap.r0)} from ${b.name}`]);
+    if (!ph || ph.stage === 'depart' || ph.stage === 'arrive') {
+      rows.push(['OFF THE POINT', { text: fmtDist(off), warn: ap.settled && off > 1000 }]);
+      rows.push(['DRIFT', fmtSpeedText(velRel(g, b).distanceTo(lp.vel.clone().sub(b.vel)))]);
+    }
+    if (!ph || ph.stage === 'arrive') rows.push(['STATION-KEEPING', `${fmtFlow(ship.burnRate)} · ${lp.stable ? 'stable point' : 'unstable: drifts in ' + fmtTime(driftTime(lp))}`]);
   } else if (ap.type === 'hold') {
     const off = holdPoint(ap).distanceTo(ship.pos);
     rows.push(['TARGET', `${fmtDist(ap.r0 - R)} above ${b.name}`]);
@@ -913,6 +925,7 @@ function planner(g: Game): PlannerView | null {
     period: isFinite(ev.period) ? fmtTime(ev.period) : 'not orbiting',
     speed: ev.speed ? fmtSpeed(ev.speed).join(' ').toLowerCase() : '0 m/s',
     dir: p.type === 'hold' || p.type === 'lagrange' ? '—' : p.type === 'sync' ? 'with rotation (required)' : p.type === 'ring' ? 'with the ring (required)' : p.dir > 0 ? 'prograde (with rotation)' : 'retrograde',
+    transfer: ev.transfer,
     note: { text: ev.note || `Autopilot flies you there${far ? ', using FTL for the long leg' : ''}.`, warn: !ev.ok || !!ev.warn },
   };
 }

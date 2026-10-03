@@ -222,6 +222,8 @@ export interface Autopilot {
   type: ApType;
   station: Station | null; // rendezvous only: the station to close on and match
   lk?: 1 | 2 | 3 | 4 | 5; // lagrange only: which of `body`'s (a planet's) points
+  revs?: number; // lagrange L3–L5: orbits of the phasing transfer (sim/phasing.ts); 0 or unset: straight there
+  ph?: PhasingState; // …and where it has got to
   r0: number; // target orbit radius, m
   period: number;
   n: Vec3 | null; // orbit normal (null when holding position)
@@ -230,6 +232,21 @@ export interface Autopilot {
   settled: boolean;
   t0: number; // sim time when engaged
   prop0: number; // propellant (kg) when engaged, for the Δv-used readout
+}
+
+/** A phasing transfer under way (sim/phasing.ts, sim/autopilot.ts phasingFlight). */
+export interface PhasingState {
+  /** depart: flying to the departure gate; burn: a burn is being flown; coast: drifting to the point (time warp works); arrive: matching it. */
+  stage: 'depart' | 'burn' | 'coast' | 'arrive';
+  /** Sim time of arrival at the point, and the times (s) of the corrections still to make, then arrival. */
+  tArr: number;
+  checks: number[];
+  /** Burn left to fly (m/s, the frame body's frame), and whether it's the departure burn or a correction. */
+  dvLeft: [number, number, number] | null;
+  /** Time warp to go back to after a burn (1: none), Δv burned so far (m/s), and seconds the thrusters have been unable to burn. */
+  resume: number;
+  spent: number;
+  stall: number;
 }
 
 export interface Tanker {
@@ -352,6 +369,7 @@ export interface Planner {
   dir: number; // +1 prograde, −1 retrograde
   curAlt: number;
   lk?: 1 | 2 | 3 | 4 | 5; // lagrange only: which point (1 if unset)
+  revs?: number; // lagrange L3–L5: orbits of the phasing transfer (3 if unset; 0: straight there)
 }
 
 export type MsgKind = '' | 'ftl' | 'warn';

@@ -1,28 +1,31 @@
 /*
- * Lagrange points (docs/lagrange.md). In the frame that turns with the planet round its parent all
- * five sit still, so each is the parent-relative position of a rigid rotation at the planet's own
- * angular velocity (ω = r × v / r²), with velocity ω × position and acceleration −ω² × position
- * (the centripetal pull a ship needs to keep up with it).
+ * Lagrange points (docs/lagrange.md).
  *
  *   L1  between the two, about a Hill radius short of the planet     unstable
  *   L2  beyond the planet, a Hill radius farther                      unstable
- *   L3  opposite the planet, at its orbit's radius                    (see below)
- *   L4  60° ahead on the planet's orbit                               stable
- *   L5  60° behind                                                    stable
+ *   L3  opposite the planet                                           free orbit
+ *   L4  60° ahead                                                     free orbit, stable
+ *   L5  60° behind                                                    free orbit, stable
  *
- * L1 and L2 are solved against the same force the ship feels (sim/gravity.ts): the parent's pull plus
- * the planet's, with the planet's tapered away past HILL_FULL Hill radii. A ship put there at the
- * point's velocity needs no thrust, and the instability (a drift of e-fold ≈ 0.5 / n, ~3 weeks at
- * Earth) is real: left alone it leaves. L3, L4 and L5 lie 14+ Hill radii from the planet, where its
- * pull is tapered to nothing (the force there is ~q of the parent's), so each is simply a circular
- * orbit of the planet's radius and period, 180°, +60° or −60° round: free, and stable. In reality
- * the planet's faint pull makes L4 and L5 librate over thousands of years and L3 drift over
- * decades; neither shows in a game session. L4 and L5 are only stable when M / m exceeds ~24.96
- * (Routh), which every planet and moon in the sim clears, but it's reported from the ratio.
+ * L1 and L2 sit still in the frame turning with the planet at its instantaneous angular rate
+ * (ω = r × v / r²): velocity ω × position, acceleration −ω² × position. They are solved against the
+ * same force the ship feels (sim/gravity.ts): the parent's pull plus the planet's, with the
+ * planet's tapered away past HILL_FULL Hill radii. A ship put there at the point's velocity needs no
+ * thrust, and the instability (a drift of e-fold ≈ 0.5 / n, ~3 weeks at Earth) is real: left alone
+ * it leaves.
+ *
+ * L3, L4 and L5 lie 14+ Hill radii from the planet, where its pull is tapered to nothing (the force
+ * there is ~q of the parent's), so each is simply a free Kepler orbit with the planet's own period:
+ * the planet's orbit with its mean anomaly shifted by 180°, +60° or −60° (`trojanRel`). That is
+ * exact however eccentric the planet's orbit is, and a ship there needs no thrust. In reality the
+ * planet's faint pull makes L4 and L5 librate over thousands of years and L3 drift over decades;
+ * neither shows in a game session. L4 and L5 are only stable when M / m exceeds ~24.96 (Routh),
+ * which every planet and moon in the sim clears, but it's reported from the ratio.
  */
 import { THREE } from '../lib/three';
-import type { Body, World } from '../types';
+import type { Autopilot, Body, World } from '../types';
 import { hillRadius, planetPullWeight } from './gravity';
+import { keplerAt, meanAnomalyOf } from './kepler';
 
 export type LKind = 1 | 2 | 3 | 4 | 5;
 
@@ -74,12 +77,25 @@ export function lagrangePoints(planet: World): LPoint[] {
   const h = new THREE.Vector3().crossVectors(r, v);
   const w = h.clone().divideScalar(r2); // angular velocity vector, rad/s
   const n = w.length();
-  const axis = h.clone().normalize();
   const q = planet.mu / par.mu;
   const rho = hillRatio(q);
   const rd = Math.sqrt(r2);
   const stable = trojansStable(q);
 
+  // L3–L5: a free orbit, the planet's own with the mean anomaly shifted (sim: nothing but the parent's pull acts there)
+  const free = (k: LKind, s: { rel: THREE.Vector3; vel: THREE.Vector3 }, dvOrbit: number, ok: boolean): LPoint => {
+    const d = s.rel.length();
+    return {
+      k,
+      name: `${planet.name} L${k}`,
+      planet,
+      pos: s.rel.clone().add(par.pos),
+      vel: s.vel.clone().add(par.vel),
+      acc: s.rel.clone().multiplyScalar(-par.mu / (d * d * d)),
+      stable: ok,
+      dvYear: ok || n === 0 ? 0 : (dvOrbit * YEAR * n) / (2 * Math.PI),
+    };
+  };
   const place = (k: LKind, rel: THREE.Vector3, dvOrbit: number, ok: boolean): LPoint => {
     const vel = new THREE.Vector3().crossVectors(w, rel).add(par.vel);
     return {
@@ -98,14 +114,61 @@ export function lagrangePoints(planet: World): LPoint[] {
   const dHill = rho * rd;
   const dL3 = Math.sqrt(q) * rd;
   const hill = hillRadius(planet);
+  const tro = (k: 3 | 4 | 5) => {
+    const rel = new THREE.Vector3(),
+      vel = new THREE.Vector3();
+    trojanRel(planet, k, meanAnomalyOf(planet.orb, r), rel, vel);
+    return { rel, vel };
+  };
   const [x1, x2] = [collinear(par.mu, planet.mu, rd, n, hill, 1 - rho), collinear(par.mu, planet.mu, rd, n, hill, 1 + rho)];
   return [
     place(1, r.clone().multiplyScalar(x1), KEEP * n * dHill, false),
     place(2, r.clone().multiplyScalar(x2), KEEP * n * dHill, false),
-    place(3, r.clone().negate(), KEEP * n * dL3, false),
-    place(4, r.clone().applyAxisAngle(axis, SIXTY), 0, stable),
-    place(5, r.clone().applyAxisAngle(axis, -SIXTY), 0, stable),
+    free(3, tro(3), KEEP * n * dL3, false),
+    free(4, tro(4), 0, stable),
+    free(5, tro(5), 0, stable),
   ]; // index k − 1
+}
+
+/** How far round its orbit, in mean anomaly, each of L3, L4 and L5 sits from the planet. */
+export const TROJAN_SHIFT = { 3: Math.PI, 4: SIXTY, 5: -SIXTY } as const;
+
+/**
+ * L3, L4 or L5 relative to the parent, on the planet's own orbit with the mean anomaly shifted:
+ * `M` is the planet's mean anomaly (rad; `meanAnomalyOf`, or its M0 + n·t for a future time).
+ * A body there is on a free Kepler orbit with the planet's period, so it keeps its place with no
+ * thrust even when the planet's orbit is eccentric.
+ */
+export function trojanRel(planet: World, k: 3 | 4 | 5, M: number, rel: THREE.Vector3, vel: THREE.Vector3) {
+  keplerAt(planet.orb, M + TROJAN_SHIFT[k], rel, vel);
+}
+
+/**
+ * The departure gate for a phasing transfer to L3, L4 or L5 (sim/phasing.ts): a free co-orbital
+ * point on the planet's own orbit, ahead of it (behind it for L5) by enough that its pull is gone
+ * (more than HILL_NONE Hill radii, and at least 0.15 rad). A ship there is on the planet's orbit
+ * with the planet's period, so it can start phasing from an exactly known state, and the FTL leg
+ * drops out matched to it the way it does beside a station.
+ */
+export function gatePoint(planet: World, k: 3 | 4 | 5): LPoint {
+  const par = planet.parent;
+  const rel0 = new THREE.Vector3().subVectors(planet.pos, par.pos);
+  const q = planet.mu / par.mu;
+  const ang = Math.max(0.15, 7 * hillRatio(q)) * (k === 5 ? -1 : 1);
+  const rel = new THREE.Vector3(),
+    vel = new THREE.Vector3();
+  keplerAt(planet.orb, meanAnomalyOf(planet.orb, rel0) + ang, rel, vel);
+  const d = rel.length();
+  return {
+    k,
+    name: `${planet.name} departure point`,
+    planet,
+    pos: rel.clone().add(par.pos),
+    vel: vel.add(par.vel),
+    acc: rel.clone().multiplyScalar(-par.mu / (d * d * d)),
+    stable: true,
+    dvYear: 0,
+  };
 }
 
 /**
@@ -140,4 +203,14 @@ export function driftTime(p: LPoint): number {
   const n = p.planet.orb.n;
   // L1 and L2: λ ≈ 2.07 n. L3: λ ≈ n·√(21q/8), far slower
   return p.k === 3 ? 1 / (n * Math.sqrt((21 * q) / 8)) : 1 / (n * COLLINEAR_GROWTH);
+}
+
+/**
+ * What a Lagrange hold is flying to now: the point itself, or while a phasing transfer is still on
+ * its way to its departure gate (sim/phasing.ts), that gate.
+ */
+export function apPoint(ap: Autopilot): LPoint {
+  const planet = ap.body as World;
+  if (ap.ph?.stage === 'depart') return gatePoint(planet, ap.lk as 3 | 4 | 5);
+  return lagrangePoints(planet)[ap.lk! - 1];
 }

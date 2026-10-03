@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { JUMP_RANGE } from '../constants';
 import { THREE } from '../lib/three';
 import { gravityAt, hillRadius, perturbation } from '../sim/gravity';
-import { updateBodies } from '../sim/kepler';
+import { keplerState, updateBodies } from '../sim/kepler';
 import { ROUTH_RATIO, YEAR, driftTime, hillRatio, lagrangePoints, trojansStable } from '../sim/lagrange';
 import type { CurrentSystem, Star, World } from '../types';
 import { homeSystem, systemsNear } from '../universe/galaxy';
@@ -31,7 +31,7 @@ const rel = (p: THREE.Vector3, w: World) => p.clone().sub(w.parent.pos);
 
 describe('lagrange points', () => {
   it('put L4 and L5 at the corners of an equilateral triangle with the planet and its parent', () => {
-    const w = home();
+    const { w } = circular();
     const [, , , l4, l5] = lagrangePoints(w);
     const r = w.pos.distanceTo(w.parent.pos);
     for (const p of [l4, l5]) {
@@ -58,7 +58,7 @@ describe('lagrange points', () => {
   });
 
   it('carry every point round the parent at the planet\'s own angular rate', () => {
-    const w = home();
+    const { w } = circular();
     const r = rel(w.pos, w);
     const n = r.clone().cross(w.vel.clone().sub(w.parent.vel)).length() / r.lengthSq();
     for (const p of lagrangePoints(w)) {
@@ -71,6 +71,7 @@ describe('lagrange points', () => {
   it('stay with the planet as it moves: the angle to L4 holds', () => {
     const bodies = buildSystem(homeSystem());
     const w = findHome(bodies) as World;
+    w.orb.e = 0;
     const angle = () => {
       const l4 = lagrangePoints(w)[3];
       return rel(l4.pos, w).angleTo(rel(w.pos, w));
@@ -80,6 +81,24 @@ describe('lagrange points', () => {
     updateBodies(bodies, 0.37 * YEAR);
     expect(angle()).toBeCloseTo(a0, 9);
     expect(a0).toBeCloseTo(Math.PI / 3, 9);
+  });
+
+  it('put L3, L4 and L5 on the planet\'s own orbit, a fixed time ahead or behind it, even when it is eccentric', () => {
+    const bodies = buildSystem(homeSystem());
+    const w = findHome(bodies) as World;
+    w.orb.e = 0.05;
+    for (const t of [0, 0.3 * YEAR, 0.71 * YEAR]) {
+      updateBodies(bodies, t);
+      for (const k of [3, 4, 5] as const) {
+        const shift = { 3: Math.PI, 4: Math.PI / 3, 5: -Math.PI / 3 }[k] / w.orb.n; // seconds along the orbit
+        const pos = new THREE.Vector3(),
+          vel = new THREE.Vector3();
+        keplerState(w.orb, t + shift, w.parent.pos, w.parent.vel, pos, vel);
+        const p = lagrangePoints(w)[k - 1];
+        expect(p.pos.distanceTo(pos) / w.pos.distanceTo(w.parent.pos)).toBeLessThan(1e-9);
+        expect(p.vel.distanceTo(vel)).toBeLessThan(1e-3);
+      }
+    }
   });
 
   it('are equilibria of the force a ship feels: the net pull equals the centripetal pull', () => {

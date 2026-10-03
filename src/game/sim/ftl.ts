@@ -7,6 +7,7 @@ import { THREE } from '../lib/three';
 import type { Body, Ship } from '../types';
 import { FRAME_ENTER, stationVel, stationWithin } from './frame';
 import { apLabel } from './orbits';
+import { apPoint } from './lagrange';
 import { RING_HALF_THICK } from './rings';
 
 /** How strongly a body's gravity well slows the FTL drive. */
@@ -204,7 +205,11 @@ export function dropFTL(g: Game, forced: boolean, body?: Body) {
   if (ship.ap) {
     ship.ap.phase = 'insert';
     // (at rest relative to the target; a Lagrange point's is its planet, whose velocity in the star's frame is its orbit's)
-    if (ship.ap.type === 'lagrange') ship.vel.copy(ship.ap.body.vel).sub(g.frameBody.vel);
+    if (ship.ap.type === 'lagrange') {
+      // a phasing transfer's gate is matched (like a station); a straight run to a point arrives moving with the planet
+      const to = ship.ap.ph?.stage === 'depart' ? apPoint(ship.ap).vel : ship.ap.body.vel;
+      ship.vel.copy(to).sub(g.frameBody.vel);
+    }
     else ship.vel.set(0, 0, 0);
     ship.ftlCoast = 0;
     g.showMsg(`Autopilot · inserting into ${apLabel(ship.ap)}`, 'ftl');

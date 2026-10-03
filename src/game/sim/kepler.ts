@@ -7,16 +7,31 @@ import type { Body, KeplerOrbit } from '../types';
  * position and velocity. Exact at any t, so nothing drifts however long the game runs.
  */
 export function keplerState(o: KeplerOrbit, t: number, parentPos: THREE.Vector3, parentVel: THREE.Vector3, pos: THREE.Vector3, vel: THREE.Vector3) {
+  keplerAt(o, o.M0 + o.n * t, pos, vel);
+  pos.add(parentPos);
+  vel.add(parentVel);
+}
+
+/** Position and velocity relative to the parent at mean anomaly `M` (rad) on the orbit. */
+export function keplerAt(o: KeplerOrbit, M: number, pos: THREE.Vector3, vel: THREE.Vector3) {
   const { a, e, n, P, Q } = o;
-  const M = o.M0 + n * t;
   let E = M;
   for (let i = 0; i < 6; i++) E -= (E - e * Math.sin(E) - M) / (1 - e * Math.cos(E));
   const cE = Math.cos(E),
     sE = Math.sin(E),
     s1 = Math.sqrt(1 - e * e);
   const k = (a * n) / (1 - e * cE);
-  pos.copy(parentPos).addScaledVector(P, a * (cE - e)).addScaledVector(Q, a * s1 * sE);
-  vel.copy(parentVel).addScaledVector(P, -sE * k).addScaledVector(Q, s1 * cE * k);
+  pos.copy(P).multiplyScalar(a * (cE - e)).addScaledVector(Q, a * s1 * sE);
+  vel.copy(P).multiplyScalar(-sE * k).addScaledVector(Q, s1 * cE * k);
+}
+
+/** The mean anomaly (rad) of the point `rel` (relative to the parent) on the orbit: where along it, whatever the time. */
+export function meanAnomalyOf(o: KeplerOrbit, rel: THREE.Vector3) {
+  const { a, e, P, Q } = o;
+  const x = rel.dot(P),
+    y = rel.dot(Q);
+  const E = Math.atan2(y / (a * Math.sqrt(1 - e * e)), x / a + e);
+  return E - e * Math.sin(E);
 }
 
 /**

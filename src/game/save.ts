@@ -27,7 +27,7 @@ import { UTILITY_SLOTS, batteryById, bestOutfit, moduleById } from './outfit/cat
 
 /** The outfit's save format: 2 added utility slots 4 and 5 (belt protection), 3 slot 6 (mining laser). */
 const OUTFIT_REV = 4;
-import type { ApType, Npc, Ship, Target, Wreck } from './types';
+import type { ApType, Autopilot, Npc, Ship, Target, Wreck } from './types';
 import { systemById } from './universe/galaxy';
 import { resetFrame } from './sim/frame';
 import { arriveAt } from './sim/navigation';
@@ -81,6 +81,8 @@ export interface ShipSave {
     n: V3 | null;
     point: V3 | null;
     lk?: 1 | 2 | 3 | 4 | 5;
+    revs?: number;
+    ph?: Autopilot['ph'];
     phase: 'charge' | 'transfer' | 'insert';
     settled: boolean;
   } | null;
@@ -191,6 +193,8 @@ function snapshotFlight(c: Game): FlightSave {
         n: ap.n && v3(ap.n),
         point: ap.point && v3(ap.point),
         lk: ap.lk,
+        revs: ap.revs,
+        ph: ap.ph && { ...ap.ph, checks: [...ap.ph.checks], dvLeft: ap.ph.dvLeft && [...ap.ph.dvLeft] },
         // mid-charge the drive's charge isn't saved: it goes back to insertion, which re-charges
         phase: ap.phase === 'charge' ? 'insert' : ap.phase,
         settled: ap.settled,
@@ -379,6 +383,8 @@ function restoreFlight(c: Game, f: FlightSave) {
       n: s.ap.n && V(s.ap.n),
       point: s.ap.point && V(s.ap.point),
       lk: s.ap.lk,
+      revs: s.ap.revs,
+      ph: s.ap.ph && { ...s.ap.ph, checks: [...s.ap.ph.checks], dvLeft: s.ap.ph.dvLeft && ([...s.ap.ph.dvLeft] as [number, number, number]), resume: 1 },
       phase: s.ap.phase,
       settled: s.ap.settled,
       t0: c.simTime,

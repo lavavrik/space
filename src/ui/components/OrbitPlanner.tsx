@@ -26,6 +26,7 @@ export function OrbitPlanner({ p }: { p: PlannerView }) {
         ))}
       </div>
       <Row label={p.type === 'lagrange' ? 'POINT' : 'ALTITUDE'} value={p.alt} />
+      {p.transfer && <Row label="TRANSFER" value={p.transfer} />}
       <Row label="PERIOD" value={p.period} />
       <Row label="ORBITAL SPEED" value={p.speed} />
       <Row label="DIRECTION" value={p.dir} />
@@ -33,7 +34,7 @@ export function OrbitPlanner({ p }: { p: PlannerView }) {
       <div className="okeys">
         {p.type === 'lagrange' ? (
           <>
-            <kbd>R</kbd> next point (L1–L5) · <kbd>L</kbd> preview · <kbd>Enter</kbd> engage
+            <kbd>R</kbd> next point (L1–L5) · <kbd>[ ]</kbd> orbits to phase over (L3–L5) · <kbd>L</kbd> preview · <kbd>Enter</kbd> engage
           </>
         ) : (
           <>

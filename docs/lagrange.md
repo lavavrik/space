@@ -13,34 +13,55 @@ At the SOI's edge the two are the same acceleration, so crossing the boundary no
 
 ## The points
 
-In the frame turning with the planet all five sit still, so each is a rigid rotation of the planet's parent-relative position, moving at ω × position (ω = r × v / r²) with acceleration −ω² × position.
+L1 and L2 sit still in the frame turning with the planet, at its instantaneous angular rate (ω = r × v / r²): velocity ω × position, acceleration −ω² × position. L3, L4 and L5 are free orbits (below).
 
 | Point | Where | In the sim |
 |---|---|---|
 | L1 | between the two, about a Hill radius short of the planet | unstable (e-fold ≈ 0.5 / n: ~3 weeks at Earth) |
 | L2 | beyond the planet, a Hill radius farther | unstable, the same |
-| L3 | opposite the planet, at its orbit's radius | free circular orbit |
-| L4 | 60° ahead | free circular orbit, stable |
-| L5 | 60° behind | free circular orbit, stable |
+| L3 | opposite the planet | free orbit |
+| L4 | 60° ahead | free orbit, stable |
+| L5 | 60° behind | free orbit, stable |
 
-L1 and L2 are **solved against the force the ship feels** (Newton on the parent's pull plus the planet's tapered pull plus the centripetal term), so a ship there at the point's velocity needs no thrust, and the instability is real: left alone it leaves. L3, L4 and L5 are 14+ Hill radii from the planet, where the taper has removed its pull, so each is simply a circular orbit with the planet's radius and period. In reality the planet's faint pull makes L4 and L5 librate over thousands of years and L3 drift over decades; neither shows in a game session. L4 and L5 are stable only above the Routh mass ratio of 24.96 (`trojansStable`), which every planet and moon here clears.
+L1 and L2 are **solved against the force the ship feels** (Newton on the parent's pull plus the planet's tapered pull plus the centripetal term), so a ship there at the point's velocity needs no thrust, and the instability is real: left alone it leaves. For a planet on an eccentric orbit (up to e = 0.06 here) they follow its instantaneous angular rate, so they sway a little as it speeds up and slows down, and a held ship pays for keeping up.
 
-For a planet on an eccentric orbit (up to e = 0.06 here) the points follow the planet's *instantaneous* angular rate, so they sway a little as it speeds up and slows down, and a held ship pays for keeping up.
+L3, L4 and L5 are 14+ Hill radii from the planet, where the taper has removed its pull, so each is a **free Kepler orbit with the planet's period**: the planet's own orbit with its mean anomaly shifted by 180°, +60° or −60° (`trojanRel`). That is exact however eccentric the orbit, and a ship there needs no thrust. (In reality the planet's faint pull makes L4 and L5 librate over thousands of years and L3 drift over decades; neither shows in a game session.) L4 and L5 are stable only above the Routh mass ratio of 24.96 (`trojansStable`), which every planet and moon here clears.
 
 ## Holding at a point (orbit planner, key 6; HX-8200 and up)
 
-Planner → 6 (L-point) → R steps L1…L5 → Enter. The planner shows the point, its distance from the planet, and whether it is stable. The autopilot flies there (an FTL leg if it's far, dropping at rest relative to the planet), matches the point's velocity, and holds, feeding forward the point's centripetal acceleration less the ship's own gravity (which near L1/L2 is nearly all of it). The autopilot panel and maneuver guide show the offset, the drift and the propellant burned.
+Planner → 6 (L-point) → **R** steps L1…L5 → **[ ]** sets the orbits to phase over (L3–L5) → Enter. The planner shows the point, how it gets there (TRANSFER), and the cost. Holding feeds forward the point's acceleration less the ship's own gravity (which near L1 and L2 is nearly all of it), so it costs next to nothing; the autopilot panel and maneuver guide show the offset, the drift and the propellant burned.
 
-Measured in the tests (`lagrangeHold.test.ts`): once settled, holding L4 costs a few m/s a year and L1 well under 50 m/s a year; with the planet's pull left out of the force it would be thousands. `LPoint.dvYear` is a separate planning estimate of what real station-keeping costs (`0.01 · n · d` per orbit, calibrated on JWST at Sun–Earth L2, ~3 m/s a year), shown in the planner for the unstable points; the sim charges whatever the autopilot actually burns.
+**L1 and L2** are flown to directly (an FTL leg, dropping at rest relative to the planet, then a few hundred m/s to match the point).
 
-Time warp is refused while the autopilot holds (it works on thrust), like any hold.
+**L3, L4 and L5: the phasing transfer** (`sim/phasing.ts`). Matching one of these at once means matching about the planet's orbital speed (~40 km/s at 0.9 AU), so the autopilot does what a real mission does: change your orbital period a little, drift round, change it back.
+
+1. **To the departure gate.** An FTL leg (or thrusters, if close) to `gatePoint`: a free point on the planet's own orbit, 7+ Hill radii ahead of it (behind it, for L5), outside its pull. The drive drops out matched to it, the way it does beside a station.
+2. **The burn.** From the gate the plan is exact: the phasing orbit passes through the gate, you come back to it after N turns, and the point has moved to meet you there. The flight takes T = (N + the phase to cover) planet periods; the speed on the new orbit follows from vis-viva. The burn is flown at the autopilot's thrust (an instant, at 1,200 m/s²).
+3. **The coast.** No thrust; **time warp works** (the one autopilot state that allows it). At up to ×100,000 a three-orbit trip at Earth takes about 15 minutes. Warp is held short of the next event so it comes at ×1, and the warp you had is put back after it.
+4. **Mid-course corrections.** At 15, 40, 70, 90, 97 and 99.5 % of the flight the autopilot re-solves from where the ship actually is (a Newton shooting solver on a Kepler propagator) and burns the difference if it's over 2 mm/s. They are tiny, because the plan has no gravity to leave out beyond the parent's.
+5. **Arrival.** The hold takes over at the planned time, a few km from the point, with the planned closing speed, and closes gently (2 m/s², 300 m/s at most) rather than at its usual far-approach profile.
+
+The cost falls with N: about v / (9N) in all for a 60° lead from the gate. Measured through the autopilot (`lagrangeHold.test.ts`, with a planet at 0.93 AU):
+
+| To | Orbits | Time | Δv in all |
+|---|---|---|---|
+| L4 | 3 | 2.0 yr | 1.7 km/s |
+| L5 | 4 | 2.9 yr | 1.5 km/s |
+| L3 | 4 | 2.5 yr | 4.2 km/s |
+
+against ~40 km/s going straight there. `[ ]` in the planner sets N from 1 to 12 (0: straight there); it shows the time and Δv, and refuses a transfer the tanks can't pay for (plus a margin). The default is 3.
+
+Holding costs, once settled: L4 a few m/s a year (the step size's own error), L1 well under 50 m/s a year; with the planet's pull left out of the force it would be thousands. `LPoint.dvYear` is a separate planning estimate of real station-keeping (`0.01 · n · d` per orbit, calibrated on JWST at Sun–Earth L2, ~3 m/s a year); the sim charges whatever the autopilot actually burns.
+
+Time warp is refused while the autopilot holds (it works on thrust), like any hold, and during a phasing burn, but not during its coast.
 
 ## Not done yet
 
-- **Arriving cheaply.** The autopilot matches the point's velocity at once, which is cheap for L1 and L2 (a few hundred m/s from rest relative to the planet) but not for L3–L5 (about the planet's orbital speed, ~30 km/s at Earth). A real trip drifts there by a small change of orbit over months; a phasing transfer would do the same.
 - **Targeting.** The points aren't a `Target` (no T/G/click, no approach strip).
-- **Trojan fields, parked stations, low-energy transfers.** Steps 2 and 3 of the plan.
+- **Trojan fields, parked stations, low-energy transfers** through L1 and L2. The rest of the plan.
 - **Moons.** `lagrangePoints` works for any world, but only planets are drawn and held. A moon's points would sit inside its parent's sphere of influence and need the tide there.
-- **Close pairs.** Near L-points of a planet round a close binary's barycentre the parent's pull is taken as one point mass.
+- **Close pairs.** Round a close binary's barycentre the parent's pull is taken as one point mass, in the plan and in the points.
+- **The trip from low orbit.** The first leg (out of the planet's mass lock and to the gate) is the usual thruster-then-FTL flight; there's no planned escape burn.
+- **L1 and L2 are still direct.** Their match costs a few hundred m/s, so they have no phasing; a plan from the gate to them would need a Lambert solution at a different radius.
 
-Tests: `src/game/__tests__/lagrange.test.ts` (geometry, equilibrium against `gravityAt`, a ship kept with L4 for two years and with L1 for days, L1's drift, SOI continuity) and `lagrangeHold.test.ts` (the autopilot's hold).
+Tests: `lagrange.test.ts` (geometry, equilibrium against `gravityAt`, a ship kept with L4 for two years and with L1 for days, L1's drift, SOI continuity), `phasing.test.ts` (the propagator against Kepler's own orbit, plans from the gate that close on L3–L5, the 1/N cost, corrections) and `lagrangeHold.test.ts` (the autopilot's hold, and whole transfers to L3, L4 and L5).

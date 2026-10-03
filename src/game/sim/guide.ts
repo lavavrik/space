@@ -4,13 +4,13 @@ import { pairSpec } from '../universe/binary';
 import { AP_ACC, AP_TAU, SHIP } from '../constants';
 import { fmtDist, fmtFlow, fmtMass, fmtPower, fmtSpeedText, fmtTime } from '../format';
 import type { Game } from '../Game';
-import type { Autopilot, Jump, Station, Tanker, World } from '../types';
+import type { Autopilot, Jump, Station, Tanker } from '../types';
 import { padWorld } from './docking';
 import { toLocal } from './stationGeom';
 import { apGeom, apInsertion, approachTime, holdPoint, orbitVelErr, profileOf, RDV_STANDOFF } from './autopilot';
 import { velRel } from './frame';
 import { orbitElements } from './gravity';
-import { lagrangePoints } from './lagrange';
+import { apPoint } from './lagrange';
 import { deltaVLeft, shipMass } from './resources';
 
 export type StepState = 'pending' | 'active' | 'done';
@@ -137,17 +137,35 @@ export function startOrbitGuide(g: Game, ap: Autopilot) {
       detail: () => `${fmtSpeedText(dv())} relative`,
     }));
   } else if (ap.type === 'lagrange') {
-    const lp = () => lagrangePoints(b as World)[ap.lk! - 1];
+    const lp = () => apPoint(ap);
+    const target = apPoint({ ...ap, ph: undefined }).name;
     const dist = () => lp().pos.distanceTo(ship.pos);
     const vRel = () => velRel(g, b).distanceTo(lp().vel.clone().sub(b.vel));
+    const ph = () => ap.ph;
+    const phasing = !!ap.ph;
     steps.push(mkStep({
-      title: `Fly to ${lp().name}`, group: 'move', active: ins, done: () => ins() && dist() < 200, err: dist, etaFn: () => approachTime(dist(), prof.radialCap, 200, prof.acc),
+      title: phasing ? `Fly to ${b.name}'s departure point` : `Fly to ${lp().name}`, group: 'move', active: ins, done: () => (phasing ? ph()!.stage !== 'depart' : ins() && dist() < 200), err: dist, etaFn: () => approachTime(dist(), prof.radialCap, 200, prof.acc),
       detail: () => `${fmtDist(dist())} to go`,
     }));
     steps.push(mkStep({
-      title: 'Match its motion', group: 'move', active: ins, done: () => ins() && dist() < 1000 && vRel() < 5, err: vRel, etaFn: () => approachTime(dist(), prof.radialCap, 1000, prof.acc),
+      title: phasing ? 'Settle on it' : 'Match its motion', group: 'move', active: ins, done: () => (phasing ? ph()!.stage !== 'depart' : ins() && dist() < 1000 && vRel() < 5), err: vRel, etaFn: () => approachTime(dist(), prof.radialCap, 1000, prof.acc),
       detail: () => `${fmtSpeedText(vRel())} relative to the point`,
     }));
+    if (phasing) {
+      steps.push(mkStep({
+        title: 'Phasing burn', group: 'phase', active: () => ph()!.stage !== 'depart', done: () => ph()!.stage === 'coast' || ph()!.stage === 'arrive', err: () => (ph()!.dvLeft ? Math.hypot(...ph()!.dvLeft!) : 0),
+        detail: () => `${fmtSpeedText(ph()!.dvLeft ? Math.hypot(...ph()!.dvLeft!) : 0)} left to burn · ${fmtSpeedText(ph()!.spent)} burned`,
+      }));
+      steps.push(mkStep({
+        title: `Coast to ${target}`, group: 'phase', active: () => ph()!.stage === 'coast' || ph()!.stage === 'arrive', done: () => ph()!.stage === 'arrive', err: () => Math.max(0, ph()!.tArr - g.simTime), ongoing: false,
+        etaFn: () => Math.max(0, ph()!.tArr - g.simTime),
+        detail: () => `${fmtTime(Math.max(0, ph()!.tArr - g.simTime))} to arrival · time warp works · corrections as needed`,
+      }));
+      steps.push(mkStep({
+        title: 'Match the point', group: 'phase', active: () => ph()!.stage === 'arrive', done: () => ap.settled, err: vRel,
+        detail: () => `${fmtSpeedText(vRel())} relative to the point`,
+      }));
+    }
     steps.push(mkStep({
       title: 'Station-keeping', ongoing: true, active: () => ins() && ap.settled, done: () => false, err: () => null,
       detail: () => {

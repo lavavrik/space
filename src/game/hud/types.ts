@@ -237,6 +237,8 @@ export interface PlannerView {
   period: string;
   speed: string;
   dir: string;
+  /** Lagrange holds: how it gets there ("3 orbits · 2.9 years", "straight there", "direct"). */
+  transfer?: string;
   note: Readout;
 }
 

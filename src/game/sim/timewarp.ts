@@ -36,12 +36,30 @@ export function warpBlocked(g: Game): string | null {
   if (g.inStation && !g.dock?.docked) return 'not inside a station';
   if (g.autodock) return 'not while the docking computer flies';
   if (g.ascent) return 'not during the ascent';
-  if (ship.ap && (!ship.ap.settled || ship.ap.type === 'hold' || ship.ap.type === 'lagrange' || ship.ap.type === 'rendezvous')) return 'not while the autopilot is manoeuvring';
+  // a phasing transfer's long coast is what warp is for; its burns need real time (see phasingWarpCap)
+  const coasting = ship.ap?.ph?.stage === 'coast';
+  if (ship.ap && !coasting && (!ship.ap.settled || ship.ap.type === 'hold' || ship.ap.type === 'lagrange' || ship.ap.type === 'rendezvous')) return 'not while the autopilot is manoeuvring';
   const thrusting = keys.KeyW || keys.KeyS || keys.KeyA || keys.KeyD || keys.Space || keys.KeyC || keys.ControlLeft || keys.ControlRight || keys.KeyX;
   if (thrusting) return 'not under thrust';
   const t = timeToImpact(g);
   if (t < IMPACT_MARGIN) return 'impact imminent';
   return null;
+}
+
+/**
+ * While a phasing transfer coasts, hold warp short of its next event (a mid-course correction, or
+ * arrival) so that it comes at 1×, on time: a frame must not step over it. The warp the pilot had
+ * is remembered and put back after the burn (sim/autopilot.ts phasingFlight).
+ */
+export function phasingWarpCap(g: Game) {
+  const ph = g.ship.ap?.ph;
+  if (!ph || ph.stage !== 'coast' || g.warp <= 1) return;
+  const room = (ph.checks[0] - g.simTime) / 0.05; // the biggest warp whose frame (~16 ms of real time) fits well inside the wait
+  if (g.warp <= room) return;
+  ph.resume = Math.max(ph.resume, g.warp);
+  let w = 1;
+  for (const l of WARP_LEVELS) if (l <= room) w = l;
+  g.warp = w;
 }
 
 /** Step the warp level up or down (clamped). Starting it is refused with the reason. */

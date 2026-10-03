@@ -19,7 +19,7 @@ import { scoop, shipMass, solarPower, turnThrust } from './resources';
 import { crossSection, updateThermal } from './thermal';
 import { battCap, beginPower, grant, loadShed, settleBattery } from './power';
 import { LAND_KW, updateLandingLights } from './landingLights';
-import { railsStep, stopWarp, warpBlocked } from './timewarp';
+import { phasingWarpCap, railsStep, stopWarp, warpBlocked } from './timewarp';
 import { updatePivot } from './pivot';
 import { updateRadar } from './radar';
 import { autodock } from './autodock';
@@ -73,6 +73,9 @@ export function update(g: Game, dt: number, realDt = dt) {
     if (why) {
       stopWarp(g, why);
       dt = realDt;
+    } else {
+      phasingWarpCap(g);
+      if (g.warp === 1) dt = realDt;
     }
   }
   g.simTime += dt;

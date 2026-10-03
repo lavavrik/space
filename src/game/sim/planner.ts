@@ -37,7 +37,14 @@ export function closePlanner(g: Game) {
 
 export function adjustAlt(g: Game, f: number) {
   const p = g.planner;
-  if (!p || p.type === 'sync' || p.type === 'lagrange') return;
+  if (!p) return;
+  if (p.type === 'lagrange') {
+    // ([ ] sets the orbits of the phasing transfer to L3–L5: 0 is straight there, more is cheaper and slower)
+    if ((p.lk ?? 1) >= 3) p.revs = Math.min(12, Math.max(0, (p.revs ?? 3) + (f > 1 ? 1 : -1)));
+    g.invalidateHud();
+    return;
+  }
+  if (p.type === 'sync') return;
   const b = p.body;
   if (p.type === 'ring' && b.kind !== 'star' && b.ring) {
     // across the ring in steps of 1 % of its width (Shift: 10 %), [ in, ] out
@@ -126,7 +133,7 @@ export function engageOrbit(g: Game) {
   const b = planner.body;
   const u = ship.pos.clone().sub(b.pos).normalize();
   if (planner.type === 'lagrange') {
-    engageAutopilot(g, { body: b, type: 'lagrange', lk: planner.lk ?? 1, r0: ev.r0, period: ev.period, n: null, point: null, station: null });
+    engageAutopilot(g, { body: b, type: 'lagrange', lk: planner.lk ?? 1, revs: (planner.lk ?? 1) >= 3 ? planner.revs ?? 3 : 0, r0: ev.r0, period: ev.period, n: null, point: null, station: null });
     return;
   }
   engageAutopilot(g, {
@@ -141,7 +148,7 @@ export function engageOrbit(g: Game) {
 }
 
 /** What engageAutopilot needs: the rest of an Autopilot is runtime state. */
-export type ApSpec = Pick<Autopilot, 'body' | 'type' | 'r0' | 'period' | 'n' | 'point' | 'station' | 'lk'>;
+export type ApSpec = Pick<Autopilot, 'body' | 'type' | 'r0' | 'period' | 'n' | 'point' | 'station' | 'lk' | 'revs'>;
 
 /**
  * Hand the ship to the autopilot: from the orbit planner, or from the nav computer (which also uses
@@ -151,6 +158,8 @@ export function engageAutopilot(g: Game, spec: ApSpec, quiet = false) {
   const { ship } = g;
   const b = spec.body;
   const ap: Autopilot = { ...spec, phase: 'insert', settled: false, t0: g.simTime, prop0: ship.prop };
+  // a phasing transfer to L3–L5 starts by flying to its departure gate (sim/phasing.ts)
+  if (ap.type === 'lagrange' && (ap.lk ?? 0) >= 3 && (ap.revs ?? 0) > 0) ap.ph = { stage: 'depart', tArr: 0, checks: [], dvLeft: null, resume: 1, spent: 0, stall: 0 };
   ship.ap = ap;
   g.apPanel = false;
   g.apConfirm = 0;
@@ -180,6 +189,7 @@ export function engageRendezvous(g: Game, st: Station) {
  */
 export function ftlWorthwhile(g: Game, ap: Autopilot) {
   if (!g.ship.avionics.orbit?.caps.ftlLeg) return false; // basic units fly it all on thrusters
+  if (ap.ph && ap.ph.stage !== 'depart') return false; // (a phasing transfer coasts: no FTL leg once it has left the gate)
   return apDistance(g.ship, ap) > AP_FTL_MIN && !massLock(g) && !beltLock(g) && !ftlBlocked(g.ship);
 }
 

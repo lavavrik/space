@@ -1,5 +1,5 @@
 import { AP_ACC, AP_FTL_MIN, AP_TAU } from '../constants';
-import { fmtDist, fmtTime } from '../format';
+import { fmtDist, fmtSpeedText, fmtTime } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import { airDensityAt, airSpeedLimit } from './catapult';
@@ -10,9 +10,10 @@ import type { Autopilot, Body, Gravity, Ship, Station, World } from '../types';
 import { atmoOf } from './atmosphere';
 import { velRel } from './frame';
 import { beltLock, dropAlt, dropFTL, ftlSpeedLimit, ftlUpkeep, massLock } from './ftl';
-import { lagrangePoints } from './lagrange';
+import { apPoint, trojanRel } from './lagrange';
+import { correction, planPhasing } from './phasing';
 import { minOrbitAlt } from './orbits';
-import { applyThrust } from './resources';
+import { applyThrust, deltaVLeft } from './resources';
 
 /** Ship position relative to the autopilot body, and "up" projected into the orbit plane. */
 export function apGeom(ship: Ship, ap: Autopilot) {
@@ -193,8 +194,108 @@ export function orbitVelErr(g: Game, ap: Autopilot) {
 
 /** The hold point in the system frame (it's stored as an offset from the moving body; a Lagrange point is worked out live). */
 export function holdPoint(ap: Autopilot) {
-  if (ap.type === 'lagrange') return lagrangePoints(ap.body as World)[ap.lk! - 1].pos;
+  if (ap.type === 'lagrange') return apPoint(ap).pos;
   return ap.body.pos.clone().add(ap.point!);
+}
+
+/** A mid-course correction smaller than this (m/s) is skipped. */
+const CORRECT_MIN = 0.002;
+/** The mid-course corrections of a phasing transfer, as shares of its flight time (arrival follows). */
+const CORRECT_AT = [0.15, 0.4, 0.7, 0.9, 0.97, 0.995];
+/** Arrival closes the last few km gently (m/s², m/s): the hold's usual profile is built for far approaches and would burn kilometres per second on them. */
+const ARRIVE_PROFILE = { acc: 2, radialCap: 300, planeCap: 300 };
+
+/**
+ * The gate is reached and held: plan the phasing burn from where the ship actually is and start it
+ * (sim/phasing.ts). True if it took the ship over (or ended the autopilot), false if it can't start
+ * yet (still in the planet's frame).
+ */
+function startPhasing(g: Game, ap: Autopilot) {
+  const { ship } = g;
+  const planet = ap.body as World;
+  const par = planet.parent;
+  if (g.frameBody !== par) return false;
+  const k = ap.lk as 3 | 4 | 5;
+  const rel = ship.pos.clone().sub(par.pos);
+  const v = ship.vel.clone().add(g.frameBody.vel).sub(par.vel);
+  const plan = planPhasing(planet, k, rel, v, g.simTime, ap.revs!);
+  const name = `${planet.name} L${k}`;
+  const stop = (why: string) => {
+    ship.ap = null;
+    g.showMsg(`Phasing to ${name} · ${why}`, 'warn');
+    return true;
+  };
+  if (!plan.ok) return stop(plan.why ?? 'the plan did not close');
+  const need = plan.dv1.length() + plan.dv2 + 50;
+  if (deltaVLeft(ship) < need) return stop(`needs ${fmtSpeedText(need)} of Δv, ${fmtSpeedText(deltaVLeft(ship))} left`);
+  const t0 = g.simTime;
+  ap.ph = { stage: 'burn', tArr: t0 + plan.T, checks: [...CORRECT_AT.map((f) => t0 + f * plan.T), t0 + plan.T], dvLeft: plan.dv1.toArray() as [number, number, number], resume: 1, spent: 0, stall: 0 };
+  ap.settled = false;
+  g.showMsg(`Phasing to ${name} · burning ${fmtSpeedText(plan.dv1.length())}, then ${fmtTime(plan.T)} to coast`, 'ftl');
+  return true;
+}
+
+/** A burn of the phasing transfer is under way: coast and wait, or fly it. Called instead of the control law. */
+function phasingFlight(g: Game, dt: number, grav: Gravity) {
+  const { ship } = g;
+  const ap = ship.ap!;
+  const ph = ap.ph!;
+  const planet = ap.body as World;
+  const par = planet.parent;
+  if (g.frameBody !== par) {
+    ship.vel.addScaledVector(grav.vec, dt);
+    ship.ap = null;
+    g.showMsg('Phasing abandoned · the ship has come under another world\'s pull', 'warn');
+    return;
+  }
+  if (ph.stage === 'burn') {
+    const left = new THREE.Vector3().fromArray(ph.dvLeft!);
+    const T = left.clone().setLength(Math.min(left.length(), AP_ACC * dt));
+    const want = T.length();
+    applyThrust(g, T, dt); // (cut back if the propellant, the bus or the radiators won't allow it)
+    ship.vel.addScaledVector(grav.vec, dt).add(T);
+    ph.spent += T.length();
+    ph.stall = T.length() < 0.01 * want ? ph.stall + dt : 0;
+    left.sub(T);
+    ph.dvLeft = left.toArray() as [number, number, number];
+    if (ph.stall > 3) {
+      ship.ap = null;
+      g.showMsg('Phasing burn abandoned · the thrusters cannot burn', 'warn');
+    } else if (left.length() < 0.02) {
+      ph.stage = 'coast';
+      ph.dvLeft = null;
+      if (ph.resume > 1) g.warp = ph.resume; // back to the warp the pilot had
+      ph.resume = 1;
+      g.invalidateHud();
+    }
+    return;
+  }
+  // coast: no thrust (time warp's rails do the same), until a check comes due
+  ship.vel.addScaledVector(grav.vec, dt);
+  if (g.simTime < ph.checks[0]) return;
+  ph.checks.shift();
+  if (ph.checks.length === 0) {
+    ph.stage = 'arrive';
+    ap.settled = false;
+    g.showMsg(`Arriving at ${planet.name} L${ap.lk} · matching its motion`, 'ftl');
+    g.invalidateHud();
+    return;
+  }
+  // mid-course correction: what still gets the ship to the point on time (the plan leaves out the planet's pull near the gate)
+  const rel = ship.pos.clone().sub(par.pos);
+  const v = ship.vel.clone().add(g.frameBody.vel).sub(par.vel);
+  const tr = new THREE.Vector3(),
+    tv = new THREE.Vector3();
+  const o = planet.orb;
+  trojanRel(planet, ap.lk as 3 | 4 | 5, o.M0 + o.n * ph.tArr, tr, tv);
+  const fix = correction(rel, v, par.mu, ph.tArr - g.simTime, tr);
+  if (fix.dv.length() > CORRECT_MIN && fix.miss < 5e3) {
+    ph.stage = 'burn';
+    ph.dvLeft = fix.dv.toArray() as [number, number, number];
+  } else if (ph.resume > 1) {
+    g.warp = ph.resume;
+    ph.resume = 1;
+  }
 }
 
 /** The frame body's own acceleration (m/s²), which the ship's frame-relative motion leaves out: a world falls toward its parent. */
@@ -213,6 +314,10 @@ export function autopilot(g: Game, dt: number, grav: Gravity) {
   const ship = g.ship;
   const ap = ship.ap!,
     b = ap.body;
+  if (ap.ph && (ap.ph.stage === 'burn' || ap.ph.stage === 'coast')) {
+    phasingFlight(g, dt, grav);
+    return;
+  }
   const prof = profileOf(ship);
   const rv = ship.pos.clone().sub(b.pos),
     r = rv.length(),
@@ -234,15 +339,24 @@ export function autopilot(g: Game, dt: number, grav: Gravity) {
     // acceleration that keeps up with it (centripetal about the parent) less what the ship's own
     // gravity already supplies, which near L1 and L2 is nearly all of it, so holding costs next to
     // nothing and the thrust is the real drift (sim/lagrange.ts, docs/lagrange.md)
-    const lp = lagrangePoints(b as World)[ap.lk! - 1];
+    const lp = apPoint(ap);
     const e = lp.pos.clone().sub(ship.pos),
       dist = e.length();
     const vPt = lp.vel.clone().sub(b.vel); // relative to the autopilot body, like vRel
-    vDes = vPt.clone().addScaledVector(e, approachSpeed(dist, prof.radialCap, prof.acc) / Math.max(dist, 1));
+    const hp = ap.ph?.stage === 'arrive' ? ARRIVE_PROFILE : prof;
+    vDes = vPt.clone().addScaledVector(e, approachSpeed(dist, hp.radialCap, hp.acc) / Math.max(dist, 1));
     aFF = lp.acc.clone().sub(frameAcc(g)).sub(grav.vec);
     if (!ap.settled && dist < 100 && vRel.distanceTo(vPt) < 5) {
-      ap.settled = true;
-      g.showMsg(`Holding at ${lp.name}`, 'ftl');
+      if (ap.ph?.stage === 'depart') {
+        // at the departure gate: plan and start the phasing burn (sim/phasing.ts)
+        if (startPhasing(g, ap)) {
+          ship.vel.addScaledVector(grav.vec, dt);
+          return;
+        }
+      } else {
+        ap.settled = true;
+        g.showMsg(`Holding at ${lp.name}`, 'ftl');
+      }
     }
   } else if (ap.type === 'rendezvous') {
     // Close on a moving station and match it: aim for a point RDV_STANDOFF short of it, arriving at
