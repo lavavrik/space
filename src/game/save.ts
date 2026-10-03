@@ -39,7 +39,8 @@ import { blankNpc, pilotOf, spawnTraffic, syncNpc } from './sim/traffic';
 
 /** localStorage key; bump the version when the format changes incompatibly (old saves are ignored). */
 export const SAVE_KEY = 'farlight.save';
-export const SAVE_VERSION = 1;
+// 2: the habitable zone regenerated the universe (docs/atmosphere.md); version 1 saves name worlds and stations that moved
+export const SAVE_VERSION = 2;
 /** Seconds of real time between autosaves. */
 export const AUTOSAVE_S = 15;
 

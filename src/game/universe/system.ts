@@ -2,10 +2,11 @@ import { AU, GRAV, MSUN, REARTH, RSUN, WT } from '../constants';
 import { lr, mulberry32, rr, type Rng } from '../lib/rng';
 import { THREE } from '../lib/three';
 import type { Body, Star, StarInfo, StarSystem, World, WorldType } from '../types';
+import { atmoOf } from '../sim/atmosphere';
 import { makeBarycentre, pairOrbits, rocheLobe } from '../sim/barycentre';
 import { updateBodies } from '../sim/kepler';
 import { starMass } from './binary';
-import { makeWorld, rockyType, teq } from './worlds';
+import { habitableZone, makeWorld, rockyType, teq } from './worlds';
 
 function makeStarBody(st: StarInfo, name: string, seed: number): Star {
   const mass = starMass(st.L) * MSUN; // main-sequence mass–luminosity relation
@@ -41,7 +42,7 @@ export function buildSystem(sys: StarSystem): Body[] {
   if (!comp) {
     const star = makeStarBody(st, sys.name, seed);
     const bodies: Body[] = [star];
-    addPlanets(bodies, g, { parent: star, L: st.L, prefix: sys.name, starR: star.radius, aMin: 0, aMax: Infinity });
+    addPlanets(bodies, g, { parent: star, L: st.L, Teff: st.T, prefix: sys.name, starR: star.radius, aMin: 0, aMax: Infinity });
     updateBodies(bodies, 0); // fill in orbital velocities
     return bodies;
   }
@@ -58,15 +59,15 @@ export function buildSystem(sys: StarSystem): Body[] {
     // the planets orbit both, from well outside the pair (closer in, orbits are unstable: Holman &
     // Wiegert, ~3.5 separations); the stars' own gravity is summed (sim/gravity.ts), so no SOIs
     A.soi = B.soi = 0;
-    addPlanets(bodies, g, { parent: bary, L: A.L + B.L, prefix: sys.name, starR: Math.max(A.radius, B.radius), aMin: 3.5 * a, aMax: Infinity });
+    addPlanets(bodies, g, { parent: bary, L: A.L + B.L, Teff: (st.L * st.T + comp.star.L * comp.star.T) / (st.L + comp.star.L), prefix: sys.name, starR: Math.max(A.radius, B.radius), aMin: 3.5 * a, aMax: Infinity });
   } else {
     // each its own planets, within 0.3 of the closest approach (stable S-type orbits); each star
     // rules within its Roche lobe (Eggleton's), the barycentre beyond
     const peri = a * (1 - comp.e);
     A.soi = peri * rocheLobe(A.mass / B.mass);
     B.soi = peri * rocheLobe(B.mass / A.mass);
-    addPlanets(bodies, g, { parent: A, L: A.L, prefix: sys.name, starR: A.radius, aMin: 0, aMax: 0.3 * peri });
-    addPlanets(bodies, g, { parent: B, L: B.L, prefix: `${sys.name} B`, starR: B.radius, aMin: 0, aMax: 0.3 * peri });
+    addPlanets(bodies, g, { parent: A, L: A.L, Teff: st.T, prefix: sys.name, starR: A.radius, aMin: 0, aMax: 0.3 * peri });
+    addPlanets(bodies, g, { parent: B, L: B.L, Teff: comp.star.T, prefix: `${sys.name} B`, starR: B.radius, aMin: 0, aMax: 0.3 * peri });
   }
   updateBodies(bodies, 0);
   return bodies;
@@ -77,6 +78,8 @@ interface PlanetSpec {
   parent: Star;
   /** The light they get (L☉): a close pair's both. */
   L: number;
+  /** Its (their light-weighted) effective temperature, K: where the habitable zone lies. */
+  Teff: number;
   /** Their names: "<prefix> 1", "<prefix> 2"… */
   prefix: string;
   /** No closer than 10 of these (the star's radius). */
@@ -89,13 +92,14 @@ interface PlanetSpec {
 /** A star's (or a pair's) planets and their moons, into `bodies`. */
 function addPlanets(bodies: Body[], g: Rng, s: PlanetSpec) {
   const sq = Math.sqrt(s.L),
-    snow = 2.7 * sq * AU;
+    snow = 2.7 * sq * AU,
+    hz = habitableZone(s.Teff);
   let a = Math.max(rr(g, 0.12, 0.4) * sq * AU, s.starR * 10, s.aMin);
   const n = 3 + Math.floor(g() * 8);
   for (let i = 0; i < n; i++) {
     if (a > s.aMax) break;
     const T = teq(s.L, a / AU);
-    const type: WorldType = a > snow ? (g() < 0.72 ? (g() < 0.6 ? WT.GasGiant : WT.IceGiant) : rockyType(T, g)) : g() < 0.05 ? WT.GasGiant : rockyType(T, g);
+    const type: WorldType = a > snow ? (g() < 0.72 ? (g() < 0.6 ? WT.GasGiant : WT.IceGiant) : rockyType(T, g, hz)) : g() < 0.05 ? WT.GasGiant : rockyType(T, g, hz);
     let radius: number;
     switch (type) {
       case WT.GasGiant: radius = rr(g, 8, 13) * REARTH; break;
@@ -144,7 +148,11 @@ export function systemAnchor(bodies: Body[]): Star {
   return s.parent ?? s;
 }
 
-/** The home planet: an Earth-like world with at least one moon. */
+/** The home planet: a temperate Earth-like world (10–30 °C at the surface) with at least one moon. */
 export function findHome(bodies: Body[]) {
-  return bodies.find((b) => b.kind === 'planet' && b.type === WT.EarthLike && bodies.some((m) => m.kind !== 'star' && m.parent === b));
+  return bodies.find((b): b is World => {
+    if (b.kind !== 'planet' || b.type !== WT.EarthLike) return false;
+    const Ts = atmoOf(b)?.Ts ?? 0;
+    return Ts > 283 && Ts < 303 && bodies.some((m) => m.kind !== 'star' && m.parent === b);
+  });
 }

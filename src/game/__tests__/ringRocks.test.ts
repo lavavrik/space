@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { THREE } from '../lib/three';
-import { homeSystem } from '../universe/galaxy';
+import { homeSystem, systemsNear } from '../universe/galaxy';
 import { buildSystem } from '../universe/system';
 import type { World } from '../types';
 import { effectiveSpeed, ringAxes, rockMass, rocksNear, sweepRocks, type Rock } from '../sim/ringRocks';
 
-const bodies = buildSystem(homeSystem());
-const w = bodies.find((b): b is World => b.kind !== 'star' && !!b.ring)!;
+// the first ringed world from home outward
+const w = [homeSystem(), ...systemsNear(new THREE.Vector3(), 20)]
+  .flatMap((s) => buildSystem(s))
+  .find((b): b is World => b.kind !== 'star' && !!b.ring)!;
 const { e1 } = ringAxes(w.axis);
 const at = e1.clone().multiplyScalar(w.radius * (w.ring!.inner * 0.5 + w.ring!.outer * 0.5));
 

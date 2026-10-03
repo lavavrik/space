@@ -29,4 +29,4 @@ Not saved: a running nav route (its waypoints are kept; engage it again from the
 
 ## Format and versions
 
-JSON, with a version number (`SAVE_VERSION`). A save of another version, or one naming a system, world or station this universe doesn't have, is ignored and a new game starts (it logs why). Objects are stored by name or id, never by reference: bodies and stations by name within the system, systems by id (`universe/galaxy.ts systemById`), modules and computers by catalog id.
+JSON, with a version number (`SAVE_VERSION`; 2 since the habitable zone regenerated the universe, so version 1 saves start a new game). A save of another version, or one naming a system, world or station this universe doesn't have, is ignored and a new game starts (it logs why). Objects are stored by name or id, never by reference: bodies and stations by name within the system, systems by id (`universe/galaxy.ts systemById`), modules and computers by catalog id.
