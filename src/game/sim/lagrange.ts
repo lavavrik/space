@@ -11,7 +11,7 @@
  * (ω = r × v / r²): velocity ω × position, acceleration −ω² × position. They are solved against the
  * same force the ship feels (sim/gravity.ts): the parent's pull plus the planet's, with the
  * planet's tapered away past HILL_FULL Hill radii. A ship put there at the point's velocity needs no
- * thrust, and the instability (a drift of e-fold ≈ 0.5 / n, ~3 weeks at Earth) is real: left alone
+ * thrust, and the instability (a drift of e-fold 1 / (2.53 n): 23 days at Earth) is real: left alone
  * it leaves.
  *
  * L3, L4 and L5 lie 14+ Hill radii from the planet, where its pull is tapered to nothing (the force
@@ -26,6 +26,7 @@ import { THREE } from '../lib/three';
 import type { Autopilot, Body, World } from '../types';
 import { hillRadius, planetPullWeight } from './gravity';
 import { keplerAt, meanAnomalyOf } from './kepler';
+import { saddleModes } from './manifold';
 
 export type LKind = 1 | 2 | 3 | 4 | 5;
 
@@ -55,7 +56,7 @@ export const YEAR = 365.25 * 86400;
  */
 const KEEP = 0.01;
 /** An unstable collinear point's e-folding rate, in units of the planet's mean motion (small q). */
-export const COLLINEAR_GROWTH = 2.07;
+export const COLLINEAR_GROWTH = 2.53;
 
 const SIXTY = Math.PI / 3;
 
@@ -201,8 +202,9 @@ export function driftTime(p: LPoint): number {
   const par = p.planet.parent;
   const q = p.planet.mu / par.mu;
   const n = p.planet.orb.n;
-  // L1 and L2: λ ≈ 2.07 n. L3: λ ≈ n·√(21q/8), far slower
-  return p.k === 3 ? 1 / (n * Math.sqrt((21 * q) / 8)) : 1 / (n * COLLINEAR_GROWTH);
+  // L1 and L2: from the saddle's own growth rate (sim/manifold.ts), which follows the planet's mass.
+  // L3: λ ≈ n·√(21q/8), far slower
+  return p.k === 3 ? 1 / (n * Math.sqrt((21 * q) / 8)) : 1 / saddleModes(p.planet, p.k as 1 | 2).lambda;
 }
 
 /**

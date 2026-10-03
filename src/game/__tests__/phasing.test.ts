@@ -78,6 +78,17 @@ describe('phasing transfers', () => {
     expect(c3).toBeGreaterThan(v / (9 * 3) / 3);
   });
 
+  it('stays solvable out to 40 orbits, where it costs a few tens of m/s (the low-energy end)', () => {
+    const { w } = world(0.02);
+    const { r0, v0 } = fromGate(w, 4);
+    const p40 = planPhasing(w, 4, r0, v0, 0, 40);
+    expect(p40.ok).toBe(true);
+    expect(p40.miss).toBeLessThan(5e3);
+    const p6 = planPhasing(w, 4, r0, v0, 0, 6);
+    expect(p40.dv1.length() + p40.dv2).toBeLessThan((p6.dv1.length() + p6.dv2) * 0.25);
+    expect(p40.dv1.length()).toBeLessThan(120);
+  });
+
   it('corrects a drifted path with a small burn', () => {
     const { w } = world(0.02);
     const { r0, v0 } = fromGate(w, 4);

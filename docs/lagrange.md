@@ -17,7 +17,7 @@ L1 and L2 sit still in the frame turning with the planet, at its instantaneous a
 
 | Point | Where | In the sim |
 |---|---|---|
-| L1 | between the two, about a Hill radius short of the planet | unstable (e-fold ≈ 0.5 / n: ~3 weeks at Earth) |
+| L1 | between the two, about a Hill radius short of the planet | unstable (e-fold 1 / (2.53 n): 23 days at Earth) |
 | L2 | beyond the planet, a Hill radius farther | unstable, the same |
 | L3 | opposite the planet | free orbit |
 | L4 | 60° ahead | free orbit, stable |
@@ -49,11 +49,15 @@ The cost falls with N: about v / (9N) in all for a 60° lead from the gate. Meas
 | L5 | 4 | 2.9 yr | 1.5 km/s |
 | L3 | 4 | 2.5 yr | 4.2 km/s |
 
-against ~40 km/s going straight there. `[ ]` in the planner sets N from 1 to 12 (0: straight there); it shows the time and Δv, and refuses a transfer the tanks can't pay for (plus a margin). The default is 3.
+against ~40 km/s going straight there. `[ ]` in the planner sets N from 1 to 40 (Shift: five at a time; 0: straight there). The long end is the low-energy transfer: the cost keeps falling as 1 / N, so a few dozen orbits (decades at Earth, minutes under time warp) take a few tens of m/s; the planner labels a plan under 300 m/s "low-energy"; it shows the time and Δv, and refuses a transfer the tanks can't pay for (plus a margin). The default is 3.
 
 Holding costs, once settled: L4 a few m/s a year (the step size's own error), L1 well under 50 m/s a year; with the planet's pull left out of the force it would be thousands. `LPoint.dvYear` is a separate planning estimate of real station-keeping (`0.01 · n · d` per orbit, calibrated on JWST at Sun–Earth L2, ~3 m/s a year); the sim charges whatever the autopilot actually burns.
 
 Time warp is refused while the autopilot holds (it works on thrust), like any hold, and during a phasing burn, but not during its coast.
+
+## The saddle at L1 and L2 (`sim/manifold.ts`)
+
+Near L1 or L2 the motion in the planet's turning frame is a saddle × centre: one direction grows as e^{λt} (the **unstable manifold**, where a ship left alone drifts to), one shrinks as e^{−λt} (the **stable** one, the way it falls in), the rest oscillates at ν. `saddleModes(planet, k)` linearises the force the ship feels (the parent's pull plus the planet's, tapered) about the point and solves the in-plane modes, `s⁴ + (4ω² − Kxx − Kyy) s² + (Kxx Kyy − Kxy²) = 0`; the position direction of a mode is (1, (s² − Kxx) / (Kxy + 2ω s)). For a light planet λ = 2.53 n, the textbook 23 days at Earth (my first, hand-derived 2.07 was wrong; the test against a flown ship caught it), and it rises with the planet's mass. `driftTime` (the planner's "drifts away over…", the autopilot panel's) now comes from it. Tests fly a ship started on each manifold under the real force and check it leaves at e^{λt} or falls in.
 
 ## Trojan swarms (`sim/swarm.ts`, `universe/trojans.ts`)
 
@@ -81,7 +85,7 @@ The depot's shader and the swarm's were compiled and test-rendered offscreen (Da
 ## Not done yet
 
 - **Targeting the points** (T/G/click, an approach strip), and **radar identification** of a swarm as a contact.
-- **Low-energy transfers** through L1 and L2: the last part of the plan.
+- **Manifold transfers** *through* L1 and L2 (flying the stable and unstable manifolds to connect a planet's neighbourhood with the co-orbital drift): the saddle is analysed, but no transfer uses it yet. The low-energy trade is made by long phasing (above).
 - **Moons.** `lagrangePoints` works for any world, but only planets are drawn, held and swarmed.
 - **Close pairs.** Round a close binary's barycentre the parent's pull is taken as one point mass, in the plan and in the points.
 - **The trip from low orbit.** The first leg (out of the planet's mass lock and to the gate) is the usual thruster-then-FTL flight; there's no planned escape burn.

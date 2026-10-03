@@ -41,7 +41,8 @@ export function adjustAlt(g: Game, f: number) {
   if (!p) return;
   if (p.type === 'lagrange') {
     // ([ ] sets the orbits of the phasing transfer to L3–L5: 0 is straight there, more is cheaper and slower)
-    if ((p.lk ?? 1) >= 3) p.revs = Math.min(12, Math.max(0, (p.revs ?? 3) + (f > 1 ? 1 : -1)));
+    // (Shift: five at a time; up to 40 orbits, the low-energy end where the cost has all but gone)
+    if ((p.lk ?? 1) >= 3) p.revs = Math.min(40, Math.max(0, (p.revs ?? 3) + (Math.abs(Math.log(f)) > 0.3 ? 5 : 1) * (f > 1 ? 1 : -1)));
     g.invalidateHud();
     return;
   }

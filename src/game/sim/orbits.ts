@@ -117,7 +117,7 @@ function evalLagrange(p: Planner, ship: Ship): PlanEval {
     const N = p.revs ?? 3;
     if (N > 0) {
       const est = phasingEstimate(b, k as 3 | 4 | 5, N);
-      transfer = `${N} orbit${N > 1 ? 's' : ''} · ${fmtTime(est.T)}`;
+      transfer = `${N} orbit${N > 1 ? 's' : ''} · ${fmtTime(est.T)}${est.dv < 300 ? ' · low-energy' : ''}`;
       note += ` Phasing: FTL to a point on the planet's own orbit, then a ${fmtSpeedText(est.dv / 2)} burn onto a slightly different orbit and ${fmtTime(est.T)} of coasting (time warp works) round to it; ${fmtSpeedText(est.dv)} of Δv in all. More orbits cost less.`;
       if (!est.ok) {
         ok = false;
