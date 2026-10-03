@@ -27,7 +27,7 @@ Three cascades round the camera (half-widths 300 m, 3 km, 30 km; 2048² each, on
 array), each an orthographic view from the star, drawn while something near can cast (rocks out,
 another ship, a station within 30 km).
 
-- **Casters:** ring rocks (every rock's own shape, from a coarse icosphere: a shadow needs only its
+- **Casters:** ring rocks and trojan swarm rocks (every rock's own shape, from a coarse icosphere: a shadow needs only its
   outline; into a cascade only if its layer's band starts inside it and its biggest rocks are a few
   texels across), other ships' hulls, station hulls and sky stations. Their `vsShadow` stages read
   the cascade's matrix from group 0 (frame.wgsl `Caster`).

@@ -105,12 +105,16 @@ The depot's shader and the swarm's were compiled and test-rendered offscreen (Da
 
 ## Not done yet
 
-- **Radar identification** of a swarm as a contact.
-- **Manifold transfers** *through* L1 and L2 (flying the stable and unstable manifolds to connect a planet's neighbourhood with the co-orbital drift): the saddle is analysed, but no transfer uses it yet. The low-energy trade is made by long phasing (above).
+- **Manifold transfers** *through* L1 and L2: **analysed, and not built, because they don't pay here.** A ship leaving L1 or L2 along the unstable manifold costs nothing and drifts away at e^{λt}, but onto a heliocentric orbit that is not the planet's: the point sits ~1 Hill radius off the planet's orbit and moves at the point's rate, so its speed differs from the circular speed there by ~n·d (385 m/s at Venydes 2's L1, ~1 % of the orbital speed), and that eccentric orbit never reaches the radius of L4 or L5. The planner (`planPhasing` from the L1 state) finds no solution near the point's velocity for 3 to 12 orbits, only far branches at tens of km/s; the capture would cost that same few hundred m/s, which long phasing from the gate already beats (about 300 m/s over a dozen orbits at Earth). With FTL to drop out matched at L1 or L2 in the first place, the stable manifold has nothing to save either. The saddle (`sim/manifold.ts`) still drives the drift times and the hold's behaviour.
 - **Moons.** `lagrangePoints` works for any world, but only planets are drawn, held and swarmed.
 - **Close pairs.** Round a close binary's barycentre the parent's pull is taken as one point mass, in the plan and in the points.
 - **The trip from low orbit.** The first leg (out of the planet's mass lock and to the gate) is the usual thruster-then-FTL flight; there's no planned escape burn.
 - **L1 and L2 are still direct.** Their match costs a few hundred m/s, so they have no phasing.
-- **Swarm rocks don't cast shadows** and aren't on the radar scope; a dust hazard (as in a ring's belt) isn't modelled.
+- **A dust hazard** (as in a ring's belt) isn't modelled in swarms.
 
 Tests: `lagrange.test.ts`, `phasing.test.ts`, `lagrangeHold.test.ts`, `depot.test.ts` (placement, orbit, attitude, pads and geometry) and `swarm.test.ts` (the fields, the centre, the density, the rocks, mining, the ray, what they're made of).
+
+## Swarm shadows and radar
+
+- **Shadows.** Swarm rocks are casters in the shadow map (`vsShadow` in `swarmRock.wgsl`, the same shape as the draw, into every cascade) and receivers (`shadowAt` on the lit term and the metal glint), so rocks shade each other and other ships and stations; they switch the shadow map on while any are drawn. The pipelines were created and the shader compiled offscreen (Dawn) against the real caster layout.
+- **Radar.** A sweep finds every swarm within range (a diffuse return: its edge counts as ~2σ short of the core). It's listed in the radar window as a *trojan swarm* contact whose target is its L4 or L5 point (so T, the nav search and the planner work from it), at the distance to its near edge. Found swarms are remembered per system with the other contacts (`swarm:<id>` scan keys, saved with them).
