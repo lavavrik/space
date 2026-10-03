@@ -25,6 +25,7 @@ import { minOrbitAlt } from '../sim/orbits';
 import { reliefAmp } from '../sim/terrain';
 import { atmoOf } from '../sim/atmosphere';
 import type { Target } from '../types';
+import { isDeck } from '../sim/stationGeom';
 import type { ApproachMark, ApproachView } from './types';
 
 /** Width of the outside zone (fraction of the strip). */
@@ -47,8 +48,8 @@ function milestones(g: Game, t: Target): Raw[] {
     if (unit?.caps.clearance) add(unit.caps.range, 'AUTODOCK', `${unit.model} can fly you in from here (K)`, 'ftl');
     add(FRAME_ENTER, 'LOCAL', 'Station frame even when not targeted', 'info');
     add(DOCK_REQUEST_RANGE, 'PAD REQUEST', 'Close enough to request a pad from traffic control (K)', 'on');
-    // (over a sky station the hold point is straight above the deck, a little higher than it's wide)
-    if (t.sky) add(t.size * 0.37 + 200, 'HOLD POINT', 'Approach hold point above the deck', 'info');
+    // (over a sky station or a depot the hold point is straight above the deck, a little higher than it's wide)
+    if (isDeck(t)) add(t.size * 0.37 + 200, 'HOLD POINT', 'Approach hold point above the deck', 'info');
     else add(HOLD_OUT, 'HOLD POINT', 'Approach hold point on the slot axis', 'info');
     return out;
   }

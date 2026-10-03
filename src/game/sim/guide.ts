@@ -6,7 +6,7 @@ import { fmtDist, fmtFlow, fmtMass, fmtPower, fmtSpeedText, fmtTime } from '../f
 import type { Game } from '../Game';
 import type { Autopilot, Jump, Station, Tanker } from '../types';
 import { padWorld } from './docking';
-import { toLocal } from './stationGeom';
+import { isDeck, toLocal } from './stationGeom';
 import { apGeom, apInsertion, approachTime, holdPoint, orbitVelErr, profileOf, RDV_STANDOFF } from './autopilot';
 import { velRel } from './frame';
 import { orbitElements } from './gravity';
@@ -385,7 +385,7 @@ export function startDockGuide(g: Game, st: Station) {
   // (a sky station has no inside: landing starts once over the pad)
   const overPad = () => !!g.dock && (padDistance(g) ?? Infinity) < SKY_OVER_PAD;
   const landing = () =>
-    docked() || (st.sky ? overPad() || phase() === 'descend' : inside() && (phase() === 'descend' || (!g.autodock && !!g.dock && isInHangar(g, st))));
+    docked() || (isDeck(st) ? overPad() || phase() === 'descend' : inside() && (phase() === 'descend' || (!g.autodock && !!g.dock && isInHangar(g, st))));
   const unit = ship.avionics.dock;
   startGuide(g, {
     title: 'DOCKING',
@@ -402,7 +402,7 @@ export function startDockGuide(g: Game, st: Station) {
         err: () => g.dockRequest?.t ?? 0, etaFn: () => g.dockRequest?.t ?? 0, guess: () => 6,
         detail: () => `Waiting for ${st.name} traffic control`,
       }),
-      ...(st.sky
+      ...(isDeck(st)
         ? [
             mkStep({
               title: 'Fly over the pad', active: () => granted() && !landing(), done: () => landing(),
@@ -421,7 +421,7 @@ export function startDockGuide(g: Game, st: Station) {
           ]),
       mkStep({
         titleFn: () => `Land on pad ${g.dock ? g.dock.pad + 1 : ''}`, active: () => landing() && !docked(), done: () => docked(),
-        err: () => (padDistance(g) ?? null), detail: () => `${padDistance(g) !== null ? fmtDist(padDistance(g)!) : ''} · under 6 m/s, ${st.sky ? 'upright' : 'top toward the axis'}`,
+        err: () => (padDistance(g) ?? null), detail: () => `${padDistance(g) !== null ? fmtDist(padDistance(g)!) : ''} · under 6 m/s, ${isDeck(st) ? 'upright' : 'top toward the axis'}`,
       }),
     ],
   });

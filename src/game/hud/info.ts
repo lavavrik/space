@@ -12,7 +12,7 @@ import type { Body, KeplerOrbit, Npc, Station, Target, World } from '../types';
 import { atmoOf, type Atmo } from '../sim/atmosphere';
 import { HULL, SIGMA, TEMP, heatCap } from '../sim/thermal';
 import type { InfoView, Readout } from './types';
-import { padCount } from '../sim/stationGeom';
+import { orbitBody, padCount } from '../sim/stationGeom';
 import { SALVAGE_R, SALVAGE_V, wreckMetal } from '../sim/wreck';
 import type { Wreck } from '../types';
 
@@ -20,7 +20,7 @@ const MEARTH = 5.972e24;
 const DEG = 180 / Math.PI;
 
 /** How a station is labelled: its kind. */
-export const stationKind = (st: Station) => (st.sky ? 'SKY STATION' : 'ORBITAL STATION');
+export const stationKind = (st: Station) => (st.depot ? 'DEPOT' : st.sky ? 'SKY STATION' : 'ORBITAL STATION');
 const tmp = new THREE.Vector3();
 
 const sci = (x: number) => x.toExponential(2).replace('e+', 'e');
@@ -44,8 +44,8 @@ export function buildInfo(g: Game, t: Target): InfoView {
   let orbit: [string, string][] = [['ORBIT', 'none · everything here orbits it']];
   if (t.kind !== 'star') {
     const par = t.parent;
-    orbitHead = t.kind === 'station' && t.sky ? `HANGS OVER ${par.name.toUpperCase()}` : `ORBITS ${par.name.toUpperCase()}`;
-    orbit = p < SCAN_STAGE.orbit ? [['ORBIT', 'unknown · scan to 75 %']] : t.kind === 'station' && t.sky ? skyRows(t) : orbitRows(t.kind === 'station' ? t : t.orb, t, par);
+    orbitHead = t.kind === 'station' && t.depot ? `PARKED AT ${par.name.toUpperCase()} L${t.depot.k}` : t.kind === 'station' && t.sky ? `HANGS OVER ${par.name.toUpperCase()}` : `ORBITS ${par.name.toUpperCase()}`;
+    orbit = p < SCAN_STAGE.orbit ? [['ORBIT', 'unknown · scan to 75 %']] : t.kind === 'station' && t.sky ? skyRows(t) : orbitRows(t.kind === 'station' ? t : t.orb, t, t.kind === 'station' ? orbitBody(t) : par);
   }
   const type = p < SCAN_STAGE.type ? 'UNKNOWN · UNSCANNED' : t.kind === 'station' ? stationKind(t) : t.typeName.toUpperCase();
   return { title: t.name, type, physical, orbitHead, orbit, you: youRows(g, t) };
@@ -163,6 +163,7 @@ const fmtX = (x: number) => (x < 0.1 ? `${Math.round(x * 100)} % of` : `${x < 10
 const fmtPct = (x: number) => `${x < 0.001 ? '<0.1' : x < 0.1 ? (x * 100).toFixed(1) : Math.round(x * 100)} %`;
 
 function stationPhysical(st: Station): [string, string][] {
+  if (st.depot) return [['SIZE', `${fmtDist(st.size)} spine · open landing plate · ${padCount(st)} pads · no gravity, no spin`]];
   if (st.sky) return [['SIZE', `${fmtDist(st.size)} open deck · ${padCount(st)} pads · catapult`]];
   return [['SIZE · SPIN', `${fmtDist(st.size)} cube · ${fmtTime((2 * Math.PI) / Math.abs(st.spinRate))} per turn`]];
 }

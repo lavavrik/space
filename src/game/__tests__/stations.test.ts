@@ -19,7 +19,7 @@ const every = systems.flatMap((sys) => {
   return buildStations(sys, bodies).map((st) => ({ st, bodies }));
 });
 /** The orbital stations, and the sky stations. */
-const all = every.filter(({ st }) => !st.sky);
+const all = every.filter(({ st }) => !st.sky && !st.depot);
 const skies = every.filter(({ st }) => st.sky);
 
 describe('stations', () => {

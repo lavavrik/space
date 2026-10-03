@@ -114,7 +114,7 @@ export function updateFrame(g: Game) {
     else if (!prev || prev === t || prev.pos.distanceTo(g.ship.pos) > FRAME_EXIT) g.refFrame = stationWithin(g, FRAME_ENTER);
   }
   if (g.refFrame === prev || g.ship.mode !== 'normal') return;
-  if (g.refFrame) g.showMsg(`Local frame · ${g.refFrame.name} · flight assist matches its ${g.refFrame.sky ? 'motion' : 'orbit'}`);
+  if (g.refFrame) g.showMsg(`Local frame · ${g.refFrame.name} · flight assist matches its ${g.refFrame.sky ? 'motion' : g.refFrame.depot ? 'orbit round the star' : 'orbit'}`);
   else if (prev) g.showMsg(`Left ${prev.name}'s frame`);
 }
 

@@ -317,6 +317,8 @@ export interface HudSnapshot {
     pad: number;
     notes: string[];
     sky: boolean;
+    /** An open deck (a sky station or a depot): "lift off" rather than "launch". */
+    deck: boolean;
     hullFull: boolean;
     tanksFull: boolean;
     credits: string;

@@ -177,9 +177,12 @@ function pilotFor(game: Game): Game {
   return c;
 }
 
+/** The stations other ships use: not the depots out at the Lagrange points (their pilots fly the planet-centred rendezvous, not a trojan one). */
+const ports = (cur: CurrentSystem) => cur.stations.filter((s) => !s.depot);
+
 /** How many ships a system has (see MAX_TRAFFIC). */
 export function trafficCount(cur: CurrentSystem) {
-  return Math.min(MAX_TRAFFIC, BASE_SHIPS + cur.stations.reduce((s, st) => s + (st.sky ? PER_SKY_STATION : PER_STATION), 0) + orbitable(cur).length * PER_WORLD);
+  return Math.min(MAX_TRAFFIC, BASE_SHIPS + ports(cur).reduce((s, st) => s + (st.sky ? PER_SKY_STATION : PER_STATION), 0) + orbitable(cur).length * PER_WORLD);
 }
 
 /**
@@ -190,7 +193,7 @@ export function trafficCount(cur: CurrentSystem) {
 export function spawnTraffic(game: Game, have: Npc[] = []): Npc[] {
   const cur = game.cur;
   const worlds = orbitable(cur);
-  if (cur.stations.length + worlds.length < 2) return [];
+  if (ports(cur).length + worlds.length < 2) return [];
   const g = mulberry32(cur.sys.seed * 7 + 11);
   const n = trafficCount(cur);
   const out: Npc[] = [];
@@ -226,7 +229,8 @@ export function spawnTraffic(game: Game, have: Npc[] = []): Npc[] {
     rides.set(npc, new THREE.Vector3());
     // most start on a pad (a free one: a crowded station sends the rest into orbit), the rest in
     // orbit; departures are staggered over their stays
-    const st = cur.stations.length && (g() < 0.65 || !worlds.length) ? cur.stations[Math.floor(g() * cur.stations.length)] : null;
+    const sts = ports(cur);
+    const st = sts.length && (g() < 0.65 || !worlds.length) ? sts[Math.floor(g() * sts.length)] : null;
     const pad = st ? freePad([...have, ...out], st, g) : -1;
     if (st && pad >= 0) dockAt(npc, c, st, g, pad);
     else placeInOrbit(npc, c, st && worlds.includes(st.parent) ? st.parent : worlds[Math.floor(g() * worlds.length)], g);
@@ -324,7 +328,7 @@ function load(root: Game, st: Station, self: Npc) {
  */
 function setOff(npc: Npc, c: Game) {
   const root = rootOf(c);
-  const stations = c.cur.stations.filter((s) => {
+  const stations = ports(c.cur).filter((s) => {
     if (s === npc.at) return false;
     const l = load(root, s, npc);
     return l.share < FULL && l.inbound < INBOUND_MAX;
@@ -404,7 +408,8 @@ export function updateTraffic(g: Game, dt: number) {
     if (ship.dead) {
       // lost (it hit something): a replacement turns up docked at a station
       ship.dead = null;
-      const st = c.cur.stations[Math.floor(Math.random() * c.cur.stations.length)];
+      const ports0 = ports(c.cur);
+      const st = ports0[Math.floor(Math.random() * ports0.length)];
       const pad = st ? freePad(g.traffic, st, Math.random) : -1;
       if (st && pad >= 0) dockAt(npc, c, st, Math.random, pad);
       else placeInOrbit(npc, c, orbitable(c.cur)[0], Math.random);

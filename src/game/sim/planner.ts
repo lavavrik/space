@@ -5,6 +5,7 @@ import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import type { Autopilot, Body, OrbitType, Station, World } from '../types';
 import { lagrangePoints } from './lagrange';
+import { orbitBody } from './stationGeom';
 import { ringDensity } from './rings';
 import { apDistance, holdPoint } from './autopilot';
 import { beltLock, ftlBlocked, massLock } from './ftl';
@@ -177,7 +178,7 @@ export function engageAutopilot(g: Game, spec: ApSpec, quiet = false) {
 
 /** Rendezvous with a station: close on it on the station's own orbit and match its velocity. */
 export function engageRendezvous(g: Game, st: Station) {
-  const p = st.parent;
+  const p = orbitBody(st);
   return engageAutopilot(g, { body: p, type: 'rendezvous', r0: st.a, period: (2 * Math.PI) / st.n, n: new THREE.Vector3().crossVectors(st.P, st.Q).normalize(), point: null, station: st });
 }
 

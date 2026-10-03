@@ -15,7 +15,7 @@ import { scanProgress } from '../sim/scanner';
 import { galPos, hiddenBy, occluders, reachable } from '../sim/navigation';
 import type { Jump, Npc, StarSystem } from '../types';
 import type { GameRenderer } from './api';
-import { PAD_R, SLOT_H, SLOT_W, toWorld } from '../sim/stationGeom';
+import { PAD_R, SLOT_H, SLOT_W, isDeck, toWorld } from '../sim/stationGeom';
 import { padWorld } from '../sim/docking';
 import { contactLabel, known } from '../sim/radar';
 import { liveProspects, prospectNow } from '../sim/prospect';
@@ -118,7 +118,7 @@ export class Overlay {
       [-sx, sy],
     ].map(([x, y]) => this.toScreen(g, toWorld(st, g.simTime, new THREE.Vector3(x, y, 0.5)).sub(g.ship.pos)));
     // (a sky station has no slot: you come down onto the pad from above)
-    if (!st.sky && !g.inStation && pts.every((p) => !p.behind)) {
+    if (!isDeck(st) && !g.inStation && pts.every((p) => !p.behind)) {
       ctx.strokeStyle = MINT + '0.85)';
       ctx.beginPath();
       pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
@@ -518,7 +518,7 @@ export class Overlay {
         if (isT) this.edgeArrow(s.v, MINT, label);
         continue;
       }
-      const near = d < st.parent.radius * 60;
+      const near = d < (st.depot ? st.size * 400 : st.parent.radius * 60);
       if (!isT && !near) continue;
       const r = Math.max(7, Math.min(view.pxR, Math.max(W, H)) + 5);
       ctx.strokeStyle = MINT + (isT ? '0.95)' : '0.8)');
@@ -545,7 +545,7 @@ export class Overlay {
           ctx.lineTo(s.x - r, s.y + r);
           ctx.stroke();
         }
-        if (g.showNames && (isT || d < st.parent.radius * 25)) {
+        if (g.showNames && (isT || d < (st.depot ? st.size * 150 : st.parent.radius * 25))) {
           ctx.fillStyle = MINT + '0.95)';
           ctx.fillText(isT ? label.toUpperCase() : stName, s.x, s.y - r - 7);
         }

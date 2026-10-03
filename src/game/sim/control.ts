@@ -16,7 +16,7 @@
 import type { Game } from '../Game';
 import type { Station } from '../types';
 import { pilotOf } from './traffic';
-import { padCount } from './stationGeom';
+import { isDeck, padCount } from './stationGeom';
 
 /** Spacing of the queue for the slot, along its axis beyond the hold point (m). */
 export const SLOT_QUEUE = 400;
@@ -59,7 +59,7 @@ function inSlot(p: Game, st: Station) {
 
 /** Another ship in `st`'s slot, if any (for `g`: it can't go yet). */
 export function slotUser(g: Game, st: Station): Game | null {
-  if (st.sky) return null; // an open deck: no slot
+  if (isDeck(st)) return null; // an open deck: no slot
   for (const p of pilots(g)) if (p.ship !== g.ship && inSlot(p, st)) return p;
   return null;
 }

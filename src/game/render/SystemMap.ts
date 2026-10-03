@@ -292,7 +292,7 @@ export class SystemMap {
     }
     // station orbits
     for (const st of cur.stations) {
-      if (st.sky || !known(g, st)) continue;
+      if (st.sky || st.depot || !known(g, st)) continue; // (a depot's orbit is its planet's, which is drawn)
       this.path(ellipse(st.parent.pos, st.a, st.e, st.P, st.Q, fp, m.dist), MINT + (st === g.target ? '0.7)' : '0.3)'));
     }
     // your orbit round the world you're in the sphere of influence of
@@ -307,7 +307,7 @@ export class SystemMap {
 
     for (const st of cur.stations) {
       if (!known(g, st) || !this.project(st.pos, s)) continue;
-      if (this.px(st.parent.pos, st.parent.radius) < 6 && st !== g.target) continue;
+      if (!st.depot && this.px(st.parent.pos, st.parent.radius) < 6 && st !== g.target) continue;
       const k = 4 * ui;
       ctx.strokeStyle = MINT + '0.9)';
       ctx.lineWidth = 1.2 * ui;

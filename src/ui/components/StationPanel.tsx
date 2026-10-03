@@ -180,7 +180,7 @@ export function StationPanel({ d, act }: { d: Docked; act: Actions }) {
           <Group icon="launch" title="Leave">
             <div className="obtns">
               <button type="button" className="obtn" onClick={act.launch}>
-                {d.sky ? 'lift off (K)' : 'launch (K)'}
+                {d.deck ? 'lift off (K)' : 'launch (K)'}
               </button>
               {d.sky && (
                 <button type="button" className="obtn" onClick={act.catapult}>

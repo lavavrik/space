@@ -10,6 +10,7 @@
  */
 import { sunsAt, type Suns } from '../sim/starlight';
 import type { Game } from '../Game';
+import { isDeck } from '../sim/stationGeom';
 import { THREE } from '../lib/three';
 import { DUST, DUSTBOX, DUST_FADE_FROM, DUST_FADE_TO, RING_AP, RING_N, RING_PLAN } from '../render/look';
 import { FtlTrail } from '../render/Trail';
@@ -299,7 +300,7 @@ export class EffectsLayer {
       // on a pad inside an orbital station: seen only from in there (its hull on the pad, no marker).
       // On a sky station's open deck it's in plain view (hidden, it vanished as it touched down)
       const docked = npc.task === 'docked';
-      const inside = docked && npc.at?.kind === 'station' && !npc.at.sky;
+      const inside = docked && npc.at?.kind === 'station' && !isDeck(npc.at);
       if (inside && npc.at !== g.inStation && !(g.dock?.docked && g.dock.station === npc.at)) continue;
       // behind a world: nothing of it shows
       if (occluder(g.cur.bodies, ship.pos, npc.pos)) continue;

@@ -20,6 +20,7 @@ import { deltaVLeft, dryMass } from '../sim/resources';
 import { battCap, loadOn } from '../sim/power';
 import { MASS_LOCK_K, dropAlt, massLock } from '../sim/ftl';
 import { ringFrameOf } from '../sim/frame';
+import { isDeck } from '../sim/stationGeom';
 import { AUTOSAVE_S, ago } from '../save';
 import { surfaceDist, surfaceRadius } from '../sim/terrain';
 import { airTemp, atmoOf, pressure } from '../sim/atmosphere';
@@ -81,6 +82,7 @@ export function buildSnapshot(g: Game): HudSnapshot {
             ...(g.dock.station.sky ? ['Catapult: thrown up and flown clear of the air, no input needed'] : []),
           ],
           sky: !!g.dock.station.sky,
+          deck: isDeck(g.dock.station),
           hullFull: g.ship.hull >= 0.999,
           credits: fmtCr(g.credits),
           refuel: fmtCr(refuelQuote(g, g.dock.station).cost),

@@ -279,7 +279,7 @@ export function debugSpots(g: Game): Spot[] {
     });
   }
   for (const sky of [false, true]) {
-    const st = g.cur.stations.find((s) => !!s.sky === sky);
+    const st = g.cur.stations.find((s) => !!s.sky === sky && !s.depot);
     if (!st) continue;
     out.push({
       id: sky ? 'skystation' : 'station',

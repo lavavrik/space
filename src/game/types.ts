@@ -102,6 +102,14 @@ export interface Station extends KeplerOrbit {
   pos: Vec3; // m, system frame
   vel: Vec3; // m/s, system frame
   sky?: SkyAnchor;
+  /** A depot parked at a Lagrange point: on a free orbit round the planet's parent, not round `parent`, which is the planet it keeps company with (sim/depotGeom.ts). */
+  depot?: DepotAnchor;
+}
+
+/** A depot's place and attitude: it keeps the planet's orbit with its mean anomaly shifted (the Kepler fields), and a fixed attitude. */
+export interface DepotAnchor {
+  k: 3 | 4 | 5; // the Lagrange point it keeps company at
+  q: Quat; // attitude (+z up out of the landing plate, +x along the spine), fixed in space
 }
 
 /** Where a sky station hangs: fixed in its world's own (turning) frame. */

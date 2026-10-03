@@ -10,6 +10,8 @@ import { populated, population } from '../sim/population';
 import type { Body, Station, StarSystem, World } from '../types';
 import { HOME_ID } from './galaxy';
 import { findHome } from './system';
+import { buildTrojans } from './trojans';
+import { TROJAN_SHIFT } from '../sim/lagrange';
 
 /*
  * Orbital stations. Only some worlds get one, mostly habitable ones. Each station follows a
@@ -53,6 +55,7 @@ export function buildStations(sys: StarSystem, bodies: Body[]): Station[] {
     if (st) out.push(st);
   }
   buildSkyStations(sys, bodies, home, used, out);
+  buildDepots(sys, bodies, used, out);
   return out;
 }
 
@@ -213,6 +216,60 @@ function makeStation(b: World, moons: World[], g: Rng, used: Set<string>): Stati
     spinRate: spinRateFor(size) * (g() < 0.5 ? -1 : 1),
     pos: new THREE.Vector3(),
     vel: new THREE.Vector3(),
+  };
+  stationState(st, 0);
+  return st;
+}
+
+/*
+ * Depots: stations parked at a giant's L4 or L5 (in its trojan swarm: a base to mine from and
+ * refuel at), now and then beside a habitable world's (universe/trojans.ts picks the places). A
+ * depot keeps the planet's orbit with its mean anomaly shifted by the point's 60° and a little more,
+ * so it stays put relative to the planet for ever, on a free orbit round the planet's parent. From
+ * their own RNG stream, after the sky stations, sharing their name pool.
+ */
+const DEPOT_KINDS = ['Depot', 'Anchorage', 'Cache', 'Waystation', 'Outpost'];
+/** Spine length (m): the plate is 0.38 of it across, so 340–500 m, room for 8 pads of ~90 m. */
+const DEPOT_SIZE: [number, number] = [900, 1300];
+
+function buildDepots(sys: StarSystem, bodies: Body[], used: Set<string>, out: Station[]) {
+  const g = mulberry32(sys.seed ^ 0xde90750);
+  for (const site of buildTrojans(sys, bodies).sites) {
+    const sg = mulberry32(Math.floor(g() * 2 ** 32));
+    out.push(makeDepot(site.planet, site.k, site.dM, sg, used));
+  }
+}
+
+function makeDepot(b: World, k: 4 | 5, dM: number, g: Rng, used: Set<string>): Station {
+  const o = b.orb;
+  let name = '';
+  for (let t = 0; t < 10 && (!name || used.has(name)); t++) name = `${NAMES[Math.floor(g() * NAMES.length)]} ${DEPOT_KINDS[Math.floor(g() * DEPOT_KINDS.length)]}`;
+  used.add(name);
+  const size = rr(g, DEPOT_SIZE[0], DEPOT_SIZE[1]);
+  // attitude: +z along the orbit's normal, +x along its periapsis direction, fixed in space
+  const z = new THREE.Vector3().crossVectors(o.P, o.Q).normalize();
+  const x = o.P.clone();
+  const y = new THREE.Vector3().crossVectors(z, x);
+  const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+  const st: Station = {
+    kind: 'station',
+    name,
+    typeName: `Depot · ${b.name} L${k}`,
+    parent: b,
+    size,
+    radius: size * 0.62,
+    seed: g() * 50,
+    a: o.a,
+    e: o.e,
+    P: o.P.clone(),
+    Q: o.Q.clone(),
+    n: o.n,
+    M0: o.M0 + TROJAN_SHIFT[k] + dM,
+    spinAxis: z.clone(),
+    spinRate: 0,
+    pos: new THREE.Vector3(),
+    vel: new THREE.Vector3(),
+    depot: { k, q },
   };
   stationState(st, 0);
   return st;

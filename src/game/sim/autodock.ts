@@ -42,7 +42,7 @@ import type { Station } from '../types';
 import { DOCK_REQUEST_RANGE, requestDocking } from './docking';
 import { applyThrust } from './resources';
 import { airDensityAt, airSpeedLimit } from './catapult';
-import { CORRIDOR_M, HANGAR_R, padOf, stationPointVelAt, stationQuat } from './stationGeom';
+import { CORRIDOR_M, HANGAR_R, deckCentre, isDeck, padOf, stationPointVelAt, stationQuat } from './stationGeom';
 import { stationAcc } from './stations';
 import { NORMAL_ACC } from '../constants';
 import { pilotName, queuePlace, slotUser, SLOT_QUEUE } from './control';
@@ -175,11 +175,13 @@ export function autodock(g: Game, dt: number, gravVec: THREE.Vector3) {
   const toWorld = (local: THREE.Vector3) => local.clone().applyQuaternion(q);
 
   const padI = d?.pad ?? g.autodockPad;
-  const sky = !!st.sky;
+  // (an open deck, over a world or parked in space) and, of those, one that hangs in a world's air and doesn't fall
+  const sky = isDeck(st);
+  const world = !!st.sky;
   // far out, fly the approach much faster (the braking profile still brings it in gently); in the
   // air, never faster than it allows
   const far = p.length() > APPROACH_NEAR;
-  const farSpeed = sky ? Math.min(FAR_SPEED, airSpeedLimit(airDensityAt(st.parent, ship.pos))) : FAR_SPEED;
+  const farSpeed = world ? Math.min(FAR_SPEED, airSpeedLimit(airDensityAt(st.parent, ship.pos))) : FAR_SPEED;
   const pad = padOf(st, padI);
   const axisZ = pad.pos.z * S;
   let target = new THREE.Vector3(); // station coordinates, metres
@@ -197,7 +199,7 @@ export function autodock(g: Game, dt: number, gravVec: THREE.Vector3) {
   const laneR = (z: number) => S * 0.5 + 0.35 * Math.min(Math.max(0, z - S / 2), CORRIDOR_M);
   const onLane = !sky && p.z > S / 2 && Math.hypot(p.x, p.y) < laneR(p.z);
   if (ad.phase === 'hold' && ad.entryZ === undefined) ad.entryZ = onLane && p.z < mouthZ ? Math.max(p.z, S / 2 + HOLD_OUT) : mouthZ;
-  const holdPt = sky ? new THREE.Vector3(0, 0, S * 0.87 + SKY_HOLD) : new THREE.Vector3(0, 0, ad.entryZ ?? mouthZ);
+  const holdPt = sky ? new THREE.Vector3(deckCentre(st) * S, 0, S * 0.87 + SKY_HOLD) : new THREE.Vector3(0, 0, ad.entryZ ?? mouthZ);
   const overPad = pad.pos.clone().multiplyScalar(S).addScaledVector(pad.up, PAD_ABOVE);
   // traffic control (sim/control.ts): may this ship use the slot now? Arriving, only if it's free
   // and no one ahead of it in the queue; leaving, only if it's free
@@ -293,7 +295,7 @@ export function autodock(g: Game, dt: number, gravVec: THREE.Vector3) {
   // close to the pad, correct twice as quickly so the ship doesn't lag its (slowing) commanded speed
   const T = vDes.sub(ship.vel).divideScalar(ad.phase === 'descend' ? TAU / 2 : TAU);
   // a sky station doesn't fall: hold the ship up with it (plus the pull that turns it with the world)
-  if (sky) T.add(stationAcc(st)).sub(gravVec);
+  if (world) T.add(stationAcc(st)).sub(gravVec);
   // Normally it keeps to AUTO_ACC. But taken over while closing fast (engaged 5 km out from a
   // rendezvous still braking for its 2 km stand-off at ~500 m/s, it needed 5.5 km to stop and hit
   // the hull at 300 m/s), it brakes as hard as it must to stop short of the hull, up to the drive's

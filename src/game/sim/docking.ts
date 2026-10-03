@@ -28,8 +28,7 @@ import type { Station } from '../types';
 import { impact } from './damage';
 import { engageAutoLaunch, engageAutodock } from './autodock';
 import { startDockGuide } from './guide';
-import { overDeck } from './skyGeom';
-import { HANGAR_R, PAD_R, padCount, padOf, stationPointVel, stationQuat, toLocal, toWorld, whereIsAt } from './stationGeom';
+import { HANGAR_R, PAD_R, isDeck, overDeckAt, padCount, padOf, stationPointVel, stationQuat, toLocal, toWorld, whereIsAt } from './stationGeom';
 import { freePads, pilotName, rootOf, slotUser } from './control';
 import { learnSystem } from './scanner';
 
@@ -140,7 +139,7 @@ export function updateDockRequest(g: Game, dt: number) {
   const pad = free[Math.floor(Math.random() * free.length)];
   g.dock = { station: r.station, pad, docked: false };
   const busy = slotUser(g, r.station);
-  const how = r.station.sky ? ' · land on it from above' : busy ? ` · hold short: ${pilotName(g, busy)} is in the slot` : ' · enter through the slot, matching its spin';
+  const how = isDeck(r.station) ? ' · land on it from above' : busy ? ` · hold short: ${pilotName(g, busy)} is in the slot` : ' · enter through the slot, matching its spin';
   g.showMsg(`Docking granted · ${r.station.name} · pad ${pad + 1}${g.autodock ? '' : how}`);
   g.invalidateHud();
 }
@@ -183,7 +182,7 @@ export function stationContact(g: Game) {
         d.docked = true;
         g.autodock = null;
         holdDocked(g);
-        g.showMsg(`Docked at ${st.name} · pad ${d.pad + 1} · K ${st.sky ? 'lifts off · or take the catapult' : 'launches'}`);
+        g.showMsg(`Docked at ${st.name} · pad ${d.pad + 1} · K ${st.sky ? 'lifts off · or take the catapult' : isDeck(st) ? 'lifts off' : 'launches'}`);
         if (rootOf(g) === g) {
           // yours (not another ship's): the station window, and the station's charts of the system
           const n = learnSystem(g);
@@ -206,7 +205,7 @@ export function stationContact(g: Game) {
         g.warned.bump = true;
         if (ship.hull >= h0 - 0.01) g.showMsg(`Contact with ${st.name} · ${speed.toFixed(0)} m/s`, 'warn');
       }
-      if (st.sky) return; // open to the sky: never "inside"
+      if (isDeck(st)) return; // open to the sky: never "inside"
       g.inStation = st;
       g.inStationRel.subVectors(ship.pos, st.pos);
       return;
@@ -222,7 +221,7 @@ export function stationContact(g: Game) {
 /** Is the local point on pad i (close to the wall, or the deck, within the pad)? */
 function onPad(st: Station, p: THREE.Vector3, i: number) {
   const pad = padOf(st, i);
-  if (st.sky) return p.z < PAD_HEIGHT / st.size && Math.hypot(p.x - pad.pos.x, p.y - pad.pos.y) < PAD_R;
+  if (isDeck(st)) return p.z < PAD_HEIGHT / st.size && Math.hypot(p.x - pad.pos.x, p.y - pad.pos.y) < PAD_R;
   const r = Math.hypot(p.x, p.y);
   if (HANGAR_R - r > PAD_HEIGHT / st.size) return false;
   const dPhi = Math.atan2(Math.sin(Math.atan2(p.y, p.x) - pad.phi), Math.cos(Math.atan2(p.y, p.x) - pad.phi));
@@ -250,7 +249,7 @@ export function holdDocked(g: Game) {
   ship.q.setFromRotationMatrix(m);
   ship.vel.copy(stationPointVel(st, ship.pos)).sub(g.frameBody.vel);
   // on an open deck you're in the open air and sunlight, not inside
-  g.inStation = st.sky ? null : st;
+  g.inStation = isDeck(st) ? null : st;
   g.inStationRel.subVectors(ship.pos, st.pos);
   g.dockRel.copy(g.inStationRel);
   g.curSpeed = 0;
@@ -262,7 +261,7 @@ export function launch(g: Game) {
   if (!d?.docked) return;
   const up = padOf(d.station, d.pad).up.applyQuaternion(stationQuat(d.station, g.simTime));
   g.ship.vel.addScaledVector(up, LAUNCH_SPEED);
-  g.showMsg(`Launched from ${d.station.name}${d.station.sky ? '' : ' · fly out through the slot'}`);
+  g.showMsg(`Launched from ${d.station.name}${isDeck(d.station) ? '' : ' · fly out through the slot'}`);
   g.dock = null;
   if (g.ship.avionics.dock?.caps.launch) {
     engageAutoLaunch(g, d.station, d.pad);
@@ -285,9 +284,9 @@ export function stationLimits(g: Game): { acc: number; maxV: number } | null {
     // over a sky station's open deck: the docking thrusters and the braking curve down to it, as
     // above a hangar's wall (from the end-of-step offset, like inside a cube)
     const sk = d.station;
-    if (sk.sky) {
+    if (isDeck(sk)) {
       const p = tmp.copy(g.dockRel).applyQuaternion(stationQuat(sk, g.simTime).invert()).divideScalar(sk.size);
-      if (p.z > 0 && overDeck(p, 0.1)) return { acc: STATION_ACC, maxV: brakeCurve(p.z * sk.size) };
+      if (p.z > 0 && overDeckAt(sk, p, 0.1)) return { acc: STATION_ACC, maxV: brakeCurve(p.z * sk.size) };
     }
     return { acc: 100, maxV: APPROACH_SPEED };
   }

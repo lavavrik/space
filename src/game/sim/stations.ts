@@ -1,6 +1,7 @@
 import { THREE } from '../lib/three';
 import type { Station } from '../types';
 import { keplerState } from './kepler';
+import { orbitBody } from './stationGeom';
 import { worldQuat } from './terrain';
 
 const qW = new THREE.Quaternion(),
@@ -13,6 +14,12 @@ const qW = new THREE.Quaternion(),
  */
 export function stationState(st: Station, t: number) {
   const sky = st.sky;
+  if (st.depot) {
+    // on a free orbit round the planet's parent (its Kepler fields are the planet's, shifted)
+    const o = st.parent.parent;
+    keplerState(st, t, o.pos, o.vel, st.pos, st.vel);
+    return;
+  }
   if (!sky) {
     keplerState(st, t, st.parent.pos, st.parent.vel, st.pos, st.vel);
     return;
@@ -33,7 +40,7 @@ export function updateStations(stations: Station[], t: number) {
  * (its engines hold it up against gravity). Autopilots feed this forward to stay alongside.
  */
 export function stationAcc(st: Station, out = new THREE.Vector3()) {
-  const b = st.parent;
+  const b = orbitBody(st);
   const r = out.subVectors(st.pos, b.pos);
   if (!st.sky) return r.multiplyScalar(-b.mu / r.length() ** 3);
   // −ω²·(r's part across the axis)

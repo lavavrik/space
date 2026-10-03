@@ -15,8 +15,9 @@
  * render/stationMesh.ts; the hull shader already paints the slot's rim at the same size.
  */
 import { THREE } from '../lib/three';
-import type { Station } from '../types';
-import { SKY_PAD_COUNT, skyPadLocal, skyWhereIs } from './skyGeom';
+import type { Body, Station } from '../types';
+import { DEPOT_PAD_COUNT, PLATE_X, depotPadLocal, depotWhereIs, overPlate } from './depotGeom';
+import { SKY_PAD_COUNT, overDeck, skyPadLocal, skyWhereIs } from './skyGeom';
 import { worldQuat } from './terrain';
 
 export const SLOT_W = 0.4,
@@ -53,12 +54,27 @@ export function padLocal(i: number) {
   return { pos: new THREE.Vector3(HANGAR_R * c, HANGAR_R * s, PAD_ROWS[row]), up: new THREE.Vector3(-c, -s, 0), fwd: new THREE.Vector3(0, 0, 1), phi };
 }
 
-/** Pad `i` of any station, cube or sky deck (sim/skyGeom.ts). */
-export const padOf = (st: Station, i: number) => (st.sky ? skyPadLocal(i) : padLocal(i));
+/** Pad `i` of any station: a cube's hangar wall, a sky deck (sim/skyGeom.ts) or a depot's plate (sim/depotGeom.ts). */
+export const padOf = (st: Station, i: number) => (st.depot ? depotPadLocal(i) : st.sky ? skyPadLocal(i) : padLocal(i));
 /** How many pads the station has. */
-export const padCount = (st: Station) => (st.sky ? SKY_PAD_COUNT : PAD_COUNT);
+export const padCount = (st: Station) => (st.depot ? DEPOT_PAD_COUNT : st.sky ? SKY_PAD_COUNT : PAD_COUNT);
 /** whereIs for any station. */
-export const whereIsAt = (st: Station, p: THREE.Vector3, m: number) => (st.sky ? skyWhereIs(p, m) : whereIs(p, m));
+export const whereIsAt = (st: Station, p: THREE.Vector3, m: number) => (st.depot ? depotWhereIs(p, m) : st.sky ? skyWhereIs(p, m) : whereIs(p, m));
+
+/** An open deck, landed on from above, with no hangar and no slot: a sky station or a depot. */
+export const isDeck = (st: Station) => !!(st.sky || st.depot);
+
+/** Is a point (unit coordinates, above the deck) over the station's landing deck, within `m` of its edge? */
+export const overDeckAt = (st: Station, p: THREE.Vector3, m: number) => (st.depot ? overPlate(p, m) : overDeck(p, m));
+
+/**
+ * Where an approach hold point is, over the deck, in unit coordinates: straight above the middle of
+ * a sky deck or of a depot's plate.
+ */
+export const deckCentre = (st: Station) => (st.depot ? PLATE_X : 0);
+
+/** The body a station's orbit goes round: its world's, or for a depot at a Lagrange point, the planet's parent. */
+export const orbitBody = (st: Station): Body => (st.depot ? st.parent.parent : st.parent);
 
 const Z = new THREE.Vector3(0, 0, 1);
 
@@ -70,6 +86,7 @@ const qSky = new THREE.Quaternion();
  * is always the sim clock's: stations only move after the worlds).
  */
 export function stationQuat(st: Station, t: number, out = new THREE.Quaternion()) {
+  if (st.depot) return out.copy(st.depot.q); // fixed in space: it doesn't turn
   if (st.sky) return worldQuat(st.parent, out).multiply(qSky.setFromUnitVectors(Z, st.sky.dir));
   const base = out.setFromUnitVectors(Z, st.spinAxis);
   return base.premultiply(new THREE.Quaternion().setFromAxisAngle(st.spinAxis, st.spinRate * t));
