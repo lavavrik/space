@@ -36,7 +36,7 @@ export function warpBlocked(g: Game): string | null {
   if (g.inStation && !g.dock?.docked) return 'not inside a station';
   if (g.autodock) return 'not while the docking computer flies';
   if (g.ascent) return 'not during the ascent';
-  if (ship.ap && (!ship.ap.settled || ship.ap.type === 'hold' || ship.ap.type === 'rendezvous')) return 'not while the autopilot is manoeuvring';
+  if (ship.ap && (!ship.ap.settled || ship.ap.type === 'hold' || ship.ap.type === 'lagrange' || ship.ap.type === 'rendezvous')) return 'not while the autopilot is manoeuvring';
   const thrusting = keys.KeyW || keys.KeyS || keys.KeyA || keys.KeyD || keys.Space || keys.KeyC || keys.ControlLeft || keys.ControlRight || keys.KeyX;
   if (thrusting) return 'not under thrust';
   const t = timeToImpact(g);

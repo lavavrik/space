@@ -76,13 +76,13 @@ export const ORBIT_COMPUTERS: OrbitComputer[] = [
   },
   {
     id: 'hx-8200', kind: 'orbit', maker: 'Hesperus Avionics', model: 'HX-8200', name: 'Apsis',
-    blurb: 'All orbit types (ring orbits too), preview ring, FTL entry leg',
-    caps: { types: ['equatorial', 'polar', 'sync', 'hold', 'ring'], preview: true, ftlLeg: true, readouts: false, profile: { acc: 25, radialCap: 5000, planeCap: 3000 } },
+    blurb: 'All orbit types (ring orbits and Lagrange holds too), preview ring, FTL entry leg',
+    caps: { types: ['equatorial', 'polar', 'sync', 'hold', 'ring', 'lagrange'], preview: true, ftlLeg: true, readouts: false, profile: { acc: 25, radialCap: 5000, planeCap: 3000 } },
   },
   {
     id: 'hx-9100', kind: 'orbit', maker: 'Hesperus Avionics', model: 'HX-9100', name: 'Periastron',
-    blurb: 'All orbit types (ring orbits too), preview ring, FTL entry leg, fast insertion, live deviation readouts',
-    caps: { types: ['equatorial', 'polar', 'sync', 'hold', 'ring'], preview: true, ftlLeg: true, readouts: true, profile: { acc: 40, radialCap: 7000, planeCap: 4000 } },
+    blurb: 'All orbit types (ring orbits and Lagrange holds too), preview ring, FTL entry leg, fast insertion, live deviation readouts',
+    caps: { types: ['equatorial', 'polar', 'sync', 'hold', 'ring', 'lagrange'], preview: true, ftlLeg: true, readouts: true, profile: { acc: 40, radialCap: 7000, planeCap: 4000 } },
   },
 ];
 

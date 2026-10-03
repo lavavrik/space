@@ -6,10 +6,11 @@ import { airDensityAt, airSpeedLimit } from './catapult';
 import { stationAcc } from './stations';
 import { RING_HALF_THICK } from './rings';
 import type { ApproachProfile } from '../avionics/catalog';
-import type { Autopilot, Body, Gravity, Ship, Station } from '../types';
+import type { Autopilot, Body, Gravity, Ship, Station, World } from '../types';
 import { atmoOf } from './atmosphere';
 import { velRel } from './frame';
 import { beltLock, dropAlt, dropFTL, ftlSpeedLimit, ftlUpkeep, massLock } from './ftl';
+import { lagrangePoints } from './lagrange';
 import { minOrbitAlt } from './orbits';
 import { applyThrust } from './resources';
 
@@ -50,6 +51,7 @@ export function apInsertion(ship: Ship, ap: Autopilot): { P: THREE.Vector3; rT: 
     const w = aroundBody(ship.pos, P, b, b.radius + dropAlt(b) * 1.02);
     return w ? { P: w, rT: floor, waypoint: true } : { P, rT: P.distanceTo(b.pos) };
   }
+  if (ap.type === 'lagrange') return { P: holdPoint(ap), rT: 1e6 }; // (drops out within 30 km of it)
   const { b, rv, up } = apGeom(ship, ap);
   const rT = b.radius + Math.max(ap.r0 - b.radius, dropAlt(b) * 1.1);
   const P = b.pos.clone().addScaledVector(up, rT);
@@ -189,9 +191,20 @@ export function orbitVelErr(g: Game, ap: Autopilot) {
   return Math.abs(velRel(g, b).dot(tang) - Math.sqrt(b.mu / Math.max(r, b.radius)));
 }
 
-/** The hold point in the system frame (it's stored as an offset from the moving body). */
+/** The hold point in the system frame (it's stored as an offset from the moving body; a Lagrange point is worked out live). */
 export function holdPoint(ap: Autopilot) {
+  if (ap.type === 'lagrange') return lagrangePoints(ap.body as World)[ap.lk! - 1].pos;
   return ap.body.pos.clone().add(ap.point!);
+}
+
+/** The frame body's own acceleration (m/s²), which the ship's frame-relative motion leaves out: a world falls toward its parent. */
+function frameAcc(g: Game) {
+  const fb = g.frameBody;
+  const out = new THREE.Vector3();
+  if (fb.kind === 'star') return out;
+  const d = out.subVectors(fb.parent.pos, fb.pos);
+  const r = d.length();
+  return d.multiplyScalar(fb.parent.mu / (r * r * r));
 }
 
 /** Orbit / station-keeping autopilot: steer velocity toward a desired velocity field
@@ -215,6 +228,21 @@ export function autopilot(g: Game, dt: number, grav: Gravity) {
     if (!ap.settled && dist < 100 && vRel.length() < 5) {
       ap.settled = true;
       g.showMsg(`Holding position ${fmtDist(ap.r0 - b.radius)} above ${b.name}`, 'ftl');
+    }
+  } else if (ap.type === 'lagrange') {
+    // Keep pace with a Lagrange point: aim for it at its own velocity, and feed forward the
+    // acceleration that keeps up with it (centripetal about the parent) less what the ship's own
+    // gravity already supplies, which near L1 and L2 is nearly all of it, so holding costs next to
+    // nothing and the thrust is the real drift (sim/lagrange.ts, docs/lagrange.md)
+    const lp = lagrangePoints(b as World)[ap.lk! - 1];
+    const e = lp.pos.clone().sub(ship.pos),
+      dist = e.length();
+    const vPt = lp.vel.clone().sub(b.vel); // relative to the autopilot body, like vRel
+    vDes = vPt.clone().addScaledVector(e, approachSpeed(dist, prof.radialCap, prof.acc) / Math.max(dist, 1));
+    aFF = lp.acc.clone().sub(frameAcc(g)).sub(grav.vec);
+    if (!ap.settled && dist < 100 && vRel.distanceTo(vPt) < 5) {
+      ap.settled = true;
+      g.showMsg(`Holding at ${lp.name}`, 'ftl');
     }
   } else if (ap.type === 'rendezvous') {
     // Close on a moving station and match it: aim for a point RDV_STANDOFF short of it, arriving at
@@ -376,7 +404,7 @@ export function ftlTransfer(g: Game, dt: number) {
   // them clear of their FTL drop-out altitude too, or the leg dives into the well, drops out, climbs
   // back on thrusters and tries again, round and round
   for (const o of g.cur.bodies) {
-    if (o === ap.body) continue;
+    if (o === ap.body && ap.type !== 'lagrange') continue; // (a Lagrange point lies clear of its planet, which is still in the way)
     const w = aroundBody(ship.pos, P, o, o.radius + dropAlt(o) * 1.1);
     if (w) {
       P = w;

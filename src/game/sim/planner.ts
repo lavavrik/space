@@ -4,6 +4,7 @@ import { AP_FTL_MIN, FTL_CHARGE_TIME } from '../constants';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import type { Autopilot, Body, OrbitType, Station, World } from '../types';
+import { lagrangePoints } from './lagrange';
 import { ringDensity } from './rings';
 import { apDistance, holdPoint } from './autopilot';
 import { beltLock, ftlBlocked, massLock } from './ftl';
@@ -11,7 +12,7 @@ import { dominantBody } from './gravity';
 import { startOrbitGuide } from './guide';
 import { apLabel, defaultOrbitAlt, evalPlan, maxOrbitR, minOrbitAlt, orbitNormal } from './orbits';
 
-const ORBIT_TYPE_NAMES: Record<OrbitType, string> = { equatorial: 'equatorial', polar: 'polar', sync: 'stationary', hold: 'hold-position', ring: 'ring' };
+const ORBIT_TYPE_NAMES: Record<OrbitType, string> = { equatorial: 'equatorial', polar: 'polar', sync: 'stationary', hold: 'hold-position', ring: 'ring', lagrange: 'Lagrange' };
 
 export function openPlanner(g: Game) {
   const { ship } = g;
@@ -25,7 +26,7 @@ export function openPlanner(g: Game) {
   const t = g.target && g.target.kind === 'station' ? g.target.parent : g.target && g.target.kind !== 'ship' && g.target.kind !== 'wreck' ? g.target : null;
   const b = t || (ship.grav && ship.grav.body) || dominantBody(g.cur, ship.pos);
   const curAlt = ship.pos.distanceTo(b.pos) - b.radius;
-  g.planner = { body: b, type: oc.caps.types[0], alt: defaultOrbitAlt(b), dir: 1, curAlt };
+  g.planner = { body: b, type: oc.caps.types[0], alt: defaultOrbitAlt(b), dir: 1, curAlt, lk: 1 };
   g.invalidateHud();
 }
 
@@ -36,7 +37,7 @@ export function closePlanner(g: Game) {
 
 export function adjustAlt(g: Game, f: number) {
   const p = g.planner;
-  if (!p || p.type === 'sync') return;
+  if (!p || p.type === 'sync' || p.type === 'lagrange') return;
   const b = p.body;
   if (p.type === 'ring' && b.kind !== 'star' && b.ring) {
     // across the ring in steps of 1 % of its width (Shift: 10 %), [ in, ] out
@@ -86,6 +87,15 @@ export function selectOrbitType(g: Game, t: OrbitType) {
     g.showMsg(`${p.body.name} has no ring`, 'warn');
     return;
   }
+  if (t === 'lagrange') {
+    // a planet's points; a moon plans its planet's, and a star has none
+    if (p.body.kind === 'moon') p.body = p.body.parent as World;
+    else if (p.body.kind === 'star') {
+      g.showMsg(`${p.body.name} has no Lagrange points: pick a planet`, 'warn');
+      return;
+    }
+    p.lk = p.lk ?? 1;
+  }
   p.type = t;
   if (t === 'ring') p.alt = ringStart(p.body as World, p.curAlt + p.body.radius) - p.body.radius;
   else if (t === 'hold') p.alt = Math.max(minOrbitAlt(p.body), p.curAlt);
@@ -95,6 +105,12 @@ export function selectOrbitType(g: Game, t: OrbitType) {
 
 export function reversePlannerDir(g: Game) {
   if (!g.planner) return;
+  if (g.planner.type === 'lagrange') {
+    // (R steps through the five points instead of reversing)
+    g.planner.lk = (((g.planner.lk ?? 1) % 5) + 1) as 1 | 2 | 3 | 4 | 5;
+    g.invalidateHud();
+    return;
+  }
   g.planner.dir *= -1;
   g.invalidateHud();
 }
@@ -109,6 +125,10 @@ export function engageOrbit(g: Game) {
   }
   const b = planner.body;
   const u = ship.pos.clone().sub(b.pos).normalize();
+  if (planner.type === 'lagrange') {
+    engageAutopilot(g, { body: b, type: 'lagrange', lk: planner.lk ?? 1, r0: ev.r0, period: ev.period, n: null, point: null, station: null });
+    return;
+  }
   engageAutopilot(g, {
     body: b,
     type: planner.type,
@@ -121,7 +141,7 @@ export function engageOrbit(g: Game) {
 }
 
 /** What engageAutopilot needs: the rest of an Autopilot is runtime state. */
-export type ApSpec = Pick<Autopilot, 'body' | 'type' | 'r0' | 'period' | 'n' | 'point' | 'station'>;
+export type ApSpec = Pick<Autopilot, 'body' | 'type' | 'r0' | 'period' | 'n' | 'point' | 'station' | 'lk'>;
 
 /**
  * Hand the ship to the autopilot: from the orbit planner, or from the nav computer (which also uses
@@ -226,12 +246,13 @@ export function orbitPreview(g: Game): OrbitPreview | null {
   if (!g.orbitPreview || !g.ship.avionics.orbit?.caps.preview) return null;
   const { ship } = g;
   const ap = ship.ap;
-  if (ap) return { body: ap.body, r: ap.r0, n: ap.n, point: ap.type === 'hold' ? holdPoint(ap) : null, engaged: true };
+  if (ap) return { body: ap.body, r: ap.r0, n: ap.n, point: ap.type === 'hold' || ap.type === 'lagrange' ? holdPoint(ap) : null, engaged: true };
   const p = g.planner;
   if (!p) return null;
   const b = p.body;
   const r = evalPlan(p, ship).r0;
   const u = new THREE.Vector3().subVectors(ship.pos, b.pos).normalize();
+  if (p.type === 'lagrange') return b.kind === 'planet' ? { body: b, r, n: null, point: lagrangePoints(b)[(p.lk ?? 1) - 1].pos, engaged: false } : null;
   if (p.type === 'hold') return { body: b, r, n: null, point: b.pos.clone().addScaledVector(u, r), engaged: false };
   return { body: b, r, n: orbitNormal(b, p.type, p.dir, u), point: null, engaged: false };
 }

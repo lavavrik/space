@@ -3,10 +3,11 @@ import { AP_ACC, AU, SHIP, WT } from '../constants';
 import { fmtFlow, fmtTime } from '../format';
 import { THREE } from '../lib/three';
 import type { Autopilot, Body, OrbitType, Planner, Ship } from '../types';
+import { driftTime, lagrangePoints } from './lagrange';
 import { deltaVLeft, shipMass } from './resources';
 import { ringDensity } from './rings';
 
-export const ORBIT_TYPES: OrbitType[] = ['equatorial', 'polar', 'sync', 'hold', 'ring'];
+export const ORBIT_TYPES: OrbitType[] = ['equatorial', 'polar', 'sync', 'hold', 'ring', 'lagrange'];
 
 export function minOrbitAlt(b: Body) {
   if (b.kind === 'star') return b.radius * 0.5;
@@ -39,6 +40,7 @@ export interface PlanEval {
 }
 
 export function evalPlan(p: Planner, ship: Ship): PlanEval {
+  if (p.type === 'lagrange') return evalLagrange(p);
   const b = p.body,
     rMin = b.radius + minOrbitAlt(b),
     rMax = maxOrbitR(b);
@@ -89,6 +91,24 @@ export function evalPlan(p: Planner, ship: Ship): PlanEval {
   return { r0, ok, note, period: 2 * Math.PI * Math.sqrt(r0 ** 3 / b.mu), speed: Math.sqrt(b.mu / r0) };
 }
 
+/**
+ * A Lagrange hold (docs/lagrange.md): `r0` is the point's distance from the planet. Free at the
+ * stable points; at the unstable ones (L1, L2, L3) the drift has to be flown out now and then.
+ */
+function evalLagrange(p: Planner): PlanEval {
+  const b = p.body;
+  if (b.kind !== 'planet') return { r0: 0, ok: false, note: `L-points are held for planets: ${b.name} has none`, period: NaN, speed: 0 };
+  const k = p.lk ?? 1;
+  const lp = lagrangePoints(b)[k - 1];
+  const r0 = lp.pos.distanceTo(b.pos);
+  const where = { 1: 'between it and its star', 2: 'beyond it, away from its star', 3: "opposite it across its star", 4: 'leading it by 60°', 5: 'trailing it by 60°' }[k];
+  const days = driftTime(lp) / 86400;
+  const note = lp.stable
+    ? `${lp.name}: ${where}. Stable: a ship left here stays with the planet, no thrust needed.`
+    : `${lp.name}: ${where}. Unstable: a ship left here drifts away over ~${days < 400 ? Math.round(days) + ' days' : (days / 365.25).toFixed(0) + ' years'}; the autopilot flies it back (real missions burn ~${lp.dvYear.toFixed(1)} m/s a year).`;
+  return { r0, ok: true, note, period: 2 * Math.PI / b.orb.n, speed: lp.vel.distanceTo(b.vel) };
+}
+
 /** Normal of the target orbit plane. `u` is the unit vector from the body to the ship. */
 export function orbitNormal(b: Body, type: OrbitType, dir: number, u: THREE.Vector3) {
   if (type === 'polar') {
@@ -100,5 +120,5 @@ export function orbitNormal(b: Body, type: OrbitType, dir: number, u: THREE.Vect
 }
 
 export function apLabel(ap: Autopilot) {
-  return { equatorial: 'equatorial orbit', polar: 'polar orbit', sync: 'synchronous orbit', hold: 'holding position', ring: 'ring orbit', rendezvous: `rendezvous with ${ap.station?.name}` }[ap.type];
+  return { equatorial: 'equatorial orbit', polar: 'polar orbit', sync: 'synchronous orbit', hold: 'holding position', ring: 'ring orbit', lagrange: `holding at ${ap.body.name} L${ap.lk}`, rendezvous: `rendezvous with ${ap.station?.name}` }[ap.type];
 }

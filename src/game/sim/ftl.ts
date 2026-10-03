@@ -203,7 +203,9 @@ export function dropFTL(g: Game, forced: boolean, body?: Body) {
   ship.ftlSpeed = 0;
   if (ship.ap) {
     ship.ap.phase = 'insert';
-    ship.vel.set(0, 0, 0);
+    // (at rest relative to the target; a Lagrange point's is its planet, whose velocity in the star's frame is its orbit's)
+    if (ship.ap.type === 'lagrange') ship.vel.copy(ship.ap.body.vel).sub(g.frameBody.vel);
+    else ship.vel.set(0, 0, 0);
     ship.ftlCoast = 0;
     g.showMsg(`Autopilot · inserting into ${apLabel(ship.ap)}`, 'ftl');
     return;

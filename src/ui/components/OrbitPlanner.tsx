@@ -8,6 +8,7 @@ const TYPES: [OrbitType, string][] = [
   ['sync', 'Stationary'],
   ['hold', 'Hold position'],
   ['ring', 'Ring'],
+  ['lagrange', 'L-point'],
 ];
 
 /** Orbit planner (O): choose an orbit type and altitude for the autopilot. */
@@ -24,13 +25,21 @@ export function OrbitPlanner({ p }: { p: PlannerView }) {
           </div>
         ))}
       </div>
-      <Row label="ALTITUDE" value={p.alt} />
+      <Row label={p.type === 'lagrange' ? 'POINT' : 'ALTITUDE'} value={p.alt} />
       <Row label="PERIOD" value={p.period} />
       <Row label="ORBITAL SPEED" value={p.speed} />
       <Row label="DIRECTION" value={p.dir} />
       <p className={cx('onote', p.note.warn && 'bad')}>{p.note.text}</p>
       <div className="okeys">
-        <kbd>[ ]</kbd> or wheel altitude · <kbd>Shift</kbd> big steps · <kbd>R</kbd> direction · <kbd>L</kbd> preview ring · <kbd>Enter</kbd> engage
+        {p.type === 'lagrange' ? (
+          <>
+            <kbd>R</kbd> next point (L1–L5) · <kbd>L</kbd> preview · <kbd>Enter</kbd> engage
+          </>
+        ) : (
+          <>
+            <kbd>[ ]</kbd> or wheel altitude · <kbd>Shift</kbd> big steps · <kbd>R</kbd> direction · <kbd>L</kbd> preview ring · <kbd>Enter</kbd> engage
+          </>
+        )}
       </div>
     </Panel>
   );

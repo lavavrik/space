@@ -4,11 +4,12 @@ import { AU, FTL_CHARGE_TIME, HULL_P_MAX, JUMP_CHARGE_TIME, LY, JUMP_DEPART_TIME
 import { DEBUG, debugSpots } from '../debug/poses';
 import { fmtArea, fmtBar, fmtClock, fmtEnergy, fmtDist, fmtFlow, fmtMass, fmtPower, fmtSpeed, fmtSpeedText, fmtTime } from '../format';
 import type { Game } from '../Game';
-import type { Station } from '../types';
+import type { Station, World } from '../types';
 import { THREE } from '../lib/three';
 import { holdPoint, orbitVelErr } from '../sim/autopilot';
 import { velRel } from '../sim/frame';
 import { orbitElements, orbitElementsRel } from '../sim/gravity';
+import { driftTime, lagrangePoints } from '../sim/lagrange';
 import { guideEta, type Guide } from '../sim/guide';
 import { transitState } from '../sim/hyperspace';
 import { NAV_MODES, searchNav } from '../sim/navroute';
@@ -121,7 +122,7 @@ function flightMode(g: Game): [string, FlightView['modeClass']] {
   if (ship.dead) return ['SHIP DESTROYED', 'warn'];
   if (ap && ap.phase === 'transfer') return ['AUTOPILOT · FTL TRANSFER', 'ftl'];
   if (ap && ap.phase === 'insert') {
-    const hold = ap.type === 'hold';
+    const hold = ap.type === 'hold' || ap.type === 'lagrange';
     if (ap.type === 'rendezvous') return [ap.settled ? 'AUTOPILOT · ALONGSIDE' : 'AUTOPILOT · RENDEZVOUS', 'ftl'];
     if (ap.settled) return [hold ? 'AUTOPILOT · HOLDING' : 'AUTOPILOT · IN ORBIT', 'ftl'];
     return [hold ? 'AUTOPILOT · MOVING TO HOLD' : 'AUTOPILOT · ORBIT INSERTION', 'ftl'];
@@ -546,7 +547,7 @@ function autopilotView(g: Game): AutopilotView {
   const ap = ship.ap!;
   const b = ap.body,
     R = b.radius;
-  const label = { equatorial: 'Equatorial orbit', polar: 'Polar orbit', sync: 'Stationary orbit', hold: 'Hold position', ring: 'Ring orbit', rendezvous: 'Rendezvous' }[ap.type];
+  const label = { equatorial: 'Equatorial orbit', polar: 'Polar orbit', sync: 'Stationary orbit', hold: 'Hold position', ring: 'Ring orbit', lagrange: 'Lagrange hold', rendezvous: 'Rendezvous' }[ap.type];
   const [mode] = flightMode(g);
   const rv = ship.pos.clone().sub(b.pos);
   const v = velRel(g, b);
@@ -558,6 +559,13 @@ function autopilotView(g: Game): AutopilotView {
     rows.push(['STATION', st.name]);
     rows.push(['DISTANCE', fmtDist(st.pos.distanceTo(ship.pos))]);
     rows.push(['RELATIVE SPEED', fmtSpeedText(v.distanceTo(st.vel.clone().sub(b.vel)))]);
+  } else if (ap.type === 'lagrange') {
+    const lp = lagrangePoints(b as World)[ap.lk! - 1];
+    const off = lp.pos.distanceTo(ship.pos);
+    rows.push(['TARGET', `${lp.name} · ${fmtDist(ap.r0)} from ${b.name}`]);
+    rows.push(['OFF THE POINT', { text: fmtDist(off), warn: ap.settled && off > 1000 }]);
+    rows.push(['DRIFT', fmtSpeedText(velRel(g, b).distanceTo(lp.vel.clone().sub(b.vel)))]);
+    rows.push(['STATION-KEEPING', `${fmtFlow(ship.burnRate)} · ${lp.stable ? 'stable point' : 'unstable: drifts in ' + fmtTime(driftTime(lp))}`]);
   } else if (ap.type === 'hold') {
     const off = holdPoint(ap).distanceTo(ship.pos);
     rows.push(['TARGET', `${fmtDist(ap.r0 - R)} above ${b.name}`]);
@@ -584,7 +592,7 @@ function autopilotView(g: Game): AutopilotView {
   return {
     unit: ship.avionics.orbit ? unitLabel(ship.avionics.orbit).toUpperCase() : 'AUTOPILOT',
     title: label,
-    sub: ap.type === 'rendezvous' ? `${ap.station!.name} · around ${b.name}` : `${b.name} · ${ap.type === 'hold' ? fmtDist(ap.r0 - R) + ' up' : fmtDist(ap.r0 - R) + ' · ' + fmtTime(ap.period)}`,
+    sub: ap.type === 'rendezvous' ? `${ap.station!.name} · around ${b.name}` : ap.type === 'lagrange' ? `${b.name} L${ap.lk}` : `${b.name} · ${ap.type === 'hold' ? fmtDist(ap.r0 - R) + ' up' : fmtDist(ap.r0 - R) + ' · ' + fmtTime(ap.period)}`,
     state: { text: mode.replace('AUTOPILOT · ', ''), warn: false },
     rows,
     confirm: g.apConfirm > 0,
@@ -820,7 +828,7 @@ function avionicsView(g: Game): AvionicsSlotView[] {
     {
       id: 'orbit', key: 'O', kind: 'ORBIT', does: 'Plan an orbit and let the autopilot fly it', ...base(orbit), status: orbitStatus, active: !!ap,
       specs: orbit ? [
-        ['ORBITS', list(...orbit.caps.types.map((x) => ({ equatorial: 'equatorial', polar: 'polar', sync: 'stationary', hold: 'hold', ring: 'ring' })[x]))],
+        ['ORBITS', list(...orbit.caps.types.map((x) => ({ equatorial: 'equatorial', polar: 'polar', sync: 'stationary', hold: 'hold', ring: 'ring', lagrange: 'Lagrange' })[x]))],
         ['INSERTION', `${orbit.caps.profile.acc} m/s² braking · ${fmtSpeedText(orbit.caps.profile.radialCap)} climb`],
         ['FEATURES', list(orbit.caps.preview && 'preview ring (L)', orbit.caps.ftlLeg && 'FTL leg', orbit.caps.readouts && 'deviation readouts')],
       ] : [],
@@ -901,10 +909,10 @@ function planner(g: Game): PlannerView | null {
     types: oc ? oc.caps.types : [],
     body: `${b.name} · ${b.typeName}`,
     type: p.type,
-    alt: fmtDist(ev.r0 - b.radius) + (p.type === 'sync' ? ' (fixed)' : p.type === 'ring' && b.kind !== 'star' && b.ring ? ` · ${Math.round(((ev.r0 / b.radius - b.ring.inner) / (b.ring.outer - b.ring.inner)) * 100)} % across the ring` : ''),
+    alt: p.type === 'lagrange' ? `L${p.lk ?? 1} · ${fmtDist(ev.r0)} from ${b.name}` : fmtDist(ev.r0 - b.radius) + (p.type === 'sync' ? ' (fixed)' : p.type === 'ring' && b.kind !== 'star' && b.ring ? ` · ${Math.round(((ev.r0 / b.radius - b.ring.inner) / (b.ring.outer - b.ring.inner)) * 100)} % across the ring` : ''),
     period: isFinite(ev.period) ? fmtTime(ev.period) : 'not orbiting',
     speed: ev.speed ? fmtSpeed(ev.speed).join(' ').toLowerCase() : '0 m/s',
-    dir: p.type === 'hold' ? '—' : p.type === 'sync' ? 'with rotation (required)' : p.type === 'ring' ? 'with the ring (required)' : p.dir > 0 ? 'prograde (with rotation)' : 'retrograde',
+    dir: p.type === 'hold' || p.type === 'lagrange' ? '—' : p.type === 'sync' ? 'with rotation (required)' : p.type === 'ring' ? 'with the ring (required)' : p.dir > 0 ? 'prograde (with rotation)' : 'retrograde',
     note: { text: ev.note || `Autopilot flies you there${far ? ', using FTL for the long leg' : ''}.`, warn: !ev.ok || !!ev.warn },
   };
 }

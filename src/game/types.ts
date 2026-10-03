@@ -212,7 +212,8 @@ export interface Gravity {
 }
 
 /** 'ring': a circular orbit in a ring's plane, moving with its rocks (sim/rings.ts). */
-export type OrbitType = 'equatorial' | 'polar' | 'sync' | 'hold' | 'ring';
+/** 'lagrange': hold at one of a planet's Lagrange points, moving with it (sim/lagrange.ts). */
+export type OrbitType = 'equatorial' | 'polar' | 'sync' | 'hold' | 'ring' | 'lagrange';
 /** What the autopilot can fly: an orbit type, or a rendezvous with a station (set by the nav computer). */
 export type ApType = OrbitType | 'rendezvous';
 
@@ -220,6 +221,7 @@ export interface Autopilot {
   body: Body;
   type: ApType;
   station: Station | null; // rendezvous only: the station to close on and match
+  lk?: 1 | 2 | 3 | 4 | 5; // lagrange only: which of `body`'s (a planet's) points
   r0: number; // target orbit radius, m
   period: number;
   n: Vec3 | null; // orbit normal (null when holding position)
@@ -349,6 +351,7 @@ export interface Planner {
   alt: number;
   dir: number; // +1 prograde, −1 retrograde
   curAlt: number;
+  lk?: 1 | 2 | 3 | 4 | 5; // lagrange only: which point (1 if unset)
 }
 
 export type MsgKind = '' | 'ftl' | 'warn';

@@ -4,12 +4,13 @@ import { pairSpec } from '../universe/binary';
 import { AP_ACC, AP_TAU, SHIP } from '../constants';
 import { fmtDist, fmtFlow, fmtMass, fmtPower, fmtSpeedText, fmtTime } from '../format';
 import type { Game } from '../Game';
-import type { Autopilot, Jump, Station, Tanker } from '../types';
+import type { Autopilot, Jump, Station, Tanker, World } from '../types';
 import { padWorld } from './docking';
 import { toLocal } from './stationGeom';
 import { apGeom, apInsertion, approachTime, holdPoint, orbitVelErr, profileOf, RDV_STANDOFF } from './autopilot';
 import { velRel } from './frame';
 import { orbitElements } from './gravity';
+import { lagrangePoints } from './lagrange';
 import { deltaVLeft, shipMass } from './resources';
 
 export type StepState = 'pending' | 'active' | 'done';
@@ -135,6 +136,26 @@ export function startOrbitGuide(g: Game, ap: Autopilot) {
       title: 'Match its velocity', group: 'rdv', active: ins, done: () => ap.settled, err: dv,
       detail: () => `${fmtSpeedText(dv())} relative`,
     }));
+  } else if (ap.type === 'lagrange') {
+    const lp = () => lagrangePoints(b as World)[ap.lk! - 1];
+    const dist = () => lp().pos.distanceTo(ship.pos);
+    const vRel = () => velRel(g, b).distanceTo(lp().vel.clone().sub(b.vel));
+    steps.push(mkStep({
+      title: `Fly to ${lp().name}`, group: 'move', active: ins, done: () => ins() && dist() < 200, err: dist, etaFn: () => approachTime(dist(), prof.radialCap, 200, prof.acc),
+      detail: () => `${fmtDist(dist())} to go`,
+    }));
+    steps.push(mkStep({
+      title: 'Match its motion', group: 'move', active: ins, done: () => ins() && dist() < 1000 && vRel() < 5, err: vRel, etaFn: () => approachTime(dist(), prof.radialCap, 1000, prof.acc),
+      detail: () => `${fmtSpeedText(vRel())} relative to the point`,
+    }));
+    steps.push(mkStep({
+      title: 'Station-keeping', ongoing: true, active: () => ins() && ap.settled, done: () => false, err: () => null,
+      detail: () => {
+        // what holding costs: the acceleration the burn gives, and how long the tank's Δv lasts at it
+        const acc = (ship.burnRate * SHIP.ve) / Math.max(shipMass(ship), 1);
+        return `${lp().stable ? 'Stable point' : 'Unstable point'} · burning ${fmtFlow(ship.burnRate)}${acc > 1e-9 ? ' · tank lasts ' + fmtTime(deltaVLeft(ship) / acc) : ''}`;
+      },
+    }));
   } else if (ap.type === 'hold') {
     const dist = () => holdPoint(ap).distanceTo(ship.pos);
     const vRel = () => velRel(g, b).length();
@@ -194,12 +215,12 @@ export function startOrbitGuide(g: Game, ap: Autopilot) {
       },
     }));
   }
-  const label = { equatorial: 'Equatorial orbit', polar: 'Polar orbit', sync: 'Stationary orbit', hold: 'Hold position', ring: 'Ring orbit', rendezvous: 'Rendezvous' }[ap.type];
+  const label = { equatorial: 'Equatorial orbit', polar: 'Polar orbit', sync: 'Stationary orbit', hold: 'Hold position', ring: 'Ring orbit', lagrange: 'Lagrange hold', rendezvous: 'Rendezvous' }[ap.type];
   startGuide(g, {
     title: label.toUpperCase(),
     sub: `${b.name} · ${fmtDist(ap.r0 - b.radius)}${ap.period ? ' · period ' + fmtTime(ap.period) : ''}`,
-    abort: () => (ship.ap !== ap ? (ship.dead ? 'Ship destroyed' : ap.type === 'hold' && ap.settled ? { ok: 'Hold released' } : 'Autopilot disengaged') : null),
-    doneText: ap.type === 'hold' ? null : ap.type === 'rendezvous' ? `Alongside ${ap.station!.name}` : 'Orbit established · no thrust needed to stay',
+    abort: () => (ship.ap !== ap ? (ship.dead ? 'Ship destroyed' : (ap.type === 'hold' || ap.type === 'lagrange') && ap.settled ? { ok: 'Hold released' } : 'Autopilot disengaged') : null),
+    doneText: ap.type === 'hold' || ap.type === 'lagrange' ? null : ap.type === 'rendezvous' ? `Alongside ${ap.station!.name}` : 'Orbit established · no thrust needed to stay',
     steps,
   });
 }

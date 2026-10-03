@@ -80,6 +80,7 @@ export interface ShipSave {
     period: number;
     n: V3 | null;
     point: V3 | null;
+    lk?: 1 | 2 | 3 | 4 | 5;
     phase: 'charge' | 'transfer' | 'insert';
     settled: boolean;
   } | null;
@@ -189,6 +190,7 @@ function snapshotFlight(c: Game): FlightSave {
         period: ap.period,
         n: ap.n && v3(ap.n),
         point: ap.point && v3(ap.point),
+        lk: ap.lk,
         // mid-charge the drive's charge isn't saved: it goes back to insertion, which re-charges
         phase: ap.phase === 'charge' ? 'insert' : ap.phase,
         settled: ap.settled,
@@ -376,6 +378,7 @@ function restoreFlight(c: Game, f: FlightSave) {
       period: s.ap.period,
       n: s.ap.n && V(s.ap.n),
       point: s.ap.point && V(s.ap.point),
+      lk: s.ap.lk,
       phase: s.ap.phase,
       settled: s.ap.settled,
       t0: c.simTime,
