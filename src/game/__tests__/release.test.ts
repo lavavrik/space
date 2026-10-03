@@ -5,7 +5,7 @@ import { gravityAt } from '../sim/gravity';
 import { updateBodies } from '../sim/kepler';
 import { lagrangePoints } from '../sim/lagrange';
 import { hillRadius } from '../sim/gravity';
-import { RELEASE_DV, canRelease, releaseFromPoint, releasePlan } from '../sim/release';
+import { RELEASE_DV, canRelease, closestApproach, releaseFromPoint, releaseHorizon, releasePlan, safeDistance, safePush } from '../sim/release';
 import type { CurrentSystem, Star, World } from '../types';
 import { homeSystem } from '../universe/galaxy';
 import { buildSystem, findHome, systemAnchor } from '../universe/system';
@@ -78,5 +78,42 @@ describe('release from L1 and L2', () => {
     expect(msgs[msgs.length - 1]).toMatch(/Released/);
     (ship as { ap: unknown }).ap = { type: 'lagrange', lk: 4, body: w, settled: true };
     expect(canRelease(g).ok).toBe(false);
+  });
+
+  it('keeps the planet branch clear of the planet: a bigger push or one off the plane, or a refusal', () => {
+    for (const k of [1, 2] as const) {
+      // an ordinary world: the plain push is safe and is used
+      const a = circular();
+      const plain = safePush(a.cur, a.w, k, 'planet', 0);
+      expect(plain.safe).toBe(true);
+      expect(plain.push.length()).toBeCloseTo(RELEASE_DV, 9);
+      // a planet fattened so the plain push's closest approach is inside the margin: a different push is found, and it really clears
+      const b = circular();
+      const base = closestApproach(b.cur, b.w, k, plain.plan.dir.clone().multiplyScalar(RELEASE_DV), 0, releaseHorizon(plain.plan));
+      // (fatten the planet until its margin, with the air, is a little over the plain push's closest approach)
+      for (const f of [4, 3.5, 3, 2.7, 2.4, 2.1, 1.8, 1.5, 1.2, 1.1]) {
+        b.w.radius = base / f;
+        if (safeDistance(b.w) > base * 1.02) break;
+      }
+      expect(safeDistance(b.w)).toBeLessThan(b.w.pos.distanceTo(lagrangePoints(b.w)[k - 1].pos));
+      const fixed = safePush(b.cur, b.w, k, 'planet', 0);
+      expect(fixed.push.length()).toBeGreaterThan(RELEASE_DV * 1.5); // (turned off the plane)
+      expect(fixed.safe).toBe(true);
+      expect(closestApproach(b.cur, b.w, k, fixed.push, 0, releaseHorizon(plain.plan))).toBeGreaterThanOrEqual(fixed.need);
+      // the far branch needs no checking
+      expect(safePush(b.cur, b.w, k, 'away', 0).safe).toBe(true);
+    }
+  });
+
+  it('refuses a release toward a planet it cannot clear, and leaves the ship alone', () => {
+    const { w, cur } = circular();
+    w.radius = lagrangePoints(w)[0].pos.distanceTo(w.pos) * 0.9; // (a planet nearly filling the gap)
+    const msgs: string[] = [];
+    const ship = { vel: new THREE.Vector3(), ap: { type: 'lagrange', lk: 1, body: w, settled: true } as unknown };
+    const g = { cur, simTime: 0, ship, frameBody: w.parent, apPanel: true, showMsg: (m: string) => msgs.push(m), invalidateHud: () => {} } as unknown as Game;
+    releaseFromPoint(g, 'planet');
+    expect(ship.vel.length()).toBe(0);
+    expect(ship.ap).not.toBeNull();
+    expect(msgs[msgs.length - 1]).toMatch(/refused/);
   });
 });
