@@ -8,7 +8,7 @@ import { lagrangePoints } from '../sim/lagrange';
 import { lpointFor, lpointsHere } from '../sim/lpoints';
 import { contactLabel, known } from '../sim/radar';
 import { scanKey, scanProgress } from '../sim/scanner';
-import type { CurrentSystem, Ship, Star, World } from '../types';
+import type { CurrentSystem, Ship, Star, Target, World } from '../types';
 import { homeSystem, systemsNear } from '../universe/galaxy';
 import { buildSystem, findHome, systemAnchor } from '../universe/system';
 import { buildTrojans } from '../universe/trojans';
@@ -78,5 +78,61 @@ describe('Lagrange points as targets', () => {
     expect(info.orbit.some((r) => r[0] === 'SWARM')).toBe(true);
     const l1 = lpointsHere(g).find((p) => p.planet === giant && p.k === 1)!;
     expect(buildInfo(g, l1).physical[1][1]).toMatch(/drifts away/);
+  });
+});
+
+/* ---------- which points show, and the target kept current ---------- */
+import { cycleTarget } from '../sim/navigation';
+import { lpointsShown, refreshTarget } from '../sim/lpoints';
+
+describe('which Lagrange points show', () => {
+  it('only the targeted planet\'s five, or its points\' while one of them is the target; none otherwise', () => {
+    const { g, cur, seen } = setup();
+    const planets = cur.bodies.filter((b): b is World => b.kind === 'planet');
+    for (const w of planets) seen.add(scanKey(cur.sys, w));
+    const [a, b] = planets;
+    expect(lpointsShown(g)).toHaveLength(0); // nothing targeted
+    g.target = cur.star;
+    expect(lpointsShown(g)).toHaveLength(0);
+    g.target = a;
+    expect(lpointsShown(g).map((p) => p.name)).toEqual([1, 2, 3, 4, 5].map((k) => `${a.name} L${k}`));
+    g.target = lpointFor(g, a, 2);
+    expect(lpointsShown(g).every((p) => p.planet === a)).toBe(true);
+    expect(lpointsShown(g)).toContain(g.target);
+    g.target = b;
+    expect(lpointsShown(g).every((p) => p.planet === b)).toBe(true);
+  });
+
+  it('G never jumps to a point unless its planet (or a sibling point) is the target', () => {
+    const { g, cur, seen } = setup();
+    const planets = cur.bodies.filter((b): b is World => b.kind === 'planet');
+    for (const w of planets) seen.add(scanKey(cur.sys, w));
+    const [a, b] = planets;
+    g.showMsg = () => {};
+    g.traffic = [];
+    g.wrecks = [];
+    g.ship.pos.copy(lagrangePoints(b)[3].pos).add(new THREE.Vector3(1e3, 0, 0)); // sitting by b's L4
+    for (let i = 0; i < 60; i++) {
+      const before = g.target;
+      const shown = before?.kind === 'planet' ? before : before?.kind === 'lpoint' ? before.planet : null;
+      cycleTarget(g);
+      if (g.target?.kind === 'lpoint') expect(g.target.planet).toBe(shown);
+    }
+    // and from a, b's L4 (the nearest thing of all) is not offered
+    g.target = a;
+    cycleTarget(g);
+    const t = g.target as Target;
+    expect(t.kind === 'lpoint' && t.planet === b).toBe(false);
+  });
+
+  it('a targeted point is brought up to the step without anything drawing it', () => {
+    const { g, cur, bodies, seen } = setup();
+    const w = findHome(cur.bodies) as World;
+    seen.add(scanKey(cur.sys, w));
+    g.target = lpointFor(g, w, 1);
+    updateBodies(bodies, 2e6);
+    g.simTime = 2e6;
+    refreshTarget(g);
+    expect(g.target.pos.distanceTo(lagrangePoints(w)[0].pos)).toBeLessThan(1);
   });
 });

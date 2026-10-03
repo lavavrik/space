@@ -9,11 +9,13 @@ Gravity is still patched conics (`sim/gravity.ts`): the pull is the innermost sp
 - **In a star's frame, each planet's own pull**, in full out to 3 Hill radii and tapering to nothing by 6. The taper is radial, so the force stays conservative (no energy gained or lost by flying round).
 - **In a planet's (or moon's) frame, its parent's tide**: the parent's pull on the ship less its pull on the frame body (which the carried frame already supplies), fading in over the outer 30 % of the SOI. Deep inside an SOI it's zero, so orbits there stay exact Kepler orbits and time warp's rails stay valid.
 
-At the SOI's edge the two are the same acceleration, so crossing the boundary no longer jolts the ship (the old switch jumped by about the planet's whole pull). `Gravity.vec` includes the corrections; `Gravity.g` is the body's own pull. Time warp's rails (`sim/timewarp.ts`) include them too.
+At the SOI's edge the two are the same acceleration, so crossing the boundary no longer jolts the ship (the old switch jumped by about the planet's whole pull). `Gravity.vec` includes the corrections; `Gravity.g` is the body's own pull. Time warp's rails (`sim/timewarp.ts`) include them too, with the other bodies taken where they were at each substep (`perturbation(…, at)`): a frame at ×100,000 is ~1,600 s, and with the planets left where the frame ends a ship drifting at L1 was ~600 km off after ten days instead of 0.3 km (`rails.test.ts`).
+
+The orbit planner's highest orbit round a world is 0.7 of its SOI, where the tide starts (`maxOrbitR`), so every orbit it offers is an exact Kepler orbit that the settled autopilot can coast and warp can hold. The old ceiling, 0.8 SOI, was inside the tide: a settled orbit there left the autopilot's band in 3 days and the SOI within 3 orbits (`tideOrbit.test.ts`). Stations are still placed below 0.48 SOI, as before.
 
 ## The points
 
-L1 and L2 sit still in the frame turning with the planet, at its instantaneous angular rate (ω = r × v / r²): velocity ω × position, acceleration −ω² × position. L3, L4 and L5 are free orbits (below).
+L1 and L2 sit on the line from the parent through the planet at a fixed share x of its distance: position x·r, velocity x·v, acceleration x·a (the planet's Kepler acceleration). On a circular orbit that is turning with the planet; on an eccentric one the line also breathes in and out with it. L3, L4 and L5 are free orbits (below).
 
 | Point | Where | In the sim |
 |---|---|---|
@@ -23,7 +25,7 @@ L1 and L2 sit still in the frame turning with the planet, at its instantaneous a
 | L4 | 60° ahead | free orbit, stable |
 | L5 | 60° behind | free orbit, stable |
 
-L1 and L2 are **solved against the force the ship feels** (Newton on the parent's pull plus the planet's tapered pull plus the centripetal term), so a ship there at the point's velocity needs no thrust, and the instability is real: left alone it leaves. For a planet on an eccentric orbit (up to e = 0.06 here) they follow its instantaneous angular rate, so they sway a little as it speeds up and slows down, and a held ship pays for keeping up.
+L1 and L2 are **solved against the force the ship feels** (Newton on the parent's pull plus the planet's tapered pull plus the centripetal term), so a ship there at the point's velocity needs no thrust, and the instability is real: left alone it leaves. Every pull there goes as 1 / r², so the x that balances on the mean orbit (semi-major axis, mean motion) balances at every r: this is the elliptic three-body problem's homographic solution, exact for any eccentricity (up to e = 0.06 here), and a ship on it needs no thrust there either. (The points used to be re-solved each step from the instantaneous r and ω with velocity ω × position, which slid them along the line, ~40 m/s at e = 0.026, and left out the planet's radial motion; the hold, steering for the point's place and its stated velocity at once, hung ~100–800 m off and never settled. The hold tests had made the orbit circular; they now also fly the real one.)
 
 L3, L4 and L5 are 14+ Hill radii from the planet, where the taper has removed its pull, so each is a **free Kepler orbit with the planet's period**: the planet's own orbit with its mean anomaly shifted by 180°, +60° or −60° (`trojanRel`). That is exact however eccentric the orbit, and a ship there needs no thrust. (In reality the planet's faint pull makes L4 and L5 librate over thousands of years and L3 drift over decades; neither shows in a game session.) L4 and L5 are stable only above the Routh mass ratio of 24.96 (`trojansStable`), which every planet and moon here clears.
 
@@ -32,6 +34,10 @@ L3, L4 and L5 are 14+ Hill radii from the planet, where the taper has removed it
 Planner → 6 (L-point) → **R** steps L1…L5 → **[ ]** sets the orbits to phase over (L3–L5) → Enter. The planner shows the point, how it gets there (TRANSFER), and the cost. Holding feeds forward the point's acceleration less the ship's own gravity (which near L1 and L2 is nearly all of it), so it costs next to nothing; the autopilot panel and maneuver guide show the offset, the drift and the propellant burned.
 
 **L1 and L2** are flown to directly (an FTL leg, dropping at rest relative to the planet, then a few hundred m/s to match the point).
+
+**The FTL leg flies in the destination's frame** (`destVel` in `sim/autopilot.ts`): its speed, which falls to 0.8 × the distance closing in, is relative to where it's going, and the ship is carried along with that. Out at the points the frame is the star's, where a point or a gate moves at its planet's orbital speed (30–45 km/s); chasing it at 0.8 × the distance in that frame, the ship hung ~40–55 km behind it for good, short of the 30 km drop-out, and never arrived (`ftlLeg.test.ts` flies the leg, the drop and the hold to L1, L2 and L4).
+
+**The hold compares the ship where it will be at the end of the step** (`ship.pos + ship.vel · dt`): the game loop moves the bodies, and so the point, to the step's end before the ship moves (`sim/update.ts`). Compared where it was, it settled a step's motion ahead of the point, which moves at the planet's orbital speed in the star's frame: 0.9 km at 60 fps, 0.45 km at 120, and the guide never ticked off the approach. The hold tests now step in the game's order.
 
 **L3, L4 and L5: the phasing transfer** (`sim/phasing.ts`). Matching one of these at once means matching about the planet's orbital speed (~40 km/s at 0.9 AU), so the autopilot does what a real mission does: change your orbital period a little, drift round, change it back.
 
@@ -57,10 +63,13 @@ Time warp is refused while the autopilot holds (it works on thrust), like any ho
 
 ## Targeting the points (`sim/lpoints.ts`)
 
-The points of every planet the radar has found are targets (`LTarget`, kind `lpoint`; they're worked out from the planet each step, since they're on rails, but each keeps its identity so `g.target` stays equal to itself):
+The points of every planet the radar has found are targets (`LTarget`, kind `lpoint`; they're worked out from the planet on rails, but each keeps its identity so `g.target` stays equal to itself). A targeted point is brought up to date every sim step, after the bodies move (`refreshTarget`), so the pivot and the HUD read where it is now, under time warp too (it used to be refreshed only when the HUD drew the points).
 
-- **T** aims at one (a marker is picked up to 0.35 rad off the nose), **G** cycles them with the bodies and stations by distance, and a click on its marker picks it; on the system map (Shift+O) a click on a point's diamond targets it.
-- **Marker:** a cyan diamond (hollow at L1–L3, filled at the stable L4 and L5) with name and distance, within 2·10¹⁰ m of you and always for the target (with an edge arrow when it's off screen).
+- **Which show:** a planet's five appear only while **that planet, or one of its points, is the target** (`lpointsShown`): target a planet and its L1–L5 come up; target one of them and all five stay, so you can hop between them. With anything else targeted, none show (every known planet's five at once cluttered the view).
+- **T** aims at a shown one (a marker is picked up to 0.35 rad off the nose), **G** cycles them with the bodies and stations by distance, and a click on its marker picks it. The system map (Shift+O, a click on a point's diamond), the nav search and the radar's swarm contacts reach any planet's points.
+- **Shift+T** pivots onto the targeted point and locks on it, like any target.
+- **Marker:** a cyan diamond (hollow at L1–L3, filled at the stable L4 and L5) with name and distance, at any distance (with an edge arrow when the targeted one is off screen).
+- **A hold at a point targets it:** engaging one (the planner or a nav route) makes the point the target, not its planet.
 - **Target card and info (I):** where it is, what a ship left there does (stays, or drifts away in so many days, with the real-mission station-keeping figure), the swarm round it and its extent, any depot, and your distance and relative speed.
 - **Approach strip:** where the planet's gravity takes over, and at L4 and L5 the swarm's core.
 - **O** with a point targeted opens the orbit planner already set to hold there (L-point, that point); the hold, the phasing and the rest are as above.
@@ -138,5 +147,5 @@ Not built; roughly by value.
 7. **Time the shadow cost** of the swarm casters (up to 600 instances a cascade) on a real GPU; the full game has not been run in a browser.
 8. **A full NPC loop test** (spawn, travel, dock, launch) at a depot with the real `Game`.
 9. **Planet-branch release as a plan:** aim for a chosen periapsis so a ship can be sent toward the planet on purpose and captured (needs a capture-burn planner).
-10. **Eccentric orbits for L1 and L2:** the hold treats the planet's orbit as instantaneously circular; for a high-e planet the points breathe and the saddle rate changes round the orbit.
+10. **Eccentric orbits for L1 and L2:** the points now breathe exactly with the planet's orbit, but the saddle (`saddleModes`, the drift times, the release) is still the circular one; for a high-e planet its rate changes round the orbit.
 11. **A save and load test** for the new state: `navRevs`, found swarms and a phasing transfer in flight.

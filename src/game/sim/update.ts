@@ -12,6 +12,7 @@ import { updateGuide } from './guide';
 import { arriveAt, galPos } from './navigation';
 import { departDist, departSpeed } from './hyperspace';
 import { advanceBodies, frameVel, relVel, ringFrameOf, syncFrame, updateFrame } from './frame';
+import { refreshTarget } from './lpoints';
 import { maybeFtlLeg } from './planner';
 import { updateScan } from './scanner';
 import { updateNav } from './navroute';
@@ -197,6 +198,7 @@ export function update(g: Game, dt: number, realDt = dt) {
   // --- orbits and spin (the ship rides along with its frame body, as do the other ships)
   if (!inTunnel) rideTraffic(g);
   advanceBodies(g);
+  refreshTarget(g); // (a targeted Lagrange point moves with its planet: sim/lpoints.ts)
   if (!inTunnel) updateTraffic(g, dt); // other ships (sim/traffic.ts)
   updateFrame(g);
 

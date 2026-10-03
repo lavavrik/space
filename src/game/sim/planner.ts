@@ -5,6 +5,7 @@ import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import type { Autopilot, Body, OrbitType, Planner, Station, World } from '../types';
 import { lagrangePoints } from './lagrange';
+import { lpointFor } from './lpoints';
 import { orbitBody } from './stationGeom';
 import { ringDensity } from './rings';
 import { apDistance, holdPoint } from './autopilot';
@@ -168,6 +169,9 @@ export function engageAutopilot(g: Game, spec: ApSpec, quiet = false) {
   const ap: Autopilot = { ...spec, phase: 'insert', settled: false, t0: g.simTime, prop0: ship.prop };
   // a phasing transfer to L3–L5 starts by flying to its departure gate (sim/phasing.ts)
   if (ap.type === 'lagrange' && (ap.lk ?? 0) >= 3 && (ap.revs ?? 0) > 0) ap.ph = { stage: 'depart', tArr: 0, checks: [], dvLeft: null, resume: 1, spent: 0, stall: 0 };
+  // a hold at a Lagrange point targets the point (not its planet), so the HUD, the approach strip and
+  // the pivot (Shift+T) are all about where the ship is going
+  if (ap.type === 'lagrange' && b.kind === 'planet') g.target = lpointFor(g, b, ap.lk ?? 1);
   ship.ap = ap;
   g.apPanel = false;
   g.apConfirm = 0;

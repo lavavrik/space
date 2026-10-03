@@ -20,10 +20,9 @@ import { padWorld } from '../sim/docking';
 import { contactLabel, known } from '../sim/radar';
 import { liveProspects, prospectNow } from '../sim/prospect';
 import { wreckMetal, wrecksHere } from '../sim/wreck';
-import { lpointsHere } from '../sim/lpoints';
+import { lpointsShown } from '../sim/lpoints';
 
 /** Lagrange points are marked within this of you when not targeted (m): a few Hill radii of the planet you're by. */
-const LPOINT_SHOW = 2e10;
 /** Prospect markers' colours by the rock's metal (rgba prefixes). */
 const PROSPECT_COL = { icy: 'rgba(255,230,199,', rocky: 'rgba(214,190,160,', 'nickel-iron': 'rgba(200,190,175,', 'cobalt-rich': 'rgba(110,160,255,', 'platinum-rich': 'rgba(255,215,120,' } as const;
 
@@ -747,9 +746,9 @@ export class Overlay {
 
   /**
    * Lagrange points (sim/lpoints.ts): a cyan diamond, hollow where a ship left there drifts off and
-   * filled where it stays, with its name and distance. Shown for the one targeted and for those
-   * within LPOINT_SHOW of you (the near ones of the planet you're by); an edge arrow while the
-   * target is off screen. Hidden behind a world.
+   * filled where it stays, with its name and distance. Only the five of the targeted planet, or of
+   * the targeted point's planet (`lpointsShown`), at any distance, each labelled (there are only
+   * five); an edge arrow while the targeted one is off screen. Hidden behind a world.
    */
   private drawLPoints(g: Game) {
     const { ctx, W, H } = this;
@@ -757,11 +756,10 @@ export class Overlay {
     ctx.save();
     ctx.font = this.font(11, SANS);
     ctx.lineWidth = 1.4 * this.ui;
-    for (const t of lpointsHere(g)) {
+    for (const t of lpointsShown(g)) {
       const isT = g.target === t;
       const rel = this.tmp.subVectors(t.pos, ship.pos);
       const d = rel.length();
-      if (!isT && d > LPOINT_SHOW) continue;
       if (occluder(g.cur.bodies, ship.pos, t.pos)) continue;
       const s = this.toScreen(g, rel);
       const text = `${t.name} · ${fmtDist(d)}`;
@@ -785,10 +783,8 @@ export class Overlay {
         ctx.arc(s.x, s.y, r + 6 * this.ui, 0, Math.PI * 2);
         ctx.stroke();
       }
-      if (g.showNames || isT) {
-        ctx.textAlign = 'left';
-        ctx.fillText(isT ? text.toUpperCase() : text, s.x + r + 6 * this.ui, s.y + 4 * this.ui);
-      }
+      ctx.textAlign = 'left';
+      ctx.fillText(isT ? text.toUpperCase() : text, s.x + r + 6 * this.ui, s.y + 4 * this.ui);
     }
     ctx.restore();
   }
