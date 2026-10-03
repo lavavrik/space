@@ -5,20 +5,45 @@ import { THREE } from '../lib/three';
 import { orbitThrough } from '../sim/kepler';
 import type { Body, Palette, World, WorldType } from '../types';
 
-/** Equilibrium temperature (K) at `aAU` from a star of luminosity L. */
+/**
+ * Insolation temperature (K) at `aAU` from a star (or a close pair) of luminosity L: what a world
+ * there that absorbed all the light on it would settle at (Earth's 278 K). A world's own equilibrium
+ * temperature is this times (1 − albedo)^¼ (makeWorld: Earth's 255 K).
+ */
 export function teq(L: number, aAU: number) {
   return (278 * Math.pow(L, 0.25)) / Math.sqrt(aAU);
 }
 
-/** Pick a rocky world type from its temperature. */
-export function rockyType(T: number, g: Rng): WorldType {
+/** A world's equilibrium temperature (K) from its insolation temperature and albedo. */
+export const eqTemp = (Tins: number, albedo: number) => Tins * Math.pow(1 - albedo, 0.25);
+
+/**
+ * The habitable zone round a star of effective temperature Teff, as insolation temperatures (K):
+ * [outer, inner]. Kopparapu et al. 2014's edges for an Earth-mass world, in stellar flux S (Earth's
+ * 1): inside the inner one (the runaway greenhouse, S 1.11 for the Sun) the oceans boil off; past
+ * the outer one (the maximum greenhouse, S 0.36) no amount of CO₂ keeps them from freezing. Around
+ * the Sun that's 0.95–1.68 AU (Earth 278 K, Venus 328, Mars 225); cooler stars' zones sit at lower
+ * fluxes, and every zone moves out as √L. Between the edges a world's carbonate–silicate cycle holds
+ * its climate temperate (sim/atmosphere.ts makeAir).
+ */
+export function habitableZone(Teff: number): [number, number] {
+  const t = Math.min(Math.max(Teff, 2600), 7200) - 5780;
+  const inner = 1.107 + 1.332e-4 * t + 1.58e-8 * t * t,
+    outer = 0.356 + 6.171e-5 * t + 1.698e-9 * t * t;
+  return [278 * Math.pow(outer, 0.25), 278 * Math.pow(inner, 0.25)];
+}
+
+/** Pick a rocky world type from its insolation temperature (teq) and its star's habitable zone. */
+export function rockyType(T: number, g: Rng, hz: [number, number]): WorldType {
   if (T > 750) return g() < 0.6 ? 4 : 0;
   if (T > 420) return g() < 0.5 ? 1 : 0;
-  if (T > 330) return g() < 0.6 ? 1 : 0;
-  if (T > 235) {
+  // too hot for oceans: deserts (a few under runaway greenhouse air) and bare rock
+  if (T > hz[1]) return g() < 0.6 ? 1 : 0;
+  if (T > hz[0]) {
     const r = g();
     return r < 0.5 ? 2 : r < 0.7 ? 3 : r < 0.85 ? 1 : 0;
   }
+  // too cold: rock, frozen deserts, ice
   if (T > 170) {
     const r = g();
     return r < 0.45 ? 0 : r < 0.7 ? 1 : 5;
@@ -69,6 +94,7 @@ export interface WorldProps {
   pos: THREE.Vector3;
   parent: Body;
   orbit: number;
+  /** Insolation temperature (teq) where it orbits; the world's own T has its albedo taken off. */
   T: number;
 }
 
@@ -95,6 +121,7 @@ export function makeWorld(props: WorldProps, g: Rng): World {
     typeName: TYPES[props.type],
     pal,
     albedo: ALBEDO[props.type],
+    T: eqTemp(props.T, ALBEDO[props.type]),
     mass,
     mu: GRAV * mass,
     // sphere of influence (patched conics): inside it, this body's gravity is the one that counts

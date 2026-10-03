@@ -4,6 +4,7 @@ import { mulberry32, rr } from '../lib/rng';
 import { THREE } from '../lib/three';
 import { generateSector, HOME_ID, homeSystem, systemsNear } from '../universe/galaxy';
 import { buildSystem, findHome } from '../universe/system';
+import { habitableZone } from '../universe/worlds';
 
 describe('rng', () => {
   it('is deterministic per seed', () => {
@@ -80,12 +81,13 @@ describe('galaxy', () => {
     expect(home.star.cls).toBe('G');
     const bodies = buildSystem(home);
     const planet = findHome(bodies);
-    // pinned (it was Venydes 5 until Venydes became a close pair, docs/binaries.md)
-    expect(planet?.name).toBe('Venydes 2');
+    // pinned (it was Venydes 5 until Venydes became a close pair, docs/binaries.md; then Venydes 2,
+    // a world too close in to be habitable, until the habitable zone, docs/atmosphere.md)
+    expect(planet?.name).toBe('Venydes 3');
     expect(home.companion?.close).toBe(true);
     expect(home.companion?.star.cls).toBe('K');
     expect(planet?.kind).toBe('planet');
-    expect(planet && planet.kind !== 'star' && planet.type).toBe(WT.EarthLike);
+    expect(planet?.type).toBe(WT.EarthLike);
     expect(bodies.some((b) => b.kind === 'moon' && b.parent === planet)).toBe(true);
   });
 
@@ -103,6 +105,30 @@ describe('galaxy', () => {
         // a body's sphere of influence sits well inside its orbit
         expect(b.soi).toBeLessThan(b.orbit);
         expect(b.axis.length()).toBeCloseTo(1, 9);
+      }
+    }
+  });
+});
+
+describe('habitable zone', () => {
+  const au = (T: number) => (278 / T) ** 2; // the distance from the Sun with that insolation temperature
+
+  it('spans 0.95–1.68 AU round the Sun, closer in round cooler stars', () => {
+    const [outer, inner] = habitableZone(5780);
+    expect(au(inner)).toBeCloseTo(0.95, 2);
+    expect(au(outer)).toBeCloseTo(1.68, 1);
+    const k = habitableZone(4500);
+    expect(k[1]).toBeLessThan(inner);
+    expect(k[0]).toBeLessThan(outer);
+  });
+
+  it('is where the Earth-like and ocean worlds are', () => {
+    for (const s of [homeSystem(), ...systemsNear(new THREE.Vector3(), 25)]) {
+      for (const b of buildSystem(s)) {
+        if (b.kind !== 'planet' || (b.type !== WT.EarthLike && b.type !== WT.Ocean)) continue;
+        const Tins = b.T / Math.pow(1 - b.albedo, 0.25);
+        expect(Tins).toBeGreaterThan(170);
+        expect(Tins).toBeLessThan(310); // (an F star's inner edge)
       }
     }
   });

@@ -3,14 +3,15 @@
  * heating it puts on the ship, and the numbers the sky and cloud shaders use.
  *
  * A world's air is a surface pressure and a mix of gases, by type (makeAir): Mars-like thin CO₂ on
- * most deserts (a few hot ones thick, Venus-like), N₂/O₂ on Earth-like and ocean worlds, crushing
+ * most deserts (a few hot ones thick, Venus-like), N₂/O₂ on Earth-like and ocean worlds (with the CO₂
+ * that keeps them temperate: livingAir), crushing
  * CO₂/SO₂ on hot volcanic worlds (a thin SO₂ haze on cold, tidally heated moons), H₂/He on the giants (1 bar at the cloud tops, their
  * "surface"). From those:
  *
  *   - molar mass M: the mix's average;
  *   - surface temperature Ts: the world's equilibrium temperature warmed by the greenhouse effect,
  *     Ts = T · (1 + 0.75 τ)^¼ with an infrared optical depth τ that grows with pressure and with
- *     CO₂, water vapour and methane (Earth-like: +20–40 K; a 90-bar CO₂ world: hundreds of K);
+ *     CO₂, water vapour and methane (an Earth twin: 255 → 288 K; a 90-bar CO₂ world: hundreds of K);
  *   - surface density ρ0 = P M / (R Ts) (ideal gas; Earth 1.2 kg/m³, Venus 65);
  *   - scale height H = R Ts / (M g) (Earth ~8 km); density ρ(h) = ρ0 e^(−h/H), pressure alike;
  *   - air temperature: Ts at the ground, cooling with height toward the world's skin temperature.
@@ -47,7 +48,7 @@ export const GASES = {
   'O₂': { M: 0.032, ir: 0 },
   Ar: { M: 0.04, ir: 0 },
   'CO₂': { M: 0.044, ir: 2.2 },
-  'H₂O': { M: 0.018, ir: 25 },
+  'H₂O': { M: 0.018, ir: 55 },
   'SO₂': { M: 0.064, ir: 8 },
   'H₂': { M: 0.002, ir: 0 },
   He: { M: 0.004, ir: 0 },
@@ -79,6 +80,27 @@ function mix(parts: [Gas, number][]): [Gas, number][] {
     .sort((a, b) => b[1] - a[1]);
 }
 
+/**
+ * A living world's air (Earth-like, ocean): dry air of `dry` bar (the parts' shares), water vapour
+ * at `xw` of it, and CO₂ held by the carbonate–silicate cycle. Rain weathers rock and buries CO₂
+ * faster the warmer it is, volcanoes put it back, so the CO₂ settles where the surface sits near the
+ * world's own set point (5–25 °C): far out in the habitable zone that takes a bar of it or more, near
+ * the inner edge next to none (and the world runs warm: the cycle can't take out what isn't there).
+ * τ is linear in the CO₂, so it's solved for directly; between a trace (volcanoes never stop) and
+ * CO2_MAX bar, past which it would freeze out (Kopparapu's maximum greenhouse).
+ */
+function livingAir(T: number, r: () => number, dry: number, parts: [Gas, number][], xw: number): { bar: number; gases: [Gas, number][] } {
+  const sum = parts.reduce((s, [, x]) => s + x, 0);
+  const pw = xw * dry,
+    set = rr(r, 278, 298),
+    tauSet = (Math.pow(set / T, 4) - 1) / 0.75,
+    tauRest = (dry + pw) * IR_BASE + pw * GASES['H₂O'].ir,
+    pc = Math.min(CO2_MAX, Math.max(lr(r, 2e-4, 1e-3), (tauSet - tauRest) / (IR_BASE + GASES['CO₂'].ir)));
+  return { bar: dry + pw + pc, gases: mix([...parts.map(([gas, x]): [Gas, number] => [gas, (x / sum) * dry]), ['H₂O', pw], ['CO₂', pc]]) };
+}
+/** The most CO₂ (bar) a living world's carbonate–silicate cycle builds up. */
+const CO2_MAX = 5;
+
 /** Surface pressure (bar) and gases for a world of type `type` at equilibrium temperature T; null: none. */
 export function makeAir(type: number, T: number, r: () => number): { bar: number; gases: [Gas, number][] } | null {
   switch (type) {
@@ -90,11 +112,11 @@ export function makeAir(type: number, T: number, r: () => number): { bar: number
       return { bar: lr(r, 0.004, 0.08), gases: mix([['CO₂', 95], ['N₂', rr(r, 1.5, 4)], ['Ar', rr(r, 1, 2.5)]]) };
     }
     case 2:
-      // Earth-like: N₂/O₂, a little water and CO₂
-      return { bar: lr(r, 0.6, 2.2), gases: mix([['N₂', rr(r, 70, 82)], ['O₂', rr(r, 15, 26)], ['Ar', rr(r, 0.5, 1.5)], ['H₂O', rr(r, 0.2, 1.2)], ['CO₂', rr(r, 0.03, 0.4)]]) };
+      // Earth-like: N₂/O₂, a little water, CO₂ as its climate needs
+      return livingAir(T, r, lr(r, 0.6, 1.8), [['N₂', rr(r, 70, 82)], ['O₂', rr(r, 15, 26)], ['Ar', rr(r, 0.5, 1.5)]], rr(r, 0.002, 0.01));
     case 3:
       // ocean: thicker and wetter
-      return { bar: lr(r, 1, 4), gases: mix([['N₂', rr(r, 72, 88)], ['O₂', rr(r, 6, 20)], ['H₂O', rr(r, 1, 3)], ['Ar', rr(r, 0.5, 1.5)], ['CO₂', rr(r, 0.05, 0.8)]]) };
+      return livingAir(T, r, lr(r, 0.9, 2.2), [['N₂', rr(r, 72, 88)], ['O₂', rr(r, 6, 20)], ['Ar', rr(r, 0.5, 1.5)]], rr(r, 0.005, 0.012));
     case 4:
       // volcanic (those with air): hot ones, crushing CO₂ with sulphur (Venus); cold ones are
       // tidally heated moons whose volcanoes keep up a thin sulphur-dioxide haze (Io, only thicker)

@@ -9,8 +9,8 @@ Every world with air gets its own, generated from its seed (`makeAir`): a surfac
 | Type | Surface pressure | Gases |
 |---|---|---|
 | Desert | mostly 4–80 mbar (Mars-like); some 0.1–1.5 bar; ~1 in 8 hot ones 8–60 bar (runaway greenhouse) | CO₂, N₂, Ar; SO₂ in the thick ones |
-| Earth-like | 0.6–2.2 bar | N₂ 70–82 %, O₂ 15–26 %, Ar, H₂O, CO₂ |
-| Ocean | 1–4 bar | N₂, O₂ 6–20 %, more water vapour |
+| Earth-like | 0.6–1.8 bar of N₂/O₂, plus the CO₂ its climate needs (a trace near the habitable zone's inner edge, up to 5 bar at the outer) | N₂ 70–82 %, O₂ 15–26 % of the dry air, Ar, H₂O 0.2–1 %, CO₂ |
+| Ocean | 0.9–2.2 bar, plus CO₂ alike | N₂, O₂ 6–20 %, more water vapour (0.5–1.2 %) |
 | Volcanic, hot (≥ 300 K) | 20–95 bar (Venus) | CO₂ ~96 %, N₂, SO₂ |
 | Volcanic, cold | 1–50 mbar (tidally heated moons: an Io-like haze, thicker) | SO₂ ~90 % |
 | Icy, a few (Titan) | 0.8–3 bar: only big (≥ 1,500 km) cold (< 150 K) ones, one in three (`universe/worlds.ts titanLike`; the rest have none, as Triton's and Pluto's are a hundred-thousandth as thick) | N₂ ~95 %, CH₄ 1.5–6 % |
@@ -18,7 +18,10 @@ Every world with air gets its own, generated from its seed (`makeAir`): a surfac
 | Ice giant | 1 bar at the cloud tops | H₂ ~80 %, He 14–19 %, CH₄ 1.5–2.5 % |
 
 - **Molar mass:** the mix's average (`GASES`).
-- **Greenhouse:** the surface is warmer than the world's equilibrium temperature: Ts = T · (1 + 0.75 τ)^¼, with an infrared optical depth τ = P(bar) · (0.5 + Σ x·k), k per gas (CO₂ 2.2, H₂O 25, SO₂ 8, CH₄ 20, NH₃ 10 per bar). Earth-like worlds come out 20–40 K warmer; a thick CO₂ world hundreds of K (a 21-bar desert at 540 K equilibrium: 1,380 K). Giants: none at the cloud tops.
+- **Equilibrium temperature:** T = 278 K · L^¼ / √a (L in L☉, a in AU: the insolation temperature, `universe/worlds.ts teq`) · (1 − albedo)^¼ (`eqTemp`), the albedo the world type's (`ALBEDO`). Earth: 278 K of insolation, 255 K with its 0.3 albedo. The world's type is picked from the insolation temperature, its T has the albedo taken off (`makeWorld`).
+- **Greenhouse:** the surface is warmer than the world's equilibrium temperature: Ts = T · (1 + 0.75 τ)^¼, with an infrared optical depth τ = P(bar) · (0.5 + Σ x·k), k per gas (CO₂ 2.2, H₂O 55, SO₂ 8, CH₄ 20, NH₃ 10 per bar; water's calibrated so an Earth twin, 255 K with 1 bar and 0.6 % water vapour, comes out at 288 K with a trace of CO₂). A thick CO₂ world comes out hundreds of K warmer (a 21-bar desert at 540 K equilibrium: 1,380 K). Giants: none at the cloud tops.
+- **The habitable zone** (`universe/worlds.ts habitableZone`): Earth-like and ocean worlds form only between its edges, from Kopparapu et al. 2014 for an Earth-mass world, in stellar flux (Earth's 1) with the star's temperature: the runaway greenhouse inside (1.11 for the Sun: 0.95 AU, 284 K of insolation) and the maximum greenhouse outside (0.36: 1.68 AU, 215 K). Cooler stars' edges sit at lower fluxes (their red light is reflected less); a close pair's zone is from both stars' light and their light-weighted temperature. Inside the inner edge rocky worlds are deserts and bare rock (some under runaway greenhouse air), outside it rock, frozen deserts and ice.
+- **The carbonate–silicate cycle** (`livingAir`): inside the zone a living world's CO₂ is what holds its surface at its own set point, 5–25 °C: rain weathers rock and buries CO₂ faster the warmer it is, volcanoes put it back. τ is linear in the CO₂, so it's solved for directly, from a trace (volcanoes never stop, 0.2–1 mbar) up to 5 bar. Far out in the zone that's bars of CO₂, more than the N₂ (thick, dense air: 3–5 bar, ~7 kg/m³); toward the inner edge it's drawn down to a trace and can't cool the world further, so the warmest run to 40–75 °C. Across ~11,000 systems: Earth-like worlds 7–23 °C (10th–90th percentile), median 16 °C; ocean worlds a degree warmer.
 - **Density:** ρ0 = P · M / (R · Ts), an ideal gas: Earth 1.2 kg/m³, a Mars-like desert ~0.01–0.06, a Venus-like world 50–100.
 - **Scale height:** H = R · Ts / (M · g) (Earth-like ~6–10 km; a light, hot, low-gravity desert 25 km). Density and pressure fall as e^(−h/H); the air ends at 12 scale heights (`ATMO_TOP_H`).
 - **Air temperature:** Ts at the ground, cooling with height toward the world's skin temperature (0.84 T) over ~1.5 H (`airTemp`).
