@@ -181,7 +181,7 @@ export interface RadarView {
     targeted: boolean;
   }[];
   /** In a belt, the sweep's metal-rich finds (sim/prospect.ts), best first: numbered as on the view. */
-  prospects: { n: number; kind: 'icy' | 'nickel-iron' | 'cobalt-rich' | 'platinum-rich'; size: string; dist: string; worth: string }[];
+  prospects: { n: number; kind: 'icy' | 'rocky' | 'nickel-iron' | 'cobalt-rich' | 'platinum-rich'; size: string; dist: string; worth: string }[];
 }
 
 /** Outfit panel (Shift+U): the utility slots, the thermal hardware's state, and fitting at a station. */

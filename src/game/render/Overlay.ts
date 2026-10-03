@@ -21,7 +21,7 @@ import { contactLabel, known } from '../sim/radar';
 import { liveProspects, prospectNow } from '../sim/prospect';
 import { wreckMetal, wrecksHere } from '../sim/wreck';
 /** Prospect markers' colours by the rock's metal (rgba prefixes). */
-const PROSPECT_COL = { icy: 'rgba(255,230,199,', 'nickel-iron': 'rgba(200,190,175,', 'cobalt-rich': 'rgba(110,160,255,', 'platinum-rich': 'rgba(255,215,120,' } as const;
+const PROSPECT_COL = { icy: 'rgba(255,230,199,', rocky: 'rgba(214,190,160,', 'nickel-iron': 'rgba(200,190,175,', 'cobalt-rich': 'rgba(110,160,255,', 'platinum-rich': 'rgba(255,215,120,' } as const;
 
 const AMB = 'rgba(255,165,58,',
   CYA = 'rgba(127,220,255,',
@@ -583,7 +583,7 @@ export class Overlay {
     const mined = 1 - (h.size / h.size0) ** 3;
     const lines = [
       `ROCK ${rockLabel(h.size)} · ${fmtDist(Math.max(0, h.dist))}`,
-      ...(m.kind !== 'icy' ? [`METAL-RICH · ${m.kind.toUpperCase()}`] : []),
+      ...(m.kind !== 'icy' && m.kind !== 'rocky' ? [`METAL-RICH · ${m.kind.toUpperCase()}`] : []),
       `ICE ${pct(m.ice)} % · SILICATE ${pct(m.rock)} % · METAL ${pct(m.metal)} %`,
       `METAL: NI-FE ${pct(m.mix.nife)} % · CO ${pct(m.mix.cobalt)} % · PGM ${pct(m.mix.pgm)} %`,
       ...(mined > 0.005 ? [`MINED ${Math.round(mined * 100)} %`] : []),

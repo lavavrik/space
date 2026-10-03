@@ -27,6 +27,7 @@ import { ascent, stopAscent } from './catapult';
 import { updateDamage } from './damage';
 import { PRICE, fmtCr, refuelQuote } from './economy';
 import { ringContact } from './ringContact';
+import { swarmContact } from './swarmContact';
 import { updateBelt } from './belt';
 import { mineRock, updateLaser } from './laser';
 import { SHORE_POWER, holdDocked, rotationCorrection, stationContact, updateDockRequest } from './docking';
@@ -267,6 +268,7 @@ export function update(g: Game, dt: number, realDt = dt) {
       collide(g, dt);
       stationContact(g);
       ringContact(g, dt); // the ring's rocks (sim/ringContact.ts)
+      swarmContact(g, dt); // a trojan swarm's (sim/swarmContact.ts)
       // the mining laser's beam (sim/laser.ts; its yield goes in with the scoop's). After the move:
       // mid-step the ship lags the rocks by its orbital motion (~700 m a frame round a giant)
       updateLaser(g);

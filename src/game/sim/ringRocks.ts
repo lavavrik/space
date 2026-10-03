@@ -22,7 +22,7 @@ export const COLLIDE_LAYERS = 3;
 const imul = Math.imul;
 
 /** GLSL pcg3 (render/RingField.ts), unsigned 32-bit. */
-function pcg3(x: number, y: number, z: number): [number, number, number] {
+export function pcg3(x: number, y: number, z: number): [number, number, number] {
   x = (imul(x, 1664525) + 1013904223) >>> 0;
   y = (imul(y, 1664525) + 1013904223) >>> 0;
   z = (imul(z, 1664525) + 1013904223) >>> 0;
@@ -39,7 +39,7 @@ function pcg3(x: number, y: number, z: number): [number, number, number] {
 }
 
 /** GLSL rnd: a PCG-RXS-M-XS step on a 32-bit state. */
-class Stream {
+export class Stream {
   constructor(public s: number) {}
   next() {
     this.s = (imul(this.s, 747796405) + 2891336453) >>> 0;

@@ -6,6 +6,7 @@ import { THREE } from '../lib/three';
 import type { Body, Gravity } from '../types';
 import { frameVel, resetFrame, ringFrameOf } from './frame';
 import { dominantBody } from './gravity';
+import { swarmHere } from './swarm';
 import { dropAlt } from './ftl';
 import { lookAt } from './navigation';
 import { closePlanner, disengageAP } from './planner';
@@ -52,7 +53,7 @@ export const BELT_MAX = 800;
 
 /** Flight assist's speed limit in a ring's belt (sim/frame.ts ring frame), or null outside one. */
 export function beltLimit(g: Game) {
-  return g.ship.fa && ringFrameOf(g) ? BELT_MAX : null;
+  return g.ship.fa && (ringFrameOf(g) || swarmHere(g.cur, g.ship, g.frameBody)) ? BELT_MAX : null;
 }
 
 /** Manual flight. Gravity always acts. Flight assist damps drift on axes you are not

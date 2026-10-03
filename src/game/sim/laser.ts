@@ -22,7 +22,9 @@ import { laserFitted, scoopFitted } from '../outfit/catalog';
 import { grant } from './power';
 import { stowMetal, type Commodity } from './economy';
 import { RING_HALF_THICK } from './rings';
+import type { World } from '../types';
 import { COLLIDE_LAYERS, METAL_RICH, minedKey, minedRocks, rockLabel, rockMass, rockRay, rocksNear, type Rock } from './ringRocks';
+import { swarmHere, swarmRay, swarmRocks, type SwarmRock } from './swarm';
 
 /** Propellant per MW of beam on pure ice at close range (kg/s). */
 export const YIELD_PER_MW = 600;
@@ -34,7 +36,7 @@ export interface LaserState {
   on: boolean;
   /** The beam's end: the rock it hits, or out at its range (planet-centred, or null outside a belt). */
   end: THREE.Vector3 | null;
-  hit: { id: string; size: number; size0: number; make: RockMake; center: THREE.Vector3; normal: THREE.Vector3; dist: number } | null;
+  hit: { id: string; /** Its key in `minedRocks` when it isn't a ring's (a swarm's rock). */ key?: string; size: number; size0: number; make: RockMake; center: THREE.Vector3; normal: THREE.Vector3; dist: number } | null;
   /** Propellant it's yielding (kg/s), and why none if none. */
   rate: number;
   /** Rock the beam breaks up and scatters (kg/s), and metal the scoop catches from it (kg/s). */
@@ -74,7 +76,7 @@ export interface RockMake {
   rock: number;
   metal: number;
   mix: Record<Commodity, number>;
-  kind: 'icy' | 'nickel-iron' | 'cobalt-rich' | 'platinum-rich';
+  kind: 'icy' | 'rocky' | 'nickel-iron' | 'cobalt-rich' | 'platinum-rich';
 }
 
 /**
@@ -91,6 +93,7 @@ export interface RockMake {
 export function rockMake(r: { id: string; tint: number }): RockMake {
   const { id } = r;
   const h = (salt: number) => idHash(id, salt);
+  if (id.startsWith('T:')) return trojanMake(r, h);
   const mix = (cobalt: number, pgm: number) => ({ nife: 1 - cobalt - pgm, cobalt, pgm });
   if (r.tint < METAL_RICH) {
     const ice = 0.05 + 0.25 * h(5),
@@ -106,6 +109,31 @@ export function rockMake(r: { id: string; tint: number }): RockMake {
   const metal = (1 - ice) * (0.05 + 0.25 * h(7));
   return { ice, rock: 1 - ice - metal, metal, mix: mix(0.03 + 0.09 * h(13), 0.002 + 0.01 * h(17)), kind: 'icy' };
 }
+/**
+ * A trojan swarm's rock (sim/swarm.ts, ids `T:…`): dry, dark rock from the giant's formation, not
+ * ring ice. Most are 8–28 % metal (the same mix as ring rocks' metal: mostly nickel-iron, 3–12 %
+ * cobalt, ~1 % platinum-group) with 0–12 % ice; one in 12 (tint under TROJAN_METAL_RICH) is a metal
+ * core, 40–65 % metal of three kinds: nickel-iron 50 %, cobalt-rich 30 %, platinum-rich 20 %. About
+ * ten times the metal of a ring rock, and a fraction of the propellant.
+ */
+export const TROJAN_METAL_RICH = 0.08;
+function trojanMake(r: { id: string; tint: number }, h: (salt: number) => number): RockMake {
+  const mix = (cobalt: number, pgm: number) => ({ nife: 1 - cobalt - pgm, cobalt, pgm });
+  if (r.tint < TROJAN_METAL_RICH) {
+    const ice = 0.05 * h(5),
+      metal = 0.4 + 0.25 * h(7);
+    const k = h(11);
+    const [kind, m] =
+      k < 0.5 ? (['nickel-iron', mix(0.02 + 0.04 * h(13), 0.002 + 0.006 * h(17))] as const)
+      : k < 0.8 ? (['cobalt-rich', mix(0.2 + 0.15 * h(13), 0.004 + 0.01 * h(17))] as const)
+      : (['platinum-rich', mix(0.05 + 0.1 * h(13), 0.04 + 0.08 * h(17))] as const);
+    return { ice, rock: 1 - ice - metal, metal, mix: m, kind };
+  }
+  const ice = 0.12 * h(0),
+    metal = 0.08 + 0.2 * h(7);
+  return { ice, rock: 1 - ice - metal, metal, mix: mix(0.03 + 0.09 * h(13), 0.002 + 0.01 * h(17)), kind: 'rocky' };
+}
+
 /**
  * Metal the scoop's magnetic separator catches, per kg of rock the beam breaks up and scatters (most
  * of the grains fly off): ~0.7 kg/s from an ice rock under the ML-6, ~30 from a metal-rich one.
@@ -162,43 +190,56 @@ export function updateLaser(g: Game) {
     L.why = 'no power';
     return;
   }
-  if (w.kind === 'star' || !w.ring) {
-    L.why = 'no ring here';
+  const ringed = w.kind !== 'star' && !!w.ring;
+  const swarm = ringed ? null : swarmHere(g.cur, ship, w);
+  if (!ringed && !swarm) {
+    L.why = 'no ring or swarm here';
     return;
   }
   // the nearest rock along the beam
-  const h0 = from.dot(w.axis),
-    h1 = L.end.dot(w.axis);
-  if (Math.min(h0, h1) > RING_HALF_THICK + 600 || Math.max(h0, h1) < -RING_HALF_THICK - 600) {
-    L.why = 'no rock in the beam';
-    return;
-  }
-  let best: { rock: Rock; t: number } | null = null;
-  const list: Rock[] = [];
-  for (let layer = 0; layer < COLLIDE_LAYERS; layer++) {
-    list.length = 0;
-    if (!rocksNear(w, layer, from, L.end, 0, g.simTime, list)) continue;
-    for (const rock of list) {
-      // quick reject by its bounding sphere, then against the shape it's drawn with
-      const R = rock.size * 1.5;
-      toRock.subVectors(rock.pos, from);
-      const along = toRock.dot(nose);
-      if (along < -R || along > unit.caps.range + R) continue;
-      if (toRock.lengthSq() - along * along > R * R) continue;
-      const t = rockRay(rock, from, nose, best ? best.t : unit.caps.range);
-      if (t === null || (best && t >= best.t)) continue;
-      best = { rock, t };
+  const best: { rock: Rock | null; t: number } = { rock: null, t: Infinity };
+  const consider = (rock: Rock, ray: (r: Rock, f: THREE.Vector3, d: THREE.Vector3, m: number) => number | null) => {
+    // quick reject by its bounding sphere, then against the shape it's drawn with
+    const R = rock.size * 1.5;
+    toRock.subVectors(rock.pos, from);
+    const along = toRock.dot(nose);
+    if (along < -R || along > unit.caps.range + R) return;
+    if (toRock.lengthSq() - along * along > R * R) return;
+    const t = ray(rock, from, nose, Math.min(best.t, unit.caps.range));
+    if (t === null || t >= best.t) return;
+    best.rock = rock;
+    best.t = t;
+  };
+  if (swarm) {
+    const list: SwarmRock[] = [];
+    const a = ship.pos.clone(),
+      b = ship.pos.clone().addScaledVector(nose, unit.caps.range);
+    swarmRocks(swarm.field, swarm.centre, a, b, 0, w.pos, w.vel, list, undefined, (k) => minedRocks.get(k));
+    for (const rock of list) consider(rock, swarmRay);
+  } else {
+    const h0 = from.dot(w.axis),
+      h1 = L.end.dot(w.axis);
+    if (Math.min(h0, h1) > RING_HALF_THICK + 600 || Math.max(h0, h1) < -RING_HALF_THICK - 600) {
+      L.why = 'no rock in the beam';
+      return;
+    }
+    const list: Rock[] = [];
+    for (let layer = 0; layer < COLLIDE_LAYERS; layer++) {
+      list.length = 0;
+      if (!rocksNear(w as World, layer, from, L.end, 0, g.simTime, list)) continue;
+      for (const rock of list) consider(rock, rockRay);
     }
   }
-  if (!best) {
+  if (!best.rock) {
     L.why = 'no rock in the beam';
     return;
   }
-  const { rock, t } = best;
+  const rock = best.rock,
+    t = best.t;
   const at = from.clone().addScaledVector(nose, t);
   L.end = at;
   const make = rockMake(rock);
-  L.hit = { id: rock.id, size: rock.size, size0: rock.size0, make, center: rock.pos.clone(), normal: at.clone().sub(rock.pos).normalize(), dist: t };
+  L.hit = { id: rock.id, key: (rock as SwarmRock).key, size: rock.size, size0: rock.size0, make, center: rock.pos.clone(), normal: at.clone().sub(rock.pos).normalize(), dist: t };
   if (!scoopFitted(ship.outfit)) {
     L.why = 'no fuel scoop to catch the vapour';
     return;
@@ -236,7 +277,7 @@ export function mineRock(g: Game, dt: number) {
     }
   }
   const w = g.frameBody;
-  const key = minedKey(w, L.hit.id);
+  const key = L.hit.key ?? minedKey(w, L.hit.id);
   const left = minedRocks.get(key) ?? 1;
   const m0 = rockMass(L.hit.size0);
   const f = Math.max(0, left ** 3 - (L.removal * dt) / m0);

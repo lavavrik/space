@@ -33,6 +33,7 @@ import { updateBodies } from './sim/kepler';
 import { updateStations } from './sim/stations';
 import { buildStations } from './universe/stations';
 import { buildSystem, systemAnchor } from './universe/system';
+import { buildTrojans } from './universe/trojans';
 import { TEMP, toggleRadiators, type HeatBudget } from './sim/thermal';
 import { BATTERIES, bestOutfit } from './outfit/catalog';
 import { ZOOM_START, updatePeriscope } from './sim/periscope';
@@ -353,7 +354,7 @@ export class Game {
     updateBodies(bodies, this.simTime);
     updateStations(stations, this.simTime);
     const stars = bodies.filter((b): b is CurrentSystem['star'] => b.kind === 'star');
-    this.cur = { sys, bodies, star: stars[0], stars, anchor: systemAnchor(bodies), close: !!sys.companion?.close, stations };
+    this.cur = { sys, bodies, star: stars[0], stars, anchor: systemAnchor(bodies), close: !!sys.companion?.close, stations, trojans: buildTrojans(sys, bodies).fields };
     this.frameBody = this.cur.anchor; // callers place the ship and then pick its frame
     this.dock = null;
     this.dockRequest = null;

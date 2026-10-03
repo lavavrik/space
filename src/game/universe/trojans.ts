@@ -1,6 +1,8 @@
 import { WT } from '../constants';
 import { mulberry32, rr } from '../lib/rng';
-import type { Body, StarSystem, World } from '../types';
+import type { Body, StarSystem, TrojanField, World } from '../types';
+
+export type { TrojanField };
 
 /*
  * Trojan swarms and the depots parked at Lagrange points (docs/lagrange.md). A swarm is a loose
@@ -10,21 +12,6 @@ import type { Body, StarSystem, World } from '../types';
  * beside a habitable world. From their own RNG stream, drawing the same number of values for each
  * planet, so adding them changed nothing that was there.
  */
-
-export interface TrojanField {
-  /** "Venydes 6#L4": the planet's name and the point. Keys the mined rocks. */
-  id: string;
-  name: string;
-  planet: World;
-  k: 4 | 5;
-  seed: number;
-  /** Where the density has fallen to e^-½ of the core: along the orbit (rad of mean anomaly), outward (m) and up (m). */
-  sigA: number;
-  sigR: number;
-  sigZ: number;
-  /** The chance a cell at the core holds a rock (0–1; see sim/swarm.ts). */
-  core: number;
-}
 
 export interface DepotSite {
   planet: World;

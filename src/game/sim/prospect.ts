@@ -14,11 +14,13 @@
  */
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
-import type { World } from '../types';
+import type { TrojanField, World } from '../types';
 import { COMMODITIES, type Commodity } from './economy';
 import { DISPERSE, METAL_CATCH, YIELD_PER_MW, rockMake, type RockMake } from './laser';
 import { laserFitted } from '../outfit/catalog';
 import { METAL_RICH, minedKey, minedRocks, rockMass, rockOn, rocksNear, type Rock } from './ringRocks';
+import { TROJAN_METAL_RICH } from './laser';
+import { swarmCentre, swarmHere, swarmKey, swarmRocks, type SwarmRock } from './swarm';
 
 export const PROSPECT_NEAR = 5e3;
 export const PROSPECT_FAR = 40e3;
@@ -38,6 +40,8 @@ export interface Prospect {
   pos: THREE.Vector3;
   vel: THREE.Vector3;
   t0: number;
+  /** A trojan swarm's rock (`world` is then the swarm's id): its offset from the swarm's centre, in system axes, which holds. */
+  swarm?: { off: THREE.Vector3 };
 }
 
 /**
@@ -55,6 +59,8 @@ export function rockWorth(size: number, make: RockMake, kw: number) {
 /** The best metal-rich rocks around the ship (at a sweep's end), best first. Empty outside a belt. */
 export function prospect(g: Game): Prospect[] {
   const w = g.frameBody;
+  const here = w.kind === 'star' || !w.ring ? swarmHere(g.cur, g.ship, w) : null;
+  if (here) return prospectSwarm(g, here.field, here.centre);
   if (w.kind === 'star' || !w.ring) return [];
   const at = g.ship.pos.clone().sub(w.pos);
   const kw = laserFitted(g.ship.outfit)?.caps.kw ?? 600; // (no laser: as an ML-6 would)
@@ -74,6 +80,23 @@ export function prospect(g: Game): Prospect[] {
   return found.sort((a, b) => b.perHour - a.perHour).slice(0, PROSPECT_MAX);
 }
 
+/** The same in a trojan swarm: its metal-rich rocks (1 in 12) within PROSPECT_FAR, best first. */
+function prospectSwarm(g: Game, f: TrojanField, c: ReturnType<typeof swarmCentre>): Prospect[] {
+  const w = g.frameBody;
+  const kw = laserFitted(g.ship.outfit)?.caps.kw ?? 600;
+  const list: SwarmRock[] = [];
+  swarmRocks(f, c, g.ship.pos, g.ship.pos, PROSPECT_FAR, w.pos, w.vel, list, undefined, (k) => minedRocks.get(k));
+  const at = g.ship.pos.clone().sub(w.pos);
+  const found: Prospect[] = [];
+  for (const r of list) {
+    if (r.tint >= TROJAN_METAL_RICH || r.size < 20 || r.pos.distanceTo(at) > PROSPECT_FAR) continue;
+    const make = rockMake(r);
+    const off = r.pos.clone().add(w.pos).sub(c.pos);
+    found.push({ id: r.id, world: f.id, size: r.size, kind: make.kind, ...rockWorth(r.size, make, kw), pos: r.pos, vel: r.vel, t0: g.simTime, swarm: { off } });
+  }
+  return found.sort((a, b) => b.perHour - a.perHour).slice(0, PROSPECT_MAX);
+}
+
 /** Finds further than this (m) are dropped: twice the sweep's reach, well past where they were worth it. */
 export const PROSPECT_FORGET = 2 * PROSPECT_FAR;
 
@@ -85,12 +108,26 @@ export function liveProspects(g: Game) {
   const w = g.frameBody as World;
   const at = g.ship.pos.clone().sub(w.pos);
   const now = new THREE.Vector3();
-  g.radar.rocks = g.radar.rocks.filter((p) => p.world === w.name && (minedRocks.get(minedKey(w, p.id)) ?? 1) > 0 && prospectNow(g, p, now).distanceTo(at) < PROSPECT_FORGET);
+  const here = swarmHere(g.cur, g.ship, w);
+  g.radar.rocks = g.radar.rocks.filter((p) => {
+    if (p.swarm ? here?.field.id !== p.world : p.world !== w.name) return false;
+    if ((minedRocks.get(p.swarm ? swarmKey(p.id) : minedKey(w, p.id)) ?? 1) <= 0) return false;
+    return prospectNow(g, p, now).distanceTo(at) < PROSPECT_FORGET;
+  });
   return g.radar.rocks;
 }
 
-/** Where a find is now (planet-centred). */
+/** Where a find is now (planet-centred; a swarm's rock, relative to the frame body). */
 export function prospectNow(g: Game, p: Prospect, pos = new THREE.Vector3(), vel = new THREE.Vector3()) {
+  if (p.swarm) {
+    const f = g.cur.trojans?.find((x) => x.id === p.world);
+    if (f) {
+      const c = swarmCentre(f);
+      pos.copy(c.pos).add(p.swarm.off).sub(g.frameBody.pos);
+      vel.copy(c.vel).sub(g.frameBody.vel);
+      return pos;
+    }
+  }
   rockOn(g.frameBody.axis, p.pos, p.vel, g.simTime - p.t0, pos, vel);
   return pos;
 }

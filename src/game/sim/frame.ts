@@ -34,6 +34,7 @@ import { updateBodies } from './kepler';
 import { updateStations } from './stations';
 import { stationPointVelAt } from './stationGeom';
 import { reliefAmp } from './terrain';
+import { swarmHere } from './swarm';
 
 /** Below this height over a world with terrain, the ground becomes the reference (see 3. above). */
 export const SURFACE_FRAME_ALT = 30e3;
@@ -103,6 +104,8 @@ export function stationWithin(g: Game, range: number): Station | null {
   return best;
 }
 
+const swarmNote = new WeakMap<Game, string | null>();
+
 /** Pick the frame for this step. Call after stations have moved. */
 export function updateFrame(g: Game) {
   const prev = g.refFrame;
@@ -112,6 +115,14 @@ export function updateFrame(g: Game) {
     const dt = t ? t.pos.distanceTo(g.ship.pos) : Infinity;
     if (t && dt < (prev === t ? TARGET_FRAME_EXIT : TARGET_FRAME_ENTER)) g.refFrame = t;
     else if (!prev || prev === t || prev.pos.distanceTo(g.ship.pos) > FRAME_EXIT) g.refFrame = stationWithin(g, FRAME_ENTER);
+  }
+  // a trojan swarm's core: its rocks all move with its centre, and flight assist works against them
+  const sw = g.ship.mode === 'normal' && !g.ship.dead ? swarmHere(g.cur, g.ship, g.frameBody) : null;
+  const swId = sw?.field.id ?? null;
+  if (swId !== swarmNote.get(g)) {
+    if (swId === null && swarmNote.get(g)) g.showMsg('Left the swarm · flight assist is back to the star\'s frame');
+    if (sw) g.showMsg(`In ${sw.field.name} · flight assist matches the swarm, speed limited among the rocks`);
+    swarmNote.set(g, swId);
   }
   if (g.refFrame === prev || g.ship.mode !== 'normal') return;
   if (g.refFrame) g.showMsg(`Local frame · ${g.refFrame.name} · flight assist matches its ${g.refFrame.sky ? 'motion' : g.refFrame.depot ? 'orbit round the star' : 'orbit'}`);
@@ -156,6 +167,11 @@ export function frameVel(g: Game, out = new THREE.Vector3()) {
     rel.addScaledVector(rb.axis, -rel.dot(rb.axis)); // in the plane
     const r = rel.length();
     return out.crossVectors(rb.axis, rel).multiplyScalar(Math.sqrt(rb.mu / (r * r * r))).add(rb.vel).sub(g.frameBody.vel);
+  }
+  // in a trojan swarm: its rocks' own motion, the swarm centre's (sim/swarm.ts)
+  if (g.ship.mode === 'normal' && !g.ship.landed) {
+    const sw = swarmHere(g.cur, g.ship, g.frameBody);
+    if (sw) return out.copy(sw.centre.vel).sub(g.frameBody.vel);
   }
   // low over a world (or on it): the ground, turning with the world (3. above)
   const b = g.ship.landed ?? g.frameBody;

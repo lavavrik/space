@@ -197,6 +197,25 @@ export interface StarSystem {
   companion?: Companion;
 }
 
+/**
+ * A swarm of rocks round a planet's L4 or L5 (universe/trojans.ts, sim/swarm.ts): thick at its
+ * core, thinning out, co-moving with the point.
+ */
+export interface TrojanField {
+  /** "Venydes 6#L4": the planet's name and the point. */
+  id: string;
+  name: string;
+  planet: World;
+  k: 4 | 5;
+  seed: number;
+  /** Where the density has fallen to e^-½ of the core: along the orbit (rad of mean anomaly), outward (m) and up (m). */
+  sigA: number;
+  sigR: number;
+  sigZ: number;
+  /** The chance a cell at the core holds a rock (0–1). */
+  core: number;
+}
+
 /** The system the ship is currently in. */
 export interface CurrentSystem {
   sys: StarSystem;
@@ -210,6 +229,8 @@ export interface CurrentSystem {
   /** A close pair: both stars' gravity is summed outside the planets' SOIs. */
   close: boolean;
   stations: Station[];
+  /** Trojan swarms (absent where a system was built without them). */
+  trojans?: TrojanField[];
 }
 
 export interface Gravity {
