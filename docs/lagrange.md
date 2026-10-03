@@ -124,3 +124,19 @@ Tests: `lagrange.test.ts`, `phasing.test.ts`, `lagrangeHold.test.ts`, `depot.tes
 From a settled hold at L1 or L2 the autopilot panel (O) offers **[ Release toward planet** and **] Release away** (the keys, or the buttons). It pushes the ship 10 cm/s along the saddle's unstable direction (`saddleModes`, signed toward or away from the planet) and disengages: the drift does the rest, at e^{λt}. The push excites the growing mode with amplitude dv / 2λ, so a Hill radius takes ln(Hill / that) / λ: about a year at Earth's L2, which the panel and the message give. The test flies both branches under the real force, from both points: the planet branch closes on the planet, the away branch leaves along the orbit, and the time to open 0.3 of a Hill radius falls inside the prediction's window. It is not a cheaper way anywhere (see the manifold note above): it is the controlled way to let a hold go, onto a chosen side.
 
 **Keeping clear of the planet.** The planet branch falls into the planet's neighbourhood, so before a release toward it the planner (`safePush`) flies the drift under the real force for three drift times (`releaseHorizon`; the bodies are moved along their rails and put back) and checks how close it comes. At an Earth-like world the plain push passes about 41 radii off (L1) or 100 (L2), nowhere near. If a fat world's first pass would come inside `safeDistance` (its surface and air, with room to spare: at least 20 % of its radius above), the planner tries the same push with a sideways push added out of the orbit's plane, smallest first (sizes from 2 % to 2× clearance × the planet's mean motion: a few m/s to tens), flies each, and takes the first that clears. A big enough sideways push carries the ship off without ever falling in, which is the cost of avoiding the planet. If none clears, the release is **refused** with the closest approach and what it needs, and the ship is left holding. The message after a release says how close the drift will pass and the push made. Release away needs no check.
+
+## Ideas for next
+
+Not built; roughly by value.
+
+1. **The trip from low orbit** to the gate or an L-point: a planned escape burn instead of "thrusters until FTL works".
+2. **Lagrange points of moons.** `lagrangePoints` works for any world, but only planets get holds, swarms and targets. Earth–Moon L1 and L2 are the classic gateways.
+3. **Halo and Lissajous orbits** round L1 and L2: the saddle's centre mode (ν) is already computed, so a ship could fly a bounded orbit about the point, as real missions do, for less station-keeping.
+4. **Station-keeping Δv against the estimate:** show what the hold has actually burned beside the planning figure (`dvYear`).
+5. **Swarm hazards:** dust and micro-impacts at speed, as in a ring's belt.
+6. **Swarm radar and scanner detail:** a density map in the radar window, and scan stages that reveal rock counts and metal share.
+7. **Time the shadow cost** of the swarm casters (up to 600 instances a cascade) on a real GPU; the full game has not been run in a browser.
+8. **A full NPC loop test** (spawn, travel, dock, launch) at a depot with the real `Game`.
+9. **Planet-branch release as a plan:** aim for a chosen periapsis so a ship can be sent toward the planet on purpose and captured (needs a capture-burn planner).
+10. **Eccentric orbits for L1 and L2:** the hold treats the planet's orbit as instantaneously circular; for a high-e planet the points breathe and the saddle rate changes round the orbit.
+11. **A save and load test** for the new state: `navRevs`, found swarms and a phasing transfer in flight.
