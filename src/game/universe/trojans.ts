@@ -48,7 +48,7 @@ export function buildTrojans(sys: StarSystem, bodies: Body[]): { fields: TrojanF
         sigA: small ? rr(sg, 0.05, 0.09) : rr(sg, 0.14, 0.22),
         sigR: a * (small ? rr(sg, 0.008, 0.02) : rr(sg, 0.02, 0.045)),
         sigZ: a * (small ? rr(sg, 0.006, 0.015) : rr(sg, 0.015, 0.04)),
-        core: small ? rr(sg, 0.01, 0.03) : rr(sg, 0.04, 0.08),
+        core: small ? rr(sg, 0.03, 0.07) : rr(sg, 0.1, 0.18),
       };
       fields.push(f);
       return f;

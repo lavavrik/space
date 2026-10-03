@@ -1,6 +1,6 @@
 # Docking
 
-Stations are Coriolis-style cubes, 1–1.6 km on a side. The geometry is in `sim/stationGeom.ts`
+Stations are Coriolis-style cubes, 1–1.6 km on a side (plus sky stations over some worlds, and depots parked at Lagrange points: open decks you land on from above; docs/lagrange.md). The geometry is in `sim/stationGeom.ts`
 and the mesh in `render/stationMesh.ts`.
 
 ## The station

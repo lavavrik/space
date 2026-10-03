@@ -43,6 +43,7 @@ import { ShadowMap } from './shadowmap';
 import { SkyLayer } from './sky';
 import { VolumetricClouds } from './vclouds';
 import { StationsLayer } from './stations';
+import { SwarmLayer } from './swarm';
 import { GpuTimer } from './timing';
 import { WorldsLayer } from './worlds';
 import { setTerrainDetail } from './terrain';
@@ -69,6 +70,7 @@ export class GpuRenderer implements GameRenderer {
   private readonly bloom: Bloom;
   private readonly worlds: WorldsLayer;
   private readonly stations: StationsLayer;
+  private readonly swarm: SwarmLayer;
   private readonly fx: EffectsLayer;
   private readonly hyper: HyperspaceLayer;
   private readonly particles: Particles;
@@ -150,6 +152,7 @@ export class GpuRenderer implements GameRenderer {
     this.sky = new SkyLayer(device, this.frameLayout);
     this.worlds = new WorldsLayer(device, this.frameLayout, this.shadows.casterLayout);
     this.stations = new StationsLayer(device, this.frameLayout, this.worlds.worldLayout, this.shadows.casterLayout);
+    this.swarm = new SwarmLayer(device, this.frameLayout);
     this.fx = new EffectsLayer(device, this.frameLayout, this.shadows.casterLayout);
     this.vclouds = new VolumetricClouds(device, this.frameLayout, this.worlds.worldLayout, this.worlds.coverLayout, NEAR);
     this.toneBuf = device.createBuffer({ label: 'post', size: POST_FLOATS * 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
@@ -331,6 +334,7 @@ export class GpuRenderer implements GameRenderer {
       this.hyper.release();
       this.worlds.update(g);
       this.stations.update(g, this.worlds);
+      this.swarm.update(g);
       this.particles.begin();
       this.fx.update(g, this.worlds, this.particles, this.PR);
       this.worlds.flushDots();
@@ -385,6 +389,7 @@ export class GpuRenderer implements GameRenderer {
     const bodies = (pass: GPURenderPassEncoder) => this.worlds.drawOpaque(pass);
     const craft = (pass: GPURenderPassEncoder) => {
       this.stations.drawOpaque(pass);
+      this.swarm.drawOpaque(pass);
       this.fx.drawOpaque(pass);
     };
     const transparent = (pass: GPURenderPassEncoder) =>
@@ -466,6 +471,7 @@ export class GpuRenderer implements GameRenderer {
     this.sky.dispose();
     this.worlds.dispose();
     this.stations.dispose();
+    this.swarm.dispose();
     this.fx.dispose();
     this.hyper.dispose();
     this.particles.dispose();

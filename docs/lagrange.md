@@ -55,13 +55,37 @@ Holding costs, once settled: L4 a few m/s a year (the step size's own error), L1
 
 Time warp is refused while the autopilot holds (it works on thrust), like any hold, and during a phasing burn, but not during its coast.
 
+## Trojan swarms (`sim/swarm.ts`, `universe/trojans.ts`)
+
+Every gas and ice giant has a swarm of rocks round both its L4 and L5 (a rocky planet sometimes a thin one): a loose cloud, thick at its core and gone ~3σ out, wide along the planet's orbit and thin across it (σ along ≈ 0.14–0.22 rad of its orbit, across ≈ 2–4.5 % of its radius, up and down ≈ 1.5–4 %). The core is the point itself, so a ship that holds at L4 is in the middle of it.
+
+- **Generation.** Like the ring's rocks, never stored. Space round the swarm's centre is cut into 4 km cubes (axes fixed in space) and a hash of each decides whether it holds a rock (the chance is the Gaussian density × the swarm's core density, 0.10–0.18 per cube for a giant), where, how big (8–300 m, mostly small) and its tint, from the ring's own random stream. The rocks sit still in the frame that moves with the centre (a free orbit with the planet's period), so they co-move with the point. About 40–100 are within 24 km of a giant's core.
+- **What they are.** Dry, dark rock, not ring ice: 0–12 % ice, 8–28 % metal (mostly nickel-iron, a few % cobalt, ~1 % platinum-group), and one in 12 a metal core: 40–65 % metal of three kinds (nickel-iron 50 %, cobalt-rich 30 %, platinum-rich 20 %). That is roughly ten times a ring rock's metal for the same laser time and a fraction of its propellant. The prospect pill and laser readout name them "rocky" or by metal kind.
+- **In the swarm** (within 2σ of the core):
+  - flight assist works against the swarm (its centre's own velocity, so hands off you hold still among the rocks), with the belt's speed limit of 800 m/s (×3 boosting);
+  - the mining laser, the radar's prospecting sweep, and collisions (the ring's rules: lighter than the ship knocked aside, heavier bounces it, damage by closing speed scaled for mass) all read the same rocks the renderer draws;
+  - FTL is not locked, as it is among a ring's rocks: the rocks are 6+ km apart.
+- **Drawing** (`gpu/swarm.ts`, `gpu/shaders/swarmRock.wgsl`): the CPU lists the rocks within 24 km each frame (the nearest 600; they shrink away over the last fifth of the reach) and the GPU draws each as one lumpy, flat-shaded icosphere: its shape from a value noise on a hashed integer lattice (no texture, so the CPU's laser ray and the GPU agree), squashed and turned by the rock's own draws. The system map (Shift+O) outlines each swarm of a planet you know, at 2σ.
+- **Mined rocks** go in the same table as the ring's (`minedRocks`, saved), under keys starting `~`.
+
+## Depots (`sim/depotGeom.ts`, `render/depotMesh.ts`, `gpu/shaders/depot.wgsl`)
+
+A third station model, parked at a Lagrange point. About one giant swarm in five has one, and now and then a habitable world has one at its L4 or L5 (`universe/stations.ts buildDepots`); a few per hundred systems. The model is a **round landing plate** at the +x end of a **truss spine** with 8 pads painted on it and ringed with lamps; at the other end a **tank farm** of eight pale propellant spheres in two rings; two **radiator fins** hanging under the spine, two **solar wings** flat on either side, a **habitat block** with lit windows under the plate, and a strobing **beacon mast**. 900–1,300 m long, its plate ~340–500 m across.
+
+- **Orbit.** It keeps its planet's orbit with the mean anomaly shifted by the point's 60° and a little more (a random spot in the swarm), so it stays put relative to the planet for ever on a free orbit round the planet's parent: `Station.parent` is the planet it keeps company with, `orbitBody(st)` the star. Its attitude is fixed in space (+z along the orbit's normal) and it doesn't spin.
+- **Docking** is the sky station's open deck (`isDeck`): target it within 10 km, K for a pad, come down onto the plate from above. No air, no catapult (K lifts off), and no gravity feed-forward for the docking computer: the ship and the depot fall together, as at an orbital station. Pads, contact, the docking computer, the guide, the HUD, the map and the info panel all handle it. The station window (trading, services, contracts, outfitting) is the same.
+- **Not yet used by other ships:** NPC traffic stays away from depots (their rendezvous is planet-centred). Reaching one by autopilot: the nav computer's rendezvous works (it takes the star as its body).
+
+The depot's shader and the swarm's were compiled and test-rendered offscreen (Dawn on software Vulkan) before they were wired in.
+
 ## Not done yet
 
-- **Targeting.** The points aren't a `Target` (no T/G/click, no approach strip).
-- **Trojan fields, parked stations, low-energy transfers** through L1 and L2. The rest of the plan.
-- **Moons.** `lagrangePoints` works for any world, but only planets are drawn and held. A moon's points would sit inside its parent's sphere of influence and need the tide there.
+- **Targeting the points** (T/G/click, an approach strip), and **radar identification** of a swarm as a contact.
+- **Low-energy transfers** through L1 and L2: the last part of the plan.
+- **Moons.** `lagrangePoints` works for any world, but only planets are drawn, held and swarmed.
 - **Close pairs.** Round a close binary's barycentre the parent's pull is taken as one point mass, in the plan and in the points.
 - **The trip from low orbit.** The first leg (out of the planet's mass lock and to the gate) is the usual thruster-then-FTL flight; there's no planned escape burn.
-- **L1 and L2 are still direct.** Their match costs a few hundred m/s, so they have no phasing; a plan from the gate to them would need a Lambert solution at a different radius.
+- **L1 and L2 are still direct.** Their match costs a few hundred m/s, so they have no phasing.
+- **Swarm rocks don't cast shadows** and aren't on the radar scope; a dust hazard (as in a ring's belt) isn't modelled.
 
-Tests: `lagrange.test.ts` (geometry, equilibrium against `gravityAt`, a ship kept with L4 for two years and with L1 for days, L1's drift, SOI continuity), `phasing.test.ts` (the propagator against Kepler's own orbit, plans from the gate that close on L3–L5, the 1/N cost, corrections) and `lagrangeHold.test.ts` (the autopilot's hold, and whole transfers to L3, L4 and L5).
+Tests: `lagrange.test.ts`, `phasing.test.ts`, `lagrangeHold.test.ts`, `depot.test.ts` (placement, orbit, attitude, pads and geometry) and `swarm.test.ts` (the fields, the centre, the density, the rocks, mining, the ray, what they're made of).

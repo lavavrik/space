@@ -13,6 +13,7 @@ import type { Game } from '../Game';
 import { fmtDist } from '../format';
 import { THREE } from '../lib/three';
 import { lagrangePoints } from '../sim/lagrange';
+import { swarmCentre } from '../sim/swarm';
 import { known } from '../sim/radar';
 import type { Body, Target, World } from '../types';
 
@@ -337,6 +338,20 @@ export class SystemMap {
         else ctx.stroke();
         label(s.x, s.y, lp.name, CYA + '0.65)');
       }
+    }
+    // trojan swarms of the planets you know: a dotted outline at 2σ (sim/swarm.ts), labelled
+    for (const f of cur.trojans ?? []) {
+      if (!known(g, f.planet)) continue;
+      const c = swarmCentre(f);
+      const A = 2 * f.sigA * c.rel.length(),
+        R = 2 * f.sigR;
+      const ring: THREE.Vector3[] = [];
+      for (let i = 0; i <= 40; i++) {
+        const th = (i / 40) * Math.PI * 2;
+        ring.push(c.pos.clone().addScaledVector(c.along, A * Math.cos(th)).addScaledVector(c.out, R * Math.sin(th)));
+      }
+      this.path(ring, 'rgba(214,190,160,0.45)', 1, [2, 4]);
+      if (this.project(c.pos, s)) label(s.x, s.y, f.name, 'rgba(214,190,160,0.7)');
     }
     for (const npc of g.traffic) {
       // (one on a pad is inside its station: its square stands for it)
