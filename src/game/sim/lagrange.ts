@@ -1,22 +1,28 @@
 /*
- * Lagrange points (docs/lagrange.md). Gravity here is patched conics, so a point where two bodies'
- * pulls balance can't come out of the physics: instead each one is a place on rails, worked out from
- * where the planet is now. In the frame that turns with the planet round its parent, all five sit
- * still, so each is the parent-relative position of a rigid rotation with the planet's own angular
- * velocity (ω = r × v / r²), and its velocity is ω × position.
+ * Lagrange points (docs/lagrange.md). In the frame that turns with the planet round its parent all
+ * five sit still, so each is the parent-relative position of a rigid rotation at the planet's own
+ * angular velocity (ω = r × v / r²), with velocity ω × position and acceleration −ω² × position
+ * (the centripetal pull a ship needs to keep up with it).
  *
- *   L1  between the two, a Hill-radius short of the planet  r (1 − ρ)    unstable
- *   L2  beyond the planet, a Hill radius farther            r (1 + ρ)    unstable
- *   L3  opposite the planet, a hair past its orbit          −r (1 + 5q/12)   unstable (and slow to go)
- *   L4  60° ahead on the planet's orbit                     stable
- *   L5  60° behind                                          stable
+ *   L1  between the two, about a Hill radius short of the planet     unstable
+ *   L2  beyond the planet, a Hill radius farther                      unstable
+ *   L3  opposite the planet, at its orbit's radius                    (see below)
+ *   L4  60° ahead on the planet's orbit                               stable
+ *   L5  60° behind                                                    stable
  *
- * with q = m / M the mass ratio and ρ = (q / 3)^⅓. These are the small-q expansions; the planets
- * here have q ≤ 1e-3, where the error is well under 1 %. L4 and L5 are only stable when M / m
- * exceeds ~24.96 (Routh), which every planet and moon in the sim clears, but it's checked anyway.
+ * L1 and L2 are solved against the same force the ship feels (sim/gravity.ts): the parent's pull plus
+ * the planet's, with the planet's tapered away past HILL_FULL Hill radii. A ship put there at the
+ * point's velocity needs no thrust, and the instability (a drift of e-fold ≈ 0.5 / n, ~3 weeks at
+ * Earth) is real: left alone it leaves. L3, L4 and L5 lie 14+ Hill radii from the planet, where its
+ * pull is tapered to nothing (the force there is ~q of the parent's), so each is simply a circular
+ * orbit of the planet's radius and period, 180°, +60° or −60° round: free, and stable. In reality
+ * the planet's faint pull makes L4 and L5 librate over thousands of years and L3 drift over
+ * decades; neither shows in a game session. L4 and L5 are only stable when M / m exceeds ~24.96
+ * (Routh), which every planet and moon in the sim clears, but it's reported from the ratio.
  */
 import { THREE } from '../lib/three';
 import type { Body, World } from '../types';
+import { hillRadius, planetPullWeight } from './gravity';
 
 export type LKind = 1 | 2 | 3 | 4 | 5;
 
@@ -25,12 +31,13 @@ export interface LPoint {
   /** "Earth L2": the planet's name and the point's number. */
   name: string;
   planet: World;
-  /** System frame, m and m/s: where it is now and how it moves (it carries on round the parent). */
+  /** System frame, m, m/s and m/s²: where it is now, how it moves, and the acceleration that keeps up with it. */
   pos: THREE.Vector3;
   vel: THREE.Vector3;
+  acc: THREE.Vector3;
   /** Whether a ship left there stays (L4, L5) or has to be flown back now and then (L1–L3). */
   stable: boolean;
-  /** Station-keeping Δv, m/s per year (0 for a stable point). */
+  /** A planning estimate of real-world station-keeping, m/s per year (0 for a stable point). The sim charges what the autopilot actually burns. */
   dvYear: number;
 }
 
@@ -79,23 +86,50 @@ export function lagrangePoints(planet: World): LPoint[] {
       k,
       name: `${planet.name} L${k}`,
       planet,
-      pos: rel.add(par.pos),
+      pos: rel.clone().add(par.pos),
       vel,
+      acc: rel.clone().multiplyScalar(-n * n),
       stable: ok,
       dvYear: ok || n === 0 ? 0 : (dvOrbit * YEAR * n) / (2 * Math.PI),
     };
   };
   // station-keeping per orbit: KEEP · n · d, d the point's distance from the planet (L1, L2); for
-  // L3, whose growth is slower by √q, d is the planet's distance from its parent scaled by √q
+  // L3, whose growth is slower by √q, d is √q × the planet's orbit
   const dHill = rho * rd;
   const dL3 = Math.sqrt(q) * rd;
+  const hill = hillRadius(planet);
+  const [x1, x2] = [collinear(par.mu, planet.mu, rd, n, hill, 1 - rho), collinear(par.mu, planet.mu, rd, n, hill, 1 + rho)];
   return [
-    place(1, r.clone().multiplyScalar(1 - rho), KEEP * n * dHill, false),
-    place(2, r.clone().multiplyScalar(1 + rho), KEEP * n * dHill, false),
-    place(3, r.clone().multiplyScalar(-(1 + (5 * q) / 12)), KEEP * n * dL3, false),
+    place(1, r.clone().multiplyScalar(x1), KEEP * n * dHill, false),
+    place(2, r.clone().multiplyScalar(x2), KEEP * n * dHill, false),
+    place(3, r.clone().negate(), KEEP * n * dL3, false),
     place(4, r.clone().applyAxisAngle(axis, SIXTY), 0, stable),
     place(5, r.clone().applyAxisAngle(axis, -SIXTY), 0, stable),
   ]; // index k − 1
+}
+
+/**
+ * Where on the line from the parent through the planet (as a share of the planet's orbit radius
+ * `r`) a ship at rest in the turning frame feels no net force: the parent's pull, the planet's
+ * (tapered like the sim's) and the centripetal term balance. Newton from the Hill-radius estimate
+ * `guess`; keeps the estimate if it doesn't settle.
+ */
+function collinear(muP: number, muC: number, r: number, n: number, hill: number, guess: number) {
+  const f = (x: number) => {
+    const d = r - x; // toward the planet
+    const ad = Math.abs(d);
+    return -muP / (x * x) + Math.sign(d) * muC * planetPullWeight(ad, hill) / (d * d) + n * n * x;
+  };
+  let x = guess * r;
+  for (let i = 0; i < 60; i++) {
+    const h = 1e-6 * hill;
+    const slope = (f(x + h) - f(x - h)) / (2 * h);
+    const dx = f(x) / slope;
+    if (!Number.isFinite(dx)) return guess;
+    x -= dx;
+    if (Math.abs(dx) < 1e-9 * r) break;
+  }
+  return Number.isFinite(x) && x > 0.5 * r && x < 1.5 * r ? x / r : guess;
 }
 
 /** e-folding time (s) of the drift away from an unstable point, or Infinity for a stable one. */

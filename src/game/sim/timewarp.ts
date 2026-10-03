@@ -11,7 +11,7 @@
  */
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
-import { dominantBody } from './gravity';
+import { dominantBody, perturbation } from './gravity';
 import { syncFrame } from './frame';
 import { surfaceRadius } from './terrain';
 
@@ -85,7 +85,9 @@ function timeToImpact(g: Game) {
 
 const rel = new THREE.Vector3(),
   acc = new THREE.Vector3(),
-  qSpin = new THREE.Quaternion();
+  qSpin = new THREE.Quaternion(),
+  pAt = new THREE.Vector3(),
+  pert = new THREE.Vector3();
 
 /**
  * Coast the ship for `dt` sim seconds relative to its frame body (which advanceBodies has already
@@ -124,7 +126,8 @@ export function railsStep(g: Game, dt: number) {
   const h = dt / n;
   const accel = () => {
     const r = rel.length();
-    return acc.copy(rel).multiplyScalar(-b.mu / (r * r * r));
+    // (the bodies hold still for the frame's step; fine, they move far less than their reach)
+    return acc.copy(rel).multiplyScalar(-b.mu / (r * r * r)).add(perturbation(g.cur, b, pAt.addVectors(b.pos, rel), pert));
   };
   for (let k = 0; k < n; k++) {
     ship.vel.addScaledVector(accel(), h / 2);

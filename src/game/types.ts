@@ -206,8 +206,8 @@ export interface CurrentSystem {
 
 export interface Gravity {
   body: Body;
-  vec: Vec3; // acceleration, m/s²
-  g: number; // magnitude, m/s²
+  vec: Vec3; // acceleration relative to the frame, m/s²: the body's pull plus third-body perturbations (sim/gravity.ts)
+  g: number; // magnitude of the body's own pull, m/s² (the perturbations aren't in it)
   r: number; // distance to the body's centre, m
 }
 
