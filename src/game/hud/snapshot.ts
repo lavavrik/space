@@ -12,7 +12,7 @@ import { orbitElements, orbitElementsRel } from '../sim/gravity';
 import { apPoint, driftTime } from '../sim/lagrange';
 import { guideEta, type Guide } from '../sim/guide';
 import { transitState } from '../sim/hyperspace';
-import { NAV_MODES, searchNav } from '../sim/navroute';
+import { NAV_MODES, ROUTE_REVS, searchNav } from '../sim/navroute';
 import { resolvable, SCAN_STAGE, scanProgress } from '../sim/scanner';
 import { galPos } from '../sim/navigation';
 import { apLabel, evalPlan } from '../sim/orbits';
@@ -886,6 +886,7 @@ function navView(g: Game): NavView {
     if (l.kind === 'jump') return { text: `Jump → ${l.to.name}`, detail: `${l.ly.toFixed(1)} ly · ${l.cost.toFixed(1)} kg exotic · ${fmtTime(l.time)}`, state };
     if (l.kind === 'refuel') return { text: `Refuel at ${l.at.name}`, detail: `skim the star's corona · ~${fmtTime(l.time)}`, state };
     if (l.kind === 'orbit') return { text: `Orbit ${l.body}`, detail: 'equatorial, default altitude', state };
+    if (l.kind === 'lpoint') return { text: `Hold at ${l.planet} L${l.k}`, detail: l.k >= 3 ? `phasing transfer, ${ROUTE_REVS} orbits · ~${fmtTime(l.time)}` : `FTL, then match it · ~${fmtTime(l.time)}`, state };
     return { text: `Rendezvous · ${l.station}`, detail: 'match its orbit, hold 2 km off', state };
   });
   const jumps = r?.legs.filter((l) => l.kind === 'jump') ?? [];
@@ -901,8 +902,8 @@ function navView(g: Game): NavView {
     running: !!r?.running,
     status: r?.running ? r.status : '',
     confirm: g.navConfirm > 0,
-    hint: r?.running ? '' : 'Click a star or search (stars, planets, moons, stations) to add a stop · Backspace removes the last',
-    points: [...g.navPoints.map((p) => p.name), ...(g.navFinal ? [`${g.navFinal.kind === 'station' ? '▢' : '◯'} ${g.navFinal.name}`] : [])],
+    hint: r?.running ? '' : 'Click a star or search (stars, planets, moons, stations, Lagrange points) to add a stop · Backspace removes the last',
+    points: [...g.navPoints.map((p) => p.name), ...(g.navFinal ? [`${g.navFinal.kind === 'station' ? '▢' : g.navFinal.kind === 'lpoint' ? '◇' : '◯'} ${g.navFinal.name}`] : [])],
     query: g.navQuery,
     sortFrom: g.navSortFrom,
     // computed while the panel is open (not only with a query): the dropdown lists what's nearest on focus

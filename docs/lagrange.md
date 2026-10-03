@@ -66,7 +66,14 @@ The points of every planet the radar has found are targets (`LTarget`, kind `lpo
 - **O** with a point targeted opens the orbit planner already set to hold there (L-point, that point); the hold, the phasing and the rest are as above.
 - Saved and restored by name.
 
-The nav computer's search and routes (M) don't yet take a point as a destination; hold there from the planner.
+## Routes to the points (nav computer, M)
+
+A Lagrange point is a destination like a body or a station (`sim/navroute.ts`):
+
+- **Adding one.** Target a point (T, G, click) and open the nav panel, or search: type a planet's name and L (`Venydes 2 L`) or a point's full name (`Venydes 2 L4`). In this system the search offers the points of planets the radar has found; in other systems (within jump range, or one whose name the query starts with) every planet's five. A point is the route's last stop, like a body or station: choosing one in another system makes that system the last waypoint, and the plan is the jumps, then the point.
+- **The leg** (`Hold at Venydes 2 L4`): the nav computer waits for the battery, then hands the ship to the autopilot as a hold at the point: straight there for L1 and L2 (an FTL leg, then the match), a **three-orbit phasing transfer** for L3–L5 (to the departure gate, the burn, the coast, the match). The panel gives the leg's time (about ten minutes, or for a transfer to L4 a couple of years of sim time); the route status follows the transfer (`flying to the departure point`, `phasing burn`, `coasting · 1.4 years to go · time warp works`, `matching`). **Time warp is allowed while a route coasts** through a phasing transfer, and not otherwise (as for any route). The leg ends, and the route with it, when the hold is made; the autopilot goes on holding.
+- **Refused** (the route ends with the reason): no orbit computer that holds at points (an HX-6100), or not enough Δv for the transfer (the same check as the planner's).
+- **Not chosen by the route:** the number of orbits. It's the planner's default of three (`ROUTE_REVS`); for more or fewer, or to pick a cheaper low-energy plan, set it in the planner (O).
 
 ## The saddle at L1 and L2 (`sim/manifold.ts`)
 

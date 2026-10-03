@@ -75,7 +75,7 @@ export function NavPanel({ n, a }: { n: NavView; a: NavActions }) {
   );
 }
 
-const KIND_ICON = { star: '★', sun: '☀', planet: '◯', moon: '◦', station: '▢' } as const;
+const KIND_ICON = { star: '★', sun: '☀', planet: '◯', moon: '◦', station: '▢', lpoint: '◇' } as const;
 
 /**
  * Search with a dropdown: stars, planets, moons and stations. The dropdown opens under the field

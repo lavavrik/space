@@ -32,7 +32,7 @@ export function warpBlocked(g: Game): string | null {
   if (g.jump) return 'not during a hyperjump';
   if (ship.ftlCharge > 0) return 'not while a drive charges';
   if (ship.vent) return 'not while venting hydrogen';
-  if (g.route?.running) return 'not while a route is flying';
+  if (g.route?.running && ship.ap?.ph?.stage !== 'coast') return 'not while a route is flying'; // (a route's phasing coast is what warp is for)
   if (g.inStation && !g.dock?.docked) return 'not inside a station';
   if (g.autodock) return 'not while the docking computer flies';
   if (g.ascent) return 'not during the ascent';

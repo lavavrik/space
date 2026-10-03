@@ -116,4 +116,5 @@
 .navres .ico { font-style: normal; color: var(--amber); grid-row: span 2; }
 .navres .ico.star { color: #ffe08a; }
 .navres .ico.station { color: #73ffb2; }
+.navres .ico.lpoint { color: #7fdcff; }
 .navres .d { grid-column: 2; font-family: var(--ui-font); font-size: .78rem; color: var(--amber-dim); }

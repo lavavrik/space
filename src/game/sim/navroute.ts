@@ -2,7 +2,7 @@
  * Navigation computer (the fitted Meridian Systems unit): plot a route and fly it leg by leg.
  *
  * Destinations: a star system (any star you click within SKY_RADIUS while the nav panel is open),
- * or the current target (a body or station in this system).
+ * or the current target (a body, a station or a Lagrange point in this system).
  *
  * Planning: an A* search over the star graph, each system's neighbours being the systems within
  * JUMP_RANGE. Edge costs depend on the mode: fewest jumps, least exotic matter (2 + 0.02·ly² per
@@ -12,16 +12,17 @@
  *
  * Flying: one leg at a time, reusing the existing systems: hyperjumps (waiting for the battery if
  * needed), an autopilot hold skimming a star's corona to refuel, and finally the autopilot's orbit
- * or station rendezvous. Disengaging the autopilot during a leg cancels the route.
+ * or station rendezvous, or a hold at a Lagrange point (a phasing transfer for L3–L5: docs/lagrange.md).
+ * Disengaging the autopilot during a leg cancels the route.
  */
 import { pairSpec } from '../universe/binary';
 import { JUMP_CHARGE_TIME, JUMP_RANGE, JUMP_TUNNEL_BASE, JUMP_TUNNEL_PER_LY, LY, SCOOP_FLUX_FULL, SHIP, fluxDist, jumpCost } from '../constants';
 import { THREE } from '../lib/three';
 import { scoopFitted } from '../outfit/catalog';
 import { contactLabel, radarSeen } from './radar';
-import { fmtDist, fmtEnergy } from '../format';
+import { fmtDist, fmtEnergy, fmtTime } from '../format';
 import type { Game } from '../Game';
-import type { StarSystem, Target } from '../types';
+import type { Planner, StarSystem, Target, World } from '../types';
 import { systemsNear } from '../universe/galaxy';
 import { buildStations } from '../universe/stations';
 import { buildSystem } from '../universe/system';
@@ -29,6 +30,8 @@ import { transitTime } from './hyperspace';
 import { dropAlt, dropFTL, massLock } from './ftl';
 import { galPos, jumpBlocker, startJump } from './navigation';
 import { defaultOrbitAlt, evalPlan } from './orbits';
+import { lpointsHere } from './lpoints';
+import { phasingEstimate } from './phasing';
 import { disengageAP, engageAutopilot, engageRendezvous } from './planner';
 
 export type NavMode = 'jumps' | 'exotic' | 'fastest';
@@ -42,7 +45,8 @@ export type Leg =
   | { kind: 'jump'; to: StarSystem; ly: number; cost: number; time: number }
   | { kind: 'refuel'; at: StarSystem; time: number }
   | { kind: 'orbit'; body: string; time: number }
-  | { kind: 'rendezvous'; station: string; time: number };
+  | { kind: 'rendezvous'; station: string; time: number }
+  | { kind: 'lpoint'; planet: string; k: 1 | 2 | 3 | 4 | 5; sysId: string; time: number };
 
 export interface Route {
   destName: string;
@@ -131,7 +135,7 @@ export function planRoute(g: Game, mode: NavMode): Route | string {
   const target: Target | null = destSys || fin ? null : g.target;
   if (!destSys && fin) {
     // a body or station in this system: just the final leg
-    legs.push(finalLeg(fin));
+    legs.push(finalLeg(g, fin));
     destName = `${fin.name} · ${g.cur.sys.name}`;
   } else if (destSys) {
     if (!nav.caps.crossSystem) return `${nav.model} plots in-system routes only`;
@@ -173,12 +177,15 @@ export function planRoute(g: Game, mode: NavMode): Route | string {
     destName = `${destSys.name} · ${pairSpec(destSys)} · ${destSys.pos.distanceTo(g.cur.sys.pos).toFixed(1)} ly${via}`;
     // ending at a body or station there: orbit it or rendezvous with it after the last jump
     if (fin && fin.sysId === destSys.id) {
-      legs.push(finalLeg(fin));
+      legs.push(finalLeg(g, fin));
       destName = `${fin.name} · ${destSys.name} · ${destSys.pos.distanceTo(g.cur.sys.pos).toFixed(1)} ly${via}`;
     }
   } else if (target && target.kind === 'station') {
     legs.push({ kind: 'rendezvous', station: target.name, time: 150 });
     destName = `${target.name} · ${target.parent.name}`;
+  } else if (target && target.kind === 'lpoint') {
+    legs.push(lpointLeg(g, g.cur.sys.id, target.name));
+    destName = `${target.name} · ${g.cur.sys.name}`;
   } else if (target && target.kind !== 'star') {
     legs.push({ kind: 'orbit', body: target.name, time: 180 });
     destName = target.name;
@@ -199,12 +206,39 @@ export function replan(g: Game) {
 
 /** Where a route may end besides a star: a body (orbit it) or a station (rendezvous), by name. */
 export interface NavFinal {
-  kind: 'body' | 'station';
+  kind: 'body' | 'station' | 'lpoint';
+  /** A body's or station's name; for a Lagrange point, "Venydes 2 L4". */
   name: string;
   sysId: string;
 }
 
-const finalLeg = (f: NavFinal): Leg => (f.kind === 'station' ? { kind: 'rendezvous', station: f.name, time: 150 } : { kind: 'orbit', body: f.name, time: 180 });
+/** "Venydes 2 L4" → its planet's name and the point (null if it isn't one). */
+export function parseLPoint(name: string): { planet: string; k: 1 | 2 | 3 | 4 | 5 } | null {
+  const m = /^(.*) L([1-5])$/.exec(name);
+  return m ? { planet: m[1], k: Number(m[2]) as 1 | 2 | 3 | 4 | 5 } : null;
+}
+
+/** Orbits a route's phasing transfer to L3–L5 takes (the planner's default; L1 and L2 are flown to straight). */
+export const ROUTE_REVS = 3;
+
+/**
+ * The leg to a Lagrange point: how long it takes is the FTL leg and the match (~10 minutes) plus, for
+ * L3–L5, the phasing transfer's flight (sim/phasing.ts), worked out from the planet where it's in
+ * this system or can be built.
+ */
+function lpointLeg(g: Game, sysId: string, name: string): Leg {
+  const p = parseLPoint(name)!;
+  let time = 600;
+  if (p.k >= 3) {
+    const sys = g.cur.sys.id === sysId ? g.cur.sys : g.sky.find((s) => s.id === sysId);
+    const w = g.cur.sys.id === sysId ? (g.cur.bodies.find((b) => b.name === p.planet && b.kind === 'planet') as World | undefined) : sys ? (buildSystem(sys).find((b) => b.name === p.planet && b.kind === 'planet') as World | undefined) : undefined;
+    if (w) time += phasingEstimate(w, p.k as 3 | 4 | 5, ROUTE_REVS).T;
+    else time += ROUTE_REVS * 3.2e7;
+  }
+  return { kind: 'lpoint', planet: p.planet, k: p.k, sysId, time };
+}
+
+const finalLeg = (g: Game, f: NavFinal): Leg => (f.kind === 'station' ? { kind: 'rendezvous', station: f.name, time: 150 } : f.kind === 'lpoint' ? lpointLeg(g, f.sysId, f.name) : { kind: 'orbit', body: f.name, time: 180 });
 
 /** Add a star as the next waypoint (not the current system, nor a repeat of the last). */
 export function addNavPoint(g: Game, s: StarSystem) {
@@ -246,7 +280,7 @@ export function removeNavPoint(g: Game) {
 export interface NavResult {
   key: string;
   /** 'star': another system (a waypoint); 'sun': a star here, a wide pair's (docs/binaries.md). */
-  kind: 'star' | 'sun' | 'planet' | 'moon' | 'station';
+  kind: 'star' | 'sun' | 'planet' | 'moon' | 'station' | 'lpoint';
   name: string; // as shown (may be "Unidentified …" until scanned)
   /** The object's real name, for routing (system ids contain colons, so it can't come from the key). */
   real?: string;
@@ -318,6 +352,15 @@ export function searchNav(g: Game, query: string, from: 'ship' | 'last', limit =
     out.push({ key: `station:${here.id}:${st.name}`, kind: 'station', name: label, real: st.name, detail: `${label === st.name ? `station · ${st.parent.name}` : 'radar contact'} · ${hereDetail(m)}`, sys: here, dist: hereKey(m) });
   }
 
+  // this system's Lagrange points, of the planets the radar has found (as a target does: sim/lpoints.ts)
+  if (q) {
+    for (const t of lpointsHere(g)) {
+      if (!match(t.name)) continue;
+      const m = Math.max(0, t.pos.distanceTo(g.ship.pos));
+      out.push({ key: `lpoint:${here.id}:${t.name}`, kind: 'lpoint', name: t.name, real: t.name, detail: `${t.k >= 4 ? 'stable' : 'unstable'} Lagrange point · ${hereDetail(m)}`, sys: here, dist: hereKey(m) });
+    }
+  }
+
   // stars
   for (const s of g.sky) {
     if (s.id !== here.id && s.id !== last?.id && match(s.name)) out.push({ key: `star:${s.id}`, kind: 'star', name: s.name, detail: `${pairSpec(s)}${s.companion ? ' pair' : ' star'} · ${ly(s).toFixed(1)} ly`, sys: s, dist: ly(s) });
@@ -331,6 +374,8 @@ export function searchNav(g: Game, query: string, from: 'ship' | 'last', limit =
       const where = `${s.name} · ${ly(s).toFixed(1)} ly`;
       for (const b of c.bodies) if (match(b.name)) out.push({ key: `${b.kind}:${s.id}:${b.name}`, kind: b.kind, name: b.name, detail: `${b.type} · ${where}`, sys: s, dist: ly(s) });
       for (const n of c.stations) if (match(n)) out.push({ key: `station:${s.id}:${n}`, kind: 'station', name: n, detail: `station · ${where}`, sys: s, dist: ly(s) });
+      // a planet's five Lagrange points (the planet's name and L1…L5), once the query names one
+      for (const b of c.bodies) if (b.kind === 'planet') for (const k of [1, 2, 3, 4, 5]) if (match(`${b.name} L${k}`)) out.push({ key: `lpoint:${s.id}:${b.name} L${k}`, kind: 'lpoint', name: `${b.name} L${k}`, detail: `${k >= 4 ? 'stable' : 'unstable'} Lagrange point · ${where}`, sys: s, dist: ly(s) });
     }
   }
   return out.sort((a, b) => a.dist - b.dist || a.name.localeCompare(b.name)).slice(0, limit);
@@ -342,7 +387,7 @@ export function addNavResult(g: Game, key: string) {
   if (!r) return;
   if (r.kind === 'star') addNavPoint(g, r.sys);
   // route by the real name (the shown one may be "Unidentified …" until it's scanned)
-  else addNavFinal(g, r.sys, r.kind === 'station' ? 'station' : 'body', r.real ?? r.name);
+  else addNavFinal(g, r.sys, r.kind === 'station' ? 'station' : r.kind === 'lpoint' ? 'lpoint' : 'body', r.real ?? r.name);
 }
 
 /* ---------- flying ---------- */
@@ -488,6 +533,32 @@ export function updateNav(g: Game, dt: number) {
       if (!ship.ap) return endRoute(g, 'Route cancelled · autopilot disengaged', 'warn');
       r.status = ship.ap.settled ? 'in orbit' : 'flying to orbit';
       if (ship.ap.settled) nextLeg(g); // the autopilot keeps flying the orbit
+      return;
+    }
+    case 'lpoint': {
+      const w = g.cur.bodies.find((x): x is World => x.kind === 'planet' && x.name === leg.planet);
+      const name = `${leg.planet} L${leg.k}`;
+      if (!w) return endRoute(g, `Route cancelled · ${leg.planet} not found`, 'warn');
+      if (!r.legStarted && waitForBattery(g)) return;
+      if (!r.legStarted) {
+        // hold at the point: straight there for L1 and L2, a phasing transfer for L3–L5 (sim/phasing.ts)
+        const oc = ship.avionics.orbit;
+        if (!oc?.caps.types.includes('lagrange')) return endRoute(g, 'Route needs an orbit computer that holds at Lagrange points (HX-8200 or better)', 'warn');
+        const revs = leg.k >= 3 ? ROUTE_REVS : 0;
+        const plan: Planner = { body: w, type: 'lagrange', alt: 0, dir: 1, curAlt: 0, lk: leg.k, revs };
+        const ev = evalPlan(plan, ship);
+        if (!ev.ok) return endRoute(g, `Route cancelled · ${ev.note}`, 'warn');
+        engageAutopilot(g, { body: w, type: 'lagrange', lk: leg.k, revs, r0: ev.r0, period: ev.period, n: null, point: null, station: null }, true);
+        r.legStarted = true;
+      }
+      if (!ship.ap) return endRoute(g, 'Route cancelled · autopilot disengaged', 'warn');
+      const ph = ship.ap.ph;
+      r.status = ship.ap.settled
+        ? `holding at ${name}`
+        : ph
+          ? { depart: `flying to the departure point for ${name}`, burn: `phasing burn for ${name}`, coast: `coasting to ${name} · ${fmtTime(Math.max(0, ph.tArr - g.simTime))} to go · time warp works`, arrive: `matching ${name}` }[ph.stage]
+          : `flying to ${name}`;
+      if (ship.ap.settled) nextLeg(g); // the autopilot keeps holding it
       return;
     }
     case 'rendezvous': {
