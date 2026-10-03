@@ -537,6 +537,11 @@ export function ftlTransfer(g: Game, dt: number) {
   if (ship.ftlSpeed < tgt) ship.ftlSpeed = Math.min(tgt, ship.ftlSpeed * Math.exp(1.5 * dt) + 20000 * dt);
   else ship.ftlSpeed = Math.max(tgt, ship.ftlSpeed * Math.exp(-3 * dt));
   ship.pos.addScaledVector(g.fwd, ship.ftlSpeed * dt);
+  // a Lagrange point moves at its planet's orbital speed (tens of km/s), and the chase closes at only
+  // 0.8 × the distance a second: it would settle where the two speeds meet, ~40 km behind, outside the
+  // drop radius, forever. The drive carries the ship along with the point (as its own field moves
+  // with it), so the closing speed is what the chase makes it
+  if (ap.type === 'lagrange') ship.pos.addScaledVector(apPoint(ap).vel, dt);
   g.curSpeed = ship.ftlSpeed;
   if (!ftlUpkeep(g, dt, align)) return;
   if (!waypoint && dist < Math.max(30e3, rT * 0.01)) {
