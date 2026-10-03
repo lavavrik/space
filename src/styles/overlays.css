@@ -299,8 +299,12 @@
 .svslider { pointer-events: auto; width: 100%; accent-color: var(--amber); margin: 0; }
 
 /* the pause menu (Esc): a dimmed view with a box of buttons in the middle */
-#pause { position: fixed; inset: 0; z-index: 200; /* over the whole HUD */ display: grid; place-items: center; background: rgba(4, 6, 10, .55); pointer-events: auto; }
-.pmrow { display: flex; gap: 1rem; align-items: flex-start; max-width: calc(100% - 2rem); }
+/* It scrolls when it's taller than the window (a phone held sideways: Settings, the Jump to list):
+   it is the scroll container, so a finger can pan it even under the touch layout's
+   `body { touch-action: none }`, and the row is centred with auto margins, which (unlike a centring
+   grid) start it at the top instead of cutting the top off when it doesn't fit. */
+#pause { position: fixed; inset: 0; z-index: 200; /* over the whole HUD */ display: flex; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; background: rgba(4, 6, 10, .55); pointer-events: auto; }
+.pmrow { margin: auto; padding: 1rem 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 1rem; align-items: flex-start; max-width: calc(100% - 2rem); }
 /* debug builds: the "Jump to" list beside the menu */
 .pmdev { width: 17rem; }
 .pmspot span { display: flex; flex-direction: column; gap: .1rem; }

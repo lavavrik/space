@@ -53,8 +53,8 @@ export class Input {
   private pinch = 0; // distance between two fingers last move
   private pinchAcc = 0; // px of pinch not yet turned into a zoom step
   /** Cursor over the canvas (CSS px), for hover highlights; `over` is false when it's elsewhere. */
-  /** A touch screen is in use (a finger has touched the canvas, or the primary pointer is coarse): no pointer lock to ask for. */
-  touch = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+  /** A touch screen is in use (a finger has touched the page, the primary pointer is coarse, or `?touch` forces the layout): no pointer lock to ask for. */
+  touch = (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches) || (typeof location !== 'undefined' && new URLSearchParams(location.search).has('touch'));
   readonly mouse = { x: 0, y: 0, over: false };
   private readonly cleanup: (() => void)[] = [];
 
@@ -110,6 +110,10 @@ export class Input {
       }
     });
     this.listenTouch(canvas);
+    // (a finger anywhere, the on-screen buttons included: the pause button is often the first thing touched)
+    this.listen(window, 'pointerdown', (e: PointerEvent) => {
+      if (e.pointerType === 'touch') this.touch = true;
+    }, { capture: true, passive: true });
     this.listen(document, 'pointerlockchange', () => handlers.onPointerLockChange(this.isLocked()));
   }
 
@@ -118,6 +122,11 @@ export class Input {
   }
 
   requestLock() {
+    // not on a touch screen: there's no mouse to capture, and a lock there (a browser that grants
+    // one, like a desktop's device emulation or a tablet's) broke steering for good: while a pointer
+    // is locked setPointerCapture throws, so the finger never registered (resuming from the pause
+    // menu, or a debug jump, left every drag dead)
+    if (this.touch) return;
     try {
       const p = this.canvas.requestPointerLock() as unknown as Promise<void> | undefined;
       if (p && p.catch) p.catch(() => {});
@@ -151,8 +160,16 @@ export class Input {
       if (e.pointerType !== 'touch') return;
       e.preventDefault(); // no emulated mouse events after it
       this.touch = true;
-      canvas.setPointerCapture(e.pointerId);
+      // a finger: let go of any pointer lock (it can't be steered with), and register the finger
+      // before asking for capture, which still throws if the lock hasn't gone yet (the finger then
+      // works without it while it stays over the canvas)
+      if (this.isLocked()) document.exitPointerLock?.();
       this.fingers.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t0: e.timeStamp, tap: this.fingers.size === 0 });
+      try {
+        canvas.setPointerCapture(e.pointerId);
+      } catch {
+        /* see above */
+      }
       if (this.fingers.size === 2) {
         this.pinch = this.span();
         this.pinchAcc = 0;

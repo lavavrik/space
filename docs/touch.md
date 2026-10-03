@@ -9,7 +9,13 @@ to try the layout on a desktop (devtools device mode works too).
 
 **Input** (`game/input/Input.ts`)
 - One finger dragging on the view steers, as an unlocked mouse drag does (`TOUCH_LOOK` scales it).
-- A short, still touch is a tap: it targets what's under it (`onClick`). No pointer lock is asked for.
+- A short, still touch is a tap: it targets what's under it (`onClick`).
+- **No pointer lock on a touch screen.** `Input.touch` is set for a coarse pointer, a forced `?touch`,
+  or the first finger anywhere on the page, and `requestLock` does nothing then. A browser that
+  grants a lock to a touch page (desktop devtools device mode, a tablet with a mouse) used to get
+  one on every Resume, debug jump included, and while a pointer is locked `setPointerCapture`
+  throws: the finger was never registered and dragging was dead until reload. A finger now also
+  releases any lock it finds, and the finger is registered before capture is asked for.
 - Two fingers pinch: one `onWheel` step per `PINCH_STEP` px, so the periscope zoom, map zoom and
   planner altitude work as with the wheel.
 - `setKey(code, down)` holds a key, `press(code, shift)` fires one (with Shift held only if asked,
@@ -22,7 +28,10 @@ to try the layout on a desktop (devtools device mode works too).
 - While the orbit planner, navigation computer or autopilot panel is open, a strip of the keys it
   wants (digits, `[ ]`, direction, `/` search, Enter, Backspace) appears above the speedometer.
 - The pause menu and station window have their own buttons, so the controls hide there; with the
-  system map open only a close button shows.
+  system map open only a close button shows. The pause menu (with Settings or the debug Jump to list)
+  scrolls when it's taller than the window: `#pause` is its own scroll container, which a finger can
+  pan despite `body.touch { touch-action: none }` (that only reaches as far as the nearest scroll
+  container), and its row is centred with auto margins so its top is never cut off.
 
 **Compact HUD** (`body.touch` rules in `styles/touch.css`). The root font size follows the window's
 height instead of its width; the location is two lines, the gauges are slim bars top right, the
