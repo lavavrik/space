@@ -140,3 +140,9 @@ Not built; roughly by value.
 9. **Planet-branch release as a plan:** aim for a chosen periapsis so a ship can be sent toward the planet on purpose and captured (needs a capture-burn planner).
 10. **Eccentric orbits for L1 and L2:** the hold treats the planet's orbit as instantaneously circular; for a high-e planet the points breathe and the saddle rate changes round the orbit.
 11. **A save and load test** for the new state: `navRevs`, found swarms and a phasing transfer in flight.
+
+## The approach on a weak bus
+
+The autopilot's thruster law asks for up to 1,200 m/s², and its braking plan assumed the orbit computer's rated deceleration. A ship whose bus can't feed that (a flat battery after the FTL leg, dim starlight far out) gets less than it asks, overshoots the point and swings round it without settling. The autopilot now learns the acceleration the thrusters actually deliver (`Autopilot.accCap`: what came out when it asked for more, creeping back up while it asks for about all of it) and brakes within 60 % of that. The panel shows a THRUST row when the bus is limiting it. Tests feed the autopilot through a mocked bus capped at 3.6 and 1.2 m/s² (`lagrangeHold.test.ts`).
+
+The FTL drop leaves the ship 235 m/s from L1 and L2 (they move faster than the planet by n × their distance from it), so the last km is a real braking run, not a drift.
