@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { WT } from '../constants';
+import { JUMP_RANGE, WT } from '../constants';
 import type { Game } from '../Game';
 import { buildInfo } from '../hud/info';
 import { THREE } from '../lib/three';
@@ -9,12 +9,19 @@ import { lpointFor, lpointsHere } from '../sim/lpoints';
 import { contactLabel, known } from '../sim/radar';
 import { scanKey, scanProgress } from '../sim/scanner';
 import type { CurrentSystem, Ship, Star, World } from '../types';
-import { homeSystem } from '../universe/galaxy';
+import { homeSystem, systemsNear } from '../universe/galaxy';
 import { buildSystem, findHome, systemAnchor } from '../universe/system';
 import { buildTrojans } from '../universe/trojans';
 
-function setup() {
-  const sys = homeSystem();
+/** The nearest system with a gas or ice giant (only they hold swarms). */
+function giantSystem() {
+  for (const sys of systemsNear(new THREE.Vector3(), JUMP_RANGE)) {
+    if (buildSystem(sys).some((b) => b.kind === 'planet' && b.type >= WT.GasGiant)) return sys;
+  }
+  throw new Error('no giant nearby');
+}
+
+function setup(sys = homeSystem()) {
   const bodies = buildSystem(sys);
   updateBodies(bodies, 1e6);
   const stars = bodies.filter((b): b is Star => b.kind === 'star');
@@ -58,7 +65,7 @@ describe('Lagrange points as targets', () => {
   });
 
   it('have an info panel: where, what a ship left there does, the swarm and the depot', () => {
-    const { g, cur, seen } = setup();
+    const { g, cur, seen } = setup(giantSystem());
     const giant = cur.bodies.find((b): b is World => b.kind === 'planet' && b.type >= WT.GasGiant);
     expect(giant).toBeTruthy();
     seen.add(scanKey(cur.sys, giant!));

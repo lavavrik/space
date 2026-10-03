@@ -51,7 +51,6 @@ import { updateBodies } from '../sim/kepler';
 import { addNavResult, adjustNavRevs, parseLPoint, planRoute, searchNav, updateNav, type Route } from '../sim/navroute';
 import { scanKey } from '../sim/scanner';
 import type { CurrentSystem, Star, World } from '../types';
-import { WT } from '../constants';
 import { buildTrojans } from '../universe/trojans';
 import { buildSystem, findHome, systemAnchor } from '../universe/system';
 import { lpointFor } from '../sim/lpoints';
@@ -129,7 +128,7 @@ describe('routes to Lagrange points', () => {
 
   it('are found by the search, here and in other systems, and added as the route\'s end', () => {
     const { g, cur } = lgame();
-    const giant = cur.bodies.find((b): b is World => b.kind === 'planet' && b.type >= WT.GasGiant)!;
+    const giant = cur.bodies.find((b): b is World => b.kind === 'planet')!; // (any planet: the home system has no giant now)
     const here = searchNav(g, `${giant.name} L`, 'ship');
     expect(here.filter((r) => r.kind === 'lpoint').map((r) => r.name)).toEqual(expect.arrayContaining([`${giant.name} L1`, `${giant.name} L5`]));
     // another system's planet, by the name of its system

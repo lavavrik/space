@@ -4,6 +4,7 @@ import { THREE } from '../lib/three';
 import { gravityAt, hillRadius, perturbation } from '../sim/gravity';
 import { keplerState, updateBodies } from '../sim/kepler';
 import { ROUTH_RATIO, YEAR, driftTime, hillRatio, lagrangePoints, trojansStable } from '../sim/lagrange';
+import { saddleModes } from '../sim/manifold';
 import type { CurrentSystem, Star, World } from '../types';
 import { homeSystem, systemsNear } from '../universe/galaxy';
 import { buildSystem, findHome, systemAnchor } from '../universe/system';
@@ -148,13 +149,14 @@ describe('lagrange points', () => {
     const pos = lp.pos.clone().addScaledVector(lp.pos.clone().sub(w.parent.pos).normalize(), 1e-4 * hill);
     const vel = lp.vel.clone();
     const dt = 1800;
-    for (let t = 0; t < 120 * 86400; t += dt) {
+    const grow = (1.5 * Math.log(1e3)) / saddleModes(w, 1).lambda; // (a few e-folds of this planet's saddle)
+    for (let t = 0; t < grow; t += dt) {
       vel.addScaledVector(gravityAt(cur, pos).vec, dt / 2);
       pos.addScaledVector(vel, dt);
       updateBodies(bodies, t + dt);
       vel.addScaledVector(gravityAt(cur, pos).vec, dt / 2);
     }
-    expect(pos.distanceTo(lagrangePoints(w)[0].pos)).toBeGreaterThan(0.1 * hill); // grown by e^(120 d / 20 d), ~400×
+    expect(pos.distanceTo(lagrangePoints(w)[0].pos)).toBeGreaterThan(0.1 * hill); // grown by e^(1.5 × ln 1000), ~30000× the start
   });
 
   it('are stable only at L4 and L5, and only above the Routh mass ratio', () => {
