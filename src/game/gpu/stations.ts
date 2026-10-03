@@ -10,17 +10,19 @@ import { sunsAt, type Suns } from '../sim/starlight';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import { STATION_RGB } from '../render/look';
+import { depotGeometry } from '../render/depotMesh';
 import { skyStationGeometry } from '../render/skyMesh';
 import { CORRIDOR_GROW, corridorGeometry, corridorLights, hullGeometry, interiorGeometry } from '../render/stationMesh';
 import { slotUser } from '../sim/control';
 import { sunFraction } from '../sim/eclipse';
 import { occluder } from '../sim/sight';
+import { DEPOT_PAD_COUNT, depotPadLocal } from '../sim/depotGeom';
 import { SKY_PAD_COUNT, skyPadLocal } from '../sim/skyGeom';
 import { CORRIDOR_M, PAD_R, padLocal, stationQuat } from '../sim/stationGeom';
 import type { CurrentSystem, Station } from '../types';
 import { DEPTH_FORMAT, HDR_FORMAT, SAMPLES } from './formats';
 import { ShadowMap } from './shadowmap';
-import { CORRIDOR_WGSL, SKY_STATION_WGSL, STATION_INTERIOR_WGSL, STATION_WGSL } from './shaders';
+import { CORRIDOR_WGSL, DEPOT_WGSL, SKY_STATION_WGSL, STATION_INTERIOR_WGSL, STATION_WGSL } from './shaders';
 import type { WorldsLayer } from './worlds';
 
 const OBJ_BYTES = 64 + 16 * 16;
@@ -54,14 +56,17 @@ export class StationsLayer {
   private readonly hull: Mesh;
   private readonly inside: Mesh;
   private readonly sky: Mesh;
+  private readonly depot: Mesh;
   private readonly layout: GPUBindGroupLayout;
   private readonly hullPipe: GPURenderPipeline;
   private readonly innerPipe: GPURenderPipeline;
   private readonly skyPipe: GPURenderPipeline;
+  private readonly depotPipe: GPURenderPipeline;
   private readonly corridorPipe: GPURenderPipeline;
   private readonly lampPipe: GPURenderPipeline;
   private readonly hullShadow: GPURenderPipeline;
   private readonly skyShadow: GPURenderPipeline;
+  private readonly depotShadow: GPURenderPipeline;
   private views: View[] = [];
   private readonly q = new THREE.Quaternion();
   private readonly m = new THREE.Matrix4();
@@ -78,6 +83,7 @@ export class StationsLayer {
     this.hull = this.mesh(hullGeometry());
     this.inside = this.mesh(interiorGeometry());
     this.sky = this.mesh(skyStationGeometry());
+    this.depot = this.mesh(depotGeometry());
     this.layout = device.createBindGroupLayout({
       entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } }],
     });
@@ -114,8 +120,10 @@ export class StationsLayer {
       });
     this.hullShadow = caster('station shadow', STATION_WGSL, [this.layout]);
     this.skyShadow = caster('sky station shadow', SKY_STATION_WGSL, [worldLayout, this.layout]);
+    this.depotShadow = caster('depot shadow', DEPOT_WGSL, [this.layout]);
     this.innerPipe = solid('station interior', STATION_INTERIOR_WGSL, pl);
     this.skyPipe = solid('sky station', SKY_STATION_WGSL, skyPL);
+    this.depotPipe = solid('depot', DEPOT_WGSL, pl);
     const corr = device.createShaderModule({ label: 'corridor', code: CORRIDOR_WGSL });
     this.corridorPipe = device.createRenderPipeline({
       label: 'corridor',
@@ -179,7 +187,13 @@ export class StationsLayer {
       data.set([pc.r, pc.g, pc.b, 0], 16 + 12);
       let corridor: Mesh | null = null,
         lights: View['lights'] = null;
-      if (st.sky) {
+      if (st.depot) {
+        data.set([0, PAD_R, -1, 0], 16 + 24);
+        for (let i = 0; i < DEPOT_PAD_COUNT; i++) {
+          const q = depotPadLocal(i).pos;
+          data.set([q.x, q.y], 16 + 32 + i * 2);
+        }
+      } else if (st.sky) {
         data.set([0, PAD_R, -1, 0], 16 + 24);
         for (let i = 0; i < SKY_PAD_COUNT; i++) {
           const q = skyPadLocal(i).pos;
@@ -247,7 +261,11 @@ export class StationsLayer {
         f.set([l2.x, l2.y, l2.z, 1, suns.c2.r, suns.c2.g, suns.c2.b, 0], 16 + 56);
       } else f.fill(0, 16 + 56, 16 + 64);
       f[16 + 15] = now;
-      if (st.sky) {
+      if (st.depot) {
+        // a depot in open space: lit by the star unless something eclipses it, your pad lit up while it's granted
+        f[16 + 3] = sunFraction(cur.bodies, suns.s1, st.pos);
+        f[16 + 26] = dk && dk.station === st && !dk.docked ? dk.pad : -1;
+      } else if (st.sky) {
         // a sky station: its up, the sun, and your pad lit up while it's granted
         const up = this.b.subVectors(st.pos, st.parent.pos).normalize();
         f.set([up.x, up.y, up.z], 16 + 28);
@@ -292,7 +310,7 @@ export class StationsLayer {
     };
     pass.setPipeline(this.hullPipe);
     for (const v of this.views)
-      if (v.show && !v.st.sky) {
+      if (v.show && !v.st.sky && !v.st.depot) {
         pass.setBindGroup(1, v.group);
         draw(this.hull);
       }
@@ -301,6 +319,12 @@ export class StationsLayer {
       if (v.show && v.showInner) {
         pass.setBindGroup(1, v.group);
         draw(this.inside);
+      }
+    pass.setPipeline(this.depotPipe);
+    for (const v of this.views)
+      if (v.show && v.st.depot) {
+        pass.setBindGroup(1, v.group);
+        draw(this.depot);
       }
     pass.setPipeline(this.skyPipe);
     for (const v of this.views)
@@ -315,7 +339,12 @@ export class StationsLayer {
   drawShadow(pass: GPURenderPassEncoder, R: number) {
     for (const v of this.views) {
       if (!v.show || v.dist > R * 4 + v.st.size) continue;
-      if (v.st.sky) {
+      if (v.st.depot) {
+        pass.setPipeline(this.depotShadow);
+        pass.setBindGroup(1, v.group);
+        pass.setVertexBuffer(0, this.depot.pos);
+        pass.draw(this.depot.count);
+      } else if (v.st.sky) {
         pass.setPipeline(this.skyShadow);
         pass.setBindGroup(1, v.worldGroup!);
         pass.setBindGroup(2, v.group);
@@ -370,7 +399,7 @@ export class StationsLayer {
 
   dispose() {
     this.clear();
-    for (const m of [this.hull, this.inside, this.sky]) {
+    for (const m of [this.hull, this.inside, this.sky, this.depot]) {
       m.pos.destroy();
       m.nrm.destroy();
     }

@@ -45,7 +45,7 @@ export const TANK_DIRS = [
 /** The habitat block under the plate. */
 export const HAB = { x0: 0.2, x1: 0.4, hw: 0.05, z0: -0.13, z1: SPINE_Z1 };
 /** Radiator fins: thin panels hanging under the spine, at y = ±FIN_Y. */
-export const FIN = { x0: -0.22, x1: 0.02, y: 0.05, t: 0.004, z0: -0.3, z1: SPINE_Z0 };
+export const FIN = { x0: -0.02, x1: 0.14, y: 0.05, t: 0.004, z0: -0.2, z1: SPINE_Z0 };
 /** Solar wings: flat panels either side of the spine, out to WING_Y. */
 export const WING = { x0: -0.2, x1: -0.04, y0: 0.06, y1: 0.34, t: 0.004, z: SPINE_ZC };
 /** The beacon mast at the tank end. */
