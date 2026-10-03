@@ -177,8 +177,8 @@ function pilotFor(game: Game): Game {
   return c;
 }
 
-/** The stations other ships use: not the depots out at the Lagrange points (their pilots fly the planet-centred rendezvous, not a trojan one). */
-const ports = (cur: CurrentSystem) => cur.stations.filter((s) => !s.depot);
+/** The stations other ships use: all of them, depots out at the Lagrange points too (their rendezvous takes the star as its body, sim/planner.ts engageRendezvous; docking is the sky deck's). */
+const ports = (cur: CurrentSystem) => cur.stations;
 
 /** How many ships a system has (see MAX_TRAFFIC). */
 export function trafficCount(cur: CurrentSystem) {

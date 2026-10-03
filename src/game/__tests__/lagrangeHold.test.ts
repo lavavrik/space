@@ -8,6 +8,11 @@ import { gatePoint, lagrangePoints } from '../sim/lagrange';
 import type { Autopilot, CurrentSystem, Ship, Star, World } from '../types';
 import { homeSystem } from '../universe/galaxy';
 import { buildSystem, findHome, systemAnchor } from '../universe/system';
+import { buildStations } from '../universe/stations';
+import { orbitBody } from '../sim/stationGeom';
+import { stationState } from '../sim/stations';
+import { JUMP_RANGE } from '../constants';
+import { systemsNear } from '../universe/galaxy';
 
 // the thruster model needs a power bus and tanks; here thrust is just applied and its Δv summed
 let spent = 0;
@@ -145,5 +150,46 @@ describe('phasing transfer (autopilot)', () => {
       expect(r.settled).toBe(true);
       expect(r.off).toBeLessThan(500);
     }
+  });
+});
+
+describe('rendezvous with a depot (the star as the autopilot body)', () => {
+  it('closes on a depot from far off, matches its orbit, and settles at the stand-off', () => {
+    // a system with a depot
+    let found: { st: ReturnType<typeof buildStations>[number]; bodies: ReturnType<typeof buildSystem>; sys: ReturnType<typeof homeSystem> } | null = null;
+    for (const sys of systemsNear(new THREE.Vector3(), JUMP_RANGE)) {
+      const bodies = buildSystem(sys);
+      const st = buildStations(sys, bodies).find((x) => x.depot);
+      if (st) {
+        found = { st, bodies, sys };
+        break;
+      }
+    }
+    expect(found).not.toBeNull();
+    const { st, bodies, sys } = found!;
+    updateBodies(bodies, 2e6);
+    stationState(st, 2e6);
+    const stars = bodies.filter((b): b is Star => b.kind === 'star');
+    const cur: CurrentSystem = { sys, bodies, star: stars[0], stars, anchor: systemAnchor(bodies), close: false, stations: [st] };
+    const star = orbitBody(st);
+    expect(star).toBe(stars[0]);
+    const ap: Autopilot = { body: star, type: 'rendezvous', station: st, r0: st.a, period: (2 * Math.PI) / st.n, n: new THREE.Vector3().crossVectors(st.P, st.Q).normalize(), point: null, phase: 'insert', settled: false, t0: 0, prop0: 0 };
+    // 300 km out, moving with the depot (as a ship that dropped out of FTL beside it would be)
+    const ship = { pos: st.pos.clone().add(new THREE.Vector3(2e5, 1e5, -1.8e5)), vel: st.vel.clone().sub(star.vel), ap, mode: 'normal', ftlCharge: 0, avionics: { orbit: null } } as unknown as Ship;
+    const g = { ship, frameBody: star, cur, simTime: 2e6, warp: 1, showMsg: () => {}, invalidateHud: () => {} } as unknown as Game;
+    const dt = 0.05;
+    let t = 0;
+    for (; t < 1200 && !ap.settled; t += dt) {
+      g.simTime = 2e6 + t;
+      autopilot(g, dt, gravityAt(cur, ship.pos));
+      ship.pos.addScaledVector(ship.vel, dt);
+      updateBodies(bodies, 2e6 + t + dt);
+      stationState(st, 2e6 + t + dt);
+    }
+    expect(ap.settled).toBe(true);
+    const off = ship.pos.distanceTo(st.pos);
+    expect(off).toBeGreaterThan(1000);
+    expect(off).toBeLessThan(4000);
+    expect(ship.vel.distanceTo(st.vel.clone().sub(star.vel))).toBeLessThan(3);
   });
 });
