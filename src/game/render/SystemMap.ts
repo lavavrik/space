@@ -12,6 +12,7 @@
 import type { Game } from '../Game';
 import { fmtDist } from '../format';
 import { THREE } from '../lib/three';
+import { lagrangePoints } from '../sim/lagrange';
 import { known } from '../sim/radar';
 import type { Body, Target, World } from '../types';
 
@@ -313,6 +314,29 @@ export class SystemMap {
       ctx.strokeRect(s.x - k, s.y - k, 2 * k, 2 * k);
       this.picks.push({ x: s.x, y: s.y, t: st });
       label(s.x, s.y, st.name, MINT + '0.8)');
+    }
+    // Lagrange points of each known planet (sim/lagrange.ts): a hollow diamond, solid where stable.
+    // Hidden while they'd sit on top of their planet (L1 and L2 when zoomed out) and when the planet
+    // is too small on screen for them to mean anything.
+    const sp = { x: 0, y: 0, z: 0 };
+    for (const b of cur.bodies) {
+      if (b.kind !== 'planet' || !known(g, b) || !this.project(b.pos, sp)) continue;
+      for (const lp of lagrangePoints(b)) {
+        if (!this.project(lp.pos, s) || Math.hypot(s.x - sp.x, s.y - sp.y) < 16 * ui) continue;
+        const k = 3.5 * ui;
+        ctx.strokeStyle = CYA + '0.75)';
+        ctx.fillStyle = CYA + '0.75)';
+        ctx.lineWidth = 1 * ui;
+        ctx.beginPath();
+        ctx.moveTo(s.x, s.y - k);
+        ctx.lineTo(s.x + k, s.y);
+        ctx.lineTo(s.x, s.y + k);
+        ctx.lineTo(s.x - k, s.y);
+        ctx.closePath();
+        if (lp.stable) ctx.fill();
+        else ctx.stroke();
+        label(s.x, s.y, lp.name, CYA + '0.65)');
+      }
     }
     for (const npc of g.traffic) {
       // (one on a pad is inside its station: its square stands for it)
