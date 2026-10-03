@@ -55,6 +55,19 @@ Holding costs, once settled: L4 a few m/s a year (the step size's own error), L1
 
 Time warp is refused while the autopilot holds (it works on thrust), like any hold, and during a phasing burn, but not during its coast.
 
+## Targeting the points (`sim/lpoints.ts`)
+
+The points of every planet the radar has found are targets (`LTarget`, kind `lpoint`; they're worked out from the planet each step, since they're on rails, but each keeps its identity so `g.target` stays equal to itself):
+
+- **T** aims at one (a marker is picked up to 0.35 rad off the nose), **G** cycles them with the bodies and stations by distance, and a click on its marker picks it; on the system map (Shift+O) a click on a point's diamond targets it.
+- **Marker:** a cyan diamond (hollow at L1–L3, filled at the stable L4 and L5) with name and distance, within 2·10¹⁰ m of you and always for the target (with an edge arrow when it's off screen).
+- **Target card and info (I):** where it is, what a ship left there does (stays, or drifts away in so many days, with the real-mission station-keeping figure), the swarm round it and its extent, any depot, and your distance and relative speed.
+- **Approach strip:** where the planet's gravity takes over, and at L4 and L5 the swarm's core.
+- **O** with a point targeted opens the orbit planner already set to hold there (L-point, that point); the hold, the phasing and the rest are as above.
+- Saved and restored by name.
+
+The nav computer's search and routes (M) don't yet take a point as a destination; hold there from the planner.
+
 ## The saddle at L1 and L2 (`sim/manifold.ts`)
 
 Near L1 or L2 the motion in the planet's turning frame is a saddle × centre: one direction grows as e^{λt} (the **unstable manifold**, where a ship left alone drifts to), one shrinks as e^{−λt} (the **stable** one, the way it falls in), the rest oscillates at ν. `saddleModes(planet, k)` linearises the force the ship feels (the parent's pull plus the planet's, tapered) about the point and solves the in-plane modes, `s⁴ + (4ω² − Kxx − Kyy) s² + (Kxx Kyy − Kxy²) = 0`; the position direction of a mode is (1, (s² − Kxx) / (Kxy + 2ω s)). For a light planet λ = 2.53 n, the textbook 23 days at Earth (my first, hand-derived 2.07 was wrong; the test against a flown ship caught it), and it rises with the planet's mass. `driftTime` (the planner's "drifts away over…", the autopilot panel's) now comes from it. Tests fly a ship started on each manifold under the real force and check it leaves at e^{λt} or falls in.
@@ -84,7 +97,7 @@ The depot's shader and the swarm's were compiled and test-rendered offscreen (Da
 
 ## Not done yet
 
-- **Targeting the points** (T/G/click, an approach strip), and **radar identification** of a swarm as a contact.
+- **Radar identification** of a swarm as a contact.
 - **Manifold transfers** *through* L1 and L2 (flying the stable and unstable manifolds to connect a planet's neighbourhood with the co-orbital drift): the saddle is analysed, but no transfer uses it yet. The low-energy trade is made by long phasing (above).
 - **Moons.** `lagrangePoints` works for any world, but only planets are drawn, held and swarmed.
 - **Close pairs.** Round a close binary's barycentre the parent's pull is taken as one point mass, in the plan and in the points.

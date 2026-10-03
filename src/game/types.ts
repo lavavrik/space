@@ -119,8 +119,25 @@ export interface SkyAnchor {
   alt: number; // m above the ground under it
 }
 
+/**
+ * A Lagrange point of a planet as a target (sim/lpoints.ts): worked out from the planet each step
+ * (the point is on rails, not a body), so `pos` and `vel` are always the present ones.
+ */
+export interface LTarget {
+  kind: 'lpoint';
+  name: string; // "Venydes 2 L4"
+  typeName: string;
+  planet: World;
+  k: 1 | 2 | 3 | 4 | 5;
+  radius: number; // m, for the marker and picking
+  pos: Vec3; // m, system frame
+  vel: Vec3; // m/s, system frame
+  /** Sim time `pos` and `vel` are for. */
+  at: number;
+}
+
 /** Anything the ship can target. */
-export type Target = Body | Station | Npc | Wreck;
+export type Target = Body | Station | Npc | Wreck | LTarget;
 
 /**
  * A ship you lost, with metal still in its hold (sim/wreck.ts): its beacon marks it, and its metal

@@ -39,7 +39,7 @@ export function learnSystem(g: Game) {
 
 /** How much of `t` has been scanned, 0…1. */
 export function scanProgress(g: Game, t: Target) {
-  if (t.kind === 'wreck') return 1; // your own ship: its beacon says it all
+  if (t.kind === 'wreck' || t.kind === 'lpoint') return 1; // your own ship: its beacon says it all; a point is worked out, not scanned
   if (g.cur.sys.id === HOME_ID && t.kind !== 'ship') return 1; // you know your home system (not who's passing through)
   return g.scans.get(scanKey(g.cur.sys, t)) ?? 0;
 }

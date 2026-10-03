@@ -53,6 +53,14 @@ function milestones(g: Game, t: Target): Raw[] {
     else add(HOLD_OUT, 'HOLD POINT', 'Approach hold point on the slot axis', 'info');
     return out;
   }
+  if (t.kind === 'lpoint') {
+    // a Lagrange point: where its planet's gravity takes over, and for L4 and L5 the swarm's core
+    const dPlanet = t.pos.distanceTo(t.planet.pos);
+    add(dPlanet - t.planet.soi, 'GRAVITY', `Sphere of influence: ${t.planet.name}'s gravity dominates inside it`, 'info');
+    const f = g.cur.trojans?.find((x) => x.planet === t.planet && x.k === t.k);
+    if (f) add(2 * f.sigZ, 'SWARM CORE', `${f.name}: rocks all about you inside this, flight assist matches the swarm`, 'warn');
+    return out;
+  }
   if (t.kind === 'ship' || t.kind === 'wreck') return out; // a ship or a wreck: nothing to mark on the way
   const b = t;
   if (b.kind !== 'star') add(b.soi - b.radius, 'GRAVITY', `Sphere of influence: ${b.name}'s gravity dominates, its frame and orbits from here`, 'info');

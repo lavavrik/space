@@ -14,7 +14,8 @@ import { HULL, SIGMA, TEMP, heatCap } from '../sim/thermal';
 import type { InfoView, Readout } from './types';
 import { orbitBody, padCount } from '../sim/stationGeom';
 import { SALVAGE_R, SALVAGE_V, wreckMetal } from '../sim/wreck';
-import type { Wreck } from '../types';
+import { driftTime, lagrangePoints } from '../sim/lagrange';
+import type { LTarget, Wreck } from '../types';
 
 const MEARTH = 5.972e24;
 const DEG = 180 / Math.PI;
@@ -34,6 +35,7 @@ export function buildInfo(g: Game, t: Target): InfoView {
   // relative to it come from the ship's instruments and are always shown
   if (t.kind === 'ship') return shipInfo(g, t);
   if (t.kind === 'wreck') return wreckInfo(g, t);
+  if (t.kind === 'lpoint') return lpointInfo(g, t);
   const p = scanProgress(g, t);
   const unknown: [string, string] = ['SCAN', scanHint(g, t, p)];
   let physical: [string, string][] = t.kind === 'station' ? stationPhysical(t) : bodyPhysical(g, t);
@@ -248,4 +250,28 @@ function youRows(g: Game, t: Body | Station): [string, string | Readout][] {
     );
   }
   return rows;
+}
+
+/** A Lagrange point (sim/lpoints.ts): where it is, what holds there, what a ship left there does. */
+function lpointInfo(g: Game, t: LTarget): InfoView {
+  const w = t.planet;
+  const lp = lagrangePoints(w)[t.k - 1];
+  const wh = { 1: 'between it and its star', 2: 'beyond it, away from its star', 3: 'opposite it across its star', 4: 'leading it by 60°', 5: 'trailing it by 60°' }[t.k];
+  const physical: [string, string][] = [
+    ['WHERE', `${wh}${t.k <= 2 ? ` · ${fmtDist(lp.pos.distanceTo(w.pos))} from ${w.name}` : ''}`],
+    ['A SHIP LEFT HERE', lp.stable ? 'stays: stable, no thrust needed' : `drifts away in ${fmtTime(driftTime(lp))}; real missions burn ~${lp.dvYear.toFixed(1)} m/s a year to keep it`],
+  ];
+  const orbit: [string, string][] = [['ORBITS', `${w.parent.name}, with ${w.name} (${fmtTime((2 * Math.PI) / w.orb.n)} a turn)`]];
+  const f = g.cur.trojans?.find((x) => x.planet === w && x.k === t.k);
+  if (f) orbit.push(['SWARM', `${f.name}: dark, metal-rich rocks about you inside ${fmtDist(2 * f.sigZ)} of it, thinning out to ${fmtDist(2 * f.sigA * lp.pos.distanceTo(w.parent.pos))} along the orbit`]);
+  const dep = g.cur.stations.filter((s) => s.depot && s.parent === w && s.depot.k === t.k).map((s) => s.name);
+  if (dep.length) orbit.push(['DEPOT', dep.join(', ')]);
+  const rv = g.ship.pos.clone().sub(t.pos);
+  const v = g.ship.vel.clone().add(g.frameBody.vel).sub(t.vel);
+  const you: [string, string | Readout][] = [
+    ['DISTANCE', fmtDist(rv.length())],
+    ['RELATIVE SPEED', g.ship.mode === 'ftl' ? 'in FTL' : fmtSpeedText(v.length())],
+    ['O', 'plan a hold here in the orbit planner'],
+  ];
+  return { title: t.name, type: 'LAGRANGE POINT', physical, orbitHead: 'ORBIT', orbit, you };
 }

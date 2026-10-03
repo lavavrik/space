@@ -27,6 +27,7 @@ import { UTILITY_SLOTS, batteryById, bestOutfit, moduleById } from './outfit/cat
 
 /** The outfit's save format: 2 added utility slots 4 and 5 (belt protection), 3 slot 6 (mining laser). */
 const OUTFIT_REV = 4;
+import { lpointsHere } from './sim/lpoints';
 import type { ApType, Autopilot, Npc, Ship, Target, Wreck } from './types';
 import { systemById } from './universe/galaxy';
 import { resetFrame } from './sim/frame';
@@ -96,7 +97,7 @@ export interface FlightSave {
   dockRequest: { station: string; t: number } | null;
   autodock: { phase: AutoPhase; station: string; pad: number } | null;
   refFrame: string | null;
-  target: { kind: 'body' | 'station'; name: string } | null;
+  target: { kind: 'body' | 'station' | 'lpoint'; name: string } | null;
 }
 
 /** Another ship: who it is, what its captain is doing (sim/traffic.ts), and its flight state. */
@@ -204,7 +205,7 @@ function snapshotFlight(c: Game): FlightSave {
     dockRequest: c.dockRequest && { station: c.dockRequest.station.name, t: c.dockRequest.t },
     autodock: c.autodock && c.autodockStation ? { phase: c.autodock.phase, station: c.autodockStation.name, pad: c.autodockPad } : null,
     refFrame: c.refFrame?.name ?? null,
-    target: t && t.kind !== 'ship' ? { kind: t.kind === 'station' ? 'station' : 'body', name: t.name } : null,
+    target: t && t.kind !== 'ship' ? { kind: t.kind === 'station' ? 'station' : t.kind === 'lpoint' ? 'lpoint' : 'body', name: t.name } : null,
   };
 }
 
@@ -394,7 +395,8 @@ function restoreFlight(c: Game, f: FlightSave) {
     ship.ap = ap;
     startOrbitGuide(c, ap);
   }
-  const t: Target | null = f.target ? (f.target.kind === 'station' ? station(f.target.name) : body(f.target.name)) : null;
+  const ft = f.target;
+  const t: Target | null | undefined = !ft ? null : ft.kind === 'station' ? station(ft.name) : ft.kind === 'lpoint' ? lpointsHere(c).find((x) => x.name === ft.name) : body(ft.name);
   if (t) c.target = t;
 }
 

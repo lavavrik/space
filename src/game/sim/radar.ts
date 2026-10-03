@@ -35,6 +35,7 @@ export function radarClass(t: Target) {
   if (t.kind === 'station') return 'station';
   if (t.kind === 'ship') return 'ship';
   if (t.kind === 'wreck') return 'wreck';
+  if (t.kind === 'lpoint') return 'Lagrange point';
   if (t.kind === 'star') return 'star';
   if (t.kind === 'moon') return 'moon';
   return t.type === WT.GasGiant ? 'gas giant' : t.type === WT.IceGiant ? 'ice giant' : 'rocky world';
@@ -45,7 +46,7 @@ export function radarClass(t: Target) {
  * system's star is always known by name (it's on the star map).
  */
 export function contactLabel(g: Game, t: Target) {
-  if (t.kind === 'wreck') return t.name; // its beacon says what it is
+  if (t.kind === 'wreck' || t.kind === 'lpoint') return t.name; // its beacon says what it is; a point is named for its planet
   if (t.kind === 'ship') return scanProgress(g, t) >= SCAN_STAGE.type ? `${t.cls} ${t.name}` : radarSeen(g, t) ? 'Unidentified ship' : 'Unknown object';
   if (t.kind === 'star' || scanProgress(g, t) >= SCAN_STAGE.type) return t.name;
   // before the radar has it, all we know is that something's there (e.g. a disc we clicked)
@@ -53,7 +54,7 @@ export function contactLabel(g: Game, t: Target) {
 }
 
 /** Does the HUD know about this object (the system's star, or anything the radar has found)? */
-export const known = (g: Game, t: Target) => t.kind === 'star' || t.kind === 'wreck' || radarSeen(g, t);
+export const known = (g: Game, t: Target): boolean => t.kind === 'star' || t.kind === 'wreck' || (t.kind === 'lpoint' ? known(g, t.planet) : radarSeen(g, t));
 
 /** Has the radar ever picked this up (in the current system)? */
 export const radarSeen = (g: Game, t: Target) => g.radar.seen.has(scanKey(g.cur.sys, t));

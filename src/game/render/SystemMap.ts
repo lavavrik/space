@@ -14,6 +14,7 @@ import { fmtDist } from '../format';
 import { THREE } from '../lib/three';
 import { lagrangePoints } from '../sim/lagrange';
 import { swarmCentre } from '../sim/swarm';
+import { lpointFor } from '../sim/lpoints';
 import { known } from '../sim/radar';
 import type { Body, Target, World } from '../types';
 
@@ -337,6 +338,7 @@ export class SystemMap {
         if (lp.stable) ctx.fill();
         else ctx.stroke();
         label(s.x, s.y, lp.name, CYA + '0.65)');
+        this.picks.push({ x: s.x, y: s.y, t: lpointFor(g, b, lp.k) });
       }
     }
     // trojan swarms of the planets you know: a dotted outline at 2σ (sim/swarm.ts), labelled

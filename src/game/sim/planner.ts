@@ -3,7 +3,7 @@ import { unitLabel } from '../avionics/catalog';
 import { AP_FTL_MIN, FTL_CHARGE_TIME } from '../constants';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
-import type { Autopilot, Body, OrbitType, Station, World } from '../types';
+import type { Autopilot, Body, OrbitType, Planner, Station, World } from '../types';
 import { lagrangePoints } from './lagrange';
 import { orbitBody } from './stationGeom';
 import { ringDensity } from './rings';
@@ -24,10 +24,16 @@ export function openPlanner(g: Game) {
   }
   // a targeted station plans an orbit around the world it circles
   // (a ship has no orbit to plan round: plan round what you're near)
-  const t = g.target && g.target.kind === 'station' ? g.target.parent : g.target && g.target.kind !== 'ship' && g.target.kind !== 'wreck' ? g.target : null;
+  const lp = g.target?.kind === 'lpoint' ? g.target : null; // a targeted Lagrange point: plan the hold there
+  const t: Body | null = lp ? lp.planet : g.target && g.target.kind === 'station' ? g.target.parent : g.target && g.target.kind !== 'ship' && g.target.kind !== 'wreck' && g.target.kind !== 'lpoint' ? g.target : null;
   const b = t || (ship.grav && ship.grav.body) || dominantBody(g.cur, ship.pos);
   const curAlt = ship.pos.distanceTo(b.pos) - b.radius;
-  g.planner = { body: b, type: oc.caps.types[0], alt: defaultOrbitAlt(b), dir: 1, curAlt, lk: 1 };
+  const plan: Planner = { body: b, type: oc.caps.types[0], alt: defaultOrbitAlt(b), dir: 1, curAlt, lk: 1 };
+  if (lp && oc.caps.types.includes('lagrange')) {
+    plan.type = 'lagrange';
+    plan.lk = lp.k;
+  }
+  g.planner = plan;
   g.invalidateHud();
 }
 

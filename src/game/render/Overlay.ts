@@ -20,6 +20,10 @@ import { padWorld } from '../sim/docking';
 import { contactLabel, known } from '../sim/radar';
 import { liveProspects, prospectNow } from '../sim/prospect';
 import { wreckMetal, wrecksHere } from '../sim/wreck';
+import { lpointsHere } from '../sim/lpoints';
+
+/** Lagrange points are marked within this of you when not targeted (m): a few Hill radii of the planet you're by. */
+const LPOINT_SHOW = 2e10;
 /** Prospect markers' colours by the rock's metal (rgba prefixes). */
 const PROSPECT_COL = { icy: 'rgba(255,230,199,', rocky: 'rgba(214,190,160,', 'nickel-iron': 'rgba(200,190,175,', 'cobalt-rich': 'rgba(110,160,255,', 'platinum-rich': 'rgba(255,215,120,' } as const;
 
@@ -285,6 +289,7 @@ export class Overlay {
     this.drawTraffic(g);
     this.drawProspects(g);
     this.drawWrecks(g);
+    this.drawLPoints(g);
     this.drawRockThreat(g);
     this.drawLaserTarget(g);
     this.drawReachable(g);
@@ -738,6 +743,54 @@ export class Overlay {
       const range = hi - lo < lo * 0.02 ? fmtDist(lo) : `${fmtDist(lo)}–${fmtDist(hi)}`;
       ctx.fillText(`${st ? `${contactLabel(g, st)} · ` : ''}${c.ships.length} ships · ${range}`, c.x + 8, c.y - 6);
     }
+  }
+
+  /**
+   * Lagrange points (sim/lpoints.ts): a cyan diamond, hollow where a ship left there drifts off and
+   * filled where it stays, with its name and distance. Shown for the one targeted and for those
+   * within LPOINT_SHOW of you (the near ones of the planet you're by); an edge arrow while the
+   * target is off screen. Hidden behind a world.
+   */
+  private drawLPoints(g: Game) {
+    const { ctx, W, H } = this;
+    const { ship } = g;
+    ctx.save();
+    ctx.font = this.font(11, SANS);
+    ctx.lineWidth = 1.4 * this.ui;
+    for (const t of lpointsHere(g)) {
+      const isT = g.target === t;
+      const rel = this.tmp.subVectors(t.pos, ship.pos);
+      const d = rel.length();
+      if (!isT && d > LPOINT_SHOW) continue;
+      if (occluder(g.cur.bodies, ship.pos, t.pos)) continue;
+      const s = this.toScreen(g, rel);
+      const text = `${t.name} · ${fmtDist(d)}`;
+      if (s.behind || s.x < 0 || s.x > W || s.y < 0 || s.y > H) {
+        if (isT) this.edgeArrow(s.v, CYA, text);
+        continue;
+      }
+      const r = (isT ? 8 : 5) * this.ui;
+      ctx.strokeStyle = CYA + (isT ? '0.95)' : '0.65)');
+      ctx.fillStyle = CYA + (isT ? '0.95)' : '0.65)');
+      ctx.beginPath();
+      ctx.moveTo(s.x, s.y - r);
+      ctx.lineTo(s.x + r, s.y);
+      ctx.lineTo(s.x, s.y + r);
+      ctx.lineTo(s.x - r, s.y);
+      ctx.closePath();
+      if (t.k >= 4) ctx.fill();
+      else ctx.stroke();
+      if (isT) {
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, r + 6 * this.ui, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      if (g.showNames || isT) {
+        ctx.textAlign = 'left';
+        ctx.fillText(isT ? text.toUpperCase() : text, s.x + r + 6 * this.ui, s.y + 4 * this.ui);
+      }
+    }
+    ctx.restore();
   }
 
   /**
