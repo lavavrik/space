@@ -46,6 +46,7 @@ const SHEET: { title: string; actions: Action[] }[] = [
     actions: [
       { label: 'Scan', code: 'KeyY' },
       { label: 'Pivot to', code: 'KeyT', shift: true },
+      { label: 'Travel to', code: 'KeyG', shift: true },
       { label: 'Info', code: 'KeyI' },
       { label: 'Radar', code: 'KeyY', shift: true },
       { label: 'Names', code: 'KeyN', shift: true },

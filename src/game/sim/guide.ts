@@ -10,6 +10,7 @@ import { isDeck, toLocal } from './stationGeom';
 import { apGeom, apInsertion, approachTime, holdPoint, orbitVelErr, profileOf, RDV_STANDOFF } from './autopilot';
 import { velRel } from './frame';
 import { orbitElements } from './gravity';
+import { pathEta } from './ftlPath';
 import { apPoint } from './lagrange';
 import { deltaVLeft, shipMass } from './resources';
 
@@ -104,11 +105,13 @@ function ftlStepsFor(g: Game, ap: Autopilot, steps: GuideStep[]) {
       title: `FTL transfer to ${b.name}`, kind: 'ftl',
       active: () => ap.phase === 'transfer', done: () => ap.phase === 'insert',
       err: () => apInsertion(ship, ap).P.distanceTo(ship.pos),
-      // speed is held near 0.8 × remaining distance, so distance decays as e^(−0.8 t)
+      // the time the course round the wells takes (sim/ftlPath.ts); before it's planned, the closing
+      // alone: speed is held near 0.8 × the remaining distance, so it decays as e^(−0.8 t)
       etaFn: () => {
         const { P, rT } = apInsertion(ship, ap);
-        const d = P.distanceTo(ship.pos);
-        return Math.log(Math.max(1, d / Math.max(30e3, rT * 0.01))) / 0.8 + (ship.ftlSpeed < 1e5 ? 4 : 0);
+        const drop = Math.max(30e3, rT * 0.01);
+        const t = pathEta(ap, g.cur.bodies, P, drop) ?? Math.log(Math.max(1, P.distanceTo(ship.pos) / drop)) / 0.8;
+        return t + (ship.ftlSpeed < 1e5 ? 4 : 0);
       },
       detail: () => `Drop point ${fmtDist(apInsertion(ship, ap).rT - b.radius)} up · ${fmtDist(apInsertion(ship, ap).P.distanceTo(ship.pos))} to go`,
     }));

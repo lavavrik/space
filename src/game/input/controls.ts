@@ -16,7 +16,7 @@ import { adjustNavRevs, engageRoute, NAV_MODES, removeNavPoint, replan, requestC
 import { startTankerGuide } from '../sim/guide';
 import { pickDest, cycleTarget, startJump, targetAhead } from '../sim/navigation';
 import { ORBIT_TYPES } from '../sim/orbits';
-import { adjustAlt, closePlanner, engageOrbit, openPlanner, requestDisengage, reversePlannerDir, selectOrbitType, toggleOrbitPreview } from '../sim/planner';
+import { adjustAlt, closePlanner, engageOrbit, openPlanner, requestDisengage, reversePlannerDir, selectOrbitType, toggleOrbitPreview, travelToTarget } from '../sim/planner';
 
 /** Handle a key press (not held keys, which the simulation polls). */
 export function onPress(g: Game, code: string) {
@@ -279,7 +279,9 @@ export function onPress(g: Game, code: string) {
       else targetAhead(g);
       break;
     case 'KeyG':
-      cycleTarget(g);
+      // Shift+G: travel to the target on the autopilot (sim/planner.ts); G: the next nearest target
+      if (keys.ShiftLeft || keys.ShiftRight) travelToTarget(g);
+      else cycleTarget(g);
       break;
     case 'KeyN':
       // N: pick a star to jump to; Shift+N: names on the HUD's markers on / off

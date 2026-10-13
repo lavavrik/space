@@ -304,6 +304,8 @@ export class SystemMap {
     // the autopilot's target orbit (dashed)
     const ap = g.ship.ap;
     if (ap && ap.n && ap.type !== 'hold' && ap.type !== 'rendezvous') this.path(circle(ap.body.pos, ap.r0, ap.n, fp, m.dist), CYA + '0.6)', 1.2, [6, 5]);
+    // the FTL leg's course round the gravity wells, while it's flown (sim/ftlPath.ts)
+    if (ap?.path && g.ship.mode === 'ftl') this.path(ap.path.pts, CYA + '0.75)', 1.2, [2, 4]);
     // a line to the target and to the navigation computer's destination
     if (g.target && g.target.pos) this.path([g.ship.pos, g.target.pos], RED + '0.35)', 1, [3, 6]);
 

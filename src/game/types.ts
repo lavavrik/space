@@ -1,5 +1,6 @@
 import type { Avionics } from './avionics/catalog';
 import type { Outfit } from './outfit/catalog';
+import type { FtlPath } from './sim/ftlPath';
 import type { THREE } from './lib/three';
 
 type Vec3 = THREE.Vector3;
@@ -289,6 +290,8 @@ export interface Autopilot {
   settled: boolean;
   /** The acceleration (m/s²) the thrusters have turned out able to deliver (the bus may not feed the full AP_ACC): the approach brakes within it. */
   accCap?: number;
+  /** The FTL leg's course round the gravity wells (sim/ftlPath.ts): planned as the leg starts, not saved. */
+  path?: FtlPath;
   t0: number; // sim time when engaged
   prop0: number; // propellant (kg) when engaged, for the Δv-used readout
 }

@@ -7,7 +7,8 @@ darkened screen; the flight HUD steps aside (only the messages stay). The game k
   once their orbit is a few pixels across), and rings; stations, with their orbits (sky stations
   just marked); other ships the radar knows; your ship (a cyan arrowhead along your motion) and its
   orbit round the world whose sphere of influence you're in (the whole ellipse if bound, the escape
-  arc out to the sphere of influence if not); the autopilot's target orbit (dashed); your target
+  arc out to the sphere of influence if not); the autopilot's target orbit (dashed), and on its FTL
+  leg the course it's flying round the gravity wells (dotted cyan, docs/ftlpath.md); your target
   (red brackets) and a dotted line to it.
 - **Moving round:** drag to turn the view round its focus, the wheel to zoom (10 km to ~1,000 AU),
   click something to target it and make it the view's centre (the view eases across; the zoom stays). It opens

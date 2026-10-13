@@ -137,7 +137,7 @@ export const POST_FLOATS = BOW_AT + 4;
 /** The camera's near plane (m; GpuRenderer's NEAR): a warp's depth is NEAR / its distance. */
 const NEAR = 0.5;
 /** Another ship's FTL warp: the drive's field bends space this far across (m). */
-const WARP_SIZE = 10000e3;
+const WARP_SIZE = 100e3;
 
 /**
  * The space warps on screen this frame (tonemap.wgsl warpAt; docs/post.md), in place of the white

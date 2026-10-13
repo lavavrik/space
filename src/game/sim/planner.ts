@@ -188,6 +188,58 @@ export function engageAutopilot(g: Game, spec: ApSpec, quiet = false) {
   return ap;
 }
 
+/**
+ * Travel to the target (Shift+G): the autopilot flies there with the plan the orbit planner would
+ * open with, without opening it. A station: a rendezvous beside it (K docks from there). A Lagrange
+ * point: a hold at it. A world or star: its default orbit (the planner's first type, at its default
+ * altitude). It charges the FTL drive and flies the leg when that's quicker (round the gravity wells:
+ * sim/ftlPath.ts), climbing out of a mass lock first; otherwise it goes on thrusters.
+ */
+export function travelToTarget(g: Game) {
+  const { ship } = g;
+  const t = g.target;
+  const oc = ship.avionics.orbit;
+  if (!oc) {
+    g.showMsg('No orbit computer fitted · see avionics (U)', 'warn');
+    return;
+  }
+  if (!t) {
+    g.showMsg('No target · T, G or click to pick one, then Shift+G to travel there', 'warn');
+    return;
+  }
+  if (g.route?.running) {
+    g.showMsg('The navigation computer is flying a route · Backspace ×2 cancels it first', 'warn');
+    return;
+  }
+  if (g.jump) {
+    g.showMsg('Hyperdrive is charging', 'warn');
+    return;
+  }
+  if (g.dock?.docked) {
+    g.showMsg('Docked · launch first (K)', 'warn');
+    return;
+  }
+  if (g.inStation) {
+    g.showMsg('Not inside a station · leave through the slot first', 'warn');
+    return;
+  }
+  if (t.kind === 'ship' || t.kind === 'wreck') {
+    g.showMsg(`The autopilot can't chase ${t.kind === 'ship' ? 'a ship' : 'a wreck'} · target its world or station`, 'warn');
+    return;
+  }
+  if (t.kind === 'station') {
+    engageRendezvous(g, t);
+    return;
+  }
+  if (t.kind === 'lpoint' && !oc.caps.types.includes('lagrange')) {
+    g.showMsg(`${unitLabel(oc)} can't hold at Lagrange points`, 'warn');
+    return;
+  }
+  openPlanner(g);
+  engageOrbit(g);
+  closePlanner(g); // (when the plan couldn't be flown: engageOrbit said why)
+}
+
 /** Rendezvous with a station: close on it on the station's own orbit and match its velocity. */
 export function engageRendezvous(g: Game, st: Station) {
   const p = orbitBody(st);

@@ -185,6 +185,7 @@ export function engageFTL(g: Game) {
   if (g.ship === ship && g.warpFx) g.warpFx.push({ r: 0.9, age: 0, dur: 1.1 }); // (the field forming round you)
   if (ship.ap) {
     ship.ap.phase = 'transfer';
+    ship.ap.path = undefined; // (the course is planned from here: sim/ftlPath.ts)
     g.showMsg(`Autopilot · FTL transfer to ${ship.ap.body.name}`, 'ftl');
     return;
   }
@@ -204,6 +205,7 @@ export function dropFTL(g: Game, forced: boolean, body?: Body) {
   ship.ftlSpeed = 0;
   if (ship.ap) {
     ship.ap.phase = 'insert';
+    ship.ap.path = undefined;
     // (at rest relative to the target; a Lagrange point's is its planet, whose velocity in the star's frame is its orbit's)
     if (ship.ap.type === 'lagrange') {
       // a phasing transfer's gate is matched (like a station); a straight run to a point arrives moving with the planet
