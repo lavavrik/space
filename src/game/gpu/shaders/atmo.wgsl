@@ -157,6 +157,15 @@ fn atRolloffP(c: vec3f, pale: f32) -> vec3f {
   return mix(c * (lo / l), vec3f(lo), pale * x / (1.0 + x)); // (paled less, 0.35, distant clouds by the horizon went yellow)
 }
 
+// The haze laid over clouds, paled toward grey (its light and how it dims what's behind, atTrans):
+// the air's own is single scattering, mostly Rayleigh blue, and below the knee it isn't paled at all,
+// so 20–30 km of it, from a few km up over a cloud field, turned white cumulus lavender and their
+// shaded sides blue (SPACE-94). Haze in front of a bright cloud reads grey-white (aerosols, light
+// scattered many times over), while the clear air and the sea behind keep their blue.
+const CLOUD_HAZE_PALE = 0.6;
+fn cloudHaze(haze: vec3f) -> vec3f { return mix(haze, vec3f(dot(haze, vec3f(0.2126, 0.7152, 0.0722))), CLOUD_HAZE_PALE); }
+fn cloudHazeT(tr: vec3f) -> vec3f { return mix(tr, vec3f(dot(tr, vec3f(0.2126, 0.7152, 0.0722))), CLOUD_HAZE_PALE); }
+
 fn atInscatter(P0: vec3f, P1: vec3f, L: vec3f, n: i32) -> vec3f {
   return atInscatterC(P0 - world.atC.xyz, P1 - world.atC.xyz, L, n);
 }
@@ -214,6 +223,22 @@ fn aurora(dir: vec3f, span: vec2f, C: vec3f, b: f32, CC: f32) -> vec3f {
   if (max(length(dir * t0 - C), length(dir * t1 - C)) < r1) { return vec3f(0.0); }
   let L = normalize(world.light.xyz);
   let toL = mat3x3f(world.toLocal[0].xyz, world.toLocal[1].xyz, world.toLocal[2].xyz);
+  // A short path (over the disc from orbit, or a flight's: the shell is a few % of the radius deep)
+  // turns its local "up" through at most `span` rad, which bounds how far its sun height and
+  // latitude can stray from its ends': if both ends are in full daylight, or both off the same side
+  // of the oval (its ±0.05, its wander ±0.023), no step can glow, and the 12 are skipped. From orbit
+  // over a daylit world they ran on every pixel for nothing (~0.3 ms at 8.5 MP, SPACE-94). At the limb,
+  // seen edge-on, the path is long and this doesn't apply.
+  let ua = normalize(dir * t0 - C);
+  let ub = normalize(dir * t1 - C);
+  let ca = dot(ua, ub);
+  if (ca > 0.995) {
+    let span = acos(clamp(ca, -1.0, 1.0));
+    if (min(dot(ua, L), dot(ub, L)) > 0.02 + span) { return vec3f(0.0); }
+    let la = abs((toL * ua).y) - 0.94;
+    let lb = abs((toL * ub).y) - 0.94;
+    if (la * lb > 0.0 && min(abs(la), abs(lb)) > 0.075 + span) { return vec3f(0.0); }
+  }
   let tt = world.time;
   let ds = (t1 - t0) / 12.0;
   var sum = vec3f(0.0);

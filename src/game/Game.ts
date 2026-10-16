@@ -347,6 +347,11 @@ export class Game {
     this.scene.terrainSweep?.();
   }
 
+  /** Alt+` (perf overlay): the scene's GPU cost by part (debug/costSweep.ts). */
+  costSweep() {
+    this.scene.costSweep?.();
+  }
+
   invalidateHud() {
     this.hudT = 0;
   }

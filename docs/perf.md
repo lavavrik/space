@@ -10,7 +10,27 @@ Press **`** (backquote) or open the game with `?perf` to show the performance ov
 
 ## GPU time by pass
 
-While the overlay is up, the fourth line splits GPU time by pass (`gpu/timing.ts`): the compute passes (terrain bake, rock cull, meter), then the scene split into sky, far bodies (stars, worlds seen as spheres), terrain (the chunks), rocks (the rings'), stations and ships, and transparent (glows, rings, dots, skies, clouds), and post (tone mapping). WebGPU times whole passes, so to split the scene it's drawn as six passes while the overlay is up (storing and reloading the MSAA target between them, which costs a little itself). Before the WebGPU port it split by shader category with WebGL timer queries.
+While the overlay is up, GPU time is split by pass (`gpu/timing.ts`): the compute passes (terrain bake, rock cull, meter), the shadow map, the **scene** (one pass: sky, bodies, terrain, rocks, stations and ships, the transparent things), the volumetric clouds, bloom and post (tone mapping).
+
+**The GPU figure is the frame's span**, from the first pass's start to the last one's end, not the sum of the passes. On a tile-based GPU (Apple's) a pass's timestamps overlap the next pass's: a heavy pass's work spills past its end, and the times summed ran to 30 ms in a 9 ms frame. So the per-pass times are a rough guide only (a trivial pass after a heavy one, like post, can read several ms) and get no share of the frame.
+
+The scene used to be drawn as six passes while the overlay was up, to time sky, far bodies, terrain, rocks, stations and ships, and transparent separately. Those times were mostly not their draws (SPACE-94): each split pass reloads and stores the 4× MSAA frame, and takes in the previous pass's spill, so a "stations, ships" pass drawing nothing read the same 6 ms as drawing them. The split now only runs for the terrain sweep below, which reads its `terrain` pass (`PerfMonitor.splitPasses`).
+
+## Pacing
+
+The panel's third line is the pacing: the display's refresh (estimated by the dynamic resolution, `gpu/dynres.ts`), the share of the last 240 frames that came over 1.5 refreshes (each missed a refresh and shows as a hitch), and the resolution scale. An average hides judder: at 120 Hz a GPU needing a little over 8.3 ms alternates 8 and 17 ms frames, 100 FPS on the counter and choppy on the screen. Dynamic resolution steps down only at 25 % late frames, so up to that it holds the resolution and lets frames miss.
+
+## The frame's cost by part (Alt+`)
+
+**Alt+`** runs the cost sweep (`debug/costSweep.ts`): each part of the frame is left out in turn for about two seconds (the scene's sky, far bodies, terrain, rocks, stations, ships, swarm, star glows, rings, dots, particles, atmospheres and cloud decks, then whole stages: the shadow map, the volumetric clouds, bloom), and its cost is how much the frame's GPU span falls without it. A baseline with everything on is measured before every four parts and at the end, and each part is compared with the baselines either side of it (interpolated in time), so a drift doesn't read as a cost. The resolution is held still meanwhile. It takes about 40 s; the picture is wrong while it runs (parts vanish in turn). The result replaces the pass list until the overlay closes, most first, as ms and a share of the frame's span, with **rest**: the span less every part's cost (the tone map, the MSAA resolve, each pass's fixed cost), and the noise level (how much the baselines varied: smaller costs are noise); it's also in the console (`console.table`, `globalThis.costSweep`). Closing the overlay stops a sweep.
+
+Checked (2550×1317, Apple GPU, headless): at a sky station the frame's span 17 ms; terrain 6.5 ms, cloud decks 0.6, atmospheres 0.5, ships 0.4, stations 0.02, the rest within the ±0.35 ms noise. Venydes 3 from 13,000 km on its day side, with another tab of the game drawing: the noise was ±1.7 ms, and the sweep's "cloud decks 4.0" was that noise: switching the deck on and off eight times over, pair by pair, it cost 0.0 ms. Trust a cost well over the noise figure, and measure with nothing else on the GPU.
+
+**Measuring on an Apple GPU** (what SPACE-94 learnt):
+- **The GPU clocks itself down under a light load**, so at a light load times stretch to fill the frame and small costs get absorbed: headless Chrome at 60 Hz read the deck as anything from 0.5 to 2.5 ms run to run. Measure loaded: a visible window at the display's rate (the browser pane at 125 Hz read it at 3.80 ± 0.07 ms), or headless at a raised scale (`scene.setScale(2)`: 8.5 MP keeps it at full clock).
+- **A hidden page stops drawing** (the pane out of view: `document.hidden`), and its numbers are worthless.
+- **Switch parts off through the game's own `gpuSkip`** (`globalThis.farlightSkip` in dev builds). A test page that imports `debug/costSweep.ts` itself can get a second copy of it once the dev server has hot-reloaded the file, and switching parts off there does nothing: every part read as free, and an empty scene cost what a full one did.
+- **The scene's contents, not the HUD.** In the pane, hiding the 2D HUD canvas or the HUD panels changed nothing measurable; an empty scene took 0.85 ms against 8.0 with everything drawn.
 
 ## Terrain pixel bisect (`?tdbg=<bits>`)
 
@@ -43,7 +63,14 @@ Open the game with `?tdbg=N` (N the sum of the bits below) and read the panel's 
 
 **Shift+`** sweeps them all from where you are (`debug/tdbg.ts`): about 4 s each with the resolution held, then the terrain pass's median and mean per setting in the console (`terrainSweep` holds the rows) and on the panel. Chrome rounds GPU timestamps to ~0.13 ms unless it's started with `--enable-webgpu-developer-features`; without that, the medians all land on the same value.
 
-## Terrain pixels above the clouds (2026-10-01)
+## A planet from orbit (2026-10-04, SPACE-94)
+
+Venydes 3 from 13,000 km on its day side, choppy on a 120 Hz display. In the browser pane (visible, 125 Hz, 2451×1959) the frame was 8.0 ms and an empty scene 0.85: the scene's contents, not the HUD or a fixed cost. Left out in pairs: the cloud deck 3.80 ± 0.07 ms, the terrain 2.69, far bodies 0.46, atmospheres and bloom 0.33 each, the rest nothing.
+
+- **The cloud deck** shaded the shell's far side on every pixel of the world (drawn unculled, and its own depth write turns off the early depth test); now discarded first where the world hides it (docs/clouds.md). At 8.5 MP the frame 9.6 → 7.1 ms.
+- **The terrain**, by its `tdbg` bits in pairs at 8.5 MP: all its shading 4.7 ms (flat grey), of which the sea 0.4–1.8 (with how much sunlit sea is in view; the sky in the water and its mirrored clouds most of it), the colour noise 0.6, the finer height octaves 0.35, the auroras 0.2–0.45. (Leaving the terrain out altogether saved only 2.2: the air shell's far side is then shaded where the ground hid it.) The auroras' 12-step march ran on every daylit pixel far from the ovals for nothing: now skipped when both ends of the ray's short path through their shell are in daylight or off the same side of the oval (`atmo.wgsl aurora`): 0.06–0.12 ms after, within the noise. The rest is work that shows.
+
+
 
 On an RTX 4090 at 3132×1597, Venydes 2 from 20 km up over the overcast, the terrain pass took 1.95 ms of 3.16 (its flat-grey floor 0.39). The sweep found three parts doing work nobody saw, now skipped where they can't show (the picture is the same): the cities' population noise by day (its only use is the night lights; 0.28 ms), the lakes' finer octave where the coarse one is far from the shore's threshold (0.14 ms), and the auroras' 12-step march when the whole ray is under their shell (0.11 ms). Terrain 1.95 → 1.48 ms, GPU 3.16 → 2.69 ms.
 

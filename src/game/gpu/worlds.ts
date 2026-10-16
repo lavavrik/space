@@ -10,6 +10,7 @@
  * each (as three.js sorts them): glow, rings, dots; skies; cloud decks.
  */
 import type { Game } from '../Game';
+import { gpuSkip } from '../debug/costSweep';
 import { AU, FOV, WT } from '../constants';
 import { THREE } from '../lib/three';
 import { noise3dBytes, noise3dGrads, NOISE3D_SIZE } from '../lib/noise3d';
@@ -720,19 +721,21 @@ export class WorldsLayer {
    */
   drawTransparent(pass: GPURenderPassEncoder, more: (pass: GPURenderPassEncoder) => void) {
     const far = [...this.worlds].sort((a, b) => b.dist - a.dist);
+    // (each kind can be left out by the cost sweep: debug/costSweep.ts)
+    const on = (part: string) => !gpuSkip.has(part);
     // (far to near, a pair's glows over each other)
-    for (const st of [...this.stars].sort((a, b) => b.dist - a.dist)) {
+    for (const st of on('star glows') ? [...this.stars].sort((a, b) => b.dist - a.dist) : []) {
       pass.setPipeline(this.glowPipe);
       pass.setBindGroup(1, st.group);
       pass.draw(6);
     }
     pass.setPipeline(this.ringPipe);
     for (const w of far) {
-      if (!w.ring) continue;
+      if (!w.ring || !on('rings')) continue;
       pass.setBindGroup(1, w.ring.group);
       this.drawMesh(pass, w.ring.mesh, false);
     }
-    if (this.dotCount) {
+    if (this.dotCount && on('dots')) {
       pass.setPipeline(this.dotsPipe);
       pass.setVertexBuffer(0, this.dotBuf);
       pass.draw(6, this.dotCount);
@@ -740,7 +743,7 @@ export class WorldsLayer {
     more(pass);
     pass.setPipeline(this.atmoPipe);
     for (const w of far) {
-      if (!w.air || w.pxR <= 2) continue;
+      if (!w.air || w.pxR <= 2 || !on('atmospheres')) continue;
       pass.setBindGroup(1, w.group);
       this.drawMesh(pass, this.sphere.hi, false);
     }
@@ -748,7 +751,7 @@ export class WorldsLayer {
     for (const w of far) {
       // (a giant's face is its cloud tops already, planet.wgsl: no deck over it, only the volumetric
       // layer up close)
-      if (!w.cloud || w.pxR <= 2 || cloudKindOf(w.b)?.kind === CK.Giant) continue;
+      if (!w.cloud || w.pxR <= 2 || cloudKindOf(w.b)?.kind === CK.Giant || !on('cloud decks')) continue;
       pass.setBindGroup(1, w.group);
       this.drawMesh(pass, this.sphere.hi, false);
     }

@@ -1,10 +1,11 @@
+import type { PartCost } from './costSweep';
 /** Stages of a frame, timed on the CPU in this order. */
 const STAGES = ['sim', 'render', 'overlay', 'hud'] as const;
 type Stage = (typeof STAGES)[number];
 const COLORS: Record<Stage, string> = { sim: '#7fdcff', render: '#ffa53a', overlay: '#73ffb2', hud: '#e6d3ff' };
 
 const W = 660; // panel size, px
-const H = 348;
+const H = 363;
 const N = 240; // frames of history in the graph
 const GRAPH_MS = 50; // graph height in ms
 const STORE_KEY = 'farlight.perf';
@@ -16,8 +17,9 @@ const STORE_KEY = 'farlight.perf';
  * frames: stacked CPU stages, the rest of each frame in grey (waiting on the GPU or vsync), GPU time
  * as a cyan line, and 60 / 30 fps guides.
  *
- * While it's shown, GPU time is also split by pass (compute, sky, bodies, stations and ships,
- * transparent, post; gpu/timing.ts), so a slow frame shows where its GPU time went.
+ * While it's shown, GPU time is also split by pass (compute passes, shadows, the scene, clouds,
+ * bloom, post; gpu/timing.ts), so a slow frame shows where its GPU time went. Alt+` measures the
+ * scene's own parts by leaving each out in turn (debug/costSweep.ts) and shows them here instead.
  */
 export class PerfMonitor {
   visible: boolean;
@@ -42,8 +44,18 @@ export class PerfMonitor {
   info3: () => string = () => '';
   /** Shown over the passes' heading while set (the terrain sweep, debug/tdbg.ts). */
   note = '';
-  /** Gets each frame's GPU times by pass as they're read back (the terrain sweep). */
-  onGpu: ((parts: [string, number][]) => void) | null = null;
+  /** Gets each frame's GPU times by pass as they're read back (the terrain and cost sweeps). */
+  onGpu: ((parts: [string, number][], span: number) => void) | null = null;
+  /** Draw the scene as separate passes (sky, far bodies, terrain…) so each is timed: the terrain sweep reads its 'terrain'. Off otherwise: see debug/costSweep.ts for why. */
+  splitPasses = false;
+  /** The last cost sweep's result (Alt+`, debug/costSweep.ts): shown in place of the passes until the overlay closes. */
+  costs: PartCost[] | null = null;
+  /** How much the sweep's baselines varied (ms): costs within it are noise. */
+  costNoise = NaN;
+  /** The frame's GPU span with everything on during the sweep (ms): what the parts are shares of. */
+  costFrame = NaN;
+  /** The display's refresh interval (ms) and the dynamic resolution's scale (NaN: off), for the pacing line. */
+  pacing: () => { refresh: number; scale: number } = () => ({ refresh: NaN, scale: NaN });
 
   constructor(
     host: HTMLElement,
@@ -68,6 +80,7 @@ export class PerfMonitor {
 
   toggle() {
     this.visible = !this.visible;
+    if (!this.visible) this.costs = null;
     this.canvas.style.display = this.visible ? '' : 'none';
     try {
       localStorage.setItem(STORE_KEY, this.visible ? '1' : '0');
@@ -99,17 +112,18 @@ export class PerfMonitor {
     return this.i;
   }
 
-  /** A frame's GPU time, by pass (read back a frame or two after it was drawn). */
-  gpuResult(slot: number, parts: [string, number][]) {
-    let total = 0;
+  /**
+   * A frame's GPU time, by pass, and its span (gpu/timing.ts): read back a frame or two after it was
+   * drawn. The span is the GPU figure; the passes' own times overlap and don't add up to it.
+   */
+  gpuResult(slot: number, parts: [string, number][], span: number) {
     for (const [label, ms] of parts) {
-      total += ms;
       let a = this.split.get(label);
       if (!a) this.split.set(label, (a = new Float32Array(N).fill(NaN)));
       a[slot] = (Number.isNaN(a[slot]) ? 0 : a[slot]) + ms;
     }
-    this.gpuMs[slot] = total;
-    this.onGpu?.(parts);
+    this.gpuMs[slot] = span;
+    this.onGpu?.(parts, span);
   }
 
   frameEnd() {
@@ -188,10 +202,20 @@ export class PerfMonitor {
     }
     ctx.fillStyle = vcol;
     ctx.fillText(verdict, 8, 36);
+    // pacing: an average can hide a judder. Frames over 1.5 refreshes missed one, and each shows
+    // as a hitch: at 120 Hz a GPU needing just over 8.3 ms alternates 8 and 17 ms frames
+    const pc = this.pacing();
+    const all = this.recent(this.frameMs, N);
+    if (Number.isFinite(pc.refresh) && all.length) {
+      const late = all.filter((v) => v > pc.refresh * 1.5).length / all.length;
+      ctx.fillStyle = late > 0.05 ? '#ff7a5c' : late > 0.01 ? '#ffd27a' : '#73ffb2';
+      const res = Number.isNaN(pc.scale) ? 'res fixed' : `res ${Math.round(pc.scale * 100)} % (dynamic: down at 25 % late)`;
+      ctx.fillText(`pacing: ${(1000 / pc.refresh).toFixed(0)} Hz · ${(late * 100).toFixed(0)} % of frames late (missed a refresh: a hitch each) · ${res}`, 8, 51);
+    }
     ctx.fillStyle = 'rgba(255,230,199,.7)';
-    ctx.fillText(`${this.info()}  2D ${this.overlayCanvas.width}×${this.overlayCanvas.height}`, 8, 51);
-    ctx.fillText(this.info2(), 8, 66);
-    ctx.fillText(this.info3(), 8, 81);
+    ctx.fillText(`${this.info()}  2D ${this.overlayCanvas.width}×${this.overlayCanvas.height}`, 8, 66);
+    ctx.fillText(this.info2(), 8, 81);
+    ctx.fillText(this.info3(), 8, 96);
     // GPU time by pass, most first: avg, worst of the last 60, share of the timed total, a bar
     const rows = [...this.split]
       .map(([k, a]) => {
@@ -203,15 +227,33 @@ export class PerfMonitor {
     const top = rows[0]?.v ?? 1;
     const colW = (W - 16) / 2;
     ctx.fillStyle = 'rgba(127,220,255,.6)';
-    ctx.fillText(this.note ? this.note : rows.length ? 'GPU by pass (ms avg / worst · % of timed)' : this.gpuTimed ? 'GPU by pass: waiting for samples…' : 'GPU by pass: no timestamp queries', 8, 98);
+    if (this.costs && !this.note) {
+      // the cost sweep's result: what each part of the scene costs the frame (left out, the frame is that much cheaper)
+      ctx.fillText(`GPU cost by part: ms the frame saves without it, of ${this.costFrame.toFixed(1)}${Number.isNaN(this.costNoise) ? '' : ` (noise ±${this.costNoise.toFixed(2)})`} · Alt+\` again`, 8, 113);
+      // what no part accounts for: the tone map, the MSAA resolve, each pass's fixed cost
+      const rest = this.costFrame - this.costs.reduce((a, c) => a + c.ms, 0);
+      const costs = [...this.costs, { part: 'rest (tone map, resolve, fixed)', ms: rest }].filter((c) => c.ms >= 0.05).sort((a, b) => b.ms - a.ms);
+      const ctop = Math.max(0.01, costs[0]?.ms ?? 0.01);
+      costs.slice(0, 16).forEach((c, n) => {
+        const cx = 8 + Math.floor(n / 8) * colW;
+        const ry = 128 + (n % 8) * 14;
+        ctx.fillStyle = 'rgba(115,255,178,.22)';
+        ctx.fillRect(cx, ry, Math.max(1, (c.ms / ctop) * (colW - 12)), 12);
+        ctx.fillStyle = '#73ffb2';
+        ctx.fillText(`${c.part}  ${c.ms.toFixed(2)} ms · ${Math.round((c.ms / this.costFrame) * 100)}%`, cx + 3, ry);
+      });
+      if (!costs.length) ctx.fillText('(nothing costs over 0.05 ms here)', 11, 128);
+    } else {
+    ctx.fillText(this.note ? this.note : rows.length ? 'GPU by pass (ms avg / worst; they overlap, the gpu figure is the frame\'s span) · Alt+` splits the scene' : this.gpuTimed ? 'GPU by pass: waiting for samples…' : 'GPU by pass: no timestamp queries', 8, 113);
     rows.slice(0, 16).forEach((r, n) => {
       const cx = 8 + Math.floor(n / 8) * colW;
-      const ry = 113 + (n % 8) * 14;
+      const ry = 128 + (n % 8) * 14;
       ctx.fillStyle = 'rgba(127,220,255,.25)';
       ctx.fillRect(cx, ry, Math.max(1, (r.v / top) * (colW - 12)), 12);
       ctx.fillStyle = '#7fdcff';
-      ctx.fillText(`${r.k}  ${r.v.toFixed(2)} / ${r.mx.toFixed(2)} · ${Number.isNaN(gpu) ? '' : Math.round((r.v / gpu) * 100) + '%'}`, cx + 3, ry);
+      ctx.fillText(`${r.k}  ${r.v.toFixed(2)} / ${r.mx.toFixed(2)}`, cx + 3, ry); // (no share of the frame: the passes overlap)
     });
+    }
 
     // graph: one column per frame, newest on the right
     const bw = (W - 16) / N;

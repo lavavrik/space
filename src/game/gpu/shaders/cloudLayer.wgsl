@@ -48,6 +48,17 @@ fn fs(in: Out) -> FragOut {
   let near = abs(t0 - dist) < abs(t1 - dist);
   var t = select(t1, t0, near);
   if (t <= 0.0) { discard; }
+  // The shell's far side, hidden behind the world: gone before any of the work below. The mesh is
+  // drawn with no culling (past the limb, and from under the deck, its far side is what shows), and
+  // this shader writes its own depth, which turns off the early depth test: every pixel of the
+  // world from orbit shaded the far side in full, for the depth test to throw it away after. That
+  // was about half the deck's cost (3.8 ms of an 8 ms frame, SPACE-94). (A ray into the world's
+  // sphere meets its ground before it gets out the other side: the far side can't show.)
+  if (!near) {
+    let cw = dot(C, C) - world.radius * world.radius;
+    let dw = b * b - cw;
+    if (dw > 0.0 && b - sqrt(dw) > 0.0 && b - sqrt(dw) < t) { discard; }
+  }
   let toL = mat3x3f(world.toLocal[0].xyz, world.toLocal[1].xyz, world.toLocal[2].xyz);
   // lifted over high ground: the same side of the sphere, a little higher
   let lift = cloudLiftAt(toL * normalize(dir * t - C));
@@ -105,8 +116,10 @@ fn fs(in: Out) -> FragOut {
     light += clamp(dot(n, L2) * 1.05 + 0.05, 0.0, 1.0) * atSunlight(P, L2) * world.lightC2.rgb;
     haze += atInscatter(dir * atSpan(dir).x, P, L2, 5) * world.lightC2.rgb;
   }
-  // (lightning in a storm, clouds.wgsl flashAt: from orbit, on the night side, flickering glows)
-  let flash = vec3f(0.75, 0.82, 1.0) * flashAt(p * world.cloudR, world.radius + world.cloudH * 0.7) * cov * (1.0 - 0.75 * smoothstep(-0.15, 0.3, dot(n, L)));
+  // (lightning in a storm, clouds.wgsl flashAt: from orbit, on the night side, flickering glows;
+  // none where the sun is up, gone by the terminator: by day a quarter as bright, they were still
+  // white blobs flickering over the lit clouds)
+  let flash = vec3f(0.75, 0.82, 1.0) * flashAt(p * world.cloudR, world.radius + world.cloudH * 0.7) * cov * (1.0 - smoothstep(-0.15, 0.02, dot(n, L)));
   // (and cities' light from below, scattered up through it at night: clouds over a city glow)
   let col = vec3f(0.97) * world.cloudC.rgb * light * select(1.0, 0.3 + 0.55 * (1.0 - cov), below) + flash + cityGlowAt(pw, L, n) * (0.4 + 0.6 * cov);
   let clip = frame.viewProj * vec4f(P, 1.0);
@@ -117,5 +130,5 @@ fn fs(in: Out) -> FragOut {
   let dT = b * b - cT;
   let tIn = select(0.0, max(b - sqrt(max(dT, 0.0)), 0.0), cT > 0.0);
   let beyond = smoothstep(tIn + 200000.0, tIn + 250000.0, t);
-  return FragOut(vec4f((col * atTrans + haze) * frame.twilight, cov * select(0.95, 1.0, cloudKind() == CK_ACID) * (1.0 - world.deckHide * (1.0 - beyond))), clamp(clip.z / clip.w, 0.0, 1.0));
+  return FragOut(vec4f((col * cloudHazeT(atTrans) + cloudHaze(haze)) * frame.twilight, cov * select(0.95, 1.0, cloudKind() == CK_ACID) * (1.0 - world.deckHide * (1.0 - beyond))), clamp(clip.z / clip.w, 0.0, 1.0));
 }

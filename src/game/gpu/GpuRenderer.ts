@@ -29,6 +29,7 @@ import { strikeGlow } from '../sim/lightning';
 import { MAX_RENDER_PIXELS } from '../render/look';
 import { DynamicResolution } from './dynres';
 import { TerrainSweep } from '../debug/tdbg';
+import { CostSweep, gpuSkip } from '../debug/costSweep';
 import { DEFAULT_SETTINGS, type Settings } from '../settings';
 import type { Body, CurrentSystem, StarSystem, Station } from '../types';
 import type { Gpu } from './device';
@@ -161,10 +162,13 @@ export class GpuRenderer implements GameRenderer {
     this.hyper = new HyperspaceLayer(device, this.frameLayout);
     this.particles = new Particles(device, this.frameLayout);
     this.meter = new Meter(device);
-    this.timer = gpu.timestamps ? new GpuTimer(device, (slot, parts) => perf.gpuResult(slot, parts)) : null;
+    this.timer = gpu.timestamps ? new GpuTimer(device, (slot, parts, span) => perf.gpuResult(slot, parts, span)) : null;
     perf.gpuTimed = !!this.timer;
     perf.info2 = () => this.worlds.terrainStats();
-    perf.info3 = () => this.vclouds.describe();
+    // (the march's settings only while it runs: it read "clouds march 778×402" from 13,000 km out,
+    // where the volumetric clouds are off and the flat deck draws them)
+    perf.info3 = () => (this.worlds.vcOn > 0 ? this.vclouds.describe() : 'clouds: volumetric off (on within 40 deck heights of a clouded world: ~400 km at an Earth) · flat deck');
+    perf.pacing = () => ({ refresh: this.dynres.refresh, scale: this.dynres.on ? this.dynres.scale : NaN });
     perf.info = () => `WebGPU ${this.W}×${this.H} @${this.PR.toFixed(2)}${this.dynres.scale < 1 ? ` (${Math.round(this.dynres.scale * 100)} %)` : ''}`;
   }
 
@@ -201,8 +205,19 @@ export class GpuRenderer implements GameRenderer {
   /** Shift+`: time the terrain with each part of its pixel shader off in turn (debug/tdbg.ts). */
   terrainSweep() {
     if (!this.timer) return;
+    this.costSweepRun?.cancel();
     const sweep = new TerrainSweep(this.perf, this.dynres);
     this.perf.onGpu = (parts) => sweep.sample(parts);
+  }
+
+  /** The cost sweep under way (Alt+`), if any. */
+  private costSweepRun: CostSweep | null = null;
+  /** Alt+`: the scene's GPU cost by part, each left out of the frame in turn (debug/costSweep.ts). */
+  costSweep() {
+    if (!this.timer) return;
+    this.costSweepRun?.cancel();
+    const sweep = (this.costSweepRun = new CostSweep(this.perf, this.dynres));
+    this.perf.onGpu = (_parts, span) => sweep.sample(span);
   }
 
   /** The Settings panel's graphics options (game/settings.ts), applied now. */
@@ -339,12 +354,19 @@ export class GpuRenderer implements GameRenderer {
       this.fx.update(g, this.worlds, this.particles, this.PR);
       this.worlds.flushDots();
       // shadows while something near can cast them: rocks, other ships, a station
-      this.shadows.update(g, this.settings.shadows && (this.worlds.rocksOut || this.fx.hullCount > 0 || this.stations.near(30e3) || this.swarm.casting));
+      this.shadows.update(g, this.settings.shadows && !gpuSkip.has('shadow map') && (this.worlds.rocksOut || this.fx.hullCount > 0 || this.stations.near(30e3) || this.swarm.casting));
     }
 
     const enc = device.createCommandEncoder({ label: 'frame' });
     // timing (the overlay up): each pass's timestamps, and the scene split into passes
+    // (closing the overlay stops a cost sweep: no more samples would come, and its part would stay off)
+    if (this.costSweepRun && !this.costSweepRun.done && !this.perf.visible) this.costSweepRun.cancel();
     const timed = !!this.timer && this.perf.splitting && this.timer.begin();
+    // the scene as separate passes only for the terrain sweep, which reads its 'terrain' pass: split,
+    // each pass's time takes in the MSAA frame's reload and store and the last pass's spill (an empty
+    // pass read ms on Apple GPUs, SPACE-94), so normally it's one 'scene' pass and Alt+` measures
+    // its parts by leaving them out (debug/costSweep.ts)
+    const split = timed && this.perf.splitPasses;
     const tw = (label: string) => this.timer?.pass(label, timed);
     const dt = Math.max(0, Math.min(0.1, g.simTime - this.lastSim));
     this.lastSim = g.simTime;
@@ -367,7 +389,7 @@ export class GpuRenderer implements GameRenderer {
     const hdrView = this.hdr.createView(),
       depthView = this.depth.createView();
     // volumetric clouds near a clouded world (they read the scene's depth, so it's kept)
-    const clouds = !inTunnel && this.worlds.vcOn > 0;
+    const clouds = !inTunnel && this.worlds.vcOn > 0 && !gpuSkip.has('volumetric clouds');
     // the terrain skips shading what last frame's clouds hid (vclouds.ts coverFor)
     this.worlds.cover = this.vclouds.coverFor(clouds ? this.worlds.vcGroup : null, this.worlds.vcRel, this.worlds.vcQ, this.worlds.vcLift);
     // (the clouds are laid over the frame in their own pass, before the particles, not by the tone map)
@@ -386,18 +408,27 @@ export class GpuRenderer implements GameRenderer {
       draw(pass);
       pass.end();
     };
-    const sky = (pass: GPURenderPassEncoder) => this.sky.draw(pass, !inTunnel);
-    const bodies = (pass: GPURenderPassEncoder) => this.worlds.drawOpaque(pass);
+    // (each part can be left out by the cost sweep, gpuSkip: debug/costSweep.ts)
+    const on = (part: string) => !gpuSkip.has(part);
+    const sky = (pass: GPURenderPassEncoder) => on('sky') && this.sky.draw(pass, !inTunnel);
+    const far = (pass: GPURenderPassEncoder) => on('far bodies') && this.worlds.drawFar(pass);
+    const terrain = (pass: GPURenderPassEncoder) => on('terrain') && this.worlds.drawTerrain(pass);
+    const rocks = (pass: GPURenderPassEncoder) => on('rocks') && this.worlds.drawRocks(pass);
+    const bodies = (pass: GPURenderPassEncoder) => {
+      far(pass);
+      terrain(pass);
+      rocks(pass);
+    };
     const craft = (pass: GPURenderPassEncoder) => {
-      this.stations.drawOpaque(pass);
-      this.swarm.drawOpaque(pass);
-      this.fx.drawOpaque(pass);
+      if (on('stations')) this.stations.drawOpaque(pass);
+      if (on('swarm')) this.swarm.drawOpaque(pass);
+      if (on('ships')) this.fx.drawOpaque(pass);
     };
     const transparent = (pass: GPURenderPassEncoder) =>
       this.worlds.drawTransparent(pass, (p) => {
-        this.stations.drawTransparent(p);
-        this.fx.drawTransparent(p);
-        if (!clouds) this.particles.draw(p);
+        if (on('stations')) this.stations.drawTransparent(p);
+        if (on('ships')) this.fx.drawTransparent(p);
+        if (!clouds && on('particles')) this.particles.draw(p);
       });
     if (inTunnel)
       scene('hyperspace', true, true, (pass) => {
@@ -406,12 +437,12 @@ export class GpuRenderer implements GameRenderer {
         this.hyper.drawHeads(pass);
         this.hyper.drawStreaks(pass);
       });
-    else if (timed) {
+    else if (split) {
       scene('sky', true, false, sky);
       // (bodies in three, to see which costs: the far spheres, the terrain, the ring rocks)
-      scene('far bodies', false, false, (pass) => this.worlds.drawFar(pass));
-      scene('terrain', false, false, (pass) => this.worlds.drawTerrain(pass));
-      scene('rocks', false, false, (pass) => this.worlds.drawRocks(pass));
+      scene('far bodies', false, false, far);
+      scene('terrain', false, false, terrain);
+      scene('rocks', false, false, rocks);
       scene('stations, ships', false, false, craft);
       scene('transparent', false, true, transparent);
     } else
@@ -427,12 +458,13 @@ export class GpuRenderer implements GameRenderer {
       const over = enc.beginRenderPass({ label: 'clouds over', colorAttachments: [{ view: this.resolved.createView(), loadOp: 'load', storeOp: 'store' }] });
       this.vclouds.composite(over, this.frameGroup, this.worlds.vcGroup!);
       over.setBindGroup(0, this.frameGroup);
-      this.particles.draw(over, true);
+      if (on('particles')) this.particles.draw(over, true);
       over.end();
     }
     if (AUTO_EXPOSURE) this.meter.encode(enc, e);
 
-    if (this.settings.bloom) this.bloom.render(enc, tw);
+    // (left out by the cost sweep, the tone map reads last frame's bloom: the picture's off, the cost is right)
+    if (this.settings.bloom && !gpuSkip.has('bloom')) this.bloom.render(enc, tw);
     const tone = enc.beginRenderPass({
       label: 'tonemap',
       colorAttachments: [{ view: this.context.getCurrentTexture().createView(), loadOp: 'clear', storeOp: 'store', clearValue: [0, 0, 0, 1] }],

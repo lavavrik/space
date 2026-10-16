@@ -36,6 +36,7 @@ export class TerrainSweep {
     private readonly dynres: DynamicResolution,
   ) {
     if (!perf.visible) perf.toggle();
+    perf.splitPasses = true; // (it reads the scene's 'terrain' pass)
     dynres.hold = true;
     this.set(0);
   }
@@ -69,6 +70,7 @@ export class TerrainSweep {
     this.done = true;
     terrainDebug.bits = this.was;
     this.dynres.hold = false;
+    this.perf.splitPasses = false;
     this.perf.note = `terrain sweep (ms, median): ${this.table()}`;
     console.table(this.rows);
     console.log('terrain sweep\n' + this.rows.map((r) => `${r.tdbg}\t${r.terrain.toFixed(3)}\t${r.mean.toFixed(3)}\t${r.gpu.toFixed(3)}\t${r.n}`).join('\n'));

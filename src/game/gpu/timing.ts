@@ -19,8 +19,13 @@ export class GpuTimer {
 
   constructor(
     device: GPUDevice,
-    /** Where results go: the frame's slot and each pass's label and ms. */
-    private readonly report: (slot: number, parts: [string, number][]) => void,
+    /**
+     * Where results go: the frame's slot, each pass's label and ms, and the frame's span (ms from
+     * the first pass's start to the last one's end). The span is the frame's GPU time: the passes'
+     * own times overlap on a tile-based GPU (Apple's), where a pass's end lands after the next
+     * pass has begun, so their sum ran to 30 ms in a 9 ms frame (SPACE-94).
+     */
+    private readonly report: (slot: number, parts: [string, number][], span: number) => void,
   ) {
     this.set = device.createQuerySet({ type: 'timestamp', count: MAX_PASSES * 2 });
     this.resolveBuf = device.createBuffer({ size: MAX_PASSES * 16, usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC });
@@ -64,7 +69,17 @@ export class GpuTimer {
         this.readBuf.unmap();
         this.busy = false;
         const parts: [string, number][] = labels.map((l, i) => [l, t[i * 2 + 1] > t[i * 2] ? Number(t[i * 2 + 1] - t[i * 2]) / 1e6 : 0]);
-        this.report(slot, parts);
+        // (passes that weren't written read 0: left out of the span)
+        let first = 0n,
+          last = 0n;
+        for (let i = 0; i < labels.length; i++) {
+          const a = t[i * 2],
+            b = t[i * 2 + 1];
+          if (!(b > a) || a === 0n) continue;
+          if (first === 0n || a < first) first = a;
+          if (b > last) last = b;
+        }
+        this.report(slot, parts, last > first ? Number(last - first) / 1e6 : 0);
       },
       () => (this.busy = false),
     );

@@ -668,7 +668,7 @@ fn marchPixel(px: vec2i) {
     // camera: × T again), and at night the night's own faint light
     let lamp = vec3f(1.0, 0.97, 0.92) * shipLightAt(P) * T * 0.08;
     // (lightning, inside a storm: clouds.wgsl flashAt, in the weather's frame)
-    // (by day a quarter as bright against the sunlit cloud: from orbit, blazing white blobs on it)
+    // (none by day: at a quarter as bright against the sunlit cloud they were still white blobs on it)
     // (a strike near you, sim/lightning.ts: the cloud round where it leaves the base lit from
     // inside, and all of it by its light)
     var strikeC = vec3f(0.0);
@@ -676,7 +676,7 @@ fn marchPixel(px: vec2i) {
       let dT = P - frame.strikeTop.xyz;
       strikeC = STRIKE_C * (frame.strike.w * 1.2 * exp(-dot(dT, dT) / (2500.0 * 2500.0)) + strikeLight(P, normalize(frame.strike.xyz - P)) * 0.15);
     }
-    let flash = vec3f(0.75, 0.82, 1.0) * flashAt(cloudDir(toLocalM() * (P - C)), world.radius + world.cloudH * 0.7) * (1.0 - 0.75 * dayK);
+    let flash = vec3f(0.75, 0.82, 1.0) * flashAt(cloudDir(toLocalM() * (P - C)), world.radius + world.cloudH * 0.7) * (1.0 - smoothstep(-0.15, 0.02, dot(normalize(mid), L))); // (gone by the terminator, as on the flat deck)
     // (the sunlight's share in the shadows of what's near: a sky station's on the clouds under it)
     sun *= shadowAtPoint(P);
     // (the sun's own light isn't dimmed by dayK: sunCol already fades and reddens as it sets, and
@@ -748,7 +748,7 @@ fn marchPixel(px: vec2i) {
     let span = atSpan(dir);
     var haze = atInscatter(dir * span.x, dir * max(tFirst, span.x), L, 4);
     if (two) { haze += atInscatter(dir * span.x, dir * max(tFirst, span.x), L2, 4) * world.lightC2.rgb; }
-    S = S * atTrans + haze * (1.0 - T) * skyDim; // (under the deck, that air is shaded too)
+    S = S * cloudHazeT(atTrans) + cloudHaze(haze) * (1.0 - T) * skyDim; // (under the deck, that air is shaded too; paled, atmo.wgsl cloudHaze)
   }
   var res = vec4f((S + rays) * frame.exposure, T * skyDim);
   // Under overcast (docs/clouds.md): below the cloud base, with thick cover overhead, the air is

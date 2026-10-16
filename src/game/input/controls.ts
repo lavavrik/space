@@ -32,7 +32,8 @@ export function onPress(g: Game, code: string) {
   }
   if (g.paused) return; // the pause menu: nothing else until it's closed
   // performance overlay, available any time; with Shift, the terrain sweep (debug/tdbg.ts)
-  if (code === 'Backquote' && (keys.ShiftLeft || keys.ShiftRight)) g.terrainSweep();
+  if (code === 'Backquote' && (keys.AltLeft || keys.AltRight)) g.costSweep();
+  else if (code === 'Backquote' && (keys.ShiftLeft || keys.ShiftRight)) g.terrainSweep();
   else if (code === 'Backquote') g.perf.toggle();
   g.invalidateHud();
   if (code === 'Tab') g.helpVisible = !g.helpVisible;

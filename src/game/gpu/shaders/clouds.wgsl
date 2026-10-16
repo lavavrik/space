@@ -142,13 +142,15 @@ fn stormAt(lp: vec3f, cov0: f32) -> f32 {
   return smoothstep(0.7, 0.85, cov0) * smoothstep(0.2, 0.32, tnoise(lp * 5e-6 + 71.0));
 }
 // Lightning: the storms are cut into STORM_CELL cells (a 3D grid through the world), each with a
-// flash point at mid-cloud height (FLASH_R from the centre); every 0.8 s a cell flashes with a 1 in
-// 7 chance (if it's in a storm), flickering for a quarter of that, lighting the cloud round its
+// flash point at mid-cloud height (FLASH_R from the centre); every 0.8 s a cell flashes with a 1.5 %
+// chance (if it's in a storm; 1 in 7 at first, and a stormy night side flickered all over), flickering for a quarter of that, lighting the cloud round its
 // point (a Gaussian, 10 km; from orbit, at 3 and 7 km, they were too small and faint to see). Only a point's own cell counts (its glow is gone by the cell's edge).
 // Its clock is world.waveO.w: the time wrapped to an hour, precise (the sim's own is in steps of
-// 0.25 s). Returns the flash's light at lp (×, with STORM_FLASH, the sun's at full).
+// 0.25 s). Returns the flash's light at lp (×, with STORM_FLASH, the sun's at full: 8 at first,
+// glaring from orbit). The callers leave it out on the sunlit side.
+const STORM_ODDS: f32 = 0.985; // (a cell flashes in a slot when its hash is over this)
 const STORM_CELL: f32 = 60000.0;
-const STORM_FLASH: f32 = 8.0;
+const STORM_FLASH: f32 = 4.0;
 // (an integer hash, PCG-style: sin of large arguments, the usual shader hash, is too imprecise on
 // GPUs and came out nearly constant, so no cell ever flashed)
 fn cloudHashU(c: vec3i, s: u32) -> f32 {
@@ -168,7 +170,7 @@ fn flashAt(lp: vec3f, flashR: f32) -> f32 {
   let h0 = cloudHashU(ci, 0u);
   let tt = world.waveO.w / 0.8 + h0 * 97.0;
   let slot = floor(tt);
-  if (cloudHashU(ci, 7u + u32(slot)) < 0.85) { return 0.0; }
+  if (cloudHashU(ci, 7u + u32(slot)) < STORM_ODDS) { return 0.0; }
   let ph = tt - slot;
   let env = select(0.0, (0.55 + 0.45 * sin(ph * 90.0 + h0 * 6.0)) * (1.0 - ph * 3.0), ph < 0.33);
   if (env <= 0.0) { return 0.0; }

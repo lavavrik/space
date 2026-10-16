@@ -25,6 +25,8 @@ export interface GameRenderer {
   applySettings(s: Settings): void;
   /** Shift+`: the terrain's pixel bisect, timed (debug/tdbg.ts; GPU timestamps only). */
   terrainSweep?(): void;
+  /** Alt+` (perf overlay): the scene's GPU cost by part, each left out in turn (debug/costSweep.ts). */
+  costSweep?(): void;
   render(g: Game): void;
   dispose(): void;
   bodyView(b: Body): ViewInfo | undefined;
