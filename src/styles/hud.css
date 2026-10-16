@@ -58,6 +58,9 @@
 /* hull temperature (200 K to failure): the track shows the limits as bands, safe to failure */
 .bar.heat { background: linear-gradient(90deg, rgba(159,196,255,.16) 0 28.6%, rgba(255,210,122,.18) 28.6% 57.1%, rgba(255,138,58,.22) 57.1% 85.7%, rgba(255,70,70,.3) 85.7%); }
 .bar.heat i { background: #ffc58a; }
+/* crew radiation dose (0 to fatal, 5 Sv): bands at elevated (0.25), sickness (1), severe (3) */
+.bar.rad { background: linear-gradient(90deg, rgba(190,230,140,.16) 0 5%, rgba(255,210,122,.18) 5% 20%, rgba(255,138,58,.22) 20% 60%, rgba(255,70,70,.3) 60%); }
+.bar.rad i { background: #d8e98a; }
 /* marked bar (the speedo): the track past the mark is the boost range, hatched; the tick is the
    normal limit; past it the fill turns bright */
 .bar s { position: absolute; top: 0; bottom: 0; right: 0; background: repeating-linear-gradient(135deg, rgba(255,165,58,.22) 0 .25rem, transparent .25rem .5rem); }

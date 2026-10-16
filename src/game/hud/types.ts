@@ -85,7 +85,7 @@ export interface GaugeView {
   icon?: 'prop' | 'exotic' | 'cargo' | 'o2';
   value: string;
   frac: number;
-  variant?: 'ftl' | 'batt' | 'heat' | 'o2';
+  variant?: 'ftl' | 'batt' | 'heat' | 'o2' | 'rad';
   sub: Readout;
   /** Status icons beside the label, e.g. the solar panels feathered by heat, the hydrogen vent running. */
   badges?: GaugeBadge[];
@@ -126,6 +126,8 @@ export interface InfluencesView {
   ftl: [string, string | Readout][];
   light: [string, string | Readout][];
   heat: [string, string | Readout][];
+  /** What's irradiating the ship and what stops it (sim/radiation.ts). */
+  rad: [string, string | Readout][];
 }
 
 /** Icon per kind of module (see ui/components/icons.ts). */
@@ -275,7 +277,7 @@ export interface GuideView {
 export type LampId =
   | 'fa' | 'decoupled' | 'autopilot' | 'cruise' | 'dock'
   | 'sun' | 'lights' | 'radiators' | 'pump' | 'vent' | 'scoop' | 'radar' | 'shore' | 'fuelcell'
-  | 'charge' | 'entry' | 'masslock' | 'hot' | 'battery' | 'power' | 'warp' | 'pivot' | 'zoom';
+  | 'charge' | 'entry' | 'masslock' | 'hot' | 'rad' | 'battery' | 'power' | 'warp' | 'pivot' | 'zoom';
 export interface Lamp {
   id: LampId;
   /** Tooltip: what it is, the key that toggles it (if any), and a line of live detail. */
@@ -328,6 +330,8 @@ export interface HudSnapshot {
     credits: string;
     refuel: string;
     repair: string;
+    /** The medbay: the crew's radiation dose and what treating it costs (sim/radiation.ts). */
+    dose: { text: string; frac: number; clear: boolean; price: string };
     cargo: string | null;
     /** The station window's open tab, and its Trading and Contracts contents. */
     tab: 'trade' | 'services' | 'contracts' | 'outfit';

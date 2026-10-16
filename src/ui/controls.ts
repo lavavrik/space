@@ -38,6 +38,7 @@ export const GROUPS: { id: ControlGroup; title: string; keys: [string, string][]
       ['G', 'next nearest'],
       ['Click', 'target it'],
       ['⇧T / wheel click', 'pivot to target'],
+      ['⇧G', 'travel to target (autopilot)'],
       ['Y', 'scan target'],
       ['I', 'target info'],
       ['⇧I', 'cargo & tanks'],

@@ -1,8 +1,11 @@
 /**
  * Debug jumps (the pause menu's "Jump to" list; dev builds, or any build with `?debug` in the URL):
  * put the ship somewhere telling for checking how things look, moving sensibly there, facing the
- * subject. Only the spots this system has are offered.
+ * subject. Only the spots this system has are offered, besides two that jump to another system:
  *
+ *   - galactic core: 150 AU from the black hole, a little above its disk (docs/blackhole.md; F8)
+ *   - home: above the home world, as at a new game (Shift+F8)
+ *   - at the core, the black hole edge-on (40 Rs out, 4° over the disk) and from over its pole
  *   - belt: inside the nearest ringed world's belt, orbiting with it (rocks, their shadows, the dust)
  *   - ring shadow: the ringed world from its sunward side (the ring's shadow on it)
  *   - above / under the clouds: over and below a clouded world's deck (volumetric clouds, light shafts)
@@ -27,6 +30,8 @@ import { stationQuat } from '../sim/stationGeom';
 import { CLEARANCE } from '../sim/flight';
 import { elevationLocal, reliefAmp, surfaceRadius, worldQuat } from '../sim/terrain';
 import { wreckBody, wrecksHere } from '../sim/wreck';
+import { arriveAt, placeAtHome } from '../sim/navigation';
+import { CORE_ARRIVE, coreSystem } from '../universe/core';
 import type { Body, World } from '../types';
 
 /** Debug tools on: dev builds, or `?debug` in the URL. */
@@ -186,9 +191,51 @@ function landOn(g: Game, b: World) {
   g.ship.landed = b;
 }
 
+/** Leave whatever's under way (a jump, a route, the autopilot) before a debug jump to another system. */
+function standDown(g: Game) {
+  g.jump = null;
+  g.guide = null;
+  g.route = null;
+}
+
+/** At the galactic core: CORE_ARRIVE out, 15° above the disk's plane, at rest, facing the hole. */
+function atCore(g: Game) {
+  standDown(g);
+  arriveAt(g, coreSystem());
+  const h = g.cur.star;
+  const n = h.hole!.diskAxis;
+  const flat = V().crossVectors(n, V(0, 0, 1)).normalize();
+  const dir = flat.multiplyScalar(Math.cos(0.26)).addScaledVector(n, Math.sin(0.26));
+  place(g, h, h.pos.clone().addScaledVector(dir, CORE_ARRIVE), V(), dir.clone().negate(), n);
+  g.target = h;
+}
+
 export function debugSpots(g: Game): Spot[] {
-  const out: Spot[] = [];
+  const out: Spot[] = [
+    { id: 'core', label: 'Galactic core', hint: 'the black hole, 1,000 ly out (F8)', go: () => atCore(g) },
+    {
+      id: 'home',
+      label: 'Home',
+      hint: 'above the home world (Shift+F8)',
+      go: () => {
+        standDown(g);
+        placeAtHome(g);
+      },
+    },
+  ];
   const bodies = g.cur.bodies;
+  const hole = g.cur.star.hole ? g.cur.star : null;
+  if (hole?.hole) {
+    const { rs, diskAxis: n } = hole.hole;
+    const flat = V().crossVectors(n, V(0, 0, 1)).normalize();
+    const look = (el: number, r: number) => {
+      const dir = flat.clone().multiplyScalar(Math.cos(el)).addScaledVector(n, Math.sin(el));
+      const up = Math.abs(el) > 1.4 ? flat : n;
+      place(g, hole, hole.pos.clone().addScaledVector(dir, r * rs), V(), dir.clone().negate(), up);
+    };
+    out.push({ id: 'holeedge', label: 'Black hole edge-on', hint: '40 Rs out, 4° above the disk', go: () => look(0.07, 40) });
+    out.push({ id: 'holepole', label: 'Black hole from the pole', hint: '60 Rs over the disk', go: () => look(Math.PI / 2 - 0.02, 60) });
+  }
   const ringed = bodies.find((b): b is World => b.kind !== 'star' && !!b.ring);
   const clouded = bodies.find((b): b is World => b.kind !== 'star' && !!atmoOf(b) && (b.type === WT.EarthLike || b.type === WT.Ocean));
   const aired = clouded ?? bodies.find((b): b is World => b.kind !== 'star' && !!atmoOf(b));

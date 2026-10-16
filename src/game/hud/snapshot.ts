@@ -1,8 +1,9 @@
 /* Turns game state into the display strings and flags the HUD shows. */
+import { DOSE, timeToFatal } from '../sim/radiation';
 import { pairSpec } from '../universe/binary';
-import { AU, FTL_CHARGE_TIME, HULL_P_MAX, JUMP_CHARGE_TIME, LY, JUMP_DEPART_TIME, AP_ACC, NORMAL_ACC, NORMAL_BOOST, NORMAL_MAX, SHIP, ftlBurn, jumpCost } from '../constants';
+import { AU, CORE_MASS, RSUN, FTL_CHARGE_TIME, HULL_P_MAX, JUMP_CHARGE_TIME, LY, JUMP_DEPART_TIME, AP_ACC, NORMAL_ACC, NORMAL_BOOST, NORMAL_MAX, SHIP, ftlBurn, jumpCost } from '../constants';
 import { DEBUG, debugSpots } from '../debug/poses';
-import { fmtArea, fmtBar, fmtClock, fmtEnergy, fmtDist, fmtFlow, fmtMass, fmtPower, fmtSpeed, fmtSpeedText, fmtTime } from '../format';
+import { fmtArea, fmtBar, fmtClock, fmtEnergy, fmtDist, fmtFlow, fmtMass, fmtPower, fmtSpeed, fmtSpeedText, fmtTime, fmtDoseRate } from '../format';
 import type { Game } from '../Game';
 import type { Station } from '../types';
 import { THREE } from '../lib/three';
@@ -41,7 +42,7 @@ import { liveProspects, prospectNow } from '../sim/prospect';
 import { wreckMetal } from '../sim/wreck';
 import { FC_KWH, FC_OFF, FC_ON, O2_PER_H2, o2Days } from '../sim/oxygen';
 import { BOARD_S, MAX_ACTIVE, board, canDeliverMetal, cantTake, reach, type Contract } from '../sim/contracts';
-import { FUELS, fuelPrice, CARGO_CAP, COMMODITIES, cargoMass, cargoValue, fmtCr, refuelQuote, repairQuote, sellPrice, type Commodity } from '../sim/economy';
+import { FUELS, fuelPrice, CARGO_CAP, COMMODITIES, cargoMass, cargoValue, fmtCr, medbayQuote, refuelQuote, repairQuote, sellPrice, type Commodity } from '../sim/economy';
 import { fitPrice } from '../outfit/fit';
 import { HULL_WARN, heatDamageRate } from '../sim/damage';
 import { buildInfo, stationKind } from './info';
@@ -88,6 +89,7 @@ export function buildSnapshot(g: Game): HudSnapshot {
           credits: fmtCr(g.credits),
           refuel: fmtCr(refuelQuote(g, g.dock.station).cost),
           repair: fmtCr(repairQuote(g, g.dock.station)),
+          dose: { text: `${g.ship.dose.toFixed(g.ship.dose < 0.1 ? 3 : 2)} Sv`, frac: g.ship.dose / DOSE.fatal, clear: medbayQuote(g, g.dock.station) < 0.5, price: fmtCr(medbayQuote(g, g.dock.station)) },
           cargo: Object.values(g.ship.cargo).some((kg) => (kg ?? 0) > 0.5) ? fmtCr(cargoValue(g, g.dock.station)) : null,
           tab: g.stationTab,
           trade: tradeRows(g, g.dock.station),
@@ -113,7 +115,9 @@ function location(g: Game): LocationView {
   return {
     system: g.cur.sys.name,
     // (a pair: both classes, both temperatures and how far apart, docs/binaries.md)
-    star: comp ? `${pairSpec(g.cur.sys)} · ${Math.round(st.T)} / ${Math.round(comp.star.T)} K · ${comp.a < 1 ? comp.a.toFixed(2) : Math.round(comp.a)} AU apart` : `${st.spec} · ${st.R.toFixed(2)} R☉ · ${Math.round(st.T)} K`,
+    star: comp ? `${pairSpec(g.cur.sys)} · ${Math.round(st.T)} / ${Math.round(comp.star.T)} K · ${comp.a < 1 ? comp.a.toFixed(2) : Math.round(comp.a)} AU apart` : st.hole
+        ? `${st.spec} · ${CORE_MASS.toExponential(0).replace('e+', 'e')} M☉ · horizon ${((st.R * RSUN) / AU).toFixed(2)} AU`
+        : `${st.spec} · ${st.R.toFixed(2)} R☉ · ${Math.round(st.T)} K`,
     sub: `${gp.x.toFixed(2)} ${gp.y.toFixed(2)} ${gp.z.toFixed(2)} ly · ${fmtClock(g.simTime)}`,
     jump: d ? { text: `JUMP → ${d.name} · ${pairSpec(d)} · ${d.pos.distanceTo(gp).toFixed(1)} ly` } : { text: 'N or click a star to set a jump · U ship · Tab controls', warn: false },
   };
@@ -145,6 +149,9 @@ function flightMode(g: Game): [string, FlightView['modeClass']] {
 }
 
 /** Dashboard tell-tales (see Lamp in hud/types.ts). */
+/** The radiation lamp lights over this (mSv/h inside). */
+const RAD_LAMP = 1;
+
 function lamps(g: Game): Lamp[] {
   const { ship, power } = g;
   const L = (id: Lamp['id'], on: unknown, name: string, key: string | undefined, detail: string | undefined, state: Lamp['state'] = 'on', blink = false, progress?: number): Lamp => ({
@@ -185,6 +192,7 @@ function lamps(g: Game): Lamp[] {
     L('charge', charging, g.jump ? 'Hyperdrive charging' : 'FTL drive charging', g.jump ? 'H' : 'J', charging ? `${Math.max(0, g.jump?.t ?? ship.ftlCharge).toFixed(1)} s at full power` : undefined, 'ftl', true, charging ? chargeDone : undefined),
     L('entry', g.aero.heatW > 1e6, 'Entry heating', undefined, g.aero.heatW > 1e6 ? `${fmtPower(g.aero.heatW / 1000)} into the hull at ${Math.round(g.aero.speed)} m/s · slow down, nose first` : 'Not in air at speed', 'warn', g.aero.heatW > 1e8),
     L('masslock', lock, 'Mass lock', undefined, lock ? `${lock.name} is too close for FTL · ${Math.round(lockOut * 100)}% of the way out (${fmtDist(dropAlt(lock) * MASS_LOCK_K)} up) · the red LOCK EXIT marker points the way` : 'Clear for FTL', 'warn', false, lock ? 1 - lockOut : undefined),
+    L('rad', (g.rad?.inside ?? 0) >= RAD_LAMP || ship.dose >= DOSE.warn, 'Radiation', undefined, `${fmtDoseRate(g.rad?.inside ?? 0)} inside · crew dose ${ship.dose.toFixed(2)} Sv of ${DOSE.fatal} fatal`, 'warn', (timeToFatal(ship.dose, g.rad?.inside ?? 0) ?? Infinity) < 3600),
     L('hot', ship.temp >= TEMP.warn, 'Hull temperature', undefined, `${ship.temp.toFixed(0)} K · warning at ${TEMP.warn} K`, 'warn', ship.temp >= TEMP.drives),
     L('battery', battLow, 'Battery low', undefined, `${fmtEnergy(ship.batt)} of ${fmtEnergy(cap)}`, 'warn', ship.batt < 1),
     L('power', power.limited, 'Power short', undefined, power.limited ? `${power.limited.what} got ${Math.round(power.limited.frac * 100)}% of what it asked for` : 'The bus covers every load', 'warn'),
@@ -382,6 +390,7 @@ function systems(g: Game): SystemsView {
       },
       o2Gauge(g),
       hullGauge(g),
+      radGauge(g),
       integrityGauge(g),
       cargoGauge(g),
     ],
@@ -435,6 +444,20 @@ function hullGauge(g: Game): GaugeView {
   if (o.radiatorsOut > 0) badges.push({ icon: 'radiators', title: o.radiatorsOut < 1 ? `Radiators ${o.deploy ? 'deploying' : 'stowing'} (${Math.round(o.radiatorsOut * 100)} %)` : 'Radiators out' });
   if (h && h.pumpW > 0) badges.push({ icon: 'pump', title: `Heat pump: ${fmtPower(h.pumpW / 1000)}, loop at ${h.radTemp.toFixed(0)} K` });
   return { label: 'HULL', value: `${T.toFixed(0)} K`, frac: (T - 200) / (TEMP.fail - 200), variant: 'heat', sub: { text, warn: T >= TEMP.warn }, badges };
+}
+
+/**
+ * Radiation (sim/radiation.ts): the dose rate inside, the bar the crew's dose toward the fatal
+ * limit, and under it the time until that's reached at this rate, or what's outside.
+ */
+function radGauge(g: Game): GaugeView {
+  const { ship } = g;
+  const r = g.rad;
+  const inside = r?.inside ?? 0;
+  const dose = `dose ${ship.dose < 0.1 ? ship.dose.toFixed(3) : ship.dose.toFixed(2)} Sv`;
+  const ttf = timeToFatal(ship.dose, inside);
+  const text = r?.shelter ? `${dose} · shielded by ${r.shelter}` : ttf !== null ? `${dose} · fatal in ${fmtTime(ttf)}` : `${dose} · outside ${fmtDoseRate(r?.outside ?? 0)}`;
+  return { label: 'RADIATION', value: fmtDoseRate(inside), frac: ship.dose / DOSE.fatal, variant: 'rad', sub: { text, warn: ship.dose >= DOSE.warn || ttf !== null } };
 }
 
 /** The hold (sim/economy.ts), and your credits under it. */

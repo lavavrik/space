@@ -16,6 +16,7 @@
  * each is timed (gpu/timing.ts).
  * Positions are camera-relative (world − ship), in doubles on the CPU, then 32-bit on the GPU.
  */
+import { BlackHolePass } from './blackhole';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import type { PerfMonitor } from '../debug/Perf';
@@ -95,6 +96,7 @@ export class GpuRenderer implements GameRenderer {
   private CH = 1;
   private basePR = 1;
   /** The scene's resolution, kept up with the display (gpu/dynres.ts). */
+  private readonly hole: BlackHolePass;
   readonly dynres = new DynamicResolution();
   /** The Settings panel's (applySettings), and the CSS size last given to resize. */
   private settings: Settings = { ...DEFAULT_SETTINGS };
@@ -160,6 +162,7 @@ export class GpuRenderer implements GameRenderer {
     this.bloom = new Bloom(device);
     this.toneSamp = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
     this.hyper = new HyperspaceLayer(device, this.frameLayout);
+    this.hole = new BlackHolePass(device, this.frameLayout, this.sky.cubeView);
     this.particles = new Particles(device, this.frameLayout);
     this.meter = new Meter(device);
     this.timer = gpu.timestamps ? new GpuTimer(device, (slot, parts, span) => perf.gpuResult(slot, parts, span)) : null;
@@ -176,6 +179,7 @@ export class GpuRenderer implements GameRenderer {
     this.views.clear();
     this.sky.setSystem(cur, sky);
     this.worlds.setSystem(cur);
+    this.hole.setSystem(cur.stars);
     this.stations.setSystem(cur, this.worlds);
   }
 
@@ -249,11 +253,13 @@ export class GpuRenderer implements GameRenderer {
     this.depth?.destroy();
     const size = [this.W, this.H];
     this.hdr = this.device.createTexture({ label: 'hdr', size, format: HDR_FORMAT, sampleCount: SAMPLES, usage: GPUTextureUsage.RENDER_ATTACHMENT });
-    this.resolved = this.device.createTexture({ label: 'hdr resolved', size, format: HDR_FORMAT, usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
+    // (copied from by the black hole's pass: gpu/blackhole.ts)
+    this.resolved = this.device.createTexture({ label: 'hdr resolved', size, format: HDR_FORMAT, usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC });
     // (the depth is read after the scene by the volumetric clouds)
     this.depth = this.device.createTexture({ label: 'depth', size, format: DEPTH_FORMAT, sampleCount: SAMPLES, usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
     this.vclouds.resize(this.depth, this.W, this.H);
     this.particles.setDepth(this.depth);
+    this.hole.resize(this.depth, this.W, this.H);
     // one per volumetric-cloud texture (they ping-pong)
     this.bloom.resize(this.resolved, this.W, this.H);
     const bl = this.bloom.views;
@@ -395,8 +401,11 @@ export class GpuRenderer implements GameRenderer {
     // (the clouds are laid over the frame in their own pass, before the particles, not by the tone map)
     const pp = postParams(g, this.vp, false, this.CW, this.CH, this.settings);
     device.queue.writeBuffer(this.toneBuf, 0, pp);
-    // (the depth is kept for the final pass while a warp is on: it bends only what's behind it)
-    const keepDepth = clouds || pp[16] > 0;
+    // the galactic core's black hole, over the frame after the scene (gpu/blackhole.ts)
+    const lensed = !inTunnel && this.hole.update(g, this.vp, this.W, this.H, NEAR);
+    // (the depth is kept for the final pass while a warp is on: it bends only what's behind it; and
+    // for the black hole's pass, which leaves what's in front of the hole alone)
+    const keepDepth = clouds || pp[16] > 0 || lensed;
     const scene = (label: string, first: boolean, last: boolean, draw: (pass: GPURenderPassEncoder) => void) => {
       const pass = enc.beginRenderPass({
         label,
@@ -461,6 +470,7 @@ export class GpuRenderer implements GameRenderer {
       if (on('particles')) this.particles.draw(over, true);
       over.end();
     }
+    if (lensed) this.hole.encode(enc, this.frameGroup, this.resolved, this.W, this.H, tw('black hole'));
     if (AUTO_EXPOSURE) this.meter.encode(enc, e);
 
     // (left out by the cost sweep, the tone map reads last frame's bloom: the picture's off, the cost is right)
@@ -502,6 +512,7 @@ export class GpuRenderer implements GameRenderer {
 
   dispose() {
     this.sky.dispose();
+    this.hole.dispose();
     this.worlds.dispose();
     this.stations.dispose();
     this.swarm.dispose();

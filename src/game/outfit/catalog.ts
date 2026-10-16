@@ -64,13 +64,15 @@ export interface ScoopModule extends ModuleBase {
 
 /**
  * Magnetic deflector (belt protection, sim/belt.ts): a field round the hull that turns aside the
- * charged dust of a ring's belt, cutting the erosion it causes at speed. It works (and draws power)
- * only while there's dust to deflect: in a belt, faster than DUST_V through it.
+ * charged dust of a ring's belt, cutting the erosion it causes at speed, and the charged particles of
+ * radiation (sim/radiation.ts: radiation belts, stellar wind, some of the cosmic rays; not X-rays). It
+ * works (and draws power) only while there's something to deflect: dust in a belt faster than DUST_V,
+ * or charged radiation over 0.5 mSv/h outside.
  */
 export interface DeflectorModule extends ModuleBase {
   kind: 'deflector';
   caps: {
-    block: number; // share of the erosion it stops (0–1)
+    block: number; // share of the erosion, and of the charged radiation, it stops (0–1)
     kw: number; // power while it works
   };
 }
@@ -152,12 +154,12 @@ export const MODULES: Module[] = [
   },
   {
     id: 'md-4', kind: 'deflector', maker: 'Tessera Shielding', model: 'MD-4', name: 'Aegis', mass: 2500, price: 20000,
-    blurb: 'Magnetic field against ring dust: cuts the erosion by 90 %. Draws 800 kW while it works',
+    blurb: 'Magnetic field against ring dust and charged radiation (radiation belts, stellar wind): turns away 90 % of both. Not X-rays. Draws 800 kW while it works',
     caps: { block: 0.9, kw: 800 },
   },
   {
     id: 'md-8', kind: 'deflector', maker: 'Tessera Shielding', model: 'MD-8', name: 'Bulwark', mass: 4000, price: 45000,
-    blurb: 'A stronger field: cuts the erosion by 98 %. Draws 1.5 MW while it works',
+    blurb: 'A stronger field: turns away 98 % of the dust and the charged radiation. Draws 1.5 MW while it works',
     caps: { block: 0.98, kw: 1500 },
   },
   {

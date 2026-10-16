@@ -686,7 +686,7 @@ export class WorldsLayer {
   /** The stars' discs and the worlds seen as spheres (too far for terrain). */
   drawFar(pass: GPURenderPassEncoder) {
     for (const st of this.stars) {
-      if (st.pxR <= 0.6) continue;
+      if (st.pxR <= 0.6 || st.b.hole) continue; // (a black hole is gpu/blackhole.ts's)
       pass.setPipeline(this.discPipe);
       pass.setBindGroup(1, st.group);
       this.drawMesh(pass, this.sphere.mid, true);
@@ -725,6 +725,7 @@ export class WorldsLayer {
     const on = (part: string) => !gpuSkip.has(part);
     // (far to near, a pair's glows over each other)
     for (const st of on('star glows') ? [...this.stars].sort((a, b) => b.dist - a.dist) : []) {
+      if (st.b.hole) continue;
       pass.setPipeline(this.glowPipe);
       pass.setBindGroup(1, st.group);
       pass.draw(6);

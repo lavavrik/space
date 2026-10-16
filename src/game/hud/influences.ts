@@ -6,10 +6,11 @@
  *   FTL      mass lock (and how far to climb out) and which gravity well caps FTL speed
  *   Star     light and solar power, shadow, and how far the scoop zones are
  */
+import { DOSE, timeToFatal } from '../sim/radiation';
 import { AU, C, SCOOP_FLUX_FULL, SCOOP_FLUX_MIN, WT, fluxDist } from '../constants';
 import { HULL, S0, TEMP } from '../sim/thermal';
-import { scoopFitted } from '../outfit/catalog';
-import { fmtDist, fmtPower, fmtSpeedText } from '../format';
+import { deflectorFitted, scoopFitted } from '../outfit/catalog';
+import { fmtDist, fmtDoseRate, fmtPower, fmtSpeedText, fmtTime } from '../format';
 import type { Game } from '../Game';
 import { THREE } from '../lib/three';
 import { ringFrameOf } from '../sim/frame';
@@ -96,7 +97,8 @@ export function buildInfluences(g: Game): InfluencesView {
   light.push(['SOLAR POWER', power.shadow ? { text: `none · in ${power.shadow.name}'s shadow`, warn: true } : `${fmtPower(power.solar)} (panels ${Math.round((Math.acos(Math.max(-1, Math.min(1, power.cos))) * 180) / Math.PI)}° off the star)`]);
   const scoopAt = fluxDist(star.L, SCOOP_FLUX_MIN, star.radius) - star.radius;
   const unit = scoopFitted(ship.outfit);
-  light.push(['CORONA SCOOP', !unit ? { text: 'no fuel scoop fitted', warn: false } : starAlt < scoopAt ? { text: `in range · ${Math.round(Math.min(1, power.flux / SCOOP_FLUX_FULL) * 100)}% rate`, warn: false } : `${fmtDist(starAlt - scoopAt)} to go`]);
+  if (star.hole) light.push(['CORONA SCOOP', 'none · a black hole has no corona']);
+  else light.push(['CORONA SCOOP', !unit ? { text: 'no fuel scoop fitted', warn: false } : starAlt < scoopAt ? { text: `in range · ${Math.round(Math.min(1, power.flux / SCOOP_FLUX_FULL) * 100)}% rate`, warn: false } : `${fmtDist(starAlt - scoopAt)} to go`]);
   const giants = g.cur.bodies
     .filter((b) => b.kind !== 'star' && b.type >= WT.GasGiant)
     .map((b) => ({ b, d: ship.pos.distanceTo(b.pos) - b.radius * 1.05 }))
@@ -122,5 +124,25 @@ export function buildInfluences(g: Game): InfluencesView {
     if (h.vent > 0) heat.push(['HYDROGEN VENT', `${mw(h.vent)} · ${h.ventFlow.toFixed(1)} kg/s`]);
     if (h.star > 0.3 * h.out && !power.shadow) heat.push(['TIP', 'nose-on to the star cuts starlight heating ~6×']);
   }
-  return { gravity, frame, ftl, light, heat };
+  // radiation: what's outside by source, what the air, hull and deflector stop (sim/radiation.ts)
+  const rad: [string, string | Readout][] = [];
+  const rs = g.rad;
+  if (rs) {
+    const ttf = timeToFatal(ship.dose, rs.inside);
+    rad.push(['INSIDE', { text: `${fmtDoseRate(rs.inside)} · crew dose ${ship.dose.toFixed(ship.dose < 0.1 ? 3 : 2)} Sv${ttf !== null ? ` · fatal in ${fmtTime(ttf)}` : ''}`, warn: ttf !== null || ship.dose >= DOSE.warn }]);
+    const tag = { cosmic: '', charged: ' · particles', photons: ' · rays' };
+    for (const s of [...rs.sources].sort((a, b) => b.rate - a.rate)) if (s.rate >= 0.0005) rad.push([s.name.toUpperCase(), `${fmtDoseRate(s.rate)}${tag[s.kind]}`]);
+    if (rs.air < 0.99) rad.push(['AIR OVER YOU', `lets ${rs.air < 0.01 ? (rs.air * 100).toFixed(2) : Math.round(rs.air * 100)} % through`]);
+    if (rs.shelter) rad.push(['SHELTER', `inside ${rs.shelter} · nothing gets in`]);
+    else {
+      rad.push(['HULL STOPS', fmtDoseRate(rs.hullBlocked)]);
+      const def = deflectorFitted(ship.outfit);
+      const charged = rs.sources.reduce((t, s) => t + (s.kind === 'charged' ? s.rate : 0), 0);
+      if (rs.deflBlocked >= 0.0005) rad.push(['DEFLECTOR TURNS AWAY', fmtDoseRate(rs.deflBlocked)]);
+      else if (charged > 1) rad.push(['DEFLECTOR', { text: def ? 'switched off · Shift+U power' : 'none fitted · it would turn away the particles', warn: true }]);
+      const top = [...rs.sources].sort((a, b) => b.rate - a.rate)[0];
+      if (top && top.rate > 10) rad.push(['TIP', top.kind === 'photons' ? 'only distance and the hull stop these rays' : top.kind === 'charged' ? 'a powered deflector turns most of these particles away' : 'cosmic rays get through almost anything']);
+    }
+  }
+  return { gravity, frame, ftl, light, heat, rad };
 }

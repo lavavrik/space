@@ -1,4 +1,5 @@
-import { AU, GRAV, MSUN, REARTH, RSUN, WT } from '../constants';
+import { AU, CORE_MASS, GRAV, MSUN, REARTH, RSUN, WT } from '../constants';
+import { CORE_RS, DISK_IN, DISK_OUT } from './core';
 import { lr, mulberry32, rr, type Rng } from '../lib/rng';
 import { THREE } from '../lib/three';
 import type { Body, Star, StarInfo, StarSystem, World, WorldType } from '../types';
@@ -29,6 +30,19 @@ function makeStarBody(st: StarInfo, name: string, seed: number): Star {
   };
 }
 
+/** The galactic core's black hole (universe/core.ts): no planets, its disk tilted ~10° off the plane. */
+function makeHole(st: StarInfo, name: string, seed: number): Star {
+  const star = makeStarBody(st, name, seed);
+  star.mass = CORE_MASS * MSUN;
+  star.mu = GRAV * star.mass;
+  star.typeName = 'Supermassive black hole';
+  star.spin = 0;
+  const diskAxis = new THREE.Vector3(0.17, 1, 0.05).normalize();
+  star.axis.copy(diskAxis);
+  star.hole = { rs: CORE_RS, diskIn: DISK_IN, diskOut: DISK_OUT, diskAxis };
+  return star;
+}
+
 /**
  * Generate every body in a star system from its seed. Always returns the primary star first; a pair
  * (docs/binaries.md) returns both stars first, on their orbits round the barycentre (their parent,
@@ -39,6 +53,7 @@ export function buildSystem(sys: StarSystem): Body[] {
   const st = sys.star;
   const seed = g() * 50;
   const comp = sys.companion;
+  if (st.hole) return [makeHole(st, sys.name, seed)];
   if (!comp) {
     const star = makeStarBody(st, sys.name, seed);
     const bodies: Body[] = [star];

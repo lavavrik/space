@@ -15,6 +15,7 @@ import { correction, planPhasing } from './phasing';
 import { minOrbitAlt } from './orbits';
 import { railAcc } from './kepler';
 import { applyThrust, deltaVLeft } from './resources';
+import { steerPath } from './ftlPath';
 
 /** Ship position relative to the autopilot body, and "up" projected into the orbit plane. */
 export function apGeom(ship: Ship, ap: Autopilot) {
@@ -37,7 +38,7 @@ export function apGeom(ship: Ship, ap: Autopilot) {
  * to the world, and in the belt its rocks would sweep by at their orbital speed (5 km/s at Venydes 8:
  * that was a wreck on arrival). The orbit branch then matches the rocks before going in.
  */
-export function apInsertion(ship: Ship, ap: Autopilot): { P: THREE.Vector3; rT: number; waypoint?: boolean } {
+export function apInsertion(ship: Ship, ap: Autopilot): { P: THREE.Vector3; rT: number } {
   if (ap.type === 'rendezvous') {
     // FTL at the station: 20 km short of it, or, if it orbits below the lowest altitude FTL can
     // reach near its world, straight above it at that floor (thrusters take it from there)
@@ -48,10 +49,8 @@ export function apInsertion(ship: Ship, ap: Autopilot): { P: THREE.Vector3; rT: 
       st.pos.distanceTo(b.pos) >= floor
         ? st.pos.clone().addScaledVector(ship.pos.clone().sub(st.pos).normalize(), 20e3)
         : b.pos.clone().addScaledVector(st.pos.clone().sub(b.pos).normalize(), floor);
-    // go round the world if the line would cross the altitude where FTL cuts out (a little below
-    // the floor, so a target sitting on the floor itself doesn't count as crossing)
-    const w = aroundBody(ship.pos, P, b, b.radius + dropAlt(b) * 1.02);
-    return w ? { P: w, rT: floor, waypoint: true } : { P, rT: P.distanceTo(b.pos) };
+    // (the FTL leg's course goes round the world if the station is on its far side: sim/ftlPath.ts)
+    return { P, rT: P.distanceTo(b.pos) };
   }
   if (ap.type === 'lagrange') return { P: holdPoint(ap), rT: 1e6 }; // (drops out within 30 km of it)
   const { b, rv, up } = apGeom(ship, ap);
@@ -537,32 +536,25 @@ export function destVel(g: Game, ap: Autopilot, out = new THREE.Vector3()) {
   return out.subVectors(v, g.frameBody.vel);
 }
 
-/** Autopilot FTL leg: turn toward the insertion point and fly there, then drop. */
+/**
+ * Autopilot FTL leg: fly the course to the insertion point (sim/ftlPath.ts: round the gravity wells
+ * that would slow the drive, and clear of every world's drop-out altitude), then drop.
+ */
 export function ftlTransfer(g: Game, dt: number) {
   const { ship } = g;
   const ap = ship.ap!;
-  const ins = apInsertion(ship, ap);
-  let { P, waypoint } = ins;
-  const { rT } = ins;
-  // other worlds in the way (e.g. the gas giant just left, when the target lies beyond it): go round
-  // them clear of their FTL drop-out altitude too, or the leg dives into the well, drops out, climbs
-  // back on thrusters and tries again, round and round
-  for (const o of g.cur.bodies) {
-    if (o === ap.body && ap.type !== 'lagrange') continue; // (a Lagrange point lies clear of its planet, which is still in the way)
-    const w = aroundBody(ship.pos, P, o, o.radius + dropAlt(o) * 1.1);
-    if (w) {
-      P = w;
-      waypoint = true;
-      break;
-    }
-  }
-  const toP = P.clone().sub(ship.pos),
-    dist = toP.length();
-  const m = new THREE.Matrix4().lookAt(ship.pos, P, new THREE.Vector3(0, 1, 0).applyQuaternion(ship.q));
+  const { P, rT } = apInsertion(ship, ap);
+  const drop = Math.max(30e3, rT * 0.01);
+  const carry = destVel(g, ap).multiplyScalar(dt);
+  const aim = steerPath(ap, g.cur.bodies, ship, P, drop, carry, dt);
+  const dist = P.distanceTo(ship.pos);
+  const toA = aim.sub(ship.pos),
+    distA = Math.max(toA.length(), 1);
+  const m = new THREE.Matrix4().lookAt(ship.pos, ship.pos.clone().add(toA), new THREE.Vector3(0, 1, 0).applyQuaternion(ship.q));
   ship.q.slerp(new THREE.Quaternion().setFromRotationMatrix(m), Math.min(1, 2.2 * dt));
   g.fwd.set(0, 0, -1).applyQuaternion(ship.q);
   const vmax = ftlSpeedLimit(g);
-  const align = Math.max(0, g.fwd.dot(toP) / dist);
+  const align = Math.max(0, g.fwd.dot(toA) / distA);
   const tgt = Math.min(vmax, dist * 0.8) * Math.pow(align, 8);
   if (ship.ftlSpeed < tgt) ship.ftlSpeed = Math.min(tgt, ship.ftlSpeed * Math.exp(1.5 * dt) + 20000 * dt);
   else ship.ftlSpeed = Math.max(tgt, ship.ftlSpeed * Math.exp(-3 * dt));
@@ -573,10 +565,10 @@ export function ftlTransfer(g: Game, dt: number) {
   // the frame out there; chased at 0.8 × the distance in that frame, the ship hung ~40–55 km behind
   // it for good, short of the 30 km drop-out (ftlLeg.test.ts). It also makes the drop-out continuous:
   // dropFTL leaves the ship moving with the destination.
-  ship.pos.addScaledVector(destVel(g, ap), dt);
+  ship.pos.add(carry);
   g.curSpeed = ship.ftlSpeed;
   if (!ftlUpkeep(g, dt, align)) return;
-  if (!waypoint && dist < Math.max(30e3, rT * 0.01)) {
+  if (dist < drop) {
     dropFTL(g, false);
     return;
   }

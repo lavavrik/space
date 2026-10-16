@@ -64,6 +64,7 @@ export function App() {
                   tab: (t) => game!.setStationTab(t),
                   buyFuel: (f, kg) => game!.buyFuel(f, kg),
                   repair: () => game!.repairDocked(),
+                  medbay: () => game!.medbayDocked(),
                   sell: (c) => game!.sellOne(c),
                   sellAll: () => game!.sellCargo(),
                   battery: (id) => game!.fitBattery(id),

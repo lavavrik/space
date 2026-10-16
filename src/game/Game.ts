@@ -1,3 +1,4 @@
+import type { RadState } from './sim/radiation';
 import type { AirspaceState } from './sim/airspace';
 import { spawnTraffic, type Npc } from './sim/traffic';
 import { loadSettings, saveSettings, type Settings } from './settings';
@@ -32,6 +33,7 @@ import { systemsNear } from './universe/galaxy';
 import { updateBodies } from './sim/kepler';
 import { updateStations } from './sim/stations';
 import { buildStations } from './universe/stations';
+import { CORE_ID, coreSystem } from './universe/core';
 import { buildSystem, systemAnchor } from './universe/system';
 import { buildTrojans } from './universe/trojans';
 import { TEMP, toggleRadiators, type HeatBudget } from './sim/thermal';
@@ -46,7 +48,7 @@ import { catapultLaunch, type Ascent } from './sim/catapult';
 import type { RockThreat } from './sim/belt';
 import { laserOff, type LaserState } from './sim/laser';
 import { mapClosed, type MapState } from './render/SystemMap';
-import { START_CREDITS, buyFuel, buyFuelTo, buyRepair, fmtCr, type Fuel, jettison, sellCargo, sellOne, type Commodity } from './sim/economy';
+import { START_CREDITS, buyFuel, buyFuelTo, buyMedbay, buyRepair, fmtCr, type Fuel, jettison, sellCargo, sellOne, type Commodity } from './sim/economy';
 import type { AutoPhase } from './sim/autodock';
 import { fitBattery, fitModule, removeModule } from './outfit/fit';
 import { AUTOSAVE_S, clearSave, loadGame, saveGame } from './save';
@@ -58,7 +60,7 @@ export function newShip(): Ship {
     pos: new THREE.Vector3(), vel: new THREE.Vector3(), q: new THREE.Quaternion(),
     mode: 'normal', throttle: 0, cruise: false, ftlSpeed: 0, ftlCharge: 0, vmax: 0,
     fa: true, decoupled: false, travelDir: new THREE.Vector3(0, 0, -1), ap: null, landed: null, dead: null, grav: null,
-    hull: 1, cargo: {}, crates: {}, prop: SHIP.propCap, o2: SHIP.o2Cap, water: 0, o2Rate: 0, boil: { prop: 0, o2: 0 }, exotic: SHIP.exoticCap, batt: BATTERIES[BATTERIES.length - 1].caps.capacity,
+    hull: 1, dose: 0, cargo: {}, crates: {}, prop: SHIP.propCap, o2: SHIP.o2Cap, water: 0, o2Rate: 0, boil: { prop: 0, o2: 0 }, exotic: SHIP.exoticCap, batt: BATTERIES[BATTERIES.length - 1].caps.capacity,
     burnRate: 0, sunTrack: false, tanker: null, scoop: '', scoopRate: { prop: 0, exotic: 0 }, avionics: defaultAvionics(), temp: TEMP.start, vent: false, outfit: bestOutfit(),
     breakers: { thrust: true, ftl: true, charge: true, radar: true, shield: true, guard: true, fuelcell: true, electrolysis: true, cryo: true },
   };
@@ -107,6 +109,8 @@ export class Game {
   guide: Guide | null = null;
   /** This frame's heat budget (see sim/thermal.ts). */
   heat: HeatBudget | null = null;
+  /** This step's radiation round the ship (sim/radiation.ts), for the HUD. */
+  rad: RadState | null = null;
   /** Other ships in the system (sim/traffic.ts). */
   traffic: Npc[] = [];
   /** The air around the ship this frame: drag and entry heating (sim/atmosphere.ts). */
@@ -372,6 +376,8 @@ export class Game {
     this.ascent = null;
     this.nearby = systemsNear(sys.pos, JUMP_RANGE + 1).filter((s) => s.id !== sys.id);
     this.sky = systemsNear(sys.pos, SKY_RADIUS);
+    // the galactic core, in sight from anywhere (docs/blackhole.md)
+    if (!this.sky.some((s) => s.id === CORE_ID)) this.sky.push(coreSystem());
     this.scene.setSystem(this.cur, this.sky);
     this.traffic = spawnTraffic(this); // after the system's state is reset: each ship copies it
     this.target = null;
@@ -430,6 +436,12 @@ export class Game {
 
   repairDocked() {
     buyRepair(this);
+    this.invalidateHud();
+  }
+
+  /** Station window, Services: the medbay treats the crew's radiation dose (sim/radiation.ts). */
+  medbayDocked() {
+    buyMedbay(this);
     this.invalidateHud();
   }
 

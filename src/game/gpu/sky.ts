@@ -39,6 +39,10 @@ export class SkyLayer {
   private readonly skyLayout: GPUBindGroupLayout;
   private readonly cube: GPUTexture;
   private readonly samp: GPUSampler;
+  /** The baked Milky Way, for what's bent off screen round the black hole (gpu/blackhole.ts). */
+  get cubeView() {
+    return this.cube.createView({ dimension: 'cube' });
+  }
   private readonly none: GPUTexture;
   private readonly patchBuf: GPUBuffer;
   private readonly patchData = new Float32Array(PATCH_BYTES / 4);
@@ -157,7 +161,7 @@ export class SkyLayer {
     others.forEach((s, i) => {
       const d = s.pos.clone().sub(cur.sys.pos);
       const pl = pairLight(s); // (a pair: one point, both stars' light)
-      const { size, k } = skyLook(pl.L, d.length());
+      const { size, k } = skyLook(pl.L, d.length(), !!s.star.hole);
       d.normalize();
       const c = skyColor(pl.color, k);
       data.set([d.x, d.y, d.z, c.r, c.g, c.b, size], i * 7);

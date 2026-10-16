@@ -72,6 +72,7 @@ Replace the uniform density with `density(x)` (stars per ly³):
 - **Bulge + bar** near the centre, and **spiral arms** as a log-spiral modulation of the disk.
 - Put home in the disk about 26k ly from the centre, in an arm, so the local density is about 0.004/ly³ and the sky looks right.
 - Star class mix varies with position: more young O/B stars in the arms, older/redder stars in the bulge. Add non-main-sequence objects later: giants, white dwarfs, neutron stars, black holes, binaries, nebulae.
+- The core already has its black hole, at a fixed point 1,000 ly out in the bright stretch of today's Milky Way bake (docs/blackhole.md). A galaxy model would centre on it.
 
 Because sectors use Poisson counts from `density(center)`, step 1's generator just works. Also, empty space is free: a cell with λ ≈ 0 costs a hash and nothing more.
 

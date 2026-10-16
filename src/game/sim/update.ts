@@ -1,3 +1,4 @@
+import { updateRadiation } from './radiation';
 import { airspaceGuard } from './airspace';
 import { rideTraffic, updateTraffic } from './traffic';
 import { noAero, updateAero } from './atmosphere';
@@ -305,6 +306,8 @@ export function update(g: Game, dt: number, realDt = dt) {
   // oxygen (sim/oxygen.ts): split from water on spare power (it asks last), scooped from the air
   ship.boil = cryo(g, dt); // the cryocoolers, or boil-off (sim/oxygen.ts)
   ship.o2Rate = gatherO2(g, dt, waterIn(g));
+  // radiation round the ship, the deflector's share of the power for it, the crew's dose (sim/radiation.ts)
+  updateRadiation(g, dt, inTunnel);
   power.draw = SHIP.baseLoad + power.thrustKW + power.ftlKW + power.chargeKW + power.pumpKW + power.radarKW + power.lightsKW + power.shieldKW + power.guardKW + power.laserKW + power.cryoKW + power.electrolysisKW;
   settleBattery(g, dt);
   // life support breathes the tank (docked: the station's air); empty, the crew is lost

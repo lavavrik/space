@@ -96,3 +96,9 @@ export const WT = {
 export const TYPES = ['Rocky body', 'Desert world', 'Earth-like world', 'Ocean world', 'Volcanic world', 'Icy body', 'Gas giant', 'Ice giant'];
 export const DENSITY = [5200, 5000, 5500, 4500, 5000, 2000, 1300, 1600]; // kg/m³ by world type
 export const ALBEDO = [0.12, 0.35, 0.3, 0.3, 0.1, 0.65, 0.5, 0.45];
+
+/* The galactic core (docs/blackhole.md): a supermassive black hole 1,000 ly out */
+export const CORE_DIST = 1000; // ly from home
+/** Its direction from home: the Milky Way bake's brightest stretch (skyBake.wgsl milkyWay `gc`). */
+export const CORE_DIR = [1, -0.05, 0.25] as const;
+export const CORE_MASS = 1e8; // M☉

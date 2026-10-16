@@ -43,6 +43,7 @@ import sprite from './sprite.wgsl?raw';
 import particles from './particles.wgsl?raw';
 import fields from './fields.wgsl?raw';
 import bloom from './bloom.wgsl?raw';
+import blackhole from './blackhole.wgsl?raw';
 
 const parts: Record<string, string> = { noise, frame, world, chunk, rock, stationBody, ringband, shadow, sprite, noise3d, terrain, atmo, clouds, giant, city };
 const build = (src: string) => src.replace(/^\/\/ #include (\w+)$/gm, (_, name: string) => parts[name] ?? `// (no ${name})`);
@@ -73,3 +74,4 @@ export const VCLOUDS_WGSL = build(vclouds);
 export const PARTICLES_WGSL = build(particles);
 export const FIELDS_WGSL = build(fields);
 export const BLOOM_WGSL = build(bloom);
+export const BLACKHOLE_WGSL = build(blackhole);
