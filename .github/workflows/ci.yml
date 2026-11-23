@@ -1,6 +1,5 @@
-# CI only for now: lint, test and build on every push and pull request.
-# Deployment is not set up yet (GitHub Pages was never enabled for this repo, so the old deploy
-# job failed on every push); add a deploy job here once hosting is chosen.
+# CI: lint, test and build on every push and pull request. Deployment is a manual step,
+# scripts/deploy.sh (docs/deploy.md).
 name: CI
 
 on:

@@ -1,6 +1,6 @@
 # Binary stars
 
-Most stars have a companion, and so do many of Farlight's systems. The design is in `docs/superpowers/specs/2026-09-30-binary-stars-design.md` (SPACE-71).
+Most stars have a companion, and so do many of Farlight's systems (SPACE-71).
 
 ## Generation (`universe/binary.ts`, `universe/system.ts`)
 

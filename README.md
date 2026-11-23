@@ -13,7 +13,7 @@ npm run preview   # serve the production build
 npm test          # unit tests (vitest)
 npm run lint
 ```
-The build is a static site with relative paths, so `dist/` can be hosted anywhere. The CI workflow (`.github/workflows/ci.yml`) lints, tests and builds every push and pull request. Deployment isn't set up yet.
+The build is a static site with relative paths, so `dist/` can be hosted anywhere. The CI workflow (`.github/workflows/ci.yml`) lints, tests and builds every push and pull request. `scripts/deploy.sh` deploys to the hosted static site (docs/deploy.md).
 
 ## Code layout
 ```
@@ -144,3 +144,6 @@ The ship's automation comes from fitted computers, commercial units with a maker
 
 ## Debugging
 `window.farlight` is the running `Game`. `farlight.step(seconds)` fast-forwards the simulation from the browser console, and `farlight.ship`, `farlight.cur` and `farlight.power` expose the live state.
+
+## License
+MIT, see [LICENSE](LICENSE).

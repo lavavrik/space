@@ -1,6 +1,6 @@
 # The galactic core
 
-A supermassive black hole, the **Galactic Core**, sits 1,000 ly from home (about 40 jumps), toward the Milky Way's brightest stretch: `gc` in `skyBake.wgsl milkyWay()`, so the sky already points at it. The plan is in `docs/superpowers/plans/2026-10-02-galactic-core-black-hole.md`.
+A supermassive black hole, the **Galactic Core**, sits 1,000 ly from home (about 40 jumps), toward the Milky Way's brightest stretch: `gc` in `skyBake.wgsl milkyWay()`, so the sky already points at it.
 
 ## In the galaxy (`universe/core.ts`)
 
