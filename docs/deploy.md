@@ -5,10 +5,10 @@ orbcloud as a **webserver** service (static files):
 
 | | |
 |---|---|
-| Project | `commonsafe` (`b2df3a30-c8af-4380-841b-054c3b4ff4c6`) |
-| Environment | `commonsafe` (the project's default; there's no `production`) |
-| Service | `ui`, webserver, public (`10d32890-180a-40c1-9467-081b442622ff`) on `vps-de2` |
-| URL | https://commonsafe-ui-10d32890.orbcloud.io |
+| Project | `space` (`b2df3a30-c8af-4380-841b-054c3b4ff4c6`) |
+| Environment | `space` (the project's default; there's no `production`) |
+| Service | `ui`, webserver, public (`221ebc30-93ed-41cc-8b77-181e25bfeaf4`) on `vps-de2` |
+| URL | https://space-ui-221ebc30.orbcloud.io |
 
 **Deploy:** `scripts/deploy.sh` (needs `occ` logged in). It builds, uploads every file under
 `assets/`, then `index.html` last. Asset names are content hashes and `vite.config.ts` has
